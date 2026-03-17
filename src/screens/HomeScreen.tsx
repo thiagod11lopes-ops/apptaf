@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Platform, Image, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { useTheme } from '../contexts/ThemeContext';
@@ -14,6 +14,12 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const { width, height } = useWindowDimensions();
   const [menuVisible, setMenuVisible] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      setMenuVisible(true);
+    }, [])
+  );
 
   const goTo = useCallback(
     (screen: 'Normas' | 'Cadastro' | 'AplicacaoTAF' | 'Estatisticas' | 'Configuracoes') => {

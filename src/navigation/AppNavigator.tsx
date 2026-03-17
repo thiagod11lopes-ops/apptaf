@@ -7,6 +7,7 @@ import NormasScreen from '../screens/NormasScreen';
 import CadastroScreen from '../screens/CadastroScreen';
 import AplicacaoTAFScreen from '../screens/AplicacaoTAFScreen';
 import EstatisticasScreen from '../screens/EstatisticasScreen';
+import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -14,6 +15,7 @@ export type RootStackParamList = {
   Cadastro: undefined;
   AplicacaoTAF: undefined;
   Estatisticas: undefined;
+  Configuracoes: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -50,6 +52,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Cadastro" component={CadastroScreen} />
         <Stack.Screen name="AplicacaoTAF" component={AplicacaoTAFScreen} />
         <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
+        <Stack.Screen name="Configuracoes" component={ConfiguracoesScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

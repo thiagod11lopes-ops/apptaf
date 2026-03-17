@@ -16,7 +16,7 @@ export default function HomeScreen() {
   const [menuVisible, setMenuVisible] = useState(true);
 
   const goTo = useCallback(
-    (screen: 'Normas' | 'Cadastro' | 'AplicacaoTAF' | 'Estatisticas') => {
+    (screen: 'Normas' | 'Cadastro' | 'AplicacaoTAF' | 'Estatisticas' | 'Configuracoes') => {
       setMenuVisible(false);
       setTimeout(() => navigation.navigate(screen), 150);
     },
@@ -28,6 +28,7 @@ export default function HomeScreen() {
     { id: 'cadastro', title: 'Cadastro', subtitle: 'Cadastrar informações no sistema', onPress: () => goTo('Cadastro') },
     { id: 'aplicacao-taf', title: 'Aplicação do TAF', subtitle: 'Aplicar o Teste de Aptidão Física', onPress: () => goTo('AplicacaoTAF') },
     { id: 'estatisticas', title: 'Estatísticas', subtitle: 'Análise e métricas dos dados', onPress: () => goTo('Estatisticas') },
+    { id: 'configuracoes', title: 'Configurações', subtitle: 'Ajustes gerais do sistema', onPress: () => goTo('Configuracoes') },
   ];
 
   const gradientColors: [string, string] = [theme.gradient[0], theme.gradient[1]];

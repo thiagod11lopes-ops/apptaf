@@ -46,6 +46,40 @@ npx expo start --web --port 8082
 
 Acesse no navegador: `http://localhost:8082`
 
+## Publicar online (ter um endereço para acessar na internet)
+
+Para ter uma **URL pública** (ex.: `https://apptaf.vercel.app`) e acessar o sistema de qualquer lugar:
+
+### 1. Gerar a build da versão web
+
+No computador, na pasta do projeto:
+
+```bash
+npm run build:web
+```
+
+Isso gera a pasta **`dist/`** com os arquivos estáticos do app.
+
+### 2. Conectar o repositório a um serviço de hospedagem
+
+Escolha um dos serviços abaixo (todos têm plano gratuito):
+
+| Serviço   | Site        | O que fazer |
+|-----------|-------------|-------------|
+| **Vercel** | vercel.com  | Login com GitHub → "Add New Project" → selecione o repositório `apptaf` → **Root Directory** deixe vazio ou `taf-app` se o repositório tiver essa pasta na raiz. Em **Build Command** use `npm run build:web`. Em **Output Directory** use `dist`. Deploy. |
+| **Netlify** | netlify.com | Login com GitHub → "Add new site" → "Import from Git" → escolha o repo. **Build command:** `npm run build:web`. **Publish directory:** `dist`. Deploy. |
+
+### 3. Resultado
+
+Depois do deploy, o serviço mostra uma URL, por exemplo:
+
+- **Vercel:** `https://apptaf.vercel.app` (ou um nome que você escolher)
+- **Netlify:** `https://nome-aleatorio.netlify.app` (você pode alterar o nome nas configurações)
+
+Qualquer pessoa pode acessar o sistema por esse endereço.
+
+**Observação:** os dados do cadastro ficam no **navegador** (AsyncStorage/localStorage). Em um novo computador ou celular, os dados não aparecem; cada dispositivo tem sua própria lista. Para dados compartilhados entre usuários seria necessário um backend (servidor/banco de dados).
+
 ## Estrutura do projeto
 
 ```

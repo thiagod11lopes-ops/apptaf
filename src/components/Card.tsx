@@ -17,8 +17,8 @@ export function Card({ children, style, onPress, noPadding, glass }: CardProps) 
     styles.card,
     glass ? styles.cardGlass : null,
     {
-      backgroundColor: glass ? 'rgba(255, 255, 255, 0.42)' : theme.cardBg,
-      borderColor: glass ? 'rgba(255, 255, 255, 0.7)' : theme.border,
+      backgroundColor: glass ? 'rgba(255, 255, 255, 0.22)' : theme.cardBg,
+      borderColor: glass ? 'rgba(255, 255, 255, 0.45)' : theme.border,
       padding: noPadding ? 0 : 16,
     },
     style,

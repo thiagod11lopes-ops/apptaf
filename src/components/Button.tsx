@@ -30,7 +30,7 @@ export function Button({
     glass
       ? variant === 'outline'
         ? 'transparent'
-        : 'rgba(255, 255, 255, 0.22)'
+        : 'rgba(255, 255, 255, 0.18)'
       : variant === 'primary'
         ? theme.primary
         : variant === 'outline'
@@ -38,7 +38,7 @@ export function Button({
           : theme.backgroundSecondary;
 
   const borderWidth = glass ? 1 : variant === 'outline' ? 2 : 0;
-  const borderColor = glass ? 'rgba(255, 255, 255, 0.7)' : variant === 'outline' ? theme.primary : 'transparent';
+  const borderColor = glass ? 'rgba(255, 255, 255, 0.45)' : variant === 'outline' ? theme.primary : 'transparent';
   const textColor = glass ? '#FFFFFF' : variant === 'primary' ? '#FFF' : theme.primary;
 
   return (

@@ -171,198 +171,201 @@ export default function CadastroScreen() {
         style={[styles.fundo, { width, height }]}
         resizeMode="cover"
       />
-      <Header title="Cadastro" onBack={() => navigation.goBack()} />
-      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content}>
-        {!formularioVisivel ? (
-          <Card glass>
-            <Text style={[styles.introTitle, { color: '#FFFFFF' }]}>Cadastro</Text>
-            <Text style={[styles.introText, { color: 'rgba(255,255,255,0.92)' }]}>
-              Toque em Iniciar cadastro para preencher os dados.
-            </Text>
-            <Button
-              title="Iniciar cadastro"
-              onPress={() => setFormularioVisivel(true)}
-              style={styles.btn}
-              glass
-            />
-          </Card>
-        ) : (
-          <Card glass>
-            <Button
-              title="Ocultar cadastro"
-              variant="outline"
-              onPress={() => {
-                setFormularioVisivel(false);
-                setEditingId(null);
-                setForm(initialForm);
-              }}
-              style={styles.btnOcultar}
-              glass
-            />
-            <Text style={[styles.label, { color: '#FFFFFF' }]}>Posto / Graduação</Text>
-            <ChecklistOficialPraca
-              value={form.categoria}
-              onValueChange={(v) => v !== 'Todos' && setFormField('categoria', v)}
-              glass
-            />
-            <View style={styles.field}>
-              {form.categoria === 'Oficial' ? (
-                <>
-                  <Text style={[styles.label, { color: '#FFFFFF' }]}>Posto</Text>
-                  <PostoSelect
-                    value={(form.categoria === 'Oficial' ? form.postoOuGraduacao : '') as Posto | ''}
-                    onValueChange={(v) => setFormField('postoOuGraduacao', v)}
-                  />
-                </>
-              ) : (
-                <>
-                  <Text style={[styles.label, { color: '#FFFFFF' }]}>Graduação</Text>
-                  <GraduacaoSelect
-                    value={(form.categoria === 'Praça' ? form.postoOuGraduacao : '') as Graduacao | ''}
-                    onValueChange={(v) => setFormField('postoOuGraduacao', v)}
-                  />
-                </>
+      <View style={styles.foreground}>
+        <Header title="Cadastro" onBack={() => navigation.goBack()} />
+        <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content}>
+          {!formularioVisivel ? (
+            <Card glass>
+              <Text style={[styles.introTitle, { color: '#FFFFFF' }]}>Cadastro</Text>
+              <Text style={[styles.introText, { color: 'rgba(255,255,255,0.92)' }]}>
+                Toque em Iniciar cadastro para preencher os dados.
+              </Text>
+              <Button
+                title="Iniciar cadastro"
+                onPress={() => setFormularioVisivel(true)}
+                style={styles.btn}
+                glass
+              />
+            </Card>
+          ) : (
+            <Card glass>
+              <Button
+                title="Ocultar cadastro"
+                variant="outline"
+                onPress={() => {
+                  setFormularioVisivel(false);
+                  setEditingId(null);
+                  setForm(initialForm);
+                }}
+                style={styles.btnOcultar}
+                glass
+              />
+              <Text style={[styles.label, { color: '#FFFFFF' }]}>Posto / Graduação</Text>
+              <ChecklistOficialPraca
+                value={form.categoria}
+                onValueChange={(v) => v !== 'Todos' && setFormField('categoria', v)}
+                glass
+              />
+              <View style={styles.field}>
+                {form.categoria === 'Oficial' ? (
+                  <>
+                    <Text style={[styles.label, { color: '#FFFFFF' }]}>Posto</Text>
+                    <PostoSelect
+                      value={(form.categoria === 'Oficial' ? form.postoOuGraduacao : '') as Posto | ''}
+                      onValueChange={(v) => setFormField('postoOuGraduacao', v)}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.label, { color: '#FFFFFF' }]}>Graduação</Text>
+                    <GraduacaoSelect
+                      value={(form.categoria === 'Praça' ? form.postoOuGraduacao : '') as Graduacao | ''}
+                      onValueChange={(v) => setFormField('postoOuGraduacao', v)}
+                    />
+                  </>
+                )}
+              </View>
+              <View style={styles.field}>
+                <LabelNip />
+                <TextInput
+                  style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+                  value={form.nip}
+                  onChangeText={(t) => setFormField('nip', t)}
+                  placeholder=""
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </View>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: '#FFFFFF' }]}>Nome</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+                  value={form.nome}
+                  onChangeText={(t) => setFormField('nome', t)}
+                  placeholder="Nome completo"
+                  placeholderTextColor={theme.textSecondary}
+                />
+              </View>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: '#FFFFFF' }]}>Data</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+                  value={form.data}
+                  onChangeText={(t) => setFormField('data', t)}
+                  placeholder="01/01/0001"
+                  placeholderTextColor={theme.textSecondary}
+                />
+              </View>
+              <Button
+                title={editingId ? 'Atualizar cadastro' : 'Salvar cadastro'}
+                onPress={handleSalvar}
+                style={styles.btnSalvar}
+                glass
+              />
+            </Card>
+          )}
+
+          {/* Filtros da planilha */}
+          <View style={styles.filtrosWrap}>
+            <Text style={[styles.planilhaTitle, { color: theme.text }]}>Lista de cadastros</Text>
+            <View style={styles.filtros}>
+              <ChecklistOficialPraca
+                filterMode
+                value={filtroCategoria}
+                onValueChange={(v) => setFiltroCategoria(v)}
+                glass
+              />
+              {filtroCategoria === 'Oficial' && (
+                <View style={styles.filtroSelect}>
+                  <Text style={[styles.labelSmall, { color: theme.textSecondary }]}>Posto</Text>
+                  <PostoSelect filterMode value={filtroPosto} onValueChange={setFiltroPosto} />
+                </View>
+              )}
+              {filtroCategoria === 'Praça' && (
+                <View style={styles.filtroSelect}>
+                  <Text style={[styles.labelSmall, { color: theme.textSecondary }]}>Graduação</Text>
+                  <GraduacaoSelect filterMode value={filtroGraduacao} onValueChange={setFiltroGraduacao} />
+                </View>
               )}
             </View>
-            <View style={styles.field}>
-              <LabelNip />
-              <TextInput
-                style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-                value={form.nip}
-                onChangeText={(t) => setFormField('nip', t)}
-                placeholder=""
-                placeholderTextColor={theme.textSecondary}
-                autoCapitalize="none"
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-              />
-            </View>
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: '#FFFFFF' }]}>Nome</Text>
-              <TextInput
-                style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-                value={form.nome}
-                onChangeText={(t) => setFormField('nome', t)}
-                placeholder="Nome completo"
-                placeholderTextColor={theme.textSecondary}
-              />
-            </View>
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: '#FFFFFF' }]}>Data</Text>
-              <TextInput
-                style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-                value={form.data}
-                onChangeText={(t) => setFormField('data', t)}
-                placeholder="01/01/0001"
-                placeholderTextColor={theme.textSecondary}
-              />
-            </View>
-            <Button
-              title={editingId ? 'Atualizar cadastro' : 'Salvar cadastro'}
-              onPress={handleSalvar}
-              style={styles.btnSalvar}
-              glass
-            />
-          </Card>
-        )}
+          </View>
 
-        {/* Filtros da planilha */}
-        <View style={styles.filtrosWrap}>
-          <Text style={[styles.planilhaTitle, { color: theme.text }]}>Lista de cadastros</Text>
-          <View style={styles.filtros}>
-            <ChecklistOficialPraca
-              filterMode
-              value={filtroCategoria}
-              onValueChange={(v) => setFiltroCategoria(v)}
-            />
-            {filtroCategoria === 'Oficial' && (
-              <View style={styles.filtroSelect}>
-                <Text style={[styles.labelSmall, { color: theme.textSecondary }]}>Posto</Text>
-                <PostoSelect filterMode value={filtroPosto} onValueChange={setFiltroPosto} />
+          {/* Planilha */}
+          <View style={[styles.tableWrap, { borderColor: theme.border }]}>
+            <View style={[styles.tableRow, styles.headerRow, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.th, styles.tdCat, { color: theme.text }]}>Categoria</Text>
+              <Text style={[styles.th, styles.tdPg, { color: theme.text }]}>Posto/Grad</Text>
+              <View style={styles.tdNip}>
+                <LabelNip />
               </View>
-            )}
-            {filtroCategoria === 'Praça' && (
-              <View style={styles.filtroSelect}>
-                <Text style={[styles.labelSmall, { color: theme.textSecondary }]}>Graduação</Text>
-                <GraduacaoSelect filterMode value={filtroGraduacao} onValueChange={setFiltroGraduacao} />
+              <Text style={[styles.th, styles.tdNome, { color: theme.text }]}>Nome</Text>
+              <Text style={[styles.th, styles.tdData, { color: theme.text }]}>Data</Text>
+              <View style={[styles.tdAcoes, { borderLeftWidth: StyleSheet.hairlineWidth, borderColor: theme.border }]} />
+            </View>
+            {filtrada.length === 0 ? (
+              <View style={[styles.tableRow, { borderBottomColor: theme.border }]}>
+                <Text style={[styles.emptyCell, { color: theme.textSecondary }]} numberOfLines={1}>
+                  Nenhum cadastro encontrado.
+                </Text>
               </View>
+            ) : (
+              filtrada.map((row) => (
+                <View
+                  key={row.id}
+                  style={[styles.tableRow, { borderBottomColor: theme.border }]}
+                >
+                  <View style={styles.tdCat}>
+                    {isCategoriaPraça(row.categoria) ? (
+                      <RotuloPracaSvg />
+                    ) : (
+                      <Text style={[styles.td, { color: theme.text }]}>{normalizePraça(row.categoria)}</Text>
+                    )}
+                  </View>
+                  <View style={[styles.td, styles.tdPg]}>
+                    {isGraduacaoSO(String(row.postoOuGraduacao)) ? (
+                      <LabelGradSO />
+                    ) : (
+                      <Text style={{ color: theme.text }} numberOfLines={1}>{normalizeSO(String(row.postoOuGraduacao))}</Text>
+                    )}
+                  </View>
+                  <View style={[styles.td, styles.tdNip]}>
+                    {normalizeNIP(row.nip) === 'NIP' ? (
+                      <LabelNip />
+                    ) : (
+                      <Text style={{ color: theme.text }} numberOfLines={1} ellipsizeMode="tail">
+                        {normalizeNIP(row.nip)}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={[styles.td, styles.tdNome, { color: theme.text }]} numberOfLines={1}>
+                    {row.nome}
+                  </Text>
+                  <Text style={[styles.td, styles.tdData, { color: theme.text }]} numberOfLines={1}>
+                    {row.data}
+                  </Text>
+                  <View style={[styles.tdAcoes, { borderLeftWidth: StyleSheet.hairlineWidth, borderColor: theme.border }]}>
+                    <TouchableOpacity
+                      style={[styles.btnAcaoIcon, { borderColor: theme.border }]}
+                      onPress={() => handleEditar(row)}
+                    >
+                      <Pencil size={18} color={theme.primary} strokeWidth={2} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.btnAcaoIcon, { borderColor: theme.border }]}
+                      onPress={() => handleExcluir(row)}
+                    >
+                      <Trash2 size={18} color={theme.error} strokeWidth={2} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
             )}
           </View>
-        </View>
-
-        {/* Planilha */}
-        <View style={[styles.tableWrap, { borderColor: theme.border }]}>
-          <View style={[styles.tableRow, styles.headerRow, { borderBottomColor: theme.border }]}>
-            <Text style={[styles.th, styles.tdCat, { color: theme.text }]}>Categoria</Text>
-            <Text style={[styles.th, styles.tdPg, { color: theme.text }]}>Posto/Grad</Text>
-            <View style={styles.tdNip}>
-              <LabelNip />
-            </View>
-            <Text style={[styles.th, styles.tdNome, { color: theme.text }]}>Nome</Text>
-            <Text style={[styles.th, styles.tdData, { color: theme.text }]}>Data</Text>
-            <View style={[styles.tdAcoes, { borderLeftWidth: StyleSheet.hairlineWidth, borderColor: theme.border }]} />
-          </View>
-          {filtrada.length === 0 ? (
-            <View style={[styles.tableRow, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.emptyCell, { color: theme.textSecondary }]} numberOfLines={1}>
-                Nenhum cadastro encontrado.
-              </Text>
-            </View>
-          ) : (
-            filtrada.map((row) => (
-              <View
-                key={row.id}
-                style={[styles.tableRow, { borderBottomColor: theme.border }]}
-              >
-                <View style={styles.tdCat}>
-                  {isCategoriaPraça(row.categoria) ? (
-                    <RotuloPracaSvg />
-                  ) : (
-                    <Text style={[styles.td, { color: theme.text }]}>{normalizePraça(row.categoria)}</Text>
-                  )}
-                </View>
-                <View style={[styles.td, styles.tdPg]}>
-                  {isGraduacaoSO(String(row.postoOuGraduacao)) ? (
-                    <LabelGradSO />
-                  ) : (
-                    <Text style={{ color: theme.text }} numberOfLines={1}>{normalizeSO(String(row.postoOuGraduacao))}</Text>
-                  )}
-                </View>
-                <View style={[styles.td, styles.tdNip]}>
-                  {normalizeNIP(row.nip) === 'NIP' ? (
-                    <LabelNip />
-                  ) : (
-                    <Text style={{ color: theme.text }} numberOfLines={1} ellipsizeMode="tail">
-                      {normalizeNIP(row.nip)}
-                    </Text>
-                  )}
-                </View>
-                <Text style={[styles.td, styles.tdNome, { color: theme.text }]} numberOfLines={1}>
-                  {row.nome}
-                </Text>
-                <Text style={[styles.td, styles.tdData, { color: theme.text }]} numberOfLines={1}>
-                  {row.data}
-                </Text>
-                <View style={[styles.tdAcoes, { borderLeftWidth: StyleSheet.hairlineWidth, borderColor: theme.border }]}>
-                  <TouchableOpacity
-                    style={[styles.btnAcaoIcon, { borderColor: theme.border }]}
-                    onPress={() => handleEditar(row)}
-                  >
-                    <Pencil size={18} color={theme.primary} strokeWidth={2} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.btnAcaoIcon, { borderColor: theme.border }]}
-                    onPress={() => handleExcluir(row)}
-                  >
-                    <Trash2 size={18} color={theme.error} strokeWidth={2} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
 
       <ModalExcluirCadastro
         visible={excluirModalRow !== null}
@@ -382,7 +385,7 @@ const styles = StyleSheet.create({
     minHeight: '100%',
     ...(Platform.OS === 'web' && { minHeight: '100vh' }),
   },
-  scroll: { flex: 1 },
+  scroll: { flex: 1, backgroundColor: 'transparent' },
   gradient: {
     ...StyleSheet.absoluteFillObject,
   },
@@ -392,6 +395,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    zIndex: 0,
+  },
+  foreground: {
+    flex: 1,
+    zIndex: 1,
   },
   content: { padding: 20, paddingBottom: 40 },
   introTitle: { fontSize: 20, fontWeight: '700', marginBottom: 12 },

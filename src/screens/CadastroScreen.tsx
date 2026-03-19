@@ -8,7 +8,10 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  Image,
+  useWindowDimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { Pencil, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -47,6 +50,7 @@ export default function CadastroScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation();
   const scrollRef = useRef<ScrollView>(null);
+  const { width, height } = useWindowDimensions();
   /** Id do cadastro a excluir (fixado no clique para não depender do state no confirmar). */
   const excluirIdRef = useRef<string | null>(null);
 
@@ -156,18 +160,34 @@ export default function CadastroScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <LinearGradient
+        colors={[theme.gradient[0], theme.gradient[1]]}
+        style={styles.gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      <Image
+        source={require('../../Fundo.png')}
+        style={[styles.fundo, { width, height }]}
+        resizeMode="cover"
+      />
       <Header title="Cadastro" onBack={() => navigation.goBack()} />
       <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content}>
         {!formularioVisivel ? (
-          <Card>
-            <Text style={[styles.introTitle, { color: theme.text }]}>Cadastro</Text>
-            <Text style={[styles.introText, { color: theme.textSecondary }]}>
+          <Card glass>
+            <Text style={[styles.introTitle, { color: '#FFFFFF' }]}>Cadastro</Text>
+            <Text style={[styles.introText, { color: 'rgba(255,255,255,0.92)' }]}>
               Toque em Iniciar cadastro para preencher os dados.
             </Text>
-            <Button title="Iniciar cadastro" onPress={() => setFormularioVisivel(true)} style={styles.btn} />
+            <Button
+              title="Iniciar cadastro"
+              onPress={() => setFormularioVisivel(true)}
+              style={styles.btn}
+              glass
+            />
           </Card>
         ) : (
-          <Card>
+          <Card glass>
             <Button
               title="Ocultar cadastro"
               variant="outline"
@@ -177,16 +197,18 @@ export default function CadastroScreen() {
                 setForm(initialForm);
               }}
               style={styles.btnOcultar}
+              glass
             />
-            <Text style={[styles.label, { color: theme.text }]}>Posto / Graduação</Text>
+            <Text style={[styles.label, { color: '#FFFFFF' }]}>Posto / Graduação</Text>
             <ChecklistOficialPraca
               value={form.categoria}
               onValueChange={(v) => v !== 'Todos' && setFormField('categoria', v)}
+              glass
             />
             <View style={styles.field}>
               {form.categoria === 'Oficial' ? (
                 <>
-                  <Text style={[styles.label, { color: theme.text }]}>Posto</Text>
+                  <Text style={[styles.label, { color: '#FFFFFF' }]}>Posto</Text>
                   <PostoSelect
                     value={(form.categoria === 'Oficial' ? form.postoOuGraduacao : '') as Posto | ''}
                     onValueChange={(v) => setFormField('postoOuGraduacao', v)}
@@ -194,7 +216,7 @@ export default function CadastroScreen() {
                 </>
               ) : (
                 <>
-                  <Text style={[styles.label, { color: theme.text }]}>Graduação</Text>
+                  <Text style={[styles.label, { color: '#FFFFFF' }]}>Graduação</Text>
                   <GraduacaoSelect
                     value={(form.categoria === 'Praça' ? form.postoOuGraduacao : '') as Graduacao | ''}
                     onValueChange={(v) => setFormField('postoOuGraduacao', v)}
@@ -217,7 +239,7 @@ export default function CadastroScreen() {
               />
             </View>
             <View style={styles.field}>
-              <Text style={[styles.label, { color: theme.text }]}>Nome</Text>
+              <Text style={[styles.label, { color: '#FFFFFF' }]}>Nome</Text>
               <TextInput
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 value={form.nome}
@@ -227,7 +249,7 @@ export default function CadastroScreen() {
               />
             </View>
             <View style={styles.field}>
-              <Text style={[styles.label, { color: theme.text }]}>Data</Text>
+              <Text style={[styles.label, { color: '#FFFFFF' }]}>Data</Text>
               <TextInput
                 style={[styles.input, { borderColor: theme.border, color: theme.text }]}
                 value={form.data}
@@ -240,6 +262,7 @@ export default function CadastroScreen() {
               title={editingId ? 'Atualizar cadastro' : 'Salvar cadastro'}
               onPress={handleSalvar}
               style={styles.btnSalvar}
+              glass
             />
           </Card>
         )}
@@ -353,8 +376,23 @@ export default function CadastroScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+    width: '100%',
+    minHeight: '100%',
+    ...(Platform.OS === 'web' && { minHeight: '100vh' }),
+  },
   scroll: { flex: 1 },
+  gradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fundo: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   content: { padding: 20, paddingBottom: 40 },
   introTitle: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
   introText: { fontSize: 15, lineHeight: 22, marginBottom: 24 },

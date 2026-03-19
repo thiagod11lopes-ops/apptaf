@@ -7,15 +7,18 @@ interface CardProps {
   style?: ViewStyle;
   onPress?: () => void;
   noPadding?: boolean;
+  /** Visual "vidro"/desfoque (compatível com web via backdrop-filter). */
+  glass?: boolean;
 }
 
-export function Card({ children, style, onPress, noPadding }: CardProps) {
+export function Card({ children, style, onPress, noPadding, glass }: CardProps) {
   const { theme } = useTheme();
   const cardStyle = [
     styles.card,
+    glass ? styles.cardGlass : null,
     {
-      backgroundColor: theme.cardBg,
-      borderColor: theme.border,
+      backgroundColor: glass ? 'rgba(255, 255, 255, 0.42)' : theme.cardBg,
+      borderColor: glass ? 'rgba(255, 255, 255, 0.7)' : theme.border,
       padding: noPadding ? 0 : 16,
     },
     style,
@@ -35,4 +38,12 @@ const styles = StyleSheet.create({
       default: { elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12 },
     }),
   },
+  cardGlass: Platform.select({
+    web: {
+      backdropFilter: 'blur(0.84px)',
+      WebkitBackdropFilter: 'blur(0.84px)',
+      boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
+    } as any,
+    default: {},
+  }),
 });

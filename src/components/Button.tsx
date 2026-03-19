@@ -10,6 +10,8 @@ interface ButtonProps {
   disabled?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  /** Visual "vidro"/desfoque (compatível com web via backdrop-filter). */
+  glass?: boolean;
 }
 
 export function Button({
@@ -20,13 +22,24 @@ export function Button({
   disabled = false,
   style,
   textStyle,
+  glass = false,
 }: ButtonProps) {
   const { theme } = useTheme();
   const isDisabled = disabled || loading;
-  const bg = variant === 'primary' ? theme.primary : variant === 'outline' ? 'transparent' : theme.backgroundSecondary;
-  const borderWidth = variant === 'outline' ? 2 : 0;
-  const borderColor = variant === 'outline' ? theme.primary : 'transparent';
-  const textColor = variant === 'primary' ? '#FFF' : theme.primary;
+  const bg =
+    glass
+      ? variant === 'outline'
+        ? 'transparent'
+        : 'rgba(255, 255, 255, 0.22)'
+      : variant === 'primary'
+        ? theme.primary
+        : variant === 'outline'
+          ? 'transparent'
+          : theme.backgroundSecondary;
+
+  const borderWidth = glass ? 1 : variant === 'outline' ? 2 : 0;
+  const borderColor = glass ? 'rgba(255, 255, 255, 0.7)' : variant === 'outline' ? theme.primary : 'transparent';
+  const textColor = glass ? '#FFFFFF' : variant === 'primary' ? '#FFF' : theme.primary;
 
   return (
     <TouchableOpacity
@@ -36,6 +49,12 @@ export function Button({
       style={[
         styles.btn,
         { backgroundColor: bg, borderWidth, borderColor },
+        glass && Platform.OS === 'web'
+          ? ({
+              backdropFilter: 'blur(0.84px)',
+              WebkitBackdropFilter: 'blur(0.84px)',
+            } as any)
+          : null,
         style,
       ]}
     >

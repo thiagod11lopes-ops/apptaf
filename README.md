@@ -1,6 +1,6 @@
 # TAF - Teste de Aptidão Física
 
-Aplicativo para gestão do Teste de Aptidão Física: cadastro, normas, aplicação do TAF e estatísticas.
+Aplicativo para gestão do Teste de Aptidão Física: normas, aplicação do TAF e estatísticas.
 
 ## Tecnologias
 
@@ -78,7 +78,7 @@ Depois do deploy, o serviço mostra uma URL, por exemplo:
 
 Qualquer pessoa pode acessar o sistema por esse endereço.
 
-**Observação:** os dados do cadastro ficam no **navegador** (AsyncStorage/localStorage). Em um novo computador ou celular, os dados não aparecem; cada dispositivo tem sua própria lista. Para dados compartilhados entre usuários seria necessário um backend (servidor/banco de dados).
+**Observação:** este app é executado no navegador (web) e pode usar armazenamento local para dados do usuário, quando aplicável.
 
 ## Estrutura do projeto
 
@@ -87,22 +87,20 @@ taf-app/
 ├── App.tsx                 # Entrada do app
 ├── src/
 │   ├── components/        # Componentes reutilizáveis (Menu, Header, Card, etc.)
-│   ├── constants/        # Postos, graduações
+│   ├── constants/        # (módulos de apoio)
 │   ├── contexts/         # ThemeContext
 │   ├── navigation/       # AppNavigator (rotas)
-│   ├── screens/          # Telas (Home, Cadastro, Normas, etc.)
-│   ├── services/         # Storage (cadastros)
+│   ├── screens/          # Telas (Home, Normas, Aplicação do TAF, Estatísticas, etc.)
 │   ├── theme/            # Cores
 │   ├── types/            # Tipos TypeScript
-│   └── utils/            # Normalização de exibição
+│   └── utils/            # Utilitários de exibição
 ├── assets/               # Recursos estáticos
 └── Fundo.png             # Imagem de fundo da home
 ```
 
 ## Funcionalidades
 
-- **Home:** acesso a Normas, Cadastro, Aplicação do TAF e Estatísticas
-- **Cadastro:** registro por categoria (Oficial/Praça), posto/graduação, NIP, nome e data; lista com filtros e ações editar/excluir
+- **Home:** acesso a Normas, Aplicação do TAF e Estatísticas
 - **Normas:** consulta a documentos e normas
 - **Aplicação do TAF:** tela para aplicação do teste
 - **Estatísticas:** análise e métricas

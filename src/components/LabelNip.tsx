@@ -1,27 +1,20 @@
 import React from 'react';
-import Svg, { Text } from 'react-native-svg';
-import { useTheme } from '../contexts/ThemeContext';
+import Svg, { Text as SvgText } from 'react-native-svg';
 
-/** Label "NIP" em SVG para evitar autocorretor (ex.: Beliscar no Chrome). */
-interface Props {
-  /** Cor do texto (opcional). */
-  color?: string;
-}
-export function LabelNip({ color }: Props) {
-  const { theme } = useTheme();
-  const fill = color ?? theme.text;
+export function LabelNip({ color }: { color: string }) {
   return (
-    <Svg width={32} height={20} viewBox="0 0 32 20">
-      <Text
-        x={2}
-        y={15}
-        fill={fill}
-        fontSize={14}
-        fontWeight="600"
-        fontFamily="System"
-      >
-        NIP
-      </Text>
+    <Svg height={28} width={110} viewBox="0 0 110 28">
+      {/* Aproxima o textShadow do Menu (offset 2px + sombra). */}
+      <SvgText x="0" y="20" fill="rgba(0,0,0,0.9)" fontSize={18} fontWeight="800">
+        Nip
+      </SvgText>
+      <SvgText x="0" y="21" fill="rgba(0,0,0,0.95)" fontSize={18} fontWeight="800">
+        Nip
+      </SvgText>
+      <SvgText x="0" y="19" fill={color} fontSize={18} fontWeight="800">
+        Nip
+      </SvgText>
     </Svg>
   );
 }
+

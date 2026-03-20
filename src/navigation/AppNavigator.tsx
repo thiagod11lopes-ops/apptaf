@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
 import HomeScreen from '../screens/HomeScreen';
 import NormasScreen from '../screens/NormasScreen';
-import CadastroScreen from '../screens/CadastroScreen';
+import CadastroScreenModern from '../screens/CadastroScreenModern';
 import AplicacaoTAFScreen from '../screens/AplicacaoTAFScreen';
 import EstatisticasScreen from '../screens/EstatisticasScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
@@ -49,7 +49,7 @@ export default function AppNavigator() {
       >
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Normas" component={NormasScreen} />
-        <Stack.Screen name="Cadastro" component={CadastroScreen} />
+        <Stack.Screen name="Cadastro" component={CadastroScreenModern} />
         <Stack.Screen name="AplicacaoTAF" component={AplicacaoTAFScreen} />
         <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
         <Stack.Screen name="Configuracoes" component={ConfiguracoesScreen} />

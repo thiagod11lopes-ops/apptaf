@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft } from 'lucide-react-native';
 import { Card } from '../components/Card';
 import { LabelNip } from '../components/LabelNip';
+import { LabelSO } from '../components/LabelSO';
+import { LabelSvgText } from '../components/LabelSvgText';
+import { addCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -24,6 +27,7 @@ type CadastroItem = {
   dataNascimento: string;
   categoria: Categoria;
   oficial?: string;
+  praca?: string;
 };
 
 function formatDateInput(value: string) {
@@ -60,11 +64,13 @@ export default function CadastroScreenModern() {
 
   const [categoria, setCategoria] = useState<Categoria | ''>('');
   const [oficialSelecionado, setOficialSelecionado] = useState<string>('');
+  const [pracaSelecionada, setPracaSelecionada] = useState<string>('');
 
   const [nip, setNip] = useState<string>('');
   const [nome, setNome] = useState<string>('');
   const [dataNascimento, setDataNascimento] = useState<string>('');
   const [cadastros, setCadastros] = useState<CadastroItem[]>([]);
+  const [faltantes, setFaltantes] = useState<string[]>([]);
 
   const datePlaceholder = useMemo(() => '00/00/0000', []);
 
@@ -80,26 +86,54 @@ export default function CadastroScreenModern() {
 
   function setCategoriaWithReset(next: Categoria) {
     setOficialSelecionado('');
+    setPracaSelecionada('');
     setCategoria(next);
   }
 
   function handleCadastrar() {
     if (!categoria) return;
 
+    const faltantesAgora: string[] = [];
+    if (!nip.trim()) faltantesAgora.push('Nip');
+    if (!nome.trim()) faltantesAgora.push('Nome');
+    if (!dataNascimento.trim()) faltantesAgora.push('Data de nascimento');
+    if (categoria === 'Oficiais' && !oficialSelecionado.trim()) faltantesAgora.push('Oficial');
+    if (categoria === 'Praças' && !pracaSelecionada.trim()) faltantesAgora.push('Graduação');
+
+    setFaltantes(faltantesAgora);
+
     const id = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    setCadastros((prev) => [
-      ...prev,
-      {
-        id,
-        nip: nip.trim(),
-        nome: nome.trim(),
-        dataNascimento: dataNascimento.trim(),
-        categoria,
-        // Se ainda não selecionou o oficial, mantém vazio (mostra '-' na tabela).
-        oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
-      },
-    ]);
+    const novoCadastro: CadastroItem = {
+      id,
+      // Reaplica a máscara/filtragem numérica para evitar que o corretor
+      // injete texto (ex.: "Beliscar") no valor salvo.
+      nip: formatNipInput(nip).trim(),
+      nome: nome.trim(),
+      dataNascimento: dataNascimento.trim(),
+      categoria,
+      // Se ainda não selecionou o oficial, mantém vazio (mostra '-' na tabela).
+      oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
+      praca: categoria === 'Praças' ? pracaSelecionada : undefined,
+    };
+
+    setCadastros((prev) => [...prev, novoCadastro]);
+    // Persistência: não trava a UX se IndexedDB falhar.
+    addCadastro(novoCadastro).catch(() => undefined);
   }
+
+  useEffect(() => {
+    let mounted = true;
+    getAllCadastros()
+      .then((items) => {
+        if (!mounted) return;
+        setCadastros(items as CadastroItem[]);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
@@ -176,6 +210,37 @@ export default function CadastroScreenModern() {
               </View>
             ) : null}
 
+            {categoria === 'Praças' ? (
+              <View style={styles.section}>
+                <FieldLabel>Graduação</FieldLabel>
+                <View style={styles.optionGrid}>
+                  {['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'].map((opt) => {
+                    const active = pracaSelecionada === opt;
+                    return (
+                      <TouchableOpacity
+                        key={opt}
+                        onPress={() => setPracaSelecionada(opt)}
+                        style={[
+                          styles.optionBtn,
+                          active ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                        ]}
+                      >
+                        {opt === 'SO' ? (
+                          <LabelSO
+                            color={active ? '#FFFFFF' : '#111827'}
+                            fontSize={13}
+                            fontWeight={800}
+                          />
+                        ) : (
+                          <Text style={active ? styles.segmentTextSelected : styles.segmentText}>{opt}</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
             <View style={styles.section}>
               {/* Nip label via SVG para evitar corretor automático do Chrome */}
               <View style={styles.labelRow}>
@@ -223,6 +288,11 @@ export default function CadastroScreenModern() {
                     color: '#111827',
                   },
                 ]}
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="off"
+                autoCapitalize="none"
+                textContentType="none"
               />
             </View>
 
@@ -241,8 +311,14 @@ export default function CadastroScreenModern() {
                     color: '#111827',
                   },
                 ]}
-                keyboardType={Platform.OS === 'web' ? 'default' : 'numeric'}
+                keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                inputMode="numeric"
                 maxLength={10}
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="off"
+                autoCapitalize="none"
+                textContentType="none"
               />
             </View>
 
@@ -255,6 +331,12 @@ export default function CadastroScreenModern() {
                 <Text style={styles.btnText}>cadastrar</Text>
               </TouchableOpacity>
             </View>
+
+            {faltantes.length > 0 ? (
+              <Text style={styles.warnText}>
+                Atenção: faltam {faltantes.join(', ')}.
+              </Text>
+            ) : null}
           </Card>
 
           <View style={{ height: 16 }} />
@@ -267,29 +349,65 @@ export default function CadastroScreenModern() {
             ) : (
               <View>
                 <View style={styles.tableHeaderRow}>
-                  <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Nip</Text>
-                  <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Nome</Text>
-                  <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Data</Text>
-                  <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Categoria</Text>
-                  <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Oficial</Text>
+                  <View style={{ flex: 1 }}>
+                    <LabelSvgText text="Categoria" color="#111827" fontSize={12} fontWeight={800} width={110} height={18} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <LabelSvgText
+                      text="Posto/ Gradução"
+                      color="#111827"
+                      fontSize={12}
+                      fontWeight={800}
+                      width={160}
+                      height={18}
+                    />
+                  </View>
+                  <View style={{ flex: 1, paddingHorizontal: 4 }}>
+                    <LabelNip color="#111827" fontSize={12} fontWeight={800} />
+                  </View>
+                  <View style={{ flex: 2 }}>
+                    <LabelSvgText text="Nome" color="#111827" fontSize={12} fontWeight={800} width={90} height={18} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <LabelSvgText
+                      text="Data de Nascimento"
+                      color="#111827"
+                      fontSize={12}
+                      fontWeight={800}
+                      width={170}
+                      height={18}
+                    />
+                  </View>
                 </View>
 
                 {cadastros.map((c) => (
                   <View key={c.id} style={styles.tableRow}>
+                    <View style={{ flex: 1, alignItems: 'flex-start' }}>
+                      <Text style={styles.tableCell} numberOfLines={1}>
+                        {c.categoria}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, alignItems: 'flex-start' }}>
+                      {c.categoria === 'Oficiais' ? (
+                        <Text style={styles.tableCell} numberOfLines={1}>
+                          {c.oficial || '-'}
+                        </Text>
+                      ) : c.praca === 'SO' ? (
+                        <LabelSO color="#111827" fontSize={12} fontWeight={900} />
+                      ) : (
+                        <Text style={styles.tableCell} numberOfLines={1}>
+                          {c.praca || '-'}
+                        </Text>
+                      )}
+                    </View>
                     <Text style={[styles.tableCell, { flex: 1 }]} numberOfLines={1}>
-                      {c.nip}
+                      {c.nip ? c.nip : '-'}
                     </Text>
                     <Text style={[styles.tableCell, { flex: 2 }]} numberOfLines={1}>
-                      {c.nome}
+                      {c.nome ? c.nome : '-'}
                     </Text>
                     <Text style={[styles.tableCell, { flex: 1 }]} numberOfLines={1}>
-                      {c.dataNascimento}
-                    </Text>
-                    <Text style={[styles.tableCell, { flex: 1 }]} numberOfLines={1}>
-                      {c.categoria}
-                    </Text>
-                    <Text style={[styles.tableCell, { flex: 1 }]} numberOfLines={1}>
-                      {c.categoria === 'Oficiais' ? c.oficial || '-' : '-'}
+                      {c.dataNascimento ? c.dataNascimento : '-'}
                     </Text>
                   </View>
                 ))}
@@ -407,5 +525,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(17,24,39,0.08)',
   },
   tableCell: { fontSize: 12, fontWeight: '700', color: '#111827', paddingHorizontal: 4 },
+
+  warnText: { marginTop: 8, fontSize: 12, fontWeight: '700', color: '#9CA3AF' },
 });
 

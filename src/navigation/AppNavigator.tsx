@@ -11,12 +11,14 @@ import EstatisticasScreen from '../screens/EstatisticasScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
 import CadastrarResultadosScreen from '../screens/CadastrarResultadosScreen';
 
-/** Linha de resultado da corrida (enviada para cadastro). */
+/** Linha de resultado da prova (enviada para cadastro). */
 export type ResultadoCorridaItem = {
   corredor: number;
   nome: string;
   tempoMs: number;
   nip: string;
+  /** Define rótulos na tela de resumo e coluna no cadastro (corrida vs natação). */
+  prova?: 'corrida' | 'natacao';
 };
 
 export type RootStackParamList = {

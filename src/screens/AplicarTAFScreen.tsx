@@ -38,6 +38,8 @@ const MAX_PARTICIPANTES = 200;
 
 type CorridaEtapa = 'menu' | 'participantes' | 'nips' | 'tabela_corrida';
 
+type TipoProvaTAF = 'corrida' | 'natacao';
+
 /** Cronômetro da corrida: pode pausar e retomar antes de parar de vez. */
 type CronometroCorridaEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
 
@@ -58,6 +60,7 @@ export default function AplicarTAFScreen() {
   const inputBorder = 'rgba(17,24,39,0.12)';
   const inputTextColor = '#111827';
   const [mostrarProvas, setMostrarProvas] = useState(false);
+  const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
   const [corridaEtapa, setCorridaEtapa] = useState<CorridaEtapa>('menu');
   const [numeroParticipantesCorrida, setNumeroParticipantesCorrida] = useState('');
   const [erroParticipantes, setErroParticipantes] = useState('');
@@ -67,6 +70,8 @@ export default function AplicarTAFScreen() {
   const [numeroVoltas, setNumeroVoltas] = useState('');
   /** Checklist por [participante][volta] na tabela “Corrida preparada”. */
   const [checksVoltas, setChecksVoltas] = useState<boolean[][]>([]);
+  /** Marcar chegada por nadador (natação — sem colunas de volta). */
+  const [chegadaNatacao, setChegadaNatacao] = useState<boolean[]>([]);
   /** Tempo (ms) registrado ao marcar a última volta; null = sem tempo ou última volta desmarcada. */
   const [temposMilitaresMs, setTemposMilitaresMs] = useState<(number | null)[]>([]);
   const [salvandoResultadosCorrida, setSalvandoResultadosCorrida] = useState(false);
@@ -184,32 +189,50 @@ export default function AplicarTAFScreen() {
     return Math.min(n, MAX_VOLTAS_COLUNAS);
   }, [numeroVoltas]);
 
-  /** Coluna “Tempo” ao lado da última volta quando alguém marca a última volta. */
+  /** Coluna “Tempo”: corrida = alguém marcou última volta; natação = alguém marcou chegada. */
   const mostrarColunaTempo = useMemo(() => {
+    if (tipoProva === 'natacao') {
+      return chegadaNatacao.some(Boolean);
+    }
     if (nColunasVoltas < 1) return false;
     const ultima = nColunasVoltas - 1;
     return checksVoltas.some((row) => row?.[ultima]);
-  }, [nColunasVoltas, checksVoltas]);
+  }, [tipoProva, chegadaNatacao, nColunasVoltas, checksVoltas]);
 
   const larguraMinTabela = useMemo(() => {
     const wVolta = 44;
     const wNome = 200;
     const wTempo = 82;
-    let w = 72 + wNome + nColunasVoltas * wVolta + 24;
+    const wAtleta = 72;
+    if (tipoProva === 'natacao') {
+      const wMarcar = 128;
+      let w = wAtleta + wNome + wMarcar + 24;
+      if (mostrarColunaTempo) w += wTempo;
+      return w;
+    }
+    let w = wAtleta + wNome + nColunasVoltas * wVolta + 24;
     if (mostrarColunaTempo) w += wTempo;
     return w;
-  }, [nColunasVoltas, mostrarColunaTempo]);
+  }, [tipoProva, nColunasVoltas, mostrarColunaTempo]);
 
-  /** Todos os participantes com tempo na coluna “Tempo” (última volta marcada com ms registrado). */
+  /** Todos com tempo registrado (corrida: última volta; natação: chegada). */
   const todosIntegrantesComTempoRegistrado = useMemo(() => {
     const p = nParticipantesConfirmado;
-    if (p < 1 || nColunasVoltas < 1) return false;
+    if (p < 1) return false;
+    if (tipoProva === 'natacao') {
+      if (temposMilitaresMs.length < p) return false;
+      for (let i = 0; i < p; i += 1) {
+        if (temposMilitaresMs[i] == null) return false;
+      }
+      return true;
+    }
+    if (nColunasVoltas < 1) return false;
     if (temposMilitaresMs.length < p) return false;
     for (let i = 0; i < p; i += 1) {
       if (temposMilitaresMs[i] == null) return false;
     }
     return true;
-  }, [nParticipantesConfirmado, nColunasVoltas, temposMilitaresMs]);
+  }, [tipoProva, nParticipantesConfirmado, nColunasVoltas, temposMilitaresMs]);
 
   /** Quando o último militar recebe tempo, encerra o cronômetro automaticamente. */
   useEffect(() => {
@@ -231,7 +254,7 @@ export default function AplicarTAFScreen() {
   }, [todosIntegrantesComTempoRegistrado, cronometroEstado]);
 
   useEffect(() => {
-    if (corridaEtapa !== 'tabela_corrida') return;
+    if (corridaEtapa !== 'tabela_corrida' || tipoProva !== 'corrida') return;
     const p = nParticipantesConfirmado;
     const v = nColunasVoltas;
     setChecksVoltas((prev) => {
@@ -245,7 +268,19 @@ export default function AplicarTAFScreen() {
       }
       return next;
     });
-  }, [corridaEtapa, nParticipantesConfirmado, nColunasVoltas]);
+  }, [corridaEtapa, tipoProva, nParticipantesConfirmado, nColunasVoltas]);
+
+  useEffect(() => {
+    if (corridaEtapa !== 'tabela_corrida' || tipoProva !== 'natacao') return;
+    const p = nParticipantesConfirmado;
+    setChegadaNatacao((prev) => {
+      const next: boolean[] = [];
+      for (let i = 0; i < p; i += 1) {
+        next[i] = prev[i] ?? false;
+      }
+      return next;
+    });
+  }, [corridaEtapa, tipoProva, nParticipantesConfirmado]);
 
   useEffect(() => {
     if (corridaEtapa !== 'tabela_corrida') return;
@@ -286,17 +321,44 @@ export default function AplicarTAFScreen() {
     [nColunasVoltas, getElapsedRaceMs],
   );
 
+  const toggleMarcarChegadaNatacao = useCallback(
+    (participante: number) => {
+      setChegadaNatacao((prev) => {
+        const next = [...prev];
+        while (next.length <= participante) next.push(false);
+        const willBeChecked = !next[participante];
+        next[participante] = willBeChecked;
+        const ms = willBeChecked ? getElapsedRaceMs() : null;
+        queueMicrotask(() => {
+          setTemposMilitaresMs((prevT) => {
+            const nextT = [...prevT];
+            while (nextT.length <= participante) nextT.push(null);
+            nextT[participante] = ms;
+            return nextT;
+          });
+        });
+        return next;
+      });
+    },
+    [getElapsedRaceMs],
+  );
+
   const onCadastrarResultados = useCallback(async () => {
     if (salvandoResultadosCorrida) return;
+    const prova = tipoProva ?? 'corrida';
+    const labelAtleta = prova === 'natacao' ? 'Nadador' : 'Corredor';
     const resultados: ResultadoCorridaItem[] = Array.from({ length: nParticipantesConfirmado }, (_, i) => {
       const fb = nipFeedbackLinhas[i];
       const nomeBase =
-        fb?.tipo === 'ok' ? (fb.nomeMilitar || '').trim() || `Corredor ${i + 1}` : `Corredor ${i + 1}`;
+        fb?.tipo === 'ok'
+          ? (fb.nomeMilitar || '').trim() || `${labelAtleta} ${i + 1}`
+          : `${labelAtleta} ${i + 1}`;
       return {
         corredor: i + 1,
         nome: nomeBase,
         tempoMs: temposMilitaresMs[i] ?? 0,
         nip: nipsParticipantes[i] ?? '',
+        prova,
       };
     });
 
@@ -317,10 +379,10 @@ export default function AplicarTAFScreen() {
           continue;
         }
         const tempoStr = formatElapsedMs(r.tempoMs);
-        const atualizado: CadastroItemPersist = {
-          ...busca.cadastro,
-          tempoCorrida: tempoStr,
-        };
+        const atualizado: CadastroItemPersist =
+          prova === 'natacao'
+            ? { ...busca.cadastro, tempoNatacao: tempoStr }
+            : { ...busca.cadastro, tempoCorrida: tempoStr };
         await addCadastro(atualizado);
         const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);
         if (idx >= 0) listaAtual[idx] = atualizado;
@@ -366,6 +428,7 @@ export default function AplicarTAFScreen() {
     nipsParticipantes,
     salvandoResultadosCorrida,
     temposMilitaresMs,
+    tipoProva,
   ]);
 
   const fecharModalTempoRegistrado = useCallback(() => {
@@ -385,10 +448,17 @@ export default function AplicarTAFScreen() {
   }, []);
 
   const abrirCorrida = useCallback(() => {
+    setTipoProva('corrida');
+    setCorridaEtapa('participantes');
+  }, []);
+
+  const abrirNatacao = useCallback(() => {
+    setTipoProva('natacao');
     setCorridaEtapa('participantes');
   }, []);
 
   const voltarMenuProvas = useCallback(() => {
+    setTipoProva(null);
     setCorridaEtapa('menu');
   }, []);
 
@@ -471,11 +541,14 @@ export default function AplicarTAFScreen() {
     });
   }, [nipsParticipantes]);
 
-  const prepararCorrida = useCallback(() => {
+  const prepararProva = useCallback(() => {
     resetCronometroCorrida();
     setTemposMilitaresMs(Array.from({ length: nParticipantesConfirmado }, () => null));
+    if (tipoProva === 'natacao') {
+      setChegadaNatacao(Array.from({ length: nParticipantesConfirmado }, () => false));
+    }
     setCorridaEtapa('tabela_corrida');
-  }, [resetCronometroCorrida, nParticipantesConfirmado]);
+  }, [resetCronometroCorrida, nParticipantesConfirmado, tipoProva]);
 
   const voltarDeTabelaParaNips = useCallback(() => {
     resetCronometroCorrida();
@@ -485,6 +558,7 @@ export default function AplicarTAFScreen() {
   const iniciarTaf = useCallback(() => {
     resetCronometroCorrida();
     setMostrarProvas(true);
+    setTipoProva(null);
     setCorridaEtapa('menu');
     setNumeroParticipantesCorrida('');
     setErroParticipantes('');
@@ -493,8 +567,12 @@ export default function AplicarTAFScreen() {
     setNipFeedbackLinhas([]);
     setNumeroVoltas('');
     setChecksVoltas([]);
+    setChegadaNatacao([]);
     setTemposMilitaresMs([]);
   }, [resetCronometroCorrida]);
+
+  const tituloProvaCurta = tipoProva === 'natacao' ? 'Natação' : 'Corrida';
+  const labelAtleta = tipoProva === 'natacao' ? 'Nadador' : 'Corredor';
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
@@ -572,7 +650,7 @@ export default function AplicarTAFScreen() {
               <TouchableOpacity
                 accessibilityLabel="Natação"
                 activeOpacity={0.85}
-                onPress={() => {}}
+                onPress={abrirNatacao}
                 style={[styles.toggleBtn, styles.toggleBtnSpacing]}
               >
                 <Text style={styles.toggleBtnText}>Natação</Text>
@@ -615,7 +693,7 @@ export default function AplicarTAFScreen() {
                 ]}
                 autoCorrect={false}
                 spellCheck={false}
-                accessibilityLabel="Número de participantes da corrida"
+                accessibilityLabel={`Número de participantes da ${tituloProvaCurta.toLowerCase()}`}
               />
               {erroParticipantes ? <Text style={styles.erroText}>{erroParticipantes}</Text> : null}
 
@@ -643,7 +721,9 @@ export default function AplicarTAFScreen() {
                 <Text style={styles.btnVoltarText}>← Voltar</Text>
               </TouchableOpacity>
 
-              <Text style={styles.sectionTitleCadastro}>Corrida — NIPs dos participantes</Text>
+              <Text style={styles.sectionTitleCadastro}>
+                {tituloProvaCurta} — NIPs dos participantes
+              </Text>
               <Text style={styles.formSubtitleCadastro}>
                 Preencha o NIP de cada um dos {nParticipantesConfirmado} participantes.
               </Text>
@@ -680,7 +760,7 @@ export default function AplicarTAFScreen() {
                   {nipFeedbackLinhas[index]?.tipo === 'ok' ? (
                     <View style={styles.nomeCorredorBeside}>
                       <Text style={styles.nomeCorredorBesideText} numberOfLines={4}>
-                        ({nipFeedbackLinhas[index].nomeMilitar}) Corredor número{' '}
+                        ({nipFeedbackLinhas[index].nomeMilitar}) {labelAtleta} número{' '}
                         <Text style={styles.numeroCorredor}>{index + 1}</Text>
                       </Text>
                     </View>
@@ -701,12 +781,12 @@ export default function AplicarTAFScreen() {
             ))}
 
             <TouchableOpacity
-              accessibilityLabel="Preparar Corrida"
+              accessibilityLabel={`Preparar ${tituloProvaCurta}`}
               activeOpacity={0.85}
-              onPress={prepararCorrida}
+              onPress={prepararProva}
               style={styles.btnPrepararCorridaCadastro}
             >
-              <Text style={styles.btnCadastroText}>Preparar Corrida</Text>
+              <Text style={styles.btnCadastroText}>Preparar {tituloProvaCurta}</Text>
             </TouchableOpacity>
             </View>
           </Card>
@@ -724,25 +804,31 @@ export default function AplicarTAFScreen() {
               <Text style={styles.btnVoltarText}>← Voltar</Text>
             </TouchableOpacity>
 
-            <Text style={styles.sectionTitleCadastro}>Corrida preparada</Text>
+            <Text style={styles.sectionTitleCadastro}>
+              {tipoProva === 'natacao' ? 'Natação preparada' : 'Corrida preparada'}
+            </Text>
 
-            <Text style={styles.labelTextCadastro}>Número de Voltas</Text>
-            <TextInput
-              value={numeroVoltas}
-              onChangeText={onChangeNumeroVoltas}
-              placeholder="0"
-              placeholderTextColor="rgba(17,24,39,0.35)"
-              keyboardType="number-pad"
-              maxLength={4}
-              style={[
-                styles.inputCadastro,
-                styles.campoVoltasInput,
-                { borderColor: inputBorder, backgroundColor: inputBg, color: inputTextColor },
-              ]}
-              autoCorrect={false}
-              spellCheck={false}
-              accessibilityLabel="Número de voltas da corrida"
-            />
+            {tipoProva === 'corrida' ? (
+              <>
+                <Text style={styles.labelTextCadastro}>Número de Voltas</Text>
+                <TextInput
+                  value={numeroVoltas}
+                  onChangeText={onChangeNumeroVoltas}
+                  placeholder="0"
+                  placeholderTextColor="rgba(17,24,39,0.35)"
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  style={[
+                    styles.inputCadastro,
+                    styles.campoVoltasInput,
+                    { borderColor: inputBorder, backgroundColor: inputBg, color: inputTextColor },
+                  ]}
+                  autoCorrect={false}
+                  spellCheck={false}
+                  accessibilityLabel="Número de voltas da corrida"
+                />
+              </>
+            ) : null}
 
             <ScrollView
               horizontal
@@ -761,24 +847,31 @@ export default function AplicarTAFScreen() {
                 ]}
               >
                 <View style={styles.tabelaHeaderRow}>
-                  <Text style={[styles.tabelaHeaderCell, styles.tabelaColCorredor]}>Corredor</Text>
+                  <Text style={[styles.tabelaHeaderCell, styles.tabelaColCorredor]}>{labelAtleta}</Text>
                   <Text style={[styles.tabelaHeaderCell, styles.tabelaColNome]}>Nome</Text>
-                  {nColunasVoltas > 0
-                    ? Array.from({ length: nColunasVoltas }, (_, v) => (
-                        <Text
-                          key={`h-volta-${v}`}
-                          style={[
-                            styles.tabelaHeaderCell,
-                            styles.tabelaHeaderVolta,
-                            styles.tabelaColVolta,
-                            v === 0 ? styles.tabelaColVoltaPrimeira : null,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          V{v + 1}
-                        </Text>
-                      ))
-                    : null}
+                  {tipoProva === 'natacao' ? (
+                    <Text
+                      style={[styles.tabelaHeaderCell, styles.tabelaColMarcarChegada]}
+                      numberOfLines={2}
+                    >
+                      Marcar Chegada
+                    </Text>
+                  ) : nColunasVoltas > 0 ? (
+                    Array.from({ length: nColunasVoltas }, (_, v) => (
+                      <Text
+                        key={`h-volta-${v}`}
+                        style={[
+                          styles.tabelaHeaderCell,
+                          styles.tabelaHeaderVolta,
+                          styles.tabelaColVolta,
+                          v === 0 ? styles.tabelaColVoltaPrimeira : null,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        V{v + 1}
+                      </Text>
+                    ))
+                  ) : null}
                   {mostrarColunaTempo ? (
                     <Text style={[styles.tabelaHeaderCell, styles.tabelaColTempo]} numberOfLines={1}>
                       Tempo
@@ -787,8 +880,8 @@ export default function AplicarTAFScreen() {
                 </View>
                 {Array.from({ length: nParticipantesConfirmado }, (_, index) => {
                   const fb = nipFeedbackLinhas[index];
-                  const nome =
-                    fb?.tipo === 'ok' ? fb.nomeMilitar : '—';
+                  const nome = fb?.tipo === 'ok' ? fb.nomeMilitar : '—';
+                  const marcadoChegada = chegadaNatacao[index] ?? false;
                   return (
                     <View
                       key={index}
@@ -803,41 +896,63 @@ export default function AplicarTAFScreen() {
                       <Text style={[styles.tabelaCellText, styles.tabelaColNome]} numberOfLines={2}>
                         {nome}
                       </Text>
-                      {nColunasVoltas > 0
-                        ? Array.from({ length: nColunasVoltas }, (__, v) => {
-                            const marcado = checksVoltas[index]?.[v] ?? false;
-                            return (
-                              <View
-                                key={`d-volta-${index}-${v}`}
-                                style={[
-                                  styles.tabelaColVolta,
-                                  styles.tabelaCelulaCheck,
-                                  v === 0 ? styles.tabelaColVoltaPrimeira : null,
-                                ]}
+                      {tipoProva === 'natacao' ? (
+                        <View style={[styles.tabelaColMarcarChegada, styles.tabelaCelulaCheck]}>
+                          <TouchableOpacity
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: marcadoChegada }}
+                            accessibilityLabel={`Marcar chegada, ${labelAtleta} ${index + 1}`}
+                            activeOpacity={0.85}
+                            onPress={() => toggleMarcarChegadaNatacao(index)}
+                            style={styles.checkVoltaOuter}
+                          >
+                            <View
+                              style={[
+                                styles.checkVoltaBox,
+                                marcadoChegada ? styles.checkVoltaBoxOn : styles.checkVoltaBoxOff,
+                              ]}
+                            >
+                              {marcadoChegada ? (
+                                <Check size={11} color="#FFFFFF" strokeWidth={2.5} />
+                              ) : null}
+                            </View>
+                          </TouchableOpacity>
+                        </View>
+                      ) : nColunasVoltas > 0 ? (
+                        Array.from({ length: nColunasVoltas }, (__, v) => {
+                          const marcado = checksVoltas[index]?.[v] ?? false;
+                          return (
+                            <View
+                              key={`d-volta-${index}-${v}`}
+                              style={[
+                                styles.tabelaColVolta,
+                                styles.tabelaCelulaCheck,
+                                v === 0 ? styles.tabelaColVoltaPrimeira : null,
+                              ]}
+                            >
+                              <TouchableOpacity
+                                accessibilityRole="checkbox"
+                                accessibilityState={{ checked: marcado }}
+                                accessibilityLabel={`Volta ${v + 1}, participante ${index + 1}`}
+                                activeOpacity={0.85}
+                                onPress={() => toggleCheckVolta(index, v)}
+                                style={styles.checkVoltaOuter}
                               >
-                                <TouchableOpacity
-                                  accessibilityRole="checkbox"
-                                  accessibilityState={{ checked: marcado }}
-                                  accessibilityLabel={`Volta ${v + 1}, participante ${index + 1}`}
-                                  activeOpacity={0.85}
-                                  onPress={() => toggleCheckVolta(index, v)}
-                                  style={styles.checkVoltaOuter}
+                                <View
+                                  style={[
+                                    styles.checkVoltaBox,
+                                    marcado ? styles.checkVoltaBoxOn : styles.checkVoltaBoxOff,
+                                  ]}
                                 >
-                                  <View
-                                    style={[
-                                      styles.checkVoltaBox,
-                                      marcado ? styles.checkVoltaBoxOn : styles.checkVoltaBoxOff,
-                                    ]}
-                                  >
-                                    {marcado ? (
-                                      <Check size={11} color="#FFFFFF" strokeWidth={2.5} />
-                                    ) : null}
-                                  </View>
-                                </TouchableOpacity>
-                              </View>
-                            );
-                          })
-                        : null}
+                                  {marcado ? (
+                                    <Check size={11} color="#FFFFFF" strokeWidth={2.5} />
+                                  ) : null}
+                                </View>
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })
+                      ) : null}
                       {mostrarColunaTempo ? (
                         <View style={[styles.tabelaColTempo, styles.tabelaCelulaTempo]}>
                           <Text
@@ -860,22 +975,26 @@ export default function AplicarTAFScreen() {
               <View style={styles.iniciarCorridaRow}>
                 {(cronometroEstado === 'inicial' || cronometroEstado === 'finalizado') ? (
                   <TouchableOpacity
-                    accessibilityLabel="Iniciar Corrida"
+                    accessibilityLabel={`Iniciar ${tituloProvaCurta}`}
                     activeOpacity={0.85}
                     onPress={iniciarCronometroCorrida}
                     style={styles.btnIniciarCorridaCadastro}
                   >
-                    <Text style={styles.btnIniciarCorridaTextCadastro}>Iniciar Corrida</Text>
+                    <Text style={styles.btnIniciarCorridaTextCadastro}>
+                      Iniciar {tituloProvaCurta}
+                    </Text>
                   </TouchableOpacity>
                 ) : null}
                 {(cronometroEstado === 'rodando' || cronometroEstado === 'pausado') ? (
                   <TouchableOpacity
-                    accessibilityLabel="Parar Corrida"
+                    accessibilityLabel={`Parar ${tituloProvaCurta}`}
                     activeOpacity={0.85}
                     onPress={pararCronometroCorrida}
                     style={styles.btnIniciarCorridaCadastro}
                   >
-                    <Text style={styles.btnIniciarCorridaTextCadastro}>Parar Corrida</Text>
+                    <Text style={styles.btnIniciarCorridaTextCadastro}>
+                      Parar {tituloProvaCurta}
+                    </Text>
                   </TouchableOpacity>
                 ) : null}
                 {cronometroEstado === 'rodando' ? (
@@ -913,7 +1032,7 @@ export default function AplicarTAFScreen() {
               </View>
               {todosIntegrantesComTempoRegistrado ? (
                 <TouchableOpacity
-                  accessibilityLabel="Aplicar resultado da corrida"
+                  accessibilityLabel={`Aplicar resultado da ${tituloProvaCurta.toLowerCase()}`}
                   activeOpacity={0.85}
                   onPress={() => {
                     void onCadastrarResultados();
@@ -1287,6 +1406,12 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     paddingRight: 4,
+  },
+  tabelaColMarcarChegada: {
+    width: 128,
+    minWidth: 128,
+    textAlign: 'center',
+    paddingHorizontal: 4,
   },
   tabelaColVolta: {
     width: 44,

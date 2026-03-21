@@ -6,6 +6,14 @@ export type CadastroItemPersist = {
   categoria: 'Oficiais' | 'Praças';
   oficial?: string;
   praca?: string;
+  /** Tempos TAF (Registrador de TAF), preenchidos quando houver registro */
+  tempoCorrida?: string;
+  tempoNatacao?: string;
+  /** Notas (Registrador de TAF), ex.: ao lado dos tempos de Corrida e Natação */
+  notaCorrida?: string;
+  notaNatacao?: string;
+  /** Resultado da prova de natação (Registrador de TAF) */
+  resultadoNatacao?: 'aprovado' | 'reprovado';
 };
 
 const DB_NAME = 'taf_cadastros_db';
@@ -63,6 +71,22 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
     });
   } catch (err) {
     // Sem impedir a funcionalidade da UI.
+  }
+}
+
+export async function deleteCadastro(id: string): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.delete(id);
+
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    // Sem impedir a UX.
   }
 }
 

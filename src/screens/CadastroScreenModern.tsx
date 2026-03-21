@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, X } from 'lucide-react-native';
 import { Card } from '../components/Card';
+import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
 import { LabelNip } from '../components/LabelNip';
 import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
-import { addCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
+import { addCadastro, deleteCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -28,6 +29,11 @@ type CadastroItem = {
   categoria: Categoria;
   oficial?: string;
   praca?: string;
+  tempoCorrida?: string;
+  tempoNatacao?: string;
+  notaCorrida?: string;
+  notaNatacao?: string;
+  resultadoNatacao?: 'aprovado' | 'reprovado';
 };
 
 function formatDateInput(value: string) {
@@ -72,6 +78,14 @@ export default function CadastroScreenModern() {
   const [cadastros, setCadastros] = useState<CadastroItem[]>([]);
   const [faltantes, setFaltantes] = useState<string[]>([]);
 
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [mostrarTabela, setMostrarTabela] = useState(false);
+
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [excluirId, setExcluirId] = useState<string | null>(null);
+  const [modalNipDuplicado, setModalNipDuplicado] = useState(false);
+  const [modalCadastroSucesso, setModalCadastroSucesso] = useState(false);
+
   const datePlaceholder = useMemo(() => '00/00/0000', []);
 
   const grayBg = theme.background; // já é #F5F7FA no light
@@ -101,24 +115,100 @@ export default function CadastroScreenModern() {
     if (categoria === 'Praças' && !pracaSelecionada.trim()) faltantesAgora.push('Graduação');
 
     setFaltantes(faltantesAgora);
+    if (faltantesAgora.length > 0) return;
 
-    const id = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const nipFinal = formatNipInput(nip).trim();
+    const nipDigits = nipFinal.replace(/\D/g, '');
+    if (nipDigits.length > 0) {
+      const jaExiste = cadastros.some((c) => {
+        const outrosDigitos = (c.nip || '').replace(/\D/g, '');
+        if (outrosDigitos !== nipDigits) return false;
+        if (editandoId && c.id === editandoId) return false;
+        return true;
+      });
+      if (jaExiste) {
+        setModalNipDuplicado(true);
+        return;
+      }
+    }
+
+    const isEdicao = !!editandoId;
+
+    const id = editandoId ?? `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const anterior = editandoId ? cadastros.find((c) => c.id === editandoId) : undefined;
+    const legacyTempo = anterior ? (anterior as CadastroItem & { tempo?: string }).tempo : undefined;
     const novoCadastro: CadastroItem = {
       id,
       // Reaplica a máscara/filtragem numérica para evitar que o corretor
       // injete texto (ex.: "Beliscar") no valor salvo.
-      nip: formatNipInput(nip).trim(),
+      nip: nipFinal,
       nome: nome.trim(),
       dataNascimento: dataNascimento.trim(),
       categoria,
       // Se ainda não selecionou o oficial, mantém vazio (mostra '-' na tabela).
       oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
       praca: categoria === 'Praças' ? pracaSelecionada : undefined,
+      tempoCorrida: anterior?.tempoCorrida ?? legacyTempo,
+      tempoNatacao: anterior?.tempoNatacao,
+      notaCorrida: anterior?.notaCorrida,
+      notaNatacao: anterior?.notaNatacao,
+      resultadoNatacao: anterior?.resultadoNatacao,
     };
 
-    setCadastros((prev) => [...prev, novoCadastro]);
+    setCadastros((prev) => {
+      if (editandoId) return prev.map((c) => (c.id === id ? novoCadastro : c));
+      return [...prev, novoCadastro];
+    });
     // Persistência: não trava a UX se IndexedDB falhar.
     addCadastro(novoCadastro).catch(() => undefined);
+
+    setEditandoId(null);
+
+    if (!isEdicao) {
+      setModalCadastroSucesso(true);
+      setNip('');
+      setNome('');
+      setDataNascimento('');
+      setOficialSelecionado('');
+      setPracaSelecionada('');
+      setCategoria('');
+      setFaltantes([]);
+    }
+  }
+
+  function handleEditar(item: CadastroItem) {
+    setEditandoId(item.id);
+    setExcluirId(null);
+    setFaltantes([]);
+
+    setMostrarFormulario(true);
+    setMostrarTabela(false);
+
+    setCategoria(item.categoria);
+    if (item.categoria === 'Oficiais') {
+      setOficialSelecionado(item.oficial || '');
+      setPracaSelecionada('');
+    } else {
+      setOficialSelecionado('');
+      setPracaSelecionada(item.praca || '');
+    }
+
+    setNip(item.nip || '');
+    setNome(item.nome || '');
+    setDataNascimento(item.dataNascimento || '');
+  }
+
+  async function handleConfirmarExcluir() {
+    if (!excluirId) return;
+    const id = excluirId;
+
+    setExcluirId(null);
+    // Atualiza a UI imediatamente para responsividade.
+    setCadastros((prev) => prev.filter((c) => c.id !== id));
+
+    await deleteCadastro(id);
+
+    if (editandoId === id) setEditandoId(null);
   }
 
   useEffect(() => {
@@ -134,6 +224,12 @@ export default function CadastroScreenModern() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!modalCadastroSucesso) return;
+    const t = setTimeout(() => setModalCadastroSucesso(false), 2000);
+    return () => clearTimeout(t);
+  }, [modalCadastroSucesso]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
@@ -156,272 +252,323 @@ export default function CadastroScreenModern() {
             </View>
           </View>
 
-          <Card glass={cardGlassEnabled} style={styles.formCard}>
-            <View style={styles.section}>
-              <FieldLabel>Categoria</FieldLabel>
+          <View style={styles.toggleStack}>
+            <TouchableOpacity
+              accessibilityLabel="Mostrar formulário"
+              onPress={() => setMostrarFormulario((v) => !v)}
+              style={[styles.toggleBtn, mostrarFormulario ? styles.toggleBtnActive : null]}
+            >
+              <Text
+                style={[styles.toggleBtnText, mostrarFormulario ? styles.toggleBtnTextActive : null]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                Realizar Cadastro
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-              <View style={styles.segmented}>
-                <TouchableOpacity
-                  onPress={() => setCategoriaWithReset('Oficiais')}
-                  style={[
-                    styles.segmentBtn,
-                    categoria === 'Oficiais' ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
-                  ]}
-                >
-                  <Text style={categoria === 'Oficiais' ? styles.segmentTextSelected : styles.segmentText}>
-                    Oficiais
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => setCategoriaWithReset('Praças')}
-                  style={[
-                    styles.segmentBtn,
-                    categoria === 'Praças' ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
-                  ]}
-                >
-                  <Text style={categoria === 'Praças' ? styles.segmentTextSelected : styles.segmentText}>
-                    Praças
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {categoria === 'Oficiais' ? (
+          {mostrarFormulario ? (
+            <Card glass={cardGlassEnabled} style={styles.formCard}>
               <View style={styles.section}>
-                <FieldLabel>Oficial</FieldLabel>
-                <View style={styles.optionGrid}>
-                  {['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG'].map((opt) => {
-                    const active = oficialSelecionado === opt;
-                    return (
-                      <TouchableOpacity
-                        key={opt}
-                        onPress={() => setOficialSelecionado(opt)}
-                        style={[
-                          styles.optionBtn,
-                          active ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
-                        ]}
-                      >
-                        <Text style={active ? styles.segmentTextSelected : styles.segmentText}>{opt}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                <FieldLabel>Categoria</FieldLabel>
+
+                <View style={styles.segmented}>
+                  <TouchableOpacity
+                    onPress={() => setCategoriaWithReset('Oficiais')}
+                    style={[
+                      styles.segmentBtn,
+                      categoria === 'Oficiais' ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                    ]}
+                  >
+                    <Text style={categoria === 'Oficiais' ? styles.segmentTextSelected : styles.segmentText}>
+                      Oficiais
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setCategoriaWithReset('Praças')}
+                    style={[
+                      styles.segmentBtn,
+                      categoria === 'Praças' ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                    ]}
+                  >
+                    <Text style={categoria === 'Praças' ? styles.segmentTextSelected : styles.segmentText}>
+                      Praças
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-            ) : null}
 
-            {categoria === 'Praças' ? (
-              <View style={styles.section}>
-                <FieldLabel>Graduação</FieldLabel>
-                <View style={styles.optionGrid}>
-                  {['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'].map((opt) => {
-                    const active = pracaSelecionada === opt;
-                    return (
-                      <TouchableOpacity
-                        key={opt}
-                        onPress={() => setPracaSelecionada(opt)}
-                        style={[
-                          styles.optionBtn,
-                          active ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
-                        ]}
-                      >
-                        {opt === 'SO' ? (
-                          <LabelSO
+              {categoria === 'Oficiais' ? (
+                <View style={styles.section}>
+                  <FieldLabel>Oficial</FieldLabel>
+                  <View style={styles.optionGrid}>
+                    {['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG'].map((opt) => {
+                      const active = oficialSelecionado === opt;
+                      return (
+                        <TouchableOpacity
+                          key={opt}
+                          onPress={() => setOficialSelecionado(opt)}
+                          style={[
+                            styles.optionBtn,
+                            active ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                          ]}
+                        >
+                        {opt === 'CT' ? (
+                          <LabelSvgText
+                            text="CT"
                             color={active ? '#FFFFFF' : '#111827'}
                             fontSize={13}
                             fontWeight={800}
+                            width={28}
+                            height={18}
                           />
                         ) : (
                           <Text style={active ? styles.segmentTextSelected : styles.segmentText}>{opt}</Text>
                         )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
-            ) : null}
+              ) : null}
 
-            <View style={styles.section}>
-              {/* Nip label via SVG para evitar corretor automático do Chrome */}
-              <View style={styles.labelRow}>
-                <View style={styles.labelSvgWrap}>
-                  <LabelNip color={unselectedText} />
+              {categoria === 'Praças' ? (
+                <View style={styles.section}>
+                  <FieldLabel>Graduação</FieldLabel>
+                  <View style={styles.optionGrid}>
+                    {['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'].map((opt) => {
+                      const active = pracaSelecionada === opt;
+                      return (
+                        <TouchableOpacity
+                          key={opt}
+                          onPress={() => setPracaSelecionada(opt)}
+                          style={[
+                            styles.optionBtn,
+                            active ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                          ]}
+                        >
+                          {opt === 'SO' ? (
+                            <LabelSO color={active ? '#FFFFFF' : '#111827'} fontSize={13} fontWeight={800} />
+                          ) : (
+                            <Text style={active ? styles.segmentTextSelected : styles.segmentText}>{opt}</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
+              ) : null}
+
+              <View style={styles.section}>
+                {/* Nip label via SVG para evitar corretor automático do Chrome */}
+                <View style={styles.labelRow}>
+                  <View style={styles.labelSvgWrap}>
+                    <LabelNip color={unselectedText} />
+                  </View>
+                </View>
+
+                <TextInput
+                  value={nip}
+                  onChangeText={(t) => setNip(formatNipInput(t))}
+                  placeholder=""
+                  placeholderTextColor="rgba(17,24,39,0.35)"
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: inputBorder,
+                      backgroundColor: inputBg,
+                      color: '#111827',
+                    },
+                  ]}
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  name="nip"
+                  textContentType="none"
+                  keyboardType="numeric"
+                  maxLength={10}
+                  inputMode="numeric"
+                />
               </View>
 
-              <TextInput
-                value={nip}
-                onChangeText={(t) => setNip(formatNipInput(t))}
-                placeholder=""
-                placeholderTextColor="rgba(17,24,39,0.35)"
-                style={[
-                  styles.input,
-                  {
-                    borderColor: inputBorder,
-                    backgroundColor: inputBg,
-                    color: '#111827',
-                  },
-                ]}
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-                autoCapitalize="none"
-                name="nip"
-                textContentType="none"
-                keyboardType="numeric"
-                maxLength={10}
-              />
-            </View>
+              <View style={styles.section}>
+                <FieldLabel>Nome</FieldLabel>
+                <TextInput
+                  value={nome}
+                  onChangeText={(t) => setNome(t)}
+                  placeholder="Nome"
+                  placeholderTextColor="rgba(17,24,39,0.35)"
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: inputBorder,
+                      backgroundColor: inputBg,
+                      color: '#111827',
+                    },
+                  ]}
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  textContentType="none"
+                />
+              </View>
 
-            <View style={styles.section}>
-              <FieldLabel>Nome</FieldLabel>
-              <TextInput
-                value={nome}
-                onChangeText={(t) => setNome(t)}
-                placeholder="Nome"
-                placeholderTextColor="rgba(17,24,39,0.35)"
-                style={[
-                  styles.input,
-                  {
-                    borderColor: inputBorder,
-                    backgroundColor: inputBg,
-                    color: '#111827',
-                  },
-                ]}
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-                autoCapitalize="none"
-                textContentType="none"
-              />
-            </View>
+              <View style={styles.section}>
+                <FieldLabel>Data de nascimento</FieldLabel>
+                <TextInput
+                  value={dataNascimento}
+                  onChangeText={(t) => setDataNascimento(formatDateInput(t))}
+                  placeholder={datePlaceholder}
+                  placeholderTextColor="rgba(17,24,39,0.35)"
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: inputBorder,
+                      backgroundColor: inputBg,
+                      color: '#111827',
+                    },
+                  ]}
+                  keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                  inputMode="numeric"
+                  maxLength={10}
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  textContentType="none"
+                />
+              </View>
 
-            <View style={styles.section}>
-              <FieldLabel>Data de nascimento</FieldLabel>
-              <TextInput
-                value={dataNascimento}
-                onChangeText={(t) => setDataNascimento(formatDateInput(t))}
-                placeholder={datePlaceholder}
-                placeholderTextColor="rgba(17,24,39,0.35)"
-                style={[
-                  styles.input,
-                  {
-                    borderColor: inputBorder,
-                    backgroundColor: inputBg,
-                    color: '#111827',
-                  },
-                ]}
-                keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-                inputMode="numeric"
-                maxLength={10}
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-                autoCapitalize="none"
-                textContentType="none"
-              />
-            </View>
+              <View style={styles.btnRow}>
+                <TouchableOpacity
+                  accessibilityLabel="cadastrar"
+                  onPress={handleCadastrar}
+                  style={styles.btn}
+                >
+                  <Text style={styles.btnText}>cadastrar</Text>
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.btnRow}>
-              <TouchableOpacity
-                accessibilityLabel="cadastrar"
-                onPress={handleCadastrar}
-                style={styles.btn}
+              {faltantes.length > 0 ? (
+                <Text style={styles.warnText}>Atenção: faltam {faltantes.join(', ')}.</Text>
+              ) : null}
+            </Card>
+          ) : null}
+
+          <View style={styles.tableToggleStack}>
+            <TouchableOpacity
+              accessibilityLabel="Mostrar tabela"
+              onPress={() => setMostrarTabela((v) => !v)}
+              style={[styles.toggleBtn, mostrarTabela ? styles.toggleBtnActive : null]}
+            >
+              <Text
+                style={[styles.toggleBtnText, mostrarTabela ? styles.toggleBtnTextActive : null]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
               >
-                <Text style={styles.btnText}>cadastrar</Text>
+                Planilha de Cadastro
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {mostrarTabela ? <View style={{ height: 16 }} /> : null}
+
+          {mostrarTabela ? (
+            <CadastroPlanilhaBlock
+              cadastros={cadastros}
+              cardGlassEnabled={cardGlassEnabled}
+              showActions
+              onEdit={handleEditar}
+              onRequestDelete={(c) => setExcluirId(c.id)}
+            />
+          ) : null}
+        </View>
+      </ScrollView>
+
+      {excluirId ? (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Excluir cadastro?</Text>
+              <TouchableOpacity
+                accessibilityLabel="Fechar modal"
+                onPress={() => setExcluirId(null)}
+                style={styles.modalCloseBtn}
+              >
+                <X size={18} color="#6B7280" strokeWidth={3} />
               </TouchableOpacity>
             </View>
 
-            {faltantes.length > 0 ? (
-              <Text style={styles.warnText}>
-                Atenção: faltam {faltantes.join(', ')}.
-              </Text>
-            ) : null}
-          </Card>
+            <Text style={styles.modalSubtitle}>Tem certeza que deseja excluir esta linha?</Text>
 
-          <View style={{ height: 16 }} />
-
-          <Card glass={cardGlassEnabled} style={styles.tableCard}>
-            <Text style={styles.tableTitle}>Cadastros</Text>
-
-            {cadastros.length === 0 ? (
-              <Text style={styles.tableEmpty}>Nenhum cadastro ainda.</Text>
-            ) : (
-              <View>
-                <View style={styles.tableHeaderRow}>
-                  <View style={{ flex: 1 }}>
-                    <LabelSvgText text="Categoria" color="#111827" fontSize={12} fontWeight={800} width={110} height={18} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <LabelSvgText
-                      text="Posto/ Gradução"
-                      color="#111827"
-                      fontSize={12}
-                      fontWeight={800}
-                      width={160}
-                      height={18}
-                    />
-                  </View>
-                  <View style={{ flex: 1, paddingHorizontal: 4 }}>
-                    <LabelNip color="#111827" fontSize={12} fontWeight={800} />
-                  </View>
-                  <View style={{ flex: 2 }}>
-                    <LabelSvgText text="Nome" color="#111827" fontSize={12} fontWeight={800} width={90} height={18} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <LabelSvgText
-                      text="Data de Nascimento"
-                      color="#111827"
-                      fontSize={12}
-                      fontWeight={800}
-                      width={170}
-                      height={18}
-                    />
-                  </View>
-                </View>
-
-                {cadastros.map((c) => (
-                  <View key={c.id} style={styles.tableRow}>
-                    <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                      <Text style={styles.tableCell} numberOfLines={1}>
-                        {c.categoria}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                      {c.categoria === 'Oficiais' ? (
-                        <Text style={styles.tableCell} numberOfLines={1}>
-                          {c.oficial || '-'}
-                        </Text>
-                      ) : c.praca === 'SO' ? (
-                        <LabelSO color="#111827" fontSize={12} fontWeight={900} />
-                      ) : (
-                        <Text style={styles.tableCell} numberOfLines={1}>
-                          {c.praca || '-'}
-                        </Text>
-                      )}
-                    </View>
-                    <Text style={[styles.tableCell, { flex: 1 }]} numberOfLines={1}>
-                      {c.nip ? c.nip : '-'}
-                    </Text>
-                    <Text style={[styles.tableCell, { flex: 2 }]} numberOfLines={1}>
-                      {c.nome ? c.nome : '-'}
-                    </Text>
-                    <Text style={[styles.tableCell, { flex: 1 }]} numberOfLines={1}>
-                      {c.dataNascimento ? c.dataNascimento : '-'}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </Card>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                accessibilityLabel="Cancelar exclusao"
+                onPress={() => setExcluirId(null)}
+                style={[styles.modalBtn, styles.modalBtnCancel]}
+              >
+                <Text style={styles.modalBtnTextCancel}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityLabel="Confirmar exclusao"
+                onPress={handleConfirmarExcluir}
+                style={[styles.modalBtn, styles.modalBtnDanger]}
+              >
+                <Text style={styles.modalBtnTextDanger}>Excluir</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </ScrollView>
+      ) : null}
+
+      {modalCadastroSucesso ? (
+        <View style={styles.modalOverlay} pointerEvents="box-none">
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitleSuccess}>Militar Cadastrado com Sucesso</Text>
+          </View>
+        </View>
+      ) : null}
+
+      {modalNipDuplicado ? (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Militar já cadastrado</Text>
+              <TouchableOpacity
+                accessibilityLabel="Fechar aviso de NIP duplicado"
+                onPress={() => setModalNipDuplicado(false)}
+                style={styles.modalCloseBtn}
+              >
+                <X size={18} color="#6B7280" strokeWidth={3} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              O NIP informado já está cadastrado. Não é possível repetir o cadastro do mesmo militar.
+            </Text>
+
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                accessibilityLabel="Entendi"
+                onPress={() => setModalNipDuplicado(false)}
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+              >
+                <Text style={styles.modalBtnTextPrimary}>Entendi</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  safe: { flex: 1, position: 'relative' },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 10 },
   centerWrap: { flex: 1, alignItems: 'center' },
   headerRow: {
@@ -468,6 +615,80 @@ const styles = StyleSheet.create({
   },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   labelSvgWrap: { marginBottom: 10 },
+
+  // Botões para alternar Formulário/Tabela
+  toggleRow: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 8,
+    padding: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    marginBottom: 14,
+    ...(Platform.OS === 'web'
+      ? ({
+          boxShadow: '0 10px 30px rgba(17,24,39,0.10)',
+        } as any)
+      : {}),
+  },
+  toggleStack: {
+    width: '100%',
+    maxWidth: 720,
+    alignItems: 'stretch',
+    padding: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    marginBottom: 14,
+    ...(Platform.OS === 'web'
+      ? ({
+          boxShadow: '0 10px 30px rgba(17,24,39,0.10)',
+        } as any)
+      : {}),
+  },
+  tableToggleStack: {
+    width: '100%',
+    maxWidth: 720,
+    alignItems: 'stretch',
+    padding: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    marginTop: 8,
+    marginBottom: 14,
+    ...(Platform.OS === 'web'
+      ? ({
+          boxShadow: '0 10px 30px rgba(17,24,39,0.10)',
+        } as any)
+      : {}),
+  },
+  toggleBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.08)',
+    backgroundColor: 'rgba(17,24,39,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleBtnActive: {
+    backgroundColor: '#111827',
+    borderColor: '#111827',
+  },
+  toggleBtnText: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  toggleBtnTextActive: {
+    color: '#FFFFFF',
+  },
+
   segmented: {
     flexDirection: 'row',
     borderRadius: 14,
@@ -502,30 +723,50 @@ const styles = StyleSheet.create({
   },
   btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 
-  tableCard: {
-    width: '100%',
-    maxWidth: 720,
-    padding: 14,
-    borderRadius: 20,
-  },
-  tableTitle: { fontSize: 14, fontWeight: '800', color: '#111827', marginBottom: 10 },
-  tableEmpty: { fontSize: 13, fontWeight: '700', color: '#6B7280' },
-  tableHeaderRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(17,24,39,0.15)',
-    paddingBottom: 10,
-    marginBottom: 6,
-  },
-  tableHeaderCell: { fontSize: 12, fontWeight: '800', color: '#111827', paddingHorizontal: 4 },
-  tableRow: {
-    flexDirection: 'row',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(17,24,39,0.08)',
-  },
-  tableCell: { fontSize: 12, fontWeight: '700', color: '#111827', paddingHorizontal: 4 },
-
   warnText: { marginTop: 8, fontSize: 12, fontWeight: '700', color: '#9CA3AF' },
+
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.10)',
+  },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  modalTitle: { fontSize: 16, fontWeight: '900', color: '#111827' },
+  modalTitleSuccess: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#15803D',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalSubtitle: { fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 14 },
+  modalCloseBtn: { padding: 8, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(17,24,39,0.12)' },
+  modalBtns: { flexDirection: 'row', gap: 12, justifyContent: 'flex-end' },
+  modalBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center' },
+  modalBtnCancel: { borderColor: 'rgba(17,24,39,0.12)', backgroundColor: 'rgba(17,24,39,0.04)' },
+  modalBtnTextCancel: { color: '#111827', fontSize: 13, fontWeight: '900' },
+  modalBtnDanger: { borderColor: 'rgba(220,38,38,0.30)', backgroundColor: 'rgba(220,38,38,0.12)' },
+  modalBtnTextDanger: { color: '#DC2626', fontSize: 13, fontWeight: '900' },
+  modalBtnPrimary: {
+    flex: 1,
+    borderColor: 'rgba(17,24,39,0.12)',
+    backgroundColor: '#111827',
+  },
+  modalBtnTextPrimary: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
 });
 

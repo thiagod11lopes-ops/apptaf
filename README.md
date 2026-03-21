@@ -34,17 +34,24 @@ npm start
 
 Depois escolha no terminal:
 
-- **Web:** tecle `w` ou acesse `http://localhost:8081` (ou a porta indicada)
+- **Web:** tecle `w` ou rode `npm run web` — abra o endereço que o **próprio terminal** mostrar (em geral **`http://localhost:8081`**).
 - **Android:** tecle `a` (com emulador ou dispositivo conectado)
 - **iOS:** tecle `i` (apenas no macOS, com simulador ou dispositivo)
 
-Para rodar direto na web em uma porta específica:
+Ou só na web:
 
 ```bash
-npx expo start --web --port 8082
+npm run web
 ```
 
-Acesse no navegador: `http://localhost:8082`
+**Se `http://localhost:8082` não abrir:** no Expo atual, o servidor de desenvolvimento costuma usar a porta **8081**, não 8082. A opção `--port` do `expo start` **não se aplica ao modo web** — use sempre o link que aparecer no terminal após `npm run web` ou `npm start`.
+
+**Checklist se a página não carregar:**
+
+1. O servidor precisa estar **rodando** (deixe o terminal aberto; não feche após o comando).
+2. Na pasta `taf-app`, execute: `npm install` e depois `npm run web`.
+3. Abra **`http://localhost:8081`** (ou a URL exata indicada no terminal).
+4. Firewall/antivírus do Windows: permita Node.js na rede local, se pedir.
 
 ## Publicar online (ter um endereço para acessar na internet)
 
@@ -90,7 +97,7 @@ taf-app/
 │   ├── constants/        # (módulos de apoio)
 │   ├── contexts/         # ThemeContext
 │   ├── navigation/       # AppNavigator (rotas)
-│   ├── screens/          # Telas (Home, Normas, Aplicação do TAF, Estatísticas, etc.)
+│   ├── screens/          # Telas (Home, Normas, Registrador de TAF, Estatísticas, etc.)
 │   ├── theme/            # Cores
 │   ├── types/            # Tipos TypeScript
 │   └── utils/            # Utilitários de exibição
@@ -100,9 +107,9 @@ taf-app/
 
 ## Funcionalidades
 
-- **Home:** acesso a Normas, Aplicação do TAF e Estatísticas
+- **Home:** acesso a Normas, Registrador de TAF e Estatísticas
 - **Normas:** consulta a documentos e normas
-- **Aplicação do TAF:** tela para aplicação do teste
+- **Registrador de TAF:** tela para aplicação do teste
 - **Estatísticas:** análise e métricas
 
 ## Licença

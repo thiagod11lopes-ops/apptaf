@@ -6,16 +6,28 @@ import HomeScreen from '../screens/HomeScreen';
 import NormasScreen from '../screens/NormasScreen';
 import CadastroScreenModern from '../screens/CadastroScreenModern';
 import AplicacaoTAFScreen from '../screens/AplicacaoTAFScreen';
+import AplicarTAFScreen from '../screens/AplicarTAFScreen';
 import EstatisticasScreen from '../screens/EstatisticasScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
+import CadastrarResultadosScreen from '../screens/CadastrarResultadosScreen';
+
+/** Linha de resultado da corrida (enviada para cadastro). */
+export type ResultadoCorridaItem = {
+  corredor: number;
+  nome: string;
+  tempoMs: number;
+  nip: string;
+};
 
 export type RootStackParamList = {
   Home: undefined;
   Normas: undefined;
   Cadastro: undefined;
   AplicacaoTAF: undefined;
+  AplicarTAF: undefined;
   Estatisticas: undefined;
   Configuracoes: undefined;
+  CadastrarResultados: { resultados: ResultadoCorridaItem[] };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -51,6 +63,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Normas" component={NormasScreen} />
         <Stack.Screen name="Cadastro" component={CadastroScreenModern} />
         <Stack.Screen name="AplicacaoTAF" component={AplicacaoTAFScreen} />
+        <Stack.Screen name="AplicarTAF" component={AplicarTAFScreen} />
+        <Stack.Screen name="CadastrarResultados" component={CadastrarResultadosScreen} />
         <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
         <Stack.Screen name="Configuracoes" component={ConfiguracoesScreen} />
       </Stack.Navigator>

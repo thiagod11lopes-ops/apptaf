@@ -148,13 +148,13 @@ export default function AplicacaoTAFScreen() {
       nip: c.nip,
       nome: c.nome,
       dataNascimento: c.dataNascimento,
+      sexo: c.sexo,
       categoria: c.categoria,
       oficial: c.oficial,
       praca: c.praca,
       tempoCorrida: tc || undefined,
       tempoNatacao: tn || undefined,
       notaCorrida: c.notaCorrida,
-      notaNatacao: c.notaNatacao,
       resultadoNatacao: c.resultadoNatacao,
     };
 
@@ -190,13 +190,13 @@ export default function AplicacaoTAFScreen() {
       nip: base.nip,
       nome: base.nome,
       dataNascimento: base.dataNascimento,
+      sexo: base.sexo,
       categoria: base.categoria,
       oficial: base.oficial,
       praca: base.praca,
       tempoCorrida: base.tempoCorrida,
       tempoNatacao: base.tempoNatacao,
       notaCorrida: base.notaCorrida,
-      notaNatacao: base.notaNatacao,
       resultadoNatacao: resultadoNatacaoOpcao,
     };
 

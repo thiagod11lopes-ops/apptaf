@@ -19,6 +19,8 @@ export type ResultadoCorridaItem = {
   nip: string;
   /** Define rótulos na tela de resumo e coluna no cadastro (corrida vs natação). */
   prova?: 'corrida' | 'natacao';
+  /** Nota corrida (tabela masculina), se calculada nesta sessão */
+  notaTexto?: string;
 };
 
 export type RootStackParamList = {

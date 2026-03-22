@@ -15,8 +15,11 @@ import { ChevronLeft, FileDown } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import { formatElapsedMs } from '../utils/formatRaceTime';
-import { exportResumoAplicacaoPdf } from '../utils/exportResumoAplicacaoPdf';
+import { formatMsByModality } from '../taf/tafTimeFormat';
+import {
+  cabecalhoColunaProvaResultados,
+  exportResumoAplicacaoPdf,
+} from '../utils/exportResumoAplicacaoPdf';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CadastrarResultados'>;
 
@@ -30,6 +33,10 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
     if (temCorrida && !temNatacao) return 'Corrida';
     return 'Corrida e Natação';
   }, [resultados]);
+  const tituloColunaPapel = useMemo(
+    () => cabecalhoColunaProvaResultados(resultados),
+    [resultados],
+  );
   const grayBg = theme.background;
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = 'rgba(17,24,39,0.12)';
@@ -105,6 +112,10 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
               <Text style={styles.vazioText}>Nenhum resultado nesta sessão.</Text>
             ) : null}
 
+            {resultados.length > 0 ? (
+              <Text style={styles.tabelaHeaderResumo}>{tituloColunaPapel}</Text>
+            ) : null}
+
             {resultados.map((r) => (
               <View
                 key={`${r.prova ?? 'corrida'}-${r.corredor}`}
@@ -121,7 +132,24 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                     NIP {r.nip}
                   </Text>
                 ) : null}
-                <Text style={styles.tempoText}>{formatElapsedMs(r.tempoMs)}</Text>
+                <View style={styles.linhaTempoNota}>
+                  <Text style={styles.tempoText}>
+                    {formatMsByModality(r.prova ?? 'corrida', r.tempoMs)}
+                  </Text>
+                  {r.notaTexto != null && r.notaTexto !== '' ? (
+                    <View style={styles.blocoNotaCorrida}>
+                      <Text style={styles.notaResumoLabel}>NOTA</Text>
+                      <Text
+                        style={[
+                          styles.notaResumoValor,
+                          r.notaTexto === 'REPROVADO' ? styles.notaResumoRepro : null,
+                        ]}
+                      >
+                        {r.notaTexto}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             ))}
           </Card>
@@ -214,6 +242,13 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginBottom: 8,
   },
+  tabelaHeaderResumo: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#374151',
+    marginBottom: 8,
+    letterSpacing: 0.2,
+  },
   resultadoRow: {
     borderRadius: 14,
     borderWidth: 1,
@@ -242,5 +277,31 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     color: '#15803D',
+  },
+  linhaTempoNota: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  blocoNotaCorrida: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notaResumoLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#6B7280',
+  },
+  notaResumoValor: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#111827',
+  },
+  notaResumoRepro: {
+    color: '#B91C1C',
+    fontSize: 12,
   },
 });

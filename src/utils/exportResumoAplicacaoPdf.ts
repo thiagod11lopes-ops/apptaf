@@ -2,7 +2,7 @@ import { Platform, Alert } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
-import { formatElapsedMs } from './formatRaceTime';
+import { formatMsByModality } from '../taf/tafTimeFormat';
 
 function escapeHtml(s: string): string {
   return String(s)
@@ -10,6 +10,15 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** Cabeçalho da 1ª coluna: Nadador (só natação), Corredor (só corrida), ou ambos se misto. */
+export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[]): string {
+  const temNatacao = resultados.some((r) => r.prova === 'natacao');
+  const temCorrida = resultados.some((r) => r.prova !== 'natacao');
+  if (temNatacao && !temCorrida) return 'Nadador';
+  if (temCorrida && !temNatacao) return 'Corredor';
+  return 'Corredor / Nadador';
 }
 
 /**
@@ -21,15 +30,21 @@ export function buildResumoAplicacaoHtml(
   titulo = 'Resumo da aplicação — TAF',
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
+  const colProva = escapeHtml(cabecalhoColunaProvaResultados(resultados));
+  const temNotas = resultados.some((r) => r.notaTexto != null && r.notaTexto !== '');
+
   const rows = resultados
     .map((r) => {
-      const atleta = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
+      const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
       const nip = r.nip ? escapeHtml(r.nip) : '—';
+      const nota = escapeHtml(r.notaTexto ?? '—');
+      const colNota = temNotas ? `<td class="nota">${nota}</td>` : '';
       return `<tr>
-        <td>${atleta} ${r.corredor}</td>
+        <td>${papel} ${r.corredor}</td>
         <td>${escapeHtml(r.nome)}</td>
         <td>${nip}</td>
-        <td class="tempo">${escapeHtml(formatElapsedMs(r.tempoMs))}</td>
+        <td class="tempo">${escapeHtml(formatMsByModality(r.prova ?? 'corrida', r.tempoMs))}</td>
+        ${colNota}
       </tr>`;
     })
     .join('');
@@ -49,6 +64,7 @@ export function buildResumoAplicacaoHtml(
     th, td { border: 1px solid #e5e7eb; padding: 10px; text-align: left; vertical-align: top; }
     th { background: #f3f4f6; font-weight: 800; color: #374151; }
     .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
+    .nota { font-weight: 800; text-align: center; }
     @media print { body { padding: 12px; } }
   </style>
 </head>
@@ -57,12 +73,18 @@ export function buildResumoAplicacaoHtml(
   <p class="meta">Gerado em ${escapeHtml(dataStr)}</p>
   <p class="intro">Os tempos compatíveis com o cadastro foram gravados na coluna <strong>${escapeHtml(
     textoColunaCadastro,
-  )}</strong> da planilha de Cadastro. Abaixo, o resumo desta aplicação.</p>
+  )}</strong> da planilha de Cadastro.${
+    temNotas
+      ? ' Notas de corrida conforme faixa etária e tempos limite (50 a 100 pontos).'
+      : ''
+  } Abaixo, o resumo desta aplicação.</p>
   ${
     resultados.length === 0
       ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessão.</p>'
       : `<table>
-    <thead><tr><th>Atleta</th><th>Nome</th><th>NIP</th><th>Tempo</th></tr></thead>
+    <thead><tr><th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th>${
+      temNotas ? '<th>Nota</th>' : ''
+    }</tr></thead>
     <tbody>${rows}</tbody>
   </table>`
   }

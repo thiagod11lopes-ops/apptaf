@@ -27,12 +27,13 @@ type CadastroItem = {
   nome: string;
   dataNascimento: string;
   categoria: Categoria;
+  /** Gênero (formulário: Masculino/Feminino) — persiste como M/F. */
+  sexo?: 'M' | 'F';
   oficial?: string;
   praca?: string;
   tempoCorrida?: string;
   tempoNatacao?: string;
   notaCorrida?: string;
-  notaNatacao?: string;
   resultadoNatacao?: 'aprovado' | 'reprovado';
 };
 
@@ -75,6 +76,7 @@ export default function CadastroScreenModern() {
   const [nip, setNip] = useState<string>('');
   const [nome, setNome] = useState<string>('');
   const [dataNascimento, setDataNascimento] = useState<string>('');
+  const [sexo, setSexo] = useState<'M' | 'F'>('M');
   const [cadastros, setCadastros] = useState<CadastroItem[]>([]);
   const [faltantes, setFaltantes] = useState<string[]>([]);
 
@@ -144,6 +146,7 @@ export default function CadastroScreenModern() {
       nip: nipFinal,
       nome: nome.trim(),
       dataNascimento: dataNascimento.trim(),
+      sexo,
       categoria,
       // Se ainda não selecionou o oficial, mantém vazio (mostra '-' na tabela).
       oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
@@ -151,7 +154,6 @@ export default function CadastroScreenModern() {
       tempoCorrida: anterior?.tempoCorrida ?? legacyTempo,
       tempoNatacao: anterior?.tempoNatacao,
       notaCorrida: anterior?.notaCorrida,
-      notaNatacao: anterior?.notaNatacao,
       resultadoNatacao: anterior?.resultadoNatacao,
     };
 
@@ -169,6 +171,7 @@ export default function CadastroScreenModern() {
       setNip('');
       setNome('');
       setDataNascimento('');
+      setSexo('M');
       setOficialSelecionado('');
       setPracaSelecionada('');
       setCategoria('');
@@ -196,6 +199,7 @@ export default function CadastroScreenModern() {
     setNip(item.nip || '');
     setNome(item.nome || '');
     setDataNascimento(item.dataNascimento || '');
+    setSexo(item.sexo === 'F' ? 'F' : 'M');
   }
 
   async function handleConfirmarExcluir() {
@@ -441,6 +445,30 @@ export default function CadastroScreenModern() {
                   autoCapitalize="none"
                   textContentType="none"
                 />
+              </View>
+
+              <View style={styles.section}>
+                <FieldLabel>Gênero</FieldLabel>
+                <View style={styles.segmented}>
+                  {(['M', 'F'] as const).map((sx) => {
+                    const active = sexo === sx;
+                    return (
+                      <TouchableOpacity
+                        key={sx}
+                        accessibilityLabel={sx === 'M' ? 'Masculino' : 'Feminino'}
+                        onPress={() => setSexo(sx)}
+                        style={[
+                          styles.segmentBtn,
+                          { backgroundColor: active ? selectedBg : unselectedBg },
+                        ]}
+                      >
+                        <Text style={active ? styles.segmentTextSelected : styles.segmentText}>
+                          {sx === 'M' ? 'Masculino' : 'Feminino'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
 
               <View style={styles.btnRow}>

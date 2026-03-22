@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef, useReducer } from 'react';
 import {
   View,
   Text,
@@ -19,9 +19,16 @@ import { Card } from '../components/Card';
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
-import { formatElapsedMs } from '../utils/formatRaceTime';
+import { formatMsByModality, parseTafPerformanceInput } from '../taf/tafTimeFormat';
+import { textoNotaCorrida } from '../taf/corrida2400Nota';
+import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
+import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
 import { Check, ChevronLeft, Pause, Play } from 'lucide-react-native';
+import {
+  aplicarTafTrialReducer,
+  initialTrialTableState,
+} from './aplicarTafTrialReducer';
 
 /** Máscara NIP: 00.0000.00 (igual ao cadastro) */
 function formatNipInput(value: string) {
@@ -44,7 +51,7 @@ type TipoProvaTAF = 'corrida' | 'natacao';
 type CronometroCorridaEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
 
 type NipFeedbackLinha =
-  | { tipo: 'ok'; texto: string; nomeMilitar: string }
+  | { tipo: 'ok'; texto: string; nomeMilitar: string; dataNascimento: string; sexo?: 'M' | 'F' }
   | { tipo: 'erro'; texto: string }
   | null;
 
@@ -61,6 +68,11 @@ export default function AplicarTAFScreen() {
   const inputTextColor = '#111827';
   const [mostrarProvas, setMostrarProvas] = useState(false);
   const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
+  const tipoProvaRef = useRef<TipoProvaTAF | null>(null);
+  useEffect(() => {
+    tipoProvaRef.current = tipoProva;
+  }, [tipoProva]);
+  const { formatMs, parseInput } = useTafTimeFormat(tipoProva);
   const [corridaEtapa, setCorridaEtapa] = useState<CorridaEtapa>('menu');
   const [numeroParticipantesCorrida, setNumeroParticipantesCorrida] = useState('');
   const [erroParticipantes, setErroParticipantes] = useState('');
@@ -68,12 +80,11 @@ export default function AplicarTAFScreen() {
   const [nipsParticipantes, setNipsParticipantes] = useState<string[]>([]);
   const [nipFeedbackLinhas, setNipFeedbackLinhas] = useState<NipFeedbackLinha[]>([]);
   const [numeroVoltas, setNumeroVoltas] = useState('');
-  /** Checklist por [participante][volta] na tabela “Corrida preparada”. */
-  const [checksVoltas, setChecksVoltas] = useState<boolean[][]>([]);
-  /** Marcar chegada por nadador (natação — sem colunas de volta). */
-  const [chegadaNatacao, setChegadaNatacao] = useState<boolean[]>([]);
-  /** Tempo (ms) registrado ao marcar a última volta; null = sem tempo ou última volta desmarcada. */
-  const [temposMilitaresMs, setTemposMilitaresMs] = useState<(number | null)[]>([]);
+  /** Voltas, chegadas e tempos em um único reducer (atualização atômica por clique). */
+  const [trialTable, dispatchTrial] = useReducer(aplicarTafTrialReducer, initialTrialTableState);
+  const { checksVoltas, chegadaNatacao, temposMilitaresMs } = trialTable;
+
+  /** Após “Aplicar Resultado”: tempos gravados no cadastro. */
   const [salvandoResultadosCorrida, setSalvandoResultadosCorrida] = useState(false);
   const [modalTempoRegistradoVisible, setModalTempoRegistradoVisible] = useState(false);
   const [modalParcialAviso, setModalParcialAviso] = useState<string | null>(null);
@@ -81,6 +92,9 @@ export default function AplicarTAFScreen() {
 
   const [cronometroEstado, setCronometroEstado] = useState<CronometroCorridaEstado>('inicial');
   const [tempoExibido, setTempoExibido] = useState('00:00');
+  /** Edição manual do tempo enquanto o cronômetro está pausado (MM:SS ou HH:MM:SS). */
+  const [cronometroPausadoTexto, setCronometroPausadoTexto] = useState('00:00');
+  const cronometroPausadoTextoRef = useRef('00:00');
   const cronometroInicioRef = useRef<number | null>(null);
   /** Ms já decorridos antes do trecho atual (somados a cada pausa). */
   const segmentoAcumuladoMsRef = useRef(0);
@@ -91,7 +105,7 @@ export default function AplicarTAFScreen() {
   const tickCronometroDisplay = useCallback(() => {
     if (cronometroInicioRef.current == null) return;
     const ms = segmentoAcumuladoMsRef.current + Date.now() - cronometroInicioRef.current;
-    setTempoExibido(formatElapsedMs(ms));
+    setTempoExibido(formatMsByModality(tipoProvaRef.current ?? 'corrida', ms));
   }, []);
 
   const getElapsedRaceMs = useCallback((): number | null => {
@@ -99,6 +113,9 @@ export default function AplicarTAFScreen() {
       return segmentoAcumuladoMsRef.current + Date.now() - cronometroInicioRef.current;
     }
     if (cronometroEstado === 'pausado') {
+      const mod = tipoProvaRef.current ?? 'corrida';
+      const parsed = parseTafPerformanceInput(mod, cronometroPausadoTextoRef.current.trim());
+      if (parsed != null) return parsed;
       return segmentoAcumuladoMsRef.current;
     }
     if (cronometroEstado === 'finalizado' && tempoParadoMsRef.current != null) {
@@ -106,6 +123,46 @@ export default function AplicarTAFScreen() {
     }
     return null;
   }, [cronometroEstado]);
+
+  const aplicarTempoCronometroPausado = useCallback((): boolean => {
+    const ms = parseInput(cronometroPausadoTexto.trim());
+    if (ms == null) {
+      Alert.alert(
+        'Tempo inválido',
+        tipoProva === 'natacao'
+          ? 'Use segundos inteiros (ex.: 66 ou 66s).'
+          : 'Use MM:SS ou HH:MM:SS (ex.: 05:30 ou 01:05:30). Segundos entre 00 e 59.',
+      );
+      return false;
+    }
+    segmentoAcumuladoMsRef.current = ms;
+    const fmt = formatMs(ms);
+    setTempoExibido(fmt);
+    setCronometroPausadoTexto(fmt);
+    cronometroPausadoTextoRef.current = fmt;
+    return true;
+  }, [cronometroPausadoTexto, parseInput, formatMs, tipoProva]);
+
+  const onCronometroPausadoTextoChange = useCallback((text: string) => {
+    setCronometroPausadoTexto(text);
+    cronometroPausadoTextoRef.current = text;
+  }, []);
+
+  /** Ao sair do campo: aplica tempo válido ou restaura o último valor do ref (sem alerta). */
+  const onBlurCronometroPausado = useCallback(() => {
+    const ms = parseInput(cronometroPausadoTexto.trim());
+    if (ms == null) {
+      const cur = formatMs(segmentoAcumuladoMsRef.current);
+      setCronometroPausadoTexto(cur);
+      cronometroPausadoTextoRef.current = cur;
+      return;
+    }
+    segmentoAcumuladoMsRef.current = ms;
+    const fmt = formatMs(ms);
+    setTempoExibido(fmt);
+    setCronometroPausadoTexto(fmt);
+    cronometroPausadoTextoRef.current = fmt;
+  }, [cronometroPausadoTexto, parseInput, formatMs]);
 
   const resetCronometroCorrida = useCallback(() => {
     if (cronometroIntervalRef.current) {
@@ -116,7 +173,10 @@ export default function AplicarTAFScreen() {
     segmentoAcumuladoMsRef.current = 0;
     tempoParadoMsRef.current = null;
     setCronometroEstado('inicial');
-    setTempoExibido('00:00');
+    const z = formatMsByModality(tipoProvaRef.current ?? 'corrida', 0);
+    setTempoExibido(z);
+    setCronometroPausadoTexto(z);
+    cronometroPausadoTextoRef.current = z;
   }, []);
 
   const iniciarCronometroCorrida = useCallback(() => {
@@ -129,9 +189,12 @@ export default function AplicarTAFScreen() {
     cronometroInicioRef.current = Date.now();
     tempoParadoMsRef.current = null;
     setCronometroEstado('rodando');
-    setTempoExibido('00:00');
+    const zero = formatMs(0);
+    setTempoExibido(zero);
+    setCronometroPausadoTexto(zero);
+    cronometroPausadoTextoRef.current = zero;
     cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
-  }, [cronometroEstado, tickCronometroDisplay]);
+  }, [cronometroEstado, tickCronometroDisplay, formatMs]);
 
   const pausarCronometroCorrida = useCallback(() => {
     if (cronometroEstado !== 'rodando' || cronometroInicioRef.current == null) return;
@@ -141,20 +204,25 @@ export default function AplicarTAFScreen() {
     }
     segmentoAcumuladoMsRef.current += Date.now() - cronometroInicioRef.current;
     cronometroInicioRef.current = null;
-    setTempoExibido(formatElapsedMs(segmentoAcumuladoMsRef.current));
+    const fmt = formatMs(segmentoAcumuladoMsRef.current);
+    setTempoExibido(fmt);
+    setCronometroPausadoTexto(fmt);
+    cronometroPausadoTextoRef.current = fmt;
     setCronometroEstado('pausado');
-  }, [cronometroEstado]);
+  }, [cronometroEstado, formatMs]);
 
   const continuarCronometroCorrida = useCallback(() => {
     if (cronometroEstado !== 'pausado') return;
+    if (!aplicarTempoCronometroPausado()) return;
     cronometroInicioRef.current = Date.now();
     setCronometroEstado('rodando');
     tickCronometroDisplay();
     cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
-  }, [cronometroEstado, tickCronometroDisplay]);
+  }, [cronometroEstado, tickCronometroDisplay, aplicarTempoCronometroPausado]);
 
   const pararCronometroCorrida = useCallback(() => {
     if (cronometroEstado !== 'rodando' && cronometroEstado !== 'pausado') return;
+    if (cronometroEstado === 'pausado' && !aplicarTempoCronometroPausado()) return;
     if (cronometroIntervalRef.current) {
       clearInterval(cronometroIntervalRef.current);
       cronometroIntervalRef.current = null;
@@ -166,9 +234,12 @@ export default function AplicarTAFScreen() {
     cronometroInicioRef.current = null;
     segmentoAcumuladoMsRef.current = 0;
     tempoParadoMsRef.current = totalMs;
-    setTempoExibido(formatElapsedMs(totalMs));
+    const fmtParado = formatMsByModality(tipoProvaRef.current ?? 'corrida', totalMs);
+    setTempoExibido(fmtParado);
+    setCronometroPausadoTexto(fmtParado);
+    cronometroPausadoTextoRef.current = fmtParado;
     setCronometroEstado('finalizado');
-  }, [cronometroEstado]);
+  }, [cronometroEstado, aplicarTempoCronometroPausado]);
 
   useEffect(() => {
     return () => {
@@ -199,10 +270,35 @@ export default function AplicarTAFScreen() {
     return checksVoltas.some((row) => row?.[ultima]);
   }, [tipoProva, chegadaNatacao, nColunasVoltas, checksVoltas]);
 
+  /** Nota (corrida masculina): exige coluna de tempo visível. */
+  const mostrarColunaNotaCorrida = tipoProva === 'corrida' && mostrarColunaTempo;
+
+  const notaCorridaPorLinha = useMemo(() => {
+    if (!mostrarColunaNotaCorrida) return [] as string[];
+    const out: string[] = [];
+    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+      const fb = nipFeedbackLinhas[i];
+      const ms = temposMilitaresMs[i];
+      if (fb?.tipo !== 'ok' || ms == null) {
+        out.push('—');
+        continue;
+      }
+      const idade = idadeFromDataNascimento(fb.dataNascimento);
+      out.push(textoNotaCorrida(ms, idade, fb.sexo));
+    }
+    return out;
+  }, [
+    mostrarColunaNotaCorrida,
+    nParticipantesConfirmado,
+    nipFeedbackLinhas,
+    temposMilitaresMs,
+  ]);
+
   const larguraMinTabela = useMemo(() => {
     const wVolta = 44;
     const wNome = 200;
     const wTempo = 82;
+    const wNota = 64;
     const wAtleta = 72;
     if (tipoProva === 'natacao') {
       const wMarcar = 128;
@@ -212,8 +308,9 @@ export default function AplicarTAFScreen() {
     }
     let w = wAtleta + wNome + nColunasVoltas * wVolta + 24;
     if (mostrarColunaTempo) w += wTempo;
+    if (mostrarColunaNotaCorrida) w += wNota;
     return w;
-  }, [tipoProva, nColunasVoltas, mostrarColunaTempo]);
+  }, [tipoProva, nColunasVoltas, mostrarColunaTempo, mostrarColunaNotaCorrida]);
 
   /** Todos com tempo registrado (corrida: última volta; natação: chegada). */
   const todosIntegrantesComTempoRegistrado = useMemo(() => {
@@ -238,6 +335,13 @@ export default function AplicarTAFScreen() {
   useEffect(() => {
     if (!todosIntegrantesComTempoRegistrado) return;
     if (cronometroEstado !== 'rodando' && cronometroEstado !== 'pausado') return;
+    if (cronometroEstado === 'pausado') {
+      const parsed = parseTafPerformanceInput(
+        tipoProvaRef.current ?? 'corrida',
+        cronometroPausadoTextoRef.current.trim(),
+      );
+      if (parsed != null) segmentoAcumuladoMsRef.current = parsed;
+    }
     if (cronometroIntervalRef.current) {
       clearInterval(cronometroIntervalRef.current);
       cronometroIntervalRef.current = null;
@@ -249,73 +353,42 @@ export default function AplicarTAFScreen() {
     cronometroInicioRef.current = null;
     segmentoAcumuladoMsRef.current = 0;
     tempoParadoMsRef.current = totalMs;
-    setTempoExibido(formatElapsedMs(totalMs));
+    const fmt = formatMsByModality(tipoProvaRef.current ?? 'corrida', totalMs);
+    setTempoExibido(fmt);
+    setCronometroPausadoTexto(fmt);
+    cronometroPausadoTextoRef.current = fmt;
     setCronometroEstado('finalizado');
   }, [todosIntegrantesComTempoRegistrado, cronometroEstado]);
 
   useEffect(() => {
     if (corridaEtapa !== 'tabela_corrida' || tipoProva !== 'corrida') return;
-    const p = nParticipantesConfirmado;
-    const v = nColunasVoltas;
-    setChecksVoltas((prev) => {
-      const next: boolean[][] = [];
-      for (let i = 0; i < p; i += 1) {
-        const row: boolean[] = [];
-        for (let j = 0; j < v; j += 1) {
-          row[j] = prev[i]?.[j] ?? false;
-        }
-        next[i] = row;
-      }
-      return next;
+    dispatchTrial({
+      type: 'resizeChecksGrid',
+      p: nParticipantesConfirmado,
+      v: nColunasVoltas,
     });
   }, [corridaEtapa, tipoProva, nParticipantesConfirmado, nColunasVoltas]);
 
   useEffect(() => {
     if (corridaEtapa !== 'tabela_corrida' || tipoProva !== 'natacao') return;
-    const p = nParticipantesConfirmado;
-    setChegadaNatacao((prev) => {
-      const next: boolean[] = [];
-      for (let i = 0; i < p; i += 1) {
-        next[i] = prev[i] ?? false;
-      }
-      return next;
-    });
+    dispatchTrial({ type: 'resizeChegadaNatacao', p: nParticipantesConfirmado });
   }, [corridaEtapa, tipoProva, nParticipantesConfirmado]);
 
   useEffect(() => {
     if (corridaEtapa !== 'tabela_corrida') return;
-    const p = nParticipantesConfirmado;
-    setTemposMilitaresMs((prev) => {
-      const next: (number | null)[] = [];
-      for (let i = 0; i < p; i += 1) {
-        next[i] = prev[i] ?? null;
-      }
-      return next;
-    });
+    dispatchTrial({ type: 'resizeTempos', p: nParticipantesConfirmado });
   }, [corridaEtapa, nParticipantesConfirmado]);
 
   const toggleCheckVolta = useCallback(
     (participante: number, volta: number) => {
       const isLastVolta = nColunasVoltas > 0 && volta === nColunasVoltas - 1;
-      setChecksVoltas((prev) => {
-        const next = prev.map((row) => [...row]);
-        if (!next[participante]) return prev;
-        const row = [...next[participante]];
-        const willBeChecked = !row[volta];
-        row[volta] = willBeChecked;
-        next[participante] = row;
-        if (isLastVolta) {
-          const ms = willBeChecked ? getElapsedRaceMs() : null;
-          queueMicrotask(() => {
-            setTemposMilitaresMs((prevT) => {
-              const nextT = [...prevT];
-              while (nextT.length <= participante) nextT.push(null);
-              nextT[participante] = ms;
-              return nextT;
-            });
-          });
-        }
-        return next;
+      const elapsedMs = isLastVolta ? getElapsedRaceMs() : null;
+      dispatchTrial({
+        type: 'toggleVoltaCorrida',
+        participante,
+        volta,
+        isLastVolta,
+        elapsedMs,
       });
     },
     [nColunasVoltas, getElapsedRaceMs],
@@ -323,21 +396,10 @@ export default function AplicarTAFScreen() {
 
   const toggleMarcarChegadaNatacao = useCallback(
     (participante: number) => {
-      setChegadaNatacao((prev) => {
-        const next = [...prev];
-        while (next.length <= participante) next.push(false);
-        const willBeChecked = !next[participante];
-        next[participante] = willBeChecked;
-        const ms = willBeChecked ? getElapsedRaceMs() : null;
-        queueMicrotask(() => {
-          setTemposMilitaresMs((prevT) => {
-            const nextT = [...prevT];
-            while (nextT.length <= participante) nextT.push(null);
-            nextT[participante] = ms;
-            return nextT;
-          });
-        });
-        return next;
+      dispatchTrial({
+        type: 'toggleNatacaoChegada',
+        participante,
+        elapsedMs: getElapsedRaceMs(),
       });
     },
     [getElapsedRaceMs],
@@ -345,27 +407,57 @@ export default function AplicarTAFScreen() {
 
   const onCadastrarResultados = useCallback(async () => {
     if (salvandoResultadosCorrida) return;
-    const prova = tipoProva ?? 'corrida';
+    if (tipoProva !== 'corrida' && tipoProva !== 'natacao') {
+      Alert.alert(
+        'Tipo de prova não definido',
+        'Volte ao menu e inicie o TAF escolhendo Corrida ou Natação.',
+      );
+      return;
+    }
+    const prova = tipoProva;
     const labelAtleta = prova === 'natacao' ? 'Nadador' : 'Corredor';
-    const resultados: ResultadoCorridaItem[] = Array.from({ length: nParticipantesConfirmado }, (_, i) => {
+
+    let cadastrosInicial: CadastroItemPersist[] = [];
+    try {
+      cadastrosInicial = await getAllCadastros();
+    } catch {
+      cadastrosInicial = [];
+    }
+    const listaBusca: CadastroItemPersist[] = [...cadastrosInicial];
+
+    const resultados: ResultadoCorridaItem[] = [];
+
+    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
       const fb = nipFeedbackLinhas[i];
       const nomeBase =
         fb?.tipo === 'ok'
           ? (fb.nomeMilitar || '').trim() || `${labelAtleta} ${i + 1}`
           : `${labelAtleta} ${i + 1}`;
-      return {
+      const nip = nipsParticipantes[i] ?? '';
+      const tempoMs = temposMilitaresMs[i] ?? 0;
+      let notaTexto: string | undefined;
+      if (prova === 'corrida') {
+        const fb = nipFeedbackLinhas[i];
+        if (fb?.tipo === 'ok' && temposMilitaresMs[i] != null) {
+          const idade = idadeFromDataNascimento(fb.dataNascimento);
+          const t = textoNotaCorrida(temposMilitaresMs[i]!, idade, fb.sexo);
+          notaTexto = t === '—' ? undefined : t;
+        }
+      }
+
+      resultados.push({
         corredor: i + 1,
         nome: nomeBase,
-        tempoMs: temposMilitaresMs[i] ?? 0,
-        nip: nipsParticipantes[i] ?? '',
+        tempoMs,
+        nip,
         prova,
-      };
-    });
+        notaTexto,
+      });
+    }
 
     setSalvandoResultadosCorrida(true);
     try {
-      const cadastros = await getAllCadastros();
-      const listaAtual: CadastroItemPersist[] = [...cadastros];
+      const listaAtual: CadastroItemPersist[] = [...cadastrosInicial];
       let ok = 0;
       const naoEncontrados: string[] = [];
 
@@ -378,11 +470,20 @@ export default function AplicarTAFScreen() {
           naoEncontrados.push(r.nome);
           continue;
         }
-        const tempoStr = formatElapsedMs(r.tempoMs);
+        const tempoStr = formatMsByModality(prova, r.tempoMs);
         const atualizado: CadastroItemPersist =
           prova === 'natacao'
             ? { ...busca.cadastro, tempoNatacao: tempoStr }
-            : { ...busca.cadastro, tempoCorrida: tempoStr };
+            : (() => {
+                const idade = idadeFromDataNascimento(busca.cadastro.dataNascimento);
+                const notaStr = textoNotaCorrida(r.tempoMs, idade, busca.cadastro.sexo);
+                const notaCorrida = notaStr === '—' ? undefined : notaStr;
+                return {
+                  ...busca.cadastro,
+                  tempoCorrida: tempoStr,
+                  notaCorrida,
+                };
+              })();
         await addCadastro(atualizado);
         const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);
         if (idx >= 0) listaAtual[idx] = atualizado;
@@ -520,10 +621,13 @@ export default function AplicarTAFScreen() {
       const next = [...prev];
       if (resultado.kind === 'found') {
         const nome = (resultado.cadastro.nome || '').trim() || 'Sem nome';
+        const c = resultado.cadastro;
         next[index] = {
           tipo: 'ok',
           texto: 'Militar Cadastrado no Sistema.',
           nomeMilitar: nome,
+          dataNascimento: c.dataNascimento || '',
+          sexo: c.sexo,
         };
       } else if (resultado.kind === 'none') {
         next[index] = {
@@ -542,11 +646,19 @@ export default function AplicarTAFScreen() {
   }, [nipsParticipantes]);
 
   const prepararProva = useCallback(() => {
-    resetCronometroCorrida();
-    setTemposMilitaresMs(Array.from({ length: nParticipantesConfirmado }, () => null));
-    if (tipoProva === 'natacao') {
-      setChegadaNatacao(Array.from({ length: nParticipantesConfirmado }, () => false));
+    if (tipoProva !== 'corrida' && tipoProva !== 'natacao') {
+      Alert.alert(
+        'Tipo de prova não definido',
+        'Volte ao menu e escolha Corrida ou Natação antes de continuar.',
+      );
+      return;
     }
+    resetCronometroCorrida();
+    dispatchTrial({
+      type: 'prepararProva',
+      nParticipantes: nParticipantesConfirmado,
+      tipoProva,
+    });
     setCorridaEtapa('tabela_corrida');
   }, [resetCronometroCorrida, nParticipantesConfirmado, tipoProva]);
 
@@ -556,6 +668,7 @@ export default function AplicarTAFScreen() {
   }, [resetCronometroCorrida]);
 
   const iniciarTaf = useCallback(() => {
+    tipoProvaRef.current = null;
     resetCronometroCorrida();
     setMostrarProvas(true);
     setTipoProva(null);
@@ -566,9 +679,7 @@ export default function AplicarTAFScreen() {
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
     setNumeroVoltas('');
-    setChecksVoltas([]);
-    setChegadaNatacao([]);
-    setTemposMilitaresMs([]);
+    dispatchTrial({ type: 'resetAll' });
   }, [resetCronometroCorrida]);
 
   const tituloProvaCurta = tipoProva === 'natacao' ? 'Natação' : 'Corrida';
@@ -877,6 +988,11 @@ export default function AplicarTAFScreen() {
                       Tempo
                     </Text>
                   ) : null}
+                  {mostrarColunaNotaCorrida ? (
+                    <Text style={[styles.tabelaHeaderCell, styles.tabelaColNota]} numberOfLines={1}>
+                      Nota
+                    </Text>
+                  ) : null}
                 </View>
                 {Array.from({ length: nParticipantesConfirmado }, (_, index) => {
                   const fb = nipFeedbackLinhas[index];
@@ -960,8 +1076,22 @@ export default function AplicarTAFScreen() {
                             numberOfLines={1}
                           >
                             {temposMilitaresMs[index] != null
-                              ? formatElapsedMs(temposMilitaresMs[index]!)
+                              ? formatMs(temposMilitaresMs[index]!)
                               : '—'}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {mostrarColunaNotaCorrida ? (
+                        <View style={[styles.tabelaColNota, styles.tabelaCelulaTempo]}>
+                          <Text
+                            style={[
+                              styles.tabelaCellText,
+                              styles.tabelaNotaText,
+                              notaCorridaPorLinha[index] === 'REPROVADO' ? styles.tabelaNotaRepro : null,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {notaCorridaPorLinha[index] ?? '—'}
                           </Text>
                         </View>
                       ) : null}
@@ -1018,16 +1148,41 @@ export default function AplicarTAFScreen() {
                   </TouchableOpacity>
                 ) : null}
                 <View style={styles.cronometroBoxCadastro}>
-                  <Text
-                    style={[
-                      styles.cronometroTextCadastro,
-                      Platform.OS === 'web'
-                        ? ({ fontVariantNumeric: 'tabular-nums' } as object)
-                        : null,
-                    ]}
-                  >
-                    {tempoExibido}
-                  </Text>
+                  {cronometroEstado === 'pausado' ? (
+                    <TextInput
+                      value={cronometroPausadoTexto}
+                      onChangeText={onCronometroPausadoTextoChange}
+                      onBlur={onBlurCronometroPausado}
+                      selectTextOnFocus
+                      accessibilityLabel="Editar tempo do cronômetro (pausado)"
+                      placeholder={tipoProva === 'natacao' ? 'Segundos (ex: 66s)' : 'MM:SS'}
+                      placeholderTextColor="rgba(17,24,39,0.35)"
+                      keyboardType={
+                        tipoProva === 'natacao'
+                          ? 'number-pad'
+                          : Platform.OS === 'ios'
+                            ? 'numbers-and-punctuation'
+                            : 'default'
+                      }
+                      style={[
+                        styles.cronometroInputCadastro,
+                        Platform.OS === 'web'
+                          ? ({ fontVariantNumeric: 'tabular-nums' } as object)
+                          : null,
+                      ]}
+                    />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.cronometroTextCadastro,
+                        Platform.OS === 'web'
+                          ? ({ fontVariantNumeric: 'tabular-nums' } as object)
+                          : null,
+                      ]}
+                    >
+                      {tempoExibido}
+                    </Text>
+                  )}
                 </View>
               </View>
               {todosIntegrantesComTempoRegistrado ? (
@@ -1277,6 +1432,18 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
   },
+  cronometroInputCadastro: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#111827',
+    minWidth: 120,
+    textAlign: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 4,
+    borderWidth: 0,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as const } : {}),
+  },
   btnAplicarResultadoCadastro: {
     marginTop: 14,
     paddingVertical: 14,
@@ -1427,6 +1594,19 @@ const styles = StyleSheet.create({
     width: 82,
     minWidth: 82,
     textAlign: 'center',
+  },
+  tabelaColNota: {
+    width: 64,
+    minWidth: 64,
+    textAlign: 'center',
+  },
+  tabelaNotaText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tabelaNotaRepro: {
+    color: '#B91C1C',
+    fontSize: 9,
   },
   tabelaCelulaTempo: {
     alignItems: 'center',

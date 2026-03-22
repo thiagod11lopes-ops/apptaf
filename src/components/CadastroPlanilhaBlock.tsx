@@ -27,6 +27,11 @@ function permanenciaLabel(c: CadastroItemPersist): string {
   return '-';
 }
 
+/** Gênero na planilha (M → Masculino, F → Feminino). */
+function generoPlanilhaLabel(c: CadastroItemPersist): string {
+  return c.sexo === 'F' ? 'Feminino' : 'Masculino';
+}
+
 export type CadastroPlanilhaVariant = 'cadastro' | 'aplicacaoTaf';
 
 export type CadastroPlanilhaBlockProps = {
@@ -103,9 +108,9 @@ export function CadastroPlanilhaBlock({
       const idadeTxt = idadeDisplayFromDataNascimento(c.dataNascimento);
       const { corrida: tCorr, natacao: tNat } = temposCorridaNatacao(c);
       const nCor = (c.notaCorrida || '').trim();
-      const nNat = (c.notaNatacao || '').trim();
       const perm = permanenciaLabel(c);
-      const haystack = `${c.categoria} ${postoGrad} ${c.nip} ${c.nome} ${c.dataNascimento} ${idadeTxt} ${tCorr} ${tNat} ${nCor} ${nNat} ${perm} permanência aprovado reprovado`
+      const gen = generoPlanilhaLabel(c);
+      const haystack = `${c.categoria} ${postoGrad} ${c.nip} ${c.nome} ${gen} masculino feminino homem mulher gênero genero ${c.dataNascimento} ${idadeTxt} ${tCorr} ${nCor} ${tNat} ${perm} permanência aprovado reprovado`
         .toLowerCase()
         .trim();
 
@@ -249,7 +254,7 @@ export function CadastroPlanilhaBlock({
   const selectedBg = '#111827';
   const unselectedBg = 'rgba(17,24,39,0.06)';
 
-  /** Borda esquerda entre colunas; em Registrador de TAF não separa Corrida|Nota nem Natação|Nota. */
+  /** Borda esquerda entre colunas da planilha. */
   const colSep = (showLeftDivider: boolean) =>
     showLeftDivider ? ([styles.tableCol, styles.tableColDivider] as const) : styles.tableCol;
 
@@ -402,6 +407,11 @@ export function CadastroPlanilhaBlock({
                 <View style={[colSep(true), { flex: 2 }]}>
                   <LabelSvgText text="Nome" color="#111827" fontSize={12} fontWeight={800} width={90} height={18} />
                 </View>
+                {!isAplicacaoTaf ? (
+                  <View style={[colSep(true), { flex: 0.9 }]}>
+                    <LabelSvgText text="Gênero" color="#111827" fontSize={12} fontWeight={800} width={72} height={18} />
+                  </View>
+                ) : null}
                 <View style={[colSep(true), { flex: 1 }]}>
                   <LabelSvgText text="Idade" color="#111827" fontSize={12} fontWeight={800} width={56} height={18} />
                 </View>
@@ -410,14 +420,11 @@ export function CadastroPlanilhaBlock({
                     <View style={[colSep(true), { flex: 1 }]}>
                       <LabelSvgText text="Corrida" color="#111827" fontSize={12} fontWeight={800} width={80} height={18} />
                     </View>
-                    <View style={[colSep(false), { flex: 0.85 }]}>
-                      <LabelSvgText text="Nota" color="#111827" fontSize={12} fontWeight={800} width={50} height={18} />
+                    <View style={[colSep(false), { flex: 0.75 }]}>
+                      <LabelSvgText text="Nota" color="#111827" fontSize={12} fontWeight={800} width={44} height={18} />
                     </View>
                     <View style={[colSep(true), { flex: 1 }]}>
                       <LabelSvgText text="Natação" color="#111827" fontSize={12} fontWeight={800} width={90} height={18} />
-                    </View>
-                    <View style={[colSep(false), { flex: 0.85 }]}>
-                      <LabelSvgText text="Nota" color="#111827" fontSize={12} fontWeight={800} width={50} height={18} />
                     </View>
                     <View style={[colSep(true), { flex: 1.1 }]}>
                       <LabelSvgText text="Permanência" color="#111827" fontSize={12} fontWeight={800} width={120} height={18} />
@@ -455,6 +462,11 @@ export function CadastroPlanilhaBlock({
                     <View style={[colSep(true), { flex: 2 }]}>
                       {highlightText(c.nome ? c.nome : '-', buscaLower, styles.tableCell, 1)}
                     </View>
+                    {!isAplicacaoTaf ? (
+                      <View style={[colSep(true), { flex: 0.9 }]}>
+                        {highlightText(generoPlanilhaLabel(c), buscaLower, styles.tableCell, 1)}
+                      </View>
+                    ) : null}
                     <View style={[colSep(true), { flex: 1 }]}>
                       {highlightText(
                         idadeDisplayFromDataNascimento(c.dataNascimento),
@@ -468,24 +480,11 @@ export function CadastroPlanilhaBlock({
                         <View style={[colSep(true), { flex: 1 }]}>
                           {highlightText(tempos.corrida || '-', buscaLower, styles.tableCell, 1)}
                         </View>
-                        <View style={[colSep(false), { flex: 0.85 }]}>
-                          {highlightText(
-                            (c.notaCorrida || '').trim() || '-',
-                            buscaLower,
-                            styles.tableCell,
-                            1
-                          )}
+                        <View style={[colSep(false), { flex: 0.75 }]}>
+                          {highlightText((c.notaCorrida || '').trim() || '-', buscaLower, styles.tableCell, 1)}
                         </View>
                         <View style={[colSep(true), { flex: 1 }]}>
                           {highlightText(tempos.natacao || '-', buscaLower, styles.tableCell, 1)}
-                        </View>
-                        <View style={[colSep(false), { flex: 0.85 }]}>
-                          {highlightText(
-                            (c.notaNatacao || '').trim() || '-',
-                            buscaLower,
-                            styles.tableCell,
-                            1
-                          )}
                         </View>
                         <View style={[colSep(true), { flex: 1.1 }]}>
                           {highlightText(permanenciaLabel(c), buscaLower, styles.tableCell, 1)}

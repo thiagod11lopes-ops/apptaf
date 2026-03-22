@@ -4,14 +4,15 @@ export type CadastroItemPersist = {
   nome: string;
   dataNascimento: string;
   categoria: 'Oficiais' | 'Praças';
+  /** Sexo biológico para tabelas da norma (M/F). Padrão M se omitido. */
+  sexo?: 'M' | 'F';
   oficial?: string;
   praca?: string;
   /** Tempos TAF (Registrador de TAF), preenchidos quando houver registro */
   tempoCorrida?: string;
   tempoNatacao?: string;
-  /** Notas (Registrador de TAF), ex.: ao lado dos tempos de Corrida e Natação */
+  /** Nota da corrida (ex.: 50–100 ou REPROVADO), conforme tabela masculina */
   notaCorrida?: string;
-  notaNatacao?: string;
   /** Resultado da prova de natação (Registrador de TAF) */
   resultadoNatacao?: 'aprovado' | 'reprovado';
 };

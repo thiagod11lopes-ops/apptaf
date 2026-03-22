@@ -34,6 +34,7 @@ type CadastroItem = {
   tempoCorrida?: string;
   tempoNatacao?: string;
   notaCorrida?: string;
+  notaNatacao?: string;
   resultadoNatacao?: 'aprovado' | 'reprovado';
 };
 
@@ -154,6 +155,7 @@ export default function CadastroScreenModern() {
       tempoCorrida: anterior?.tempoCorrida ?? legacyTempo,
       tempoNatacao: anterior?.tempoNatacao,
       notaCorrida: anterior?.notaCorrida,
+      notaNatacao: anterior?.notaNatacao,
       resultadoNatacao: anterior?.resultadoNatacao,
     };
 

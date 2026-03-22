@@ -75,7 +75,7 @@ export function buildResumoAplicacaoHtml(
     textoColunaCadastro,
   )}</strong> da planilha de Cadastro.${
     temNotas
-      ? ' Notas de corrida conforme faixa etária e tempos limite (50 a 100 pontos).'
+      ? ' Notas conforme faixa etária e tempos limite (50 a 100 pontos). Corrida e natação: tabelas F e M.'
       : ''
   } Abaixo, o resumo desta aplicação.</p>
   ${

@@ -155,6 +155,7 @@ export default function AplicacaoTAFScreen() {
       tempoCorrida: tc || undefined,
       tempoNatacao: tn || undefined,
       notaCorrida: c.notaCorrida,
+      notaNatacao: c.notaNatacao,
       resultadoNatacao: c.resultadoNatacao,
     };
 
@@ -197,6 +198,7 @@ export default function AplicacaoTAFScreen() {
       tempoCorrida: base.tempoCorrida,
       tempoNatacao: base.tempoNatacao,
       notaCorrida: base.notaCorrida,
+      notaNatacao: base.notaNatacao,
       resultadoNatacao: resultadoNatacaoOpcao,
     };
 

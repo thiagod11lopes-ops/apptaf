@@ -1,4 +1,12 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef, useReducer } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useReducer,
+} from 'react';
 import {
   View,
   Text,
@@ -19,8 +27,9 @@ import { Card } from '../components/Card';
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
-import { formatMsByModality, parseTafPerformanceInput } from '../taf/tafTimeFormat';
+import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
 import { textoNotaCorrida } from '../taf/corrida2400Nota';
+import { textoNotaNatacao } from '../taf/natacaoNota';
 import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
@@ -69,10 +78,14 @@ export default function AplicarTAFScreen() {
   const [mostrarProvas, setMostrarProvas] = useState(false);
   const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
   const tipoProvaRef = useRef<TipoProvaTAF | null>(null);
-  useEffect(() => {
+  /** Antes do paint, para o cronômetro nunca formatar corrida (MM:SS) durante natação. */
+  useLayoutEffect(() => {
     tipoProvaRef.current = tipoProva;
   }, [tipoProva]);
   const { formatMs, parseInput } = useTafTimeFormat(tipoProva);
+  /** Sempre o `formatMs` da modalidade atual (evita MM:SS no lugar de segundos na natação). */
+  const formatMsDisplayRef = useRef(formatMs);
+  formatMsDisplayRef.current = formatMs;
   const [corridaEtapa, setCorridaEtapa] = useState<CorridaEtapa>('menu');
   const [numeroParticipantesCorrida, setNumeroParticipantesCorrida] = useState('');
   const [erroParticipantes, setErroParticipantes] = useState('');
@@ -105,15 +118,15 @@ export default function AplicarTAFScreen() {
   const tickCronometroDisplay = useCallback(() => {
     if (cronometroInicioRef.current == null) return;
     const ms = segmentoAcumuladoMsRef.current + Date.now() - cronometroInicioRef.current;
-    setTempoExibido(formatMsByModality(tipoProvaRef.current ?? 'corrida', ms));
+    setTempoExibido(formatMsDisplayRef.current(ms));
   }, []);
 
   const getElapsedRaceMs = useCallback((): number | null => {
+    const mod: TafModality = tipoProva === 'natacao' ? 'natacao' : 'corrida';
     if (cronometroEstado === 'rodando' && cronometroInicioRef.current != null) {
       return segmentoAcumuladoMsRef.current + Date.now() - cronometroInicioRef.current;
     }
     if (cronometroEstado === 'pausado') {
-      const mod = tipoProvaRef.current ?? 'corrida';
       const parsed = parseTafPerformanceInput(mod, cronometroPausadoTextoRef.current.trim());
       if (parsed != null) return parsed;
       return segmentoAcumuladoMsRef.current;
@@ -122,7 +135,7 @@ export default function AplicarTAFScreen() {
       return tempoParadoMsRef.current;
     }
     return null;
-  }, [cronometroEstado]);
+  }, [cronometroEstado, tipoProva]);
 
   const aplicarTempoCronometroPausado = useCallback((): boolean => {
     const ms = parseInput(cronometroPausadoTexto.trim());
@@ -130,7 +143,7 @@ export default function AplicarTAFScreen() {
       Alert.alert(
         'Tempo inválido',
         tipoProva === 'natacao'
-          ? 'Use segundos inteiros (ex.: 66 ou 66s).'
+          ? 'Use segundos inteiros (ex.: 66 ou 66 S).'
           : 'Use MM:SS ou HH:MM:SS (ex.: 05:30 ou 01:05:30). Segundos entre 00 e 59.',
       );
       return false;
@@ -173,7 +186,7 @@ export default function AplicarTAFScreen() {
     segmentoAcumuladoMsRef.current = 0;
     tempoParadoMsRef.current = null;
     setCronometroEstado('inicial');
-    const z = formatMsByModality(tipoProvaRef.current ?? 'corrida', 0);
+    const z = formatMsDisplayRef.current(0);
     setTempoExibido(z);
     setCronometroPausadoTexto(z);
     cronometroPausadoTextoRef.current = z;
@@ -193,7 +206,8 @@ export default function AplicarTAFScreen() {
     setTempoExibido(zero);
     setCronometroPausadoTexto(zero);
     cronometroPausadoTextoRef.current = zero;
-    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
+    const tickMs = tipoProvaRef.current === 'natacao' ? 100 : 1000;
+    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, tickMs);
   }, [cronometroEstado, tickCronometroDisplay, formatMs]);
 
   const pausarCronometroCorrida = useCallback(() => {
@@ -217,7 +231,8 @@ export default function AplicarTAFScreen() {
     cronometroInicioRef.current = Date.now();
     setCronometroEstado('rodando');
     tickCronometroDisplay();
-    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
+    const tickMs = tipoProvaRef.current === 'natacao' ? 100 : 1000;
+    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, tickMs);
   }, [cronometroEstado, tickCronometroDisplay, aplicarTempoCronometroPausado]);
 
   const pararCronometroCorrida = useCallback(() => {
@@ -234,7 +249,7 @@ export default function AplicarTAFScreen() {
     cronometroInicioRef.current = null;
     segmentoAcumuladoMsRef.current = 0;
     tempoParadoMsRef.current = totalMs;
-    const fmtParado = formatMsByModality(tipoProvaRef.current ?? 'corrida', totalMs);
+    const fmtParado = formatMsDisplayRef.current(totalMs);
     setTempoExibido(fmtParado);
     setCronometroPausadoTexto(fmtParado);
     cronometroPausadoTextoRef.current = fmtParado;
@@ -260,18 +275,28 @@ export default function AplicarTAFScreen() {
     return Math.min(n, MAX_VOLTAS_COLUNAS);
   }, [numeroVoltas]);
 
-  /** Coluna “Tempo”: corrida = alguém marcou última volta; natação = alguém marcou chegada. */
-  const mostrarColunaTempo = useMemo(() => {
-    if (tipoProva === 'natacao') {
-      return chegadaNatacao.some(Boolean);
-    }
+  /** Corrida: coluna “Tempo” só após alguém marcar a última volta. */
+  const mostrarColunaTempoCorrida = useMemo(() => {
     if (nColunasVoltas < 1) return false;
     const ultima = nColunasVoltas - 1;
     return checksVoltas.some((row) => row?.[ultima]);
-  }, [tipoProva, chegadaNatacao, nColunasVoltas, checksVoltas]);
+  }, [nColunasVoltas, checksVoltas]);
 
-  /** Nota (corrida masculina): exige coluna de tempo visível. */
+  /**
+   * Natação: coluna “Tempo” fica sempre ao lado de “Marcar chegada”; o valor é gravado
+   * no instante do clique (elapsed do cronômetro). Corrida: só após última volta.
+   */
+  const mostrarColunaTempo =
+    tipoProva === 'natacao' ? true : mostrarColunaTempoCorrida;
+
+  /** Nota corrida: exige coluna de tempo visível. */
   const mostrarColunaNotaCorrida = tipoProva === 'corrida' && mostrarColunaTempo;
+
+  /**
+   * Natação: coluna “Nota” sempre ao lado de “Tempo” (valores preenchidos após marcar chegada;
+   * tabelas F/M — `textoNotaNatacao`).
+   */
+  const mostrarColunaNotaNatacao = tipoProva === 'natacao';
 
   const notaCorridaPorLinha = useMemo(() => {
     if (!mostrarColunaNotaCorrida) return [] as string[];
@@ -294,6 +319,29 @@ export default function AplicarTAFScreen() {
     temposMilitaresMs,
   ]);
 
+  const notaNatacaoPorLinha = useMemo(() => {
+    if (tipoProva !== 'natacao') return [] as string[];
+    const out: string[] = [];
+    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+      const fb = nipFeedbackLinhas[i];
+      const ms = temposMilitaresMs[i];
+      const marcado = chegadaNatacao[i] ?? false;
+      if (fb?.tipo !== 'ok' || ms == null || !marcado) {
+        out.push('—');
+        continue;
+      }
+      const idade = idadeFromDataNascimento(fb.dataNascimento);
+      out.push(textoNotaNatacao(ms, idade, fb.sexo));
+    }
+    return out;
+  }, [
+    tipoProva,
+    nParticipantesConfirmado,
+    nipFeedbackLinhas,
+    temposMilitaresMs,
+    chegadaNatacao,
+  ]);
+
   const larguraMinTabela = useMemo(() => {
     const wVolta = 44;
     const wNome = 200;
@@ -304,13 +352,20 @@ export default function AplicarTAFScreen() {
       const wMarcar = 128;
       let w = wAtleta + wNome + wMarcar + 24;
       if (mostrarColunaTempo) w += wTempo;
+      if (mostrarColunaNotaNatacao) w += wNota;
       return w;
     }
     let w = wAtleta + wNome + nColunasVoltas * wVolta + 24;
     if (mostrarColunaTempo) w += wTempo;
     if (mostrarColunaNotaCorrida) w += wNota;
     return w;
-  }, [tipoProva, nColunasVoltas, mostrarColunaTempo, mostrarColunaNotaCorrida]);
+  }, [
+    tipoProva,
+    nColunasVoltas,
+    mostrarColunaTempo,
+    mostrarColunaNotaCorrida,
+    mostrarColunaNotaNatacao,
+  ]);
 
   /** Todos com tempo registrado (corrida: última volta; natação: chegada). */
   const todosIntegrantesComTempoRegistrado = useMemo(() => {
@@ -335,9 +390,10 @@ export default function AplicarTAFScreen() {
   useEffect(() => {
     if (!todosIntegrantesComTempoRegistrado) return;
     if (cronometroEstado !== 'rodando' && cronometroEstado !== 'pausado') return;
+    const mod: TafModality = tipoProva === 'natacao' ? 'natacao' : 'corrida';
     if (cronometroEstado === 'pausado') {
       const parsed = parseTafPerformanceInput(
-        tipoProvaRef.current ?? 'corrida',
+        mod,
         cronometroPausadoTextoRef.current.trim(),
       );
       if (parsed != null) segmentoAcumuladoMsRef.current = parsed;
@@ -353,12 +409,12 @@ export default function AplicarTAFScreen() {
     cronometroInicioRef.current = null;
     segmentoAcumuladoMsRef.current = 0;
     tempoParadoMsRef.current = totalMs;
-    const fmt = formatMsByModality(tipoProvaRef.current ?? 'corrida', totalMs);
+    const fmt = formatMsDisplayRef.current(totalMs);
     setTempoExibido(fmt);
     setCronometroPausadoTexto(fmt);
     cronometroPausadoTextoRef.current = fmt;
     setCronometroEstado('finalizado');
-  }, [todosIntegrantesComTempoRegistrado, cronometroEstado]);
+  }, [todosIntegrantesComTempoRegistrado, cronometroEstado, tipoProva]);
 
   useEffect(() => {
     if (corridaEtapa !== 'tabela_corrida' || tipoProva !== 'corrida') return;
@@ -396,10 +452,12 @@ export default function AplicarTAFScreen() {
 
   const toggleMarcarChegadaNatacao = useCallback(
     (participante: number) => {
+      /** Instantâneo no clique (estado atual do cronômetro). */
+      const elapsedMs = getElapsedRaceMs();
       dispatchTrial({
         type: 'toggleNatacaoChegada',
         participante,
-        elapsedMs: getElapsedRaceMs(),
+        elapsedMs,
       });
     },
     [getElapsedRaceMs],
@@ -437,10 +495,17 @@ export default function AplicarTAFScreen() {
       const tempoMs = temposMilitaresMs[i] ?? 0;
       let notaTexto: string | undefined;
       if (prova === 'corrida') {
-        const fb = nipFeedbackLinhas[i];
-        if (fb?.tipo === 'ok' && temposMilitaresMs[i] != null) {
-          const idade = idadeFromDataNascimento(fb.dataNascimento);
-          const t = textoNotaCorrida(temposMilitaresMs[i]!, idade, fb.sexo);
+        const fbOk = nipFeedbackLinhas[i];
+        if (fbOk?.tipo === 'ok' && temposMilitaresMs[i] != null) {
+          const idade = idadeFromDataNascimento(fbOk.dataNascimento);
+          const t = textoNotaCorrida(temposMilitaresMs[i]!, idade, fbOk.sexo);
+          notaTexto = t === '—' ? undefined : t;
+        }
+      } else if (prova === 'natacao') {
+        const fbOk = nipFeedbackLinhas[i];
+        if (fbOk?.tipo === 'ok' && temposMilitaresMs[i] != null) {
+          const idade = idadeFromDataNascimento(fbOk.dataNascimento);
+          const t = textoNotaNatacao(temposMilitaresMs[i]!, idade, fbOk.sexo);
           notaTexto = t === '—' ? undefined : t;
         }
       }
@@ -471,12 +536,20 @@ export default function AplicarTAFScreen() {
           continue;
         }
         const tempoStr = formatMsByModality(prova, r.tempoMs);
+        const idadeCad = idadeFromDataNascimento(busca.cadastro.dataNascimento);
         const atualizado: CadastroItemPersist =
           prova === 'natacao'
-            ? { ...busca.cadastro, tempoNatacao: tempoStr }
+            ? (() => {
+                const notaStr = textoNotaNatacao(r.tempoMs, idadeCad, busca.cadastro.sexo);
+                const notaNatacao = notaStr === '—' ? undefined : notaStr;
+                return {
+                  ...busca.cadastro,
+                  tempoNatacao: tempoStr,
+                  notaNatacao,
+                };
+              })()
             : (() => {
-                const idade = idadeFromDataNascimento(busca.cadastro.dataNascimento);
-                const notaStr = textoNotaCorrida(r.tempoMs, idade, busca.cadastro.sexo);
+                const notaStr = textoNotaCorrida(r.tempoMs, idadeCad, busca.cadastro.sexo);
                 const notaCorrida = notaStr === '—' ? undefined : notaStr;
                 return {
                   ...busca.cadastro,
@@ -549,16 +622,19 @@ export default function AplicarTAFScreen() {
   }, []);
 
   const abrirCorrida = useCallback(() => {
+    tipoProvaRef.current = 'corrida';
     setTipoProva('corrida');
     setCorridaEtapa('participantes');
   }, []);
 
   const abrirNatacao = useCallback(() => {
+    tipoProvaRef.current = 'natacao';
     setTipoProva('natacao');
     setCorridaEtapa('participantes');
   }, []);
 
   const voltarMenuProvas = useCallback(() => {
+    tipoProvaRef.current = null;
     setTipoProva(null);
     setCorridaEtapa('menu');
   }, []);
@@ -993,6 +1069,11 @@ export default function AplicarTAFScreen() {
                       Nota
                     </Text>
                   ) : null}
+                  {mostrarColunaNotaNatacao ? (
+                    <Text style={[styles.tabelaHeaderCell, styles.tabelaColNota]} numberOfLines={1}>
+                      Nota
+                    </Text>
+                  ) : null}
                 </View>
                 {Array.from({ length: nParticipantesConfirmado }, (_, index) => {
                   const fb = nipFeedbackLinhas[index];
@@ -1095,6 +1176,20 @@ export default function AplicarTAFScreen() {
                           </Text>
                         </View>
                       ) : null}
+                      {mostrarColunaNotaNatacao ? (
+                        <View style={[styles.tabelaColNota, styles.tabelaCelulaTempo]}>
+                          <Text
+                            style={[
+                              styles.tabelaCellText,
+                              styles.tabelaNotaText,
+                              notaNatacaoPorLinha[index] === 'REPROVADO' ? styles.tabelaNotaRepro : null,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {notaNatacaoPorLinha[index] ?? '—'}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                   );
                 })}
@@ -1155,8 +1250,12 @@ export default function AplicarTAFScreen() {
                       onBlur={onBlurCronometroPausado}
                       selectTextOnFocus
                       accessibilityLabel="Editar tempo do cronômetro (pausado)"
-                      placeholder={tipoProva === 'natacao' ? 'Segundos (ex: 66s)' : 'MM:SS'}
+                      placeholder={tipoProva === 'natacao' ? 'Ex.: 60 S' : 'MM:SS'}
                       placeholderTextColor="rgba(17,24,39,0.35)"
+                      autoCorrect={false}
+                      autoComplete="off"
+                      spellCheck={false}
+                      {...(Platform.OS === 'ios' ? { textContentType: 'none' as const } : {})}
                       keyboardType={
                         tipoProva === 'natacao'
                           ? 'number-pad'

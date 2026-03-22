@@ -108,9 +108,10 @@ export function CadastroPlanilhaBlock({
       const idadeTxt = idadeDisplayFromDataNascimento(c.dataNascimento);
       const { corrida: tCorr, natacao: tNat } = temposCorridaNatacao(c);
       const nCor = (c.notaCorrida || '').trim();
+      const nNat = (c.notaNatacao || '').trim();
       const perm = permanenciaLabel(c);
       const gen = generoPlanilhaLabel(c);
-      const haystack = `${c.categoria} ${postoGrad} ${c.nip} ${c.nome} ${gen} masculino feminino homem mulher gênero genero ${c.dataNascimento} ${idadeTxt} ${tCorr} ${nCor} ${tNat} ${perm} permanência aprovado reprovado`
+      const haystack = `${c.categoria} ${postoGrad} ${c.nip} ${c.nome} ${gen} masculino feminino homem mulher gênero genero ${c.dataNascimento} ${idadeTxt} ${tCorr} ${nCor} ${tNat} ${nNat} ${perm} permanência aprovado reprovado`
         .toLowerCase()
         .trim();
 
@@ -485,6 +486,9 @@ export function CadastroPlanilhaBlock({
                         </View>
                         <View style={[colSep(true), { flex: 1 }]}>
                           {highlightText(tempos.natacao || '-', buscaLower, styles.tableCell, 1)}
+                        </View>
+                        <View style={[colSep(false), { flex: 0.75 }]}>
+                          {highlightText((c.notaNatacao || '').trim() || '-', buscaLower, styles.tableCell, 1)}
                         </View>
                         <View style={[colSep(true), { flex: 1.1 }]}>
                           {highlightText(permanenciaLabel(c), buscaLower, styles.tableCell, 1)}

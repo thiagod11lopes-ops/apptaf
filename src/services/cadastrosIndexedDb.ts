@@ -11,8 +11,10 @@ export type CadastroItemPersist = {
   /** Tempos TAF (Registrador de TAF), preenchidos quando houver registro */
   tempoCorrida?: string;
   tempoNatacao?: string;
-  /** Nota da corrida (ex.: 50–100 ou REPROVADO), conforme tabela masculina */
+  /** Nota da corrida (ex.: 50–100 ou REPROVADO) */
   notaCorrida?: string;
+  /** Nota da natação (feminino: 50–100 ou REPROVADO) */
+  notaNatacao?: string;
   /** Resultado da prova de natação (Registrador de TAF) */
   resultadoNatacao?: 'aprovado' | 'reprovado';
 };

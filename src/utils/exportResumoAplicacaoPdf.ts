@@ -43,16 +43,16 @@ export function buildResumoAplicacaoHtml(
   const colProva = escapeHtml(cabecalhoColunaProvaResultados(resultados));
   const temNotas = resultados.some((r) => r.notaTexto != null && r.notaTexto !== '');
 
-  /** Colunas fixas do PDF: Nadador/Corredor, Nome, NIP, Tempo, Nota, Reprovação, Rúbrica do candidato */
-  const theadPdf = `<th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Reprovação</th><th>Rúbrica do candidato</th>`;
+  /** Colunas fixas do PDF: Nadador/Corredor, Nome, NIP, Tempo, Nota, Situação, Rúbrica do candidato */
+  const theadPdf = `<th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th>Rúbrica do candidato</th>`;
 
   const rows = resultados
     .map((r) => {
       const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
       const nip = r.nip ? escapeHtml(r.nip) : '—';
       const nota = escapeHtml(r.notaTexto ?? '—');
-      const reprovacao = escapeHtml(
-        r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : '—'),
+      const situacao = escapeHtml(
+        r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : 'Aprovado'),
       );
       const rubrica =
         r.prova === 'natacao' ? celulaRubricaPdf(r) : '—';
@@ -62,7 +62,7 @@ export function buildResumoAplicacaoHtml(
         <td>${nip}</td>
         <td class="tempo">${escapeHtml(formatMsByModality(r.prova ?? 'corrida', r.tempoMs))}</td>
         <td class="nota">${nota}</td>
-        <td class="repro">${reprovacao}</td>
+        <td class="repro">${situacao}</td>
         <td class="rubrica">${rubrica}</td>
       </tr>`;
     })

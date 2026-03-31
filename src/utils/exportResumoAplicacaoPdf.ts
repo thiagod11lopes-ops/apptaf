@@ -55,7 +55,10 @@ export function buildResumoAplicacaoHtml(
       const nip = r.nip ? escapeHtml(r.nip) : '—';
       const nora = escapeHtml(r.noraTexto ?? r.notaTexto ?? '—');
       const reprovacao = escapeHtml(r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : '—'));
-      const rubrica = escapeHtml(r.rubricaCandidato ?? '');
+      const rubricaSvg = r.rubricaCandidatoSvg ?? '';
+      const rubrica = rubricaSvg
+        ? `<img src="${rubricaSvg}" alt="Rúbrica" style="width:200px;height:70px;object-fit:contain;display:block;"/>`
+        : escapeHtml(r.rubricaCandidato ?? '');
       return `<tr>
         <td>Natação</td>
         <td>${escapeHtml(r.nome)}</td>

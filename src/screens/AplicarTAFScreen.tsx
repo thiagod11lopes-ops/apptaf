@@ -19,7 +19,9 @@ import {
   ActivityIndicator,
   Modal,
   SafeAreaView,
+  GestureResponderEvent,
 } from 'react-native';
+import Svg, { Path as SvgPath } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
@@ -65,6 +67,32 @@ type NipFeedbackLinha =
   | null;
 
 const MAX_VOLTAS_COLUNAS = 99;
+const RUBRICA_CANVAS_HEIGHT = 180;
+
+type RubricaPoint = { x: number; y: number };
+type RubricaStroke = RubricaPoint[];
+
+function buildStrokePath(points: RubricaPoint[]): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) {
+    const p = points[0];
+    return `M ${p.x.toFixed(1)} ${p.y.toFixed(1)} L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+  }
+  return points
+    .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(' ');
+}
+
+function buildRubricaSvgDataUrl(strokes: RubricaStroke[], width: number, height: number): string {
+  const paths = strokes
+    .filter((s) => s.length > 0)
+    .map((s) => `<path d="${buildStrokePath(s)}" fill="none" stroke="#111827" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`)
+    .join('');
+  const safeWidth = Math.max(1, Math.round(width));
+  const safeHeight = Math.max(1, Math.round(height));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeWidth}" height="${safeHeight}" viewBox="0 0 ${safeWidth} ${safeHeight}"><rect width="100%" height="100%" fill="#ffffff"/>${paths}</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
 
 export default function AplicarTAFScreen() {
   const { theme } = useTheme();
@@ -104,8 +132,11 @@ export default function AplicarTAFScreen() {
   const pendingResultadosNavRef = useRef<ResultadoCorridaItem[] | null>(null);
   const [modalRubricaNatacaoVisible, setModalRubricaNatacaoVisible] = useState(false);
   const [indiceRubricaNatacao, setIndiceRubricaNatacao] = useState(0);
-  const [rubricasNatacao, setRubricasNatacao] = useState<string[]>([]);
+  const [, setRubricasNatacaoSvg] = useState<string[]>([]);
   const [erroRubricaNatacao, setErroRubricaNatacao] = useState('');
+  const [rubricaStrokes, setRubricaStrokes] = useState<RubricaStroke[]>([]);
+  const [rubricaStrokeAtual, setRubricaStrokeAtual] = useState<RubricaStroke>([]);
+  const [rubricaCanvasWidth, setRubricaCanvasWidth] = useState(420);
 
   const [cronometroEstado, setCronometroEstado] = useState<CronometroCorridaEstado>('inicial');
   const [tempoExibido, setTempoExibido] = useState('00:00');
@@ -578,9 +609,11 @@ export default function AplicarTAFScreen() {
             : null;
         if (prova === 'natacao' && resultados.length > 0) {
           setModalParcialAviso(avisoParcial);
-          setRubricasNatacao(Array.from({ length: resultados.length }, () => ''));
+          setRubricasNatacaoSvg(Array.from({ length: resultados.length }, () => ''));
           setIndiceRubricaNatacao(0);
           setErroRubricaNatacao('');
+          setRubricaStrokes([]);
+          setRubricaStrokeAtual([]);
           pendingResultadosNavRef.current = resultados;
           setModalRubricaNatacaoVisible(true);
         } else {
@@ -630,50 +663,92 @@ export default function AplicarTAFScreen() {
     }
   }, [navigation]);
 
-  const atualizarRubricaNatacaoAtual = useCallback((texto: string) => {
+  const iniciarRubricaStroke = useCallback((event: GestureResponderEvent) => {
+    const { locationX, locationY } = event.nativeEvent;
     setErroRubricaNatacao('');
-    setRubricasNatacao((prev) => {
-      const next = [...prev];
-      next[indiceRubricaNatacao] = texto;
-      return next;
-    });
-  }, [indiceRubricaNatacao]);
+    setRubricaStrokeAtual([{ x: locationX, y: locationY }]);
+  }, []);
+
+  const moverRubricaStroke = useCallback((event: GestureResponderEvent) => {
+    const { locationX, locationY } = event.nativeEvent;
+    setRubricaStrokeAtual((prev) => [...prev, { x: locationX, y: locationY }]);
+  }, []);
+
+  const finalizarRubricaStroke = useCallback(() => {
+    if (rubricaStrokeAtual.length === 0) return;
+    setRubricaStrokes((prev) => [...prev, rubricaStrokeAtual]);
+    setRubricaStrokeAtual([]);
+  }, [rubricaStrokeAtual]);
+
+  const limparRubricaNatacaoAtual = useCallback(() => {
+    setErroRubricaNatacao('');
+    setRubricaStrokes([]);
+    setRubricaStrokeAtual([]);
+  }, []);
 
   const confirmarRubricaNatacao = useCallback(() => {
-    const rubricaAtual = (rubricasNatacao[indiceRubricaNatacao] ?? '').trim();
-    if (!rubricaAtual) {
-      setErroRubricaNatacao('Informe a rúbrica do candidato para continuar.');
+    const strokesProntos = [
+      ...rubricaStrokes.filter((s) => s.length > 0),
+      ...(rubricaStrokeAtual.length > 0 ? [rubricaStrokeAtual] : []),
+    ];
+    if (strokesProntos.length === 0) {
+      setErroRubricaNatacao('Desenhe a rúbrica do candidato para continuar.');
       return;
     }
+    const rubricaSvgAtual = buildRubricaSvgDataUrl(
+      strokesProntos,
+      rubricaCanvasWidth,
+      RUBRICA_CANVAS_HEIGHT,
+    );
     const res = pendingResultadosNavRef.current;
     if (!res || res.length === 0) {
       setModalRubricaNatacaoVisible(false);
       setIndiceRubricaNatacao(0);
-      setRubricasNatacao([]);
+      setRubricasNatacaoSvg([]);
       setErroRubricaNatacao('');
+      setRubricaStrokes([]);
+      setRubricaStrokeAtual([]);
       return;
     }
     const atualizados = res.map((item, idx) =>
-      idx === indiceRubricaNatacao ? { ...item, rubricaCandidato: rubricaAtual } : item,
+      idx === indiceRubricaNatacao
+        ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: rubricaSvgAtual }
+        : item,
     );
+    setRubricasNatacaoSvg((prev) => {
+      const next = [...prev];
+      next[indiceRubricaNatacao] = rubricaSvgAtual;
+      return next;
+    });
     pendingResultadosNavRef.current = atualizados;
     const proximo = indiceRubricaNatacao + 1;
     if (proximo < atualizados.length) {
       setIndiceRubricaNatacao(proximo);
       setErroRubricaNatacao('');
+      setRubricaStrokes([]);
+      setRubricaStrokeAtual([]);
       return;
     }
     setModalRubricaNatacaoVisible(false);
     setIndiceRubricaNatacao(0);
-    setRubricasNatacao([]);
+    setRubricasNatacaoSvg([]);
     setErroRubricaNatacao('');
+    setRubricaStrokes([]);
+    setRubricaStrokeAtual([]);
     if (modalParcialAviso) {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
     navigation.navigate('CadastrarResultados', { resultados: atualizados });
     pendingResultadosNavRef.current = null;
     setModalParcialAviso(null);
-  }, [indiceRubricaNatacao, modalParcialAviso, navigation, rubricasNatacao]);
+  }, [
+    indiceRubricaNatacao,
+    modalParcialAviso,
+    navigation,
+    rubricaCanvasWidth,
+    rubricaStrokeAtual,
+    rubricaStrokes,
+  ]);
 
   const onChangeParticipantes = useCallback((text: string) => {
     const apenasDigitos = text.replace(/\D/g, '');
@@ -901,15 +976,51 @@ export default function AplicarTAFScreen() {
                   </Text>
                 </Text>
                 <Text style={styles.modalRubricaLegendaCadastro}>Rúbrica do candidato</Text>
-                <TextInput
-                  value={rubricasNatacao[indiceRubricaNatacao] ?? ''}
-                  onChangeText={atualizarRubricaNatacaoAtual}
-                  placeholder="Digite a rúbrica"
-                  placeholderTextColor="rgba(17,24,39,0.35)"
-                  style={styles.modalRubricaInputCadastro}
-                  autoCorrect={false}
-                  spellCheck={false}
-                />
+                <View
+                  style={styles.modalRubricaCanvasWrap}
+                  onLayout={(e) => {
+                    const w = e.nativeEvent.layout.width;
+                    if (w > 0) setRubricaCanvasWidth(w);
+                  }}
+                  onStartShouldSetResponder={() => true}
+                  onMoveShouldSetResponder={() => true}
+                  onResponderGrant={iniciarRubricaStroke}
+                  onResponderMove={moverRubricaStroke}
+                  onResponderRelease={finalizarRubricaStroke}
+                  onResponderTerminate={finalizarRubricaStroke}
+                >
+                  <Svg width="100%" height={RUBRICA_CANVAS_HEIGHT}>
+                    {rubricaStrokes.map((stroke, idx) => (
+                      <SvgPath
+                        key={`rubrica-${idx}`}
+                        d={buildStrokePath(stroke)}
+                        stroke="#111827"
+                        strokeWidth={2.5}
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    ))}
+                    {rubricaStrokeAtual.length > 0 ? (
+                      <SvgPath
+                        d={buildStrokePath(rubricaStrokeAtual)}
+                        stroke="#111827"
+                        strokeWidth={2.5}
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    ) : null}
+                  </Svg>
+                </View>
+                <TouchableOpacity
+                  accessibilityLabel="Limpar rúbrica"
+                  activeOpacity={0.85}
+                  onPress={limparRubricaNatacaoAtual}
+                  style={styles.modalRubricaBtnSecundario}
+                >
+                  <Text style={styles.modalRubricaBtnSecundarioText}>Limpar assinatura</Text>
+                </TouchableOpacity>
                 {erroRubricaNatacao ? (
                   <Text style={styles.modalRubricaErroCadastro}>{erroRubricaNatacao}</Text>
                 ) : null}
@@ -1638,16 +1749,28 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 6,
   },
-  modalRubricaInputCadastro: {
+  modalRubricaCanvasWrap: {
     borderWidth: 1,
     borderColor: 'rgba(17,24,39,0.12)',
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
     backgroundColor: '#FFFFFF',
+    height: RUBRICA_CANVAS_HEIGHT,
+    overflow: 'hidden',
+  },
+  modalRubricaBtnSecundario: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.12)',
+    backgroundColor: 'rgba(17,24,39,0.04)',
+  },
+  modalRubricaBtnSecundarioText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#111827',
   },
   modalRubricaErroCadastro: {
     marginTop: 8,

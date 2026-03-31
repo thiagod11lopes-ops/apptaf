@@ -27,6 +27,8 @@ export type ResultadoCorridaItem = {
   reprovacaoTexto?: string;
   /** Rúbrica digitada no modal sequencial da natação. */
   rubricaCandidato?: string;
+  /** Rúbrica desenhada no modal sequencial da natação (SVG data URL). */
+  rubricaCandidatoSvg?: string;
 };
 
 export type RootStackParamList = {

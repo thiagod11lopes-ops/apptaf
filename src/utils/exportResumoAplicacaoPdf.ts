@@ -49,6 +49,25 @@ export function buildResumoAplicacaoHtml(
     })
     .join('');
 
+  const rowsRubricaNatacao = resultados
+    .filter((r) => r.prova === 'natacao')
+    .map((r) => {
+      const nip = r.nip ? escapeHtml(r.nip) : '—';
+      const nora = escapeHtml(r.noraTexto ?? r.notaTexto ?? '—');
+      const reprovacao = escapeHtml(r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : '—'));
+      const rubrica = escapeHtml(r.rubricaCandidato ?? '');
+      return `<tr>
+        <td>Natação</td>
+        <td>${escapeHtml(r.nome)}</td>
+        <td>${nip}</td>
+        <td class="tempo">${escapeHtml(formatMsByModality('natacao', r.tempoMs))}</td>
+        <td>${nora}</td>
+        <td>${reprovacao}</td>
+        <td>${rubrica || '______________________________'}</td>
+      </tr>`;
+    })
+    .join('');
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -65,6 +84,8 @@ export function buildResumoAplicacaoHtml(
     th { background: #f3f4f6; font-weight: 800; color: #374151; }
     .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
     .nota { font-weight: 800; text-align: center; }
+    .rubrica-section { margin-top: 22px; }
+    .rubrica-title { font-size: 14px; font-weight: 900; margin: 0 0 8px; color: #111827; }
     @media print { body { padding: 12px; } }
   </style>
 </head>
@@ -87,6 +108,27 @@ export function buildResumoAplicacaoHtml(
     }</tr></thead>
     <tbody>${rows}</tbody>
   </table>`
+  }
+  ${
+    rowsRubricaNatacao
+      ? `<div class="rubrica-section">
+    <p class="rubrica-title">Rúbricas - Prova de Natação</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Modalidade</th>
+          <th>Nome</th>
+          <th>NIP</th>
+          <th>Tempo de prova</th>
+          <th>NORA</th>
+          <th>Reprovação</th>
+          <th>Rúbrica do candidato</th>
+        </tr>
+      </thead>
+      <tbody>${rowsRubricaNatacao}</tbody>
+    </table>
+  </div>`
+      : ''
   }
 </body>
 </html>`;

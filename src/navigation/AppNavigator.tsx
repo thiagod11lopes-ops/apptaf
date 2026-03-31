@@ -21,6 +21,12 @@ export type ResultadoCorridaItem = {
   prova?: 'corrida' | 'natacao';
   /** Nota da prova (corrida ou natação feminina), se calculada nesta sessão */
   notaTexto?: string;
+  /** Campo NORA exibido no fluxo de rúbrica da natação. */
+  noraTexto?: string;
+  /** Texto de reprovação no fluxo de rúbrica da natação (se houver). */
+  reprovacaoTexto?: string;
+  /** Rúbrica digitada no modal sequencial da natação. */
+  rubricaCandidato?: string;
 };
 
 export type RootStackParamList = {

@@ -12,6 +12,16 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+function celulaRubricaPdf(r: ResultadoCorridaItem): string {
+  const svg = r.rubricaCandidatoSvg ?? '';
+  if (svg) {
+    return `<img src="${svg}" alt="Rúbrica" class="rubrica-img"/>`;
+  }
+  const texto = r.rubricaCandidato?.trim();
+  if (texto) return escapeHtml(texto);
+  return '—';
+}
+
 /** Cabeçalho da 1ª coluna: Nadador (só natação), Corredor (só corrida), ou ambos se misto. */
 export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[]): string {
   const temNatacao = resultados.some((r) => r.prova === 'natacao');
@@ -32,6 +42,7 @@ export function buildResumoAplicacaoHtml(
   const dataStr = new Date().toLocaleString('pt-BR');
   const colProva = escapeHtml(cabecalhoColunaProvaResultados(resultados));
   const temNotas = resultados.some((r) => r.notaTexto != null && r.notaTexto !== '');
+  const temNatacao = resultados.some((r) => r.prova === 'natacao');
 
   const rows = resultados
     .map((r) => {
@@ -39,37 +50,30 @@ export function buildResumoAplicacaoHtml(
       const nip = r.nip ? escapeHtml(r.nip) : '—';
       const nota = escapeHtml(r.notaTexto ?? '—');
       const colNota = temNotas ? `<td class="nota">${nota}</td>` : '';
+      const colsNatacaoExtra =
+        temNatacao && r.prova === 'natacao'
+          ? `<td class="nora">${escapeHtml(r.noraTexto ?? r.notaTexto ?? '—')}</td>
+        <td class="repro">${escapeHtml(r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : '—'))}</td>
+        <td class="rubrica">${celulaRubricaPdf(r)}</td>`
+          : temNatacao
+            ? `<td class="nora">—</td>
+        <td class="repro">—</td>
+        <td class="rubrica">—</td>`
+            : '';
       return `<tr>
         <td>${papel} ${r.corredor}</td>
         <td>${escapeHtml(r.nome)}</td>
         <td>${nip}</td>
         <td class="tempo">${escapeHtml(formatMsByModality(r.prova ?? 'corrida', r.tempoMs))}</td>
         ${colNota}
+        ${colsNatacaoExtra}
       </tr>`;
     })
     .join('');
 
-  const rowsRubricaNatacao = resultados
-    .filter((r) => r.prova === 'natacao')
-    .map((r) => {
-      const nip = r.nip ? escapeHtml(r.nip) : '—';
-      const nora = escapeHtml(r.noraTexto ?? r.notaTexto ?? '—');
-      const reprovacao = escapeHtml(r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : '—'));
-      const rubricaSvg = r.rubricaCandidatoSvg ?? '';
-      const rubrica = rubricaSvg
-        ? `<img src="${rubricaSvg}" alt="Rúbrica" style="width:200px;height:70px;object-fit:contain;display:block;"/>`
-        : escapeHtml(r.rubricaCandidato ?? '');
-      return `<tr>
-        <td>Natação</td>
-        <td>${escapeHtml(r.nome)}</td>
-        <td>${nip}</td>
-        <td class="tempo">${escapeHtml(formatMsByModality('natacao', r.tempoMs))}</td>
-        <td>${nora}</td>
-        <td>${reprovacao}</td>
-        <td>${rubrica || '______________________________'}</td>
-      </tr>`;
-    })
-    .join('');
+  const theadNatacaoExtra = temNatacao
+    ? '<th>NORA</th><th>Reprovação</th><th>Rúbrica do candidato</th>'
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -87,8 +91,8 @@ export function buildResumoAplicacaoHtml(
     th { background: #f3f4f6; font-weight: 800; color: #374151; }
     .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
     .nota { font-weight: 800; text-align: center; }
-    .rubrica-section { margin-top: 22px; }
-    .rubrica-title { font-size: 14px; font-weight: 900; margin: 0 0 8px; color: #111827; }
+    td.rubrica { min-width: 120px; max-width: 200px; }
+    .rubrica-img { width: 160px; height: 56px; object-fit: contain; display: block; vertical-align: top; }
     @media print { body { padding: 12px; } }
   </style>
 </head>
@@ -108,30 +112,9 @@ export function buildResumoAplicacaoHtml(
       : `<table>
     <thead><tr><th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th>${
       temNotas ? '<th>Nota</th>' : ''
-    }</tr></thead>
+    }${theadNatacaoExtra}</tr></thead>
     <tbody>${rows}</tbody>
   </table>`
-  }
-  ${
-    rowsRubricaNatacao
-      ? `<div class="rubrica-section">
-    <p class="rubrica-title">Rúbricas - Prova de Natação</p>
-    <table>
-      <thead>
-        <tr>
-          <th>Modalidade</th>
-          <th>Nome</th>
-          <th>NIP</th>
-          <th>Tempo de prova</th>
-          <th>NORA</th>
-          <th>Reprovação</th>
-          <th>Rúbrica do candidato</th>
-        </tr>
-      </thead>
-      <tbody>${rowsRubricaNatacao}</tbody>
-    </table>
-  </div>`
-      : ''
   }
 </body>
 </html>`;

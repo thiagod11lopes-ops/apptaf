@@ -42,38 +42,31 @@ export function buildResumoAplicacaoHtml(
   const dataStr = new Date().toLocaleString('pt-BR');
   const colProva = escapeHtml(cabecalhoColunaProvaResultados(resultados));
   const temNotas = resultados.some((r) => r.notaTexto != null && r.notaTexto !== '');
-  const temNatacao = resultados.some((r) => r.prova === 'natacao');
+
+  /** Colunas fixas do PDF: Nadador/Corredor, Nome, NIP, Tempo, Nota, Reprovação, Rúbrica do candidato */
+  const theadPdf = `<th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Reprovação</th><th>Rúbrica do candidato</th>`;
 
   const rows = resultados
     .map((r) => {
       const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
       const nip = r.nip ? escapeHtml(r.nip) : '—';
       const nota = escapeHtml(r.notaTexto ?? '—');
-      const colNota = temNotas ? `<td class="nota">${nota}</td>` : '';
-      const colsNatacaoExtra =
-        temNatacao && r.prova === 'natacao'
-          ? `<td class="nora">${escapeHtml(r.noraTexto ?? r.notaTexto ?? '—')}</td>
-        <td class="repro">${escapeHtml(r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : '—'))}</td>
-        <td class="rubrica">${celulaRubricaPdf(r)}</td>`
-          : temNatacao
-            ? `<td class="nora">—</td>
-        <td class="repro">—</td>
-        <td class="rubrica">—</td>`
-            : '';
+      const reprovacao = escapeHtml(
+        r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : '—'),
+      );
+      const rubrica =
+        r.prova === 'natacao' ? celulaRubricaPdf(r) : '—';
       return `<tr>
         <td>${papel} ${r.corredor}</td>
         <td>${escapeHtml(r.nome)}</td>
         <td>${nip}</td>
         <td class="tempo">${escapeHtml(formatMsByModality(r.prova ?? 'corrida', r.tempoMs))}</td>
-        ${colNota}
-        ${colsNatacaoExtra}
+        <td class="nota">${nota}</td>
+        <td class="repro">${reprovacao}</td>
+        <td class="rubrica">${rubrica}</td>
       </tr>`;
     })
     .join('');
-
-  const theadNatacaoExtra = temNatacao
-    ? '<th>NORA</th><th>Reprovação</th><th>Rúbrica do candidato</th>'
-    : '';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -110,9 +103,7 @@ export function buildResumoAplicacaoHtml(
     resultados.length === 0
       ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessão.</p>'
       : `<table>
-    <thead><tr><th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th>${
-      temNotas ? '<th>Nota</th>' : ''
-    }${theadNatacaoExtra}</tr></thead>
+    <thead><tr>${theadPdf}</tr></thead>
     <tbody>${rows}</tbody>
   </table>`
   }

@@ -104,7 +104,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
             </TouchableOpacity>
             <Text style={styles.dicaPdf}>
               {Platform.OS === 'web'
-                ? 'No navegador, use “Salvar como PDF” na janela de impressão.'
+                ? 'No navegador, use “Salvar como PDF” na janela de impressão (folha em paisagem).'
                 : 'Será gerado um PDF para salvar ou compartilhar.'}
             </Text>
 

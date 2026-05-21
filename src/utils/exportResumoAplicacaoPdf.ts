@@ -22,6 +22,21 @@ function celulaRubricaPdf(r: ResultadoCorridaItem): string {
   return '—';
 }
 
+/** A4 paisagem em pontos (72 PPI) — usado no PDF nativo e como referência de layout. */
+const PDF_A4_LANDSCAPE_WIDTH = 842;
+const PDF_A4_LANDSCAPE_HEIGHT = 595;
+
+const PRINT_LANDSCAPE_CSS = `
+    @page {
+      size: A4 landscape;
+      margin: 10mm;
+    }
+    @media print {
+      html, body { width: 100%; margin: 0; }
+      body { padding: 12px; }
+    }
+`;
+
 /** Cabeçalho da 1ª coluna: Nadador (só natação), Corredor (só corrida), ou ambos se misto. */
 export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[]): string {
   const temNatacao = resultados.some((r) => r.prova === 'natacao');
@@ -85,7 +100,7 @@ export function buildResumoAplicacaoHtml(
     .nota { font-weight: 800; text-align: center; }
     td.rubrica { min-width: 120px; max-width: 200px; }
     .rubrica-img { width: 160px; height: 56px; object-fit: contain; display: block; vertical-align: top; }
-    @media print { body { padding: 12px; } }
+    ${PRINT_LANDSCAPE_CSS}
   </style>
 </head>
 <body>
@@ -136,7 +151,11 @@ export async function exportResumoAplicacaoPdf(
     return;
   }
 
-  const { uri } = await Print.printToFileAsync({ html });
+  const { uri } = await Print.printToFileAsync({
+    html,
+    width: PDF_A4_LANDSCAPE_WIDTH,
+    height: PDF_A4_LANDSCAPE_HEIGHT,
+  });
 
   const canShare = await Sharing.isAvailableAsync();
   if (canShare) {

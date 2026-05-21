@@ -10,14 +10,17 @@
     "build:web": "expo export --platform web --output-dir dist"
   },
   "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
     "@react-native-async-storage/async-storage": "^3.0.1",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/native": "^7.1.33",
     "@react-navigation/native-stack": "^7.14.5",
     "expo": "~55.0.6",
     "expo-blur": "~55.0.9",
+    "expo-font": "~55.0.8",
     "expo-linear-gradient": "~55.0.8",
     "expo-print": "~55.0.9",
+    "expo-screen-orientation": "~55.0.16",
     "expo-sharing": "~55.0.14",
     "expo-status-bar": "~55.0.4",
     "framer-motion": "^12.40.0",

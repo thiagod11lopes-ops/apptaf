@@ -6,17 +6,27 @@ export type Theme = AppTheme;
 type ThemeContextType = {
   theme: Theme;
   isDark: boolean;
+  fontsLoaded: boolean;
   toggleTheme: () => void;
 };
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
+export function ThemeProvider({
+  children,
+  fontsLoaded = true,
+}: {
+  children: ReactNode;
+  fontsLoaded?: boolean;
+}) {
   const [isDark, setIsDark] = useState(true);
-  const theme = useMemo(() => (isDark ? buildPremiumDarkTheme() : buildPremiumLightTheme()), [isDark]);
+  const theme = useMemo(
+    () => (isDark ? buildPremiumDarkTheme(fontsLoaded) : buildPremiumLightTheme(fontsLoaded)),
+    [isDark, fontsLoaded],
+  );
   const value = useMemo(
-    () => ({ theme, isDark, toggleTheme: () => setIsDark((d) => !d) }),
-    [theme, isDark],
+    () => ({ theme, isDark, fontsLoaded, toggleTheme: () => setIsDark((d) => !d) }),
+    [theme, isDark, fontsLoaded],
   );
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

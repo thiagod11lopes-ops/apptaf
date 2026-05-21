@@ -3,6 +3,7 @@ import { View, Text, Platform, StyleSheet } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { PressableScale } from './premium/PressableScale';
+import { PREMIUM } from '../theme/premium';
 
 interface Props {
   title: string;
@@ -11,32 +12,29 @@ interface Props {
 }
 
 export function Header({ title, onBack, right }: Props) {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
+  const ts = theme.textStyles;
 
   return (
     <View
       style={[
         styles.wrap,
         {
-          backgroundColor: isDark ? 'rgba(9, 9, 11, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-          borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+          backgroundColor: theme.backgroundSecondary,
+          borderBottomColor: theme.border,
         },
-        Platform.OS === 'web'
-          ? ({
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-            } as object)
-          : undefined,
       ]}
     >
       {onBack ? (
         <PressableScale onPress={onBack} style={styles.backBtn} accessibilityLabel="Voltar">
-          <ChevronLeft size={22} color={theme.text} strokeWidth={2.5} />
+          <View style={[styles.backCircle, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+            <ChevronLeft size={20} color={theme.text} strokeWidth={2.5} />
+          </View>
         </PressableScale>
       ) : (
         <View style={styles.backPlaceholder} />
       )}
-      <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
+      <Text style={[ts.h2, styles.titleCenter]} numberOfLines={1}>
         {title}
       </Text>
       <View style={styles.right}>{right}</View>
@@ -48,27 +46,28 @@ const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-    paddingTop: Platform.OS === 'web' ? 12 : 48,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingTop: Platform.OS === 'web' ? 14 : 48,
     minHeight: 56,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backBtn: {
     minWidth: 48,
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+  },
+  backCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   backPlaceholder: { width: 48 },
-  title: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '700',
-    textAlign: 'center',
-    letterSpacing: 0.2,
-  },
+  titleCenter: { flex: 1, textAlign: 'center' },
   right: {
     minWidth: 48,
     alignItems: 'flex-end',

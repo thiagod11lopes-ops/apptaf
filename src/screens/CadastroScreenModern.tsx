@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,9 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft, X } from 'lucide-react-native';
 import { Card } from '../components/Card';
@@ -26,6 +27,8 @@ import {
   notaNatacaoParaPersistencia,
   textoNotaNatacaoFromCadastro,
 } from '../taf/natacaoNota';
+import { PREMIUM } from '../theme/premium';
+import { fontFamily } from '../theme/typography';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -71,12 +74,17 @@ function formatNipInput(value: string) {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.labelText}>{children}</Text>;
+  const { theme } = useTheme();
+  const ts = theme.textStyles;
+  return <Text style={[ts.label, styles.labelText]}>{children}</Text>;
 }
 
 export default function CadastroScreenModern() {
-  const { theme } = useTheme();
+  const { theme, fontsLoaded } = useTheme();
   const navigation = useNavigation();
+  const ts = theme.textStyles;
+  const regularFont = fontFamily('regular', fontsLoaded);
+  const boldFont = fontFamily('bold', fontsLoaded);
 
   const [categoria, setCategoria] = useState<Categoria | ''>('');
   const [oficialSelecionado, setOficialSelecionado] = useState<string>('');
@@ -92,22 +100,19 @@ export default function CadastroScreenModern() {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [mostrarTabela, setMostrarTabela] = useState(false);
 
+  useFocusEffect(
+    useCallback(() => {
+      setMostrarFormulario(false);
+      setMostrarTabela(false);
+    }, []),
+  );
+
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [excluirId, setExcluirId] = useState<string | null>(null);
   const [modalNipDuplicado, setModalNipDuplicado] = useState(false);
   const [modalCadastroSucesso, setModalCadastroSucesso] = useState(false);
 
   const datePlaceholder = useMemo(() => '00/00/0000', []);
-
-  const grayBg = theme.background; // já é #F5F7FA no light
-  const cardGlassEnabled = Platform.OS === 'web'; // em mobile mantém minimal, sem blur excessivo
-
-  const selectedBg = '#111827'; // slate-900
-  const unselectedBg = 'rgba(17,24,39,0.06)';
-  const selectedText = '#FFFFFF';
-  const unselectedText = '#374151'; // gray-700 (mesma cor dos FieldLabel)
-  const inputBg = '#FFFFFF';
-  const inputBorder = 'rgba(17,24,39,0.12)';
 
   function setCategoriaWithReset(next: Categoria) {
     setOficialSelecionado('');
@@ -119,9 +124,9 @@ export default function CadastroScreenModern() {
     if (!categoria) return;
 
     const faltantesAgora: string[] = [];
-    if (!nip.trim()) faltantesAgora.push('Nip');
+    if (!nip.trim()) faltantesAgora.push('NIP');
     if (!nome.trim()) faltantesAgora.push('Nome');
-    if (!dataNascimento.trim()) faltantesAgora.push('Data de nascimento');
+    if (!dataNascimento.trim()) faltantesAgora.push('Data de Nascimento');
     if (categoria === 'Oficiais' && !oficialSelecionado.trim()) faltantesAgora.push('Oficial');
     if (categoria === 'Praças' && !pracaSelecionada.trim()) faltantesAgora.push('Graduação');
 
@@ -264,8 +269,18 @@ export default function CadastroScreenModern() {
     return () => clearTimeout(t);
   }, [modalCadastroSucesso]);
 
+  const selectedBgColor = theme.primary;
+  const unselectedBgColor = theme.backgroundSecondary;
+  const selectedTextColor = theme.text;
+  const unselectedTextColor = theme.textSecondary;
+  const inputTextColor = theme.text;
+  const inputBgColor = theme.cardBg;
+  const inputBorderColor = theme.border;
+  const dangerColor = theme.loss;
+  const successColor = theme.gain;
+
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -278,21 +293,32 @@ export default function CadastroScreenModern() {
               style={styles.backBtn}
               accessibilityLabel="Voltar para Home"
             >
-              <ChevronLeft size={26} color="#6B7280" strokeWidth={2.5} />
+              <ChevronLeft size={26} color={theme.text} strokeWidth={2.5} />
             </TouchableOpacity>
             <View style={styles.headerTitleWrap}>
-              <Text style={styles.pageTitle}>Cadastro</Text>
+              <Text style={[ts.h2, styles.pageTitle]}>Cadastro</Text>
             </View>
           </View>
 
-          <View style={styles.toggleStack}>
+          <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <TouchableOpacity
               accessibilityLabel="Mostrar formulário"
               onPress={() => setMostrarFormulario((v) => !v)}
-              style={[styles.toggleBtn, mostrarFormulario ? styles.toggleBtnActive : null]}
+              style={[
+                styles.toggleBtn,
+                mostrarFormulario
+                  ? { backgroundColor: selectedBgColor, borderColor: selectedBgColor }
+                  : { backgroundColor: unselectedBgColor, borderColor: theme.borderSubtle },
+              ]}
             >
               <Text
-                style={[styles.toggleBtnText, mostrarFormulario ? styles.toggleBtnTextActive : null]}
+                style={[
+                  ts.caption,
+                  mostrarFormulario
+                    ? { color: selectedTextColor }
+                    : { color: unselectedTextColor },
+                  styles.toggleBtnText,
+                ]}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
@@ -302,19 +328,27 @@ export default function CadastroScreenModern() {
           </View>
 
           {mostrarFormulario ? (
-            <Card glass={cardGlassEnabled} style={styles.formCard}>
+            <Card elevated style={styles.formCard}>
               <View style={styles.section}>
                 <FieldLabel>Categoria</FieldLabel>
 
-                <View style={styles.segmented}>
+                <View style={[styles.segmented, { borderColor: theme.border }]}>
                   <TouchableOpacity
                     onPress={() => setCategoriaWithReset('Oficiais')}
                     style={[
                       styles.segmentBtn,
-                      categoria === 'Oficiais' ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                      categoria === 'Oficiais'
+                        ? { backgroundColor: selectedBgColor }
+                        : { backgroundColor: unselectedBgColor },
                     ]}
                   >
-                    <Text style={categoria === 'Oficiais' ? styles.segmentTextSelected : styles.segmentText}>
+                    <Text
+                      style={[
+                        ts.caption,
+                        categoria === 'Oficiais' ? { color: selectedTextColor } : { color: unselectedTextColor },
+                        styles.segmentText,
+                      ]}
+                    >
                       Oficiais
                     </Text>
                   </TouchableOpacity>
@@ -323,10 +357,18 @@ export default function CadastroScreenModern() {
                     onPress={() => setCategoriaWithReset('Praças')}
                     style={[
                       styles.segmentBtn,
-                      categoria === 'Praças' ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                      categoria === 'Praças'
+                        ? { backgroundColor: selectedBgColor }
+                        : { backgroundColor: unselectedBgColor },
                     ]}
                   >
-                    <Text style={categoria === 'Praças' ? styles.segmentTextSelected : styles.segmentText}>
+                    <Text
+                      style={[
+                        ts.caption,
+                        categoria === 'Praças' ? { color: selectedTextColor } : { color: unselectedTextColor },
+                        styles.segmentText,
+                      ]}
+                    >
                       Praças
                     </Text>
                   </TouchableOpacity>
@@ -345,21 +387,27 @@ export default function CadastroScreenModern() {
                           onPress={() => setOficialSelecionado(opt)}
                           style={[
                             styles.optionBtn,
-                            active ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                            active ? { backgroundColor: selectedBgColor } : { backgroundColor: unselectedBgColor, borderColor: theme.borderSubtle },
                           ]}
                         >
-                        {opt === 'CT' ? (
-                          <LabelSvgText
-                            text="CT"
-                            color={active ? '#FFFFFF' : '#111827'}
-                            fontSize={13}
-                            fontWeight={800}
-                            width={28}
-                            height={18}
-                          />
-                        ) : (
-                          <Text style={active ? styles.segmentTextSelected : styles.segmentText}>{opt}</Text>
-                        )}
+                          {opt === 'CT' ? (
+                            <LabelSvgText
+                              text="CT"
+                              color={active ? selectedTextColor : unselectedTextColor}
+                              fontSize={13}
+                              fontWeight={800}
+                            />
+                          ) : (
+                            <Text
+                              style={[
+                                ts.caption,
+                                active ? { color: selectedTextColor } : { color: unselectedTextColor },
+                                styles.segmentText,
+                              ]}
+                            >
+                              {opt}
+                            </Text>
+                          )}
                         </TouchableOpacity>
                       );
                     })}
@@ -379,13 +427,21 @@ export default function CadastroScreenModern() {
                           onPress={() => setPracaSelecionada(opt)}
                           style={[
                             styles.optionBtn,
-                            active ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                            active ? { backgroundColor: selectedBgColor } : { backgroundColor: unselectedBgColor, borderColor: theme.borderSubtle },
                           ]}
                         >
                           {opt === 'SO' ? (
-                            <LabelSO color={active ? '#FFFFFF' : '#111827'} fontSize={13} fontWeight={800} />
+                            <LabelSO color={active ? selectedTextColor : unselectedTextColor} fontSize={13} fontWeight={800} />
                           ) : (
-                            <Text style={active ? styles.segmentTextSelected : styles.segmentText}>{opt}</Text>
+                            <Text
+                              style={[
+                                ts.caption,
+                                active ? { color: selectedTextColor } : { color: unselectedTextColor },
+                                styles.segmentText,
+                              ]}
+                            >
+                              {opt}
+                            </Text>
                           )}
                         </TouchableOpacity>
                       );
@@ -398,7 +454,7 @@ export default function CadastroScreenModern() {
                 {/* Nip label via SVG para evitar corretor automático do Chrome */}
                 <View style={styles.labelRow}>
                   <View style={styles.labelSvgWrap}>
-                    <LabelNip color={unselectedText} />
+                    <LabelNip color={unselectedTextColor} />
                   </View>
                 </View>
 
@@ -406,13 +462,14 @@ export default function CadastroScreenModern() {
                   value={nip}
                   onChangeText={(t) => setNip(formatNipInput(t))}
                   placeholder=""
-                  placeholderTextColor="rgba(17,24,39,0.35)"
+                  placeholderTextColor={theme.textMuted}
                   style={[
                     styles.input,
                     {
-                      borderColor: inputBorder,
-                      backgroundColor: inputBg,
-                      color: '#111827',
+                      borderColor: inputBorderColor,
+                      backgroundColor: inputBgColor,
+                      color: inputTextColor,
+                      fontFamily: regularFont,
                     },
                   ]}
                   autoCorrect={false}
@@ -433,13 +490,14 @@ export default function CadastroScreenModern() {
                   value={nome}
                   onChangeText={(t) => setNome(t)}
                   placeholder="Nome"
-                  placeholderTextColor="rgba(17,24,39,0.35)"
+                  placeholderTextColor={theme.textMuted}
                   style={[
                     styles.input,
                     {
-                      borderColor: inputBorder,
-                      backgroundColor: inputBg,
-                      color: '#111827',
+                      borderColor: inputBorderColor,
+                      backgroundColor: inputBgColor,
+                      color: inputTextColor,
+                      fontFamily: regularFont,
                     },
                   ]}
                   autoCorrect={false}
@@ -456,13 +514,14 @@ export default function CadastroScreenModern() {
                   value={dataNascimento}
                   onChangeText={(t) => setDataNascimento(formatDateInput(t))}
                   placeholder={datePlaceholder}
-                  placeholderTextColor="rgba(17,24,39,0.35)"
+                  placeholderTextColor={theme.textMuted}
                   style={[
                     styles.input,
                     {
-                      borderColor: inputBorder,
-                      backgroundColor: inputBg,
-                      color: '#111827',
+                      borderColor: inputBorderColor,
+                      backgroundColor: inputBgColor,
+                      color: inputTextColor,
+                      fontFamily: regularFont,
                     },
                   ]}
                   keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
@@ -478,7 +537,7 @@ export default function CadastroScreenModern() {
 
               <View style={styles.section}>
                 <FieldLabel>Gênero</FieldLabel>
-                <View style={styles.segmented}>
+                <View style={[styles.segmented, { borderColor: theme.border }]}>
                   {(['M', 'F'] as const).map((sx) => {
                     const active = sexo === sx;
                     return (
@@ -488,10 +547,18 @@ export default function CadastroScreenModern() {
                         onPress={() => setSexo(sx)}
                         style={[
                           styles.segmentBtn,
-                          { backgroundColor: active ? selectedBg : unselectedBg },
+                          active
+                            ? { backgroundColor: selectedBgColor }
+                            : { backgroundColor: unselectedBgColor },
                         ]}
                       >
-                        <Text style={active ? styles.segmentTextSelected : styles.segmentText}>
+                        <Text
+                          style={[
+                            ts.caption,
+                            active ? { color: selectedTextColor } : { color: unselectedTextColor },
+                            styles.segmentText,
+                          ]}
+                        >
                           {sx === 'M' ? 'Masculino' : 'Feminino'}
                         </Text>
                       </TouchableOpacity>
@@ -504,26 +571,39 @@ export default function CadastroScreenModern() {
                 <TouchableOpacity
                   accessibilityLabel="cadastrar"
                   onPress={handleCadastrar}
-                  style={styles.btn}
+                  style={[styles.btn, { backgroundColor: theme.primary }]}
                 >
-                  <Text style={styles.btnText}>cadastrar</Text>
+                  <Text style={[ts.body, styles.btnText]}>Cadastrar</Text>
                 </TouchableOpacity>
               </View>
 
               {faltantes.length > 0 ? (
-                <Text style={styles.warnText}>Atenção: faltam {faltantes.join(', ')}.</Text>
+                <Text style={[ts.caption, styles.warnText, { color: dangerColor }]}>
+                  Atenção: faltam {faltantes.join(', ')}.
+                </Text>
               ) : null}
             </Card>
           ) : null}
 
-          <View style={styles.tableToggleStack}>
+          <View style={[styles.tableToggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <TouchableOpacity
               accessibilityLabel="Mostrar tabela"
               onPress={() => setMostrarTabela((v) => !v)}
-              style={[styles.toggleBtn, mostrarTabela ? styles.toggleBtnActive : null]}
+              style={[
+                styles.toggleBtn,
+                mostrarTabela
+                  ? { backgroundColor: selectedBgColor, borderColor: selectedBgColor }
+                  : { backgroundColor: unselectedBgColor, borderColor: theme.borderSubtle },
+              ]}
             >
               <Text
-                style={[styles.toggleBtnText, mostrarTabela ? styles.toggleBtnTextActive : null]}
+                style={[
+                  ts.caption,
+                  mostrarTabela
+                    ? { color: selectedTextColor }
+                    : { color: unselectedTextColor },
+                  styles.toggleBtnText,
+                ]}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
@@ -537,7 +617,7 @@ export default function CadastroScreenModern() {
           {mostrarTabela ? (
             <CadastroPlanilhaBlock
               cadastros={cadastros}
-              cardGlassEnabled={cardGlassEnabled}
+              cardGlassEnabled={false}
               showActions
               onEdit={handleEditar}
               onRequestDelete={(c) => setExcluirId(c.id)}
@@ -547,35 +627,37 @@ export default function CadastroScreenModern() {
       </ScrollView>
 
       {excluirId ? (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+        <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)' }]}>
+          <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Excluir cadastro?</Text>
+              <Text style={[ts.h2, styles.modalTitle, { color: theme.text }]}>Excluir cadastro?</Text>
               <TouchableOpacity
                 accessibilityLabel="Fechar modal"
                 onPress={() => setExcluirId(null)}
-                style={styles.modalCloseBtn}
+                style={[styles.modalCloseBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
               >
-                <X size={18} color="#6B7280" strokeWidth={3} />
+                <X size={18} color={theme.textSecondary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalSubtitle}>Tem certeza que deseja excluir esta linha?</Text>
+            <Text style={[ts.bodySecondary, styles.modalSubtitle, { color: theme.textSecondary }]}>
+              Tem certeza que deseja excluir esta linha?
+            </Text>
 
             <View style={styles.modalBtns}>
               <TouchableOpacity
                 accessibilityLabel="Cancelar exclusao"
                 onPress={() => setExcluirId(null)}
-                style={[styles.modalBtn, styles.modalBtnCancel]}
+                style={[styles.modalBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
               >
-                <Text style={styles.modalBtnTextCancel}>Cancelar</Text>
+                <Text style={[ts.caption, { color: theme.textSecondary }]}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 accessibilityLabel="Confirmar exclusao"
                 onPress={handleConfirmarExcluir}
-                style={[styles.modalBtn, styles.modalBtnDanger]}
+                style={[styles.modalBtn, { borderColor: dangerColor, backgroundColor: theme.lossMuted }]}
               >
-                <Text style={styles.modalBtnTextDanger}>Excluir</Text>
+                <Text style={[ts.caption, { color: dangerColor }]}>Excluir</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -583,28 +665,30 @@ export default function CadastroScreenModern() {
       ) : null}
 
       {modalCadastroSucesso ? (
-        <View style={styles.modalOverlay} pointerEvents="box-none">
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitleSuccess}>Militar Cadastrado com Sucesso</Text>
+        <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)' }]} pointerEvents="box-none">
+          <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+            <Text style={[ts.h2, styles.modalTitleSuccess, { color: successColor }]}>
+              Militar Cadastrado com Sucesso
+            </Text>
           </View>
         </View>
       ) : null}
 
       {modalNipDuplicado ? (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+        <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)' }]}>
+          <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Militar já cadastrado</Text>
+              <Text style={[ts.h2, styles.modalTitle, { color: theme.text }]}>Militar já cadastrado</Text>
               <TouchableOpacity
                 accessibilityLabel="Fechar aviso de NIP duplicado"
                 onPress={() => setModalNipDuplicado(false)}
-                style={styles.modalCloseBtn}
+                style={[styles.modalCloseBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
               >
-                <X size={18} color="#6B7280" strokeWidth={3} />
+                <X size={18} color={theme.textSecondary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalSubtitle}>
+            <Text style={[ts.bodySecondary, styles.modalSubtitle, { color: theme.textSecondary }]}>
               O NIP informado já está cadastrado. Não é possível repetir o cadastro do mesmo militar.
             </Text>
 
@@ -612,9 +696,9 @@ export default function CadastroScreenModern() {
               <TouchableOpacity
                 accessibilityLabel="Entendi"
                 onPress={() => setModalNipDuplicado(false)}
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                style={[styles.modalBtn, { borderColor: theme.border, backgroundColor: theme.primary }]}
               >
-                <Text style={styles.modalBtnTextPrimary}>Entendi</Text>
+                <Text style={[ts.caption, { color: theme.text }]}>Entendi</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -626,161 +710,115 @@ export default function CadastroScreenModern() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, position: 'relative' },
-  scrollContent: { paddingHorizontal: 16, paddingVertical: 10 },
+  scrollContent: { paddingHorizontal: 16, paddingVertical: 16 },
   centerWrap: { flex: 1, alignItems: 'center' },
   headerRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 14,
+    gap: 12,
+    marginBottom: 16,
   },
   backBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: PREMIUM.minTouch,
+    height: PREMIUM.minTouch,
+    borderRadius: PREMIUM.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitleWrap: { flex: 1 },
   pageTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textAlign: 'center',
   },
   formCard: {
     width: '100%',
     maxWidth: 720,
-    padding: 18,
-    borderRadius: 20,
+    marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: 'rgba(17,24,39,0.8)',
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  section: { marginBottom: 16 },
+  section: { marginBottom: 20 },
   labelText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#374151', // gray-700
-    marginBottom: 10,
+    marginBottom: 8,
   },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  labelSvgWrap: { marginBottom: 10 },
+  labelSvgWrap: { marginBottom: 8 },
 
   // Botões para alternar Formulário/Tabela
-  toggleRow: {
-    width: '100%',
-    flexDirection: 'row',
-    gap: 8,
-    padding: 8,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    marginBottom: 14,
-    ...(Platform.OS === 'web'
-      ? ({
-          boxShadow: '0 10px 30px rgba(17,24,39,0.10)',
-        } as any)
-      : {}),
-  },
   toggleStack: {
     width: '100%',
     maxWidth: 720,
     alignItems: 'stretch',
     padding: 8,
-    borderRadius: 18,
+    borderRadius: PREMIUM.radiusLg,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    marginBottom: 14,
-    ...(Platform.OS === 'web'
-      ? ({
-          boxShadow: '0 10px 30px rgba(17,24,39,0.10)',
-        } as any)
-      : {}),
+    marginBottom: 20,
   },
   tableToggleStack: {
     width: '100%',
     maxWidth: 720,
     alignItems: 'stretch',
     padding: 8,
-    borderRadius: 18,
+    borderRadius: PREMIUM.radiusLg,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
-    backgroundColor: 'rgba(255,255,255,0.55)',
     marginTop: 8,
-    marginBottom: 14,
-    ...(Platform.OS === 'web'
-      ? ({
-          boxShadow: '0 10px 30px rgba(17,24,39,0.10)',
-        } as any)
-      : {}),
+    marginBottom: 20,
   },
   toggleBtn: {
     width: '100%',
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.08)',
-    backgroundColor: 'rgba(17,24,39,0.04)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  toggleBtnActive: {
-    backgroundColor: '#111827',
-    borderColor: '#111827',
-  },
   toggleBtnText: {
-    color: '#111827',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  toggleBtnTextActive: {
-    color: '#FFFFFF',
+    fontWeight: '700',
   },
 
   segmented: {
     flexDirection: 'row',
-    borderRadius: 14,
+    borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
     overflow: 'hidden',
+    borderColor: 'transparent',
   },
   segmentBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
-  segmentText: { color: '#111827', fontSize: 13, fontWeight: '800' },
-  segmentTextSelected: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  segmentText: {
+    fontWeight: '700',
+  },
   optionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   optionBtn: {
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 12,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   input: {
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
+    borderRadius: PREMIUM.radiusMd,
+    paddingHorizontal: 16,
     paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: '500',
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}),
   },
   btnRow: { marginTop: 8 },
   btn: {
     marginTop: 6,
     width: '100%',
     paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: '#374151', // gray-700 (minimal SaaS)
+    borderRadius: PREMIUM.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  btnText: {
+    fontWeight: '700',
+  },
 
-  warnText: { marginTop: 8, fontSize: 12, fontWeight: '700', color: '#9CA3AF' },
+  warnText: { marginTop: 8, textAlign: 'center' },
 
   modalOverlay: {
     position: 'absolute',
@@ -796,34 +834,129 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 420,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
+    borderRadius: PREMIUM.radiusLg,
+    padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
+    ...Platform.select({
+      web: { boxShadow: '0 8px 32px rgba(0,0,0,0.12)' } as object,
+      default: { elevation: 8 },
+    }),
   },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  modalTitle: { fontSize: 16, fontWeight: '900', color: '#111827' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  modalTitle: {},
   modalTitleSuccess: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: '#15803D',
     textAlign: 'center',
+    marginBottom: 12,
+  },
+  modalSubtitle: { marginBottom: 20, textAlign: 'center' },
+  modalCloseBtn: {
+    padding: 8,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+  },
+  modalBtns: { flexDirection: 'row', gap: 12, justifyContent: 'flex-end' },
+  modalBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: PREMIUM.radiusMd, borderWidth: 1, alignItems: 'center' },
+
+  // Tabelas e feedback
+  tabelaScrollHorizontal: {
     marginBottom: 8,
   },
-  modalSubtitle: { fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 14 },
-  modalCloseBtn: { padding: 8, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(17,24,39,0.12)' },
-  modalBtns: { flexDirection: 'row', gap: 12, justifyContent: 'flex-end' },
-  modalBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center' },
-  modalBtnCancel: { borderColor: 'rgba(17,24,39,0.12)', backgroundColor: 'rgba(17,24,39,0.04)' },
-  modalBtnTextCancel: { color: '#111827', fontSize: 13, fontWeight: '900' },
-  modalBtnDanger: { borderColor: 'rgba(220,38,38,0.30)', backgroundColor: 'rgba(220,38,38,0.12)' },
-  modalBtnTextDanger: { color: '#DC2626', fontSize: 13, fontWeight: '900' },
-  modalBtnPrimary: {
-    flex: 1,
-    borderColor: 'rgba(17,24,39,0.12)',
-    backgroundColor: '#111827',
+  tabelaCard: {
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  modalBtnTextPrimary: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  tabelaHeaderRow: {
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  tabelaHeaderCell: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tabelaHeaderVolta: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0,
+  },
+  tabelaDataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    minHeight: 48,
+  },
+  tabelaCell: {
+    justifyContent: 'center',
+  },
+  tabelaCellText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  tabelaColCorredor: {
+    width: 60,
+    paddingRight: 6,
+  },
+  tabelaColNome: {
+    width: 160,
+    maxWidth: 200,
+    minWidth: 100,
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingRight: 4,
+  },
+  tabelaColMarcarChegada: {
+    width: 100,
+    minWidth: 100,
+    textAlign: 'center',
+    paddingHorizontal: 4,
+  },
+  tabelaColVolta: {
+    width: 44,
+    minWidth: 44,
+    textAlign: 'center',
+    paddingHorizontal: 0,
+  },
+  tabelaColTempo: {
+    width: 72,
+    minWidth: 72,
+    textAlign: 'center',
+  },
+  tabelaColNota: {
+    width: 64,
+    minWidth: 64,
+    textAlign: 'center',
+  },
+  tabelaNotaText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  tabelaNotaRepro: {
+    fontSize: 9,
+  },
+  tabelaCelulaTempo: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabelaCelulaCheck: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkVoltaOuter: {
+    padding: 2,
+  },
+  checkVoltaBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  tabelaNumeroVerde: {
+    fontSize: 22,
+    fontWeight: '800',
+  },
 });
-

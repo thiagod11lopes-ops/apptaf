@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
+import { getUiColors } from '../theme/uiColors';
 import {
   View,
   Text,
@@ -46,11 +48,13 @@ function CheckPermanencia({
   checked,
   onPress,
   variant,
+  labelColor,
 }: {
   label: string;
   checked: boolean;
   onPress: () => void;
   variant: 'aprovado' | 'reprovado';
+  labelColor: string;
 }) {
   const onStyle = variant === 'aprovado' ? styles.checkOnAprovado : styles.checkOnReprovado;
   return (
@@ -65,7 +69,7 @@ function CheckPermanencia({
       <View style={[styles.checkBox, checked ? onStyle : styles.checkOff]}>
         {checked ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
       </View>
-      <Text style={styles.checkLabel}>{label}</Text>
+      <Text style={[styles.checkLabel, { color: labelColor }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -90,13 +94,15 @@ export function PermanenciaTafPanel({
   inputBg,
   inputTextColor,
 }: PermanenciaTafPanelProps) {
+  const { theme } = useTheme();
+  const ui = useMemo(() => getUiColors(theme), [theme]);
   const todosMarcados =
     participantes.length > 0 &&
     participantes.every((_, i) => resultados[i] === 'aprovado' || resultados[i] === 'reprovado');
 
   return (
     <View style={styles.root}>
-      <Text style={styles.subtitle}>
+      <Text style={[styles.subtitle, { color: ui.text }]}>
         Marque Aprovado ou Reprovado para cada militar. O cronômetro encerra aos 10 minutos.
       </Text>
 
@@ -104,10 +110,16 @@ export function PermanenciaTafPanel({
         {participantes.map((p) => {
           const r = resultados[p.index] ?? null;
           return (
-            <View key={p.index} style={styles.participanteCard}>
+            <View
+              key={p.index}
+              style={[
+                styles.participanteCard,
+                { borderColor: theme.border, backgroundColor: ui.inputBg },
+              ]}
+            >
               <View style={styles.participanteHeader}>
-                <Text style={styles.participanteNumero}>{p.index + 1}</Text>
-                <Text style={styles.participanteNome} numberOfLines={2}>
+                <Text style={[styles.participanteNumero, { color: ui.text }]}>{p.index + 1}</Text>
+                <Text style={[styles.participanteNome, { color: ui.text }]} numberOfLines={2}>
                   {p.nome}
                 </Text>
               </View>
@@ -116,12 +128,14 @@ export function PermanenciaTafPanel({
                   label="Aprovado"
                   checked={r === 'aprovado'}
                   variant="aprovado"
+                  labelColor={ui.text}
                   onPress={() => onToggleResultado(p.index, 'aprovado')}
                 />
                 <CheckPermanencia
                   label="Reprovado"
                   checked={r === 'reprovado'}
                   variant="reprovado"
+                  labelColor={ui.text}
                   onPress={() => onToggleResultado(p.index, 'reprovado')}
                 />
               </View>
@@ -157,9 +171,9 @@ export function PermanenciaTafPanel({
               accessibilityLabel="Pausar cronômetro"
               activeOpacity={0.85}
               onPress={onPausarCronometro}
-              style={styles.btnIcon}
+              style={[styles.btnIcon, { borderColor: theme.border, backgroundColor: ui.inputBg }]}
             >
-              <Pause size={22} color="#111827" strokeWidth={2.5} />
+              <Pause size={22} color={ui.iconStrong} strokeWidth={2.5} />
             </TouchableOpacity>
           ) : null}
           {cronometroEstado === 'pausado' ? (
@@ -167,9 +181,9 @@ export function PermanenciaTafPanel({
               accessibilityLabel="Continuar cronômetro"
               activeOpacity={0.85}
               onPress={onContinuarCronometro}
-              style={styles.btnIcon}
+              style={[styles.btnIcon, { borderColor: theme.border, backgroundColor: ui.inputBg }]}
             >
-              <Play size={22} color="#111827" strokeWidth={2.5} />
+              <Play size={22} color={ui.iconStrong} strokeWidth={2.5} />
             </TouchableOpacity>
           ) : null}
           <View style={[styles.cronometroBox, { borderColor: inputBorder, backgroundColor: inputBg }]}>
@@ -179,7 +193,7 @@ export function PermanenciaTafPanel({
                 onChangeText={onCronometroPausadoTextoChange}
                 onBlur={onBlurCronometroPausado}
                 placeholder="MM:SS"
-                placeholderTextColor="rgba(17,24,39,0.35)"
+                placeholderTextColor={ui.placeholder}
                 style={[styles.cronometroInput, { color: inputTextColor }]}
               />
             ) : (
@@ -195,10 +209,10 @@ export function PermanenciaTafPanel({
             )}
           </View>
         </View>
-        <Text style={styles.limiteHint}>Limite da prova: 10:00</Text>
+        <Text style={[styles.limiteHint, { color: ui.text }]}>Limite da prova: 10:00</Text>
       </View>
 
-      {erroAplicar ? <Text style={styles.erroText}>{erroAplicar}</Text> : null}
+      {erroAplicar ? <Text style={[styles.erroText, { color: ui.text }]}>{erroAplicar}</Text> : null}
 
       {todosMarcados ? (
         <TouchableOpacity

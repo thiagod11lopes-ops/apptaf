@@ -3,7 +3,7 @@ export type ResultadoCorridaItem = {
   nome: string;
   tempoMs: number;
   nip: string;
-  prova?: 'corrida' | 'natacao';
+  prova?: 'corrida' | 'natacao' | 'permanencia';
   notaTexto?: string;
   noraTexto?: string;
   reprovacaoTexto?: string;
@@ -18,6 +18,7 @@ export type RootStackParamList = {
   AplicacaoTAF: undefined;
   AplicarTAF: undefined;
   Estatisticas: undefined;
+  Resultados: undefined;
   Configuracoes: undefined;
   CadastrarResultados: { resultados: ResultadoCorridaItem[] };
 };

@@ -2,8 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import type { ContagemItem } from '../../utils/estatisticasTaf';
 import { useTheme } from '../../contexts/ThemeContext';
-import { MonoValue } from '../fintech/MonoValue';
-import { FINTECH } from '../../theme/fintech';
 
 type Props = {
   items: ContagemItem[];
@@ -13,12 +11,13 @@ type Props = {
 
 export function StatBarChart({ items, barColor, maxItems = 12 }: Props) {
   const { theme } = useTheme();
+  const ts = theme.textStyles;
   const fill = barColor ?? theme.primary;
   const slice = items.filter((i) => i.valor > 0).slice(0, maxItems);
   const max = Math.max(1, ...slice.map((i) => i.valor));
 
   if (slice.length === 0) {
-    return <Text style={[styles.empty, { color: theme.textMuted }]}>Sem dados para exibir.</Text>;
+    return <Text style={[ts.caption, styles.empty]}>Sem dados para exibir.</Text>;
   }
 
   return (
@@ -29,21 +28,16 @@ export function StatBarChart({ items, barColor, maxItems = 12 }: Props) {
         return (
           <View key={item.label} style={styles.row}>
             <View style={styles.labelCol}>
-              <Text style={[styles.label, { color: theme.text }]} numberOfLines={1}>
+              <Text style={[ts.caption, { color: theme.text }]} numberOfLines={1}>
                 {item.label}
               </Text>
-              <MonoValue size="sm" variant="muted">
+              <Text style={[ts.caption, { color: theme.text }]}>
                 {item.valor}
                 {pctLabel ? ` · ${pctLabel}` : ''}
-              </MonoValue>
+              </Text>
             </View>
             <View style={[styles.barTrack, { backgroundColor: theme.backgroundSecondary }]}>
-              <View
-                style={[
-                  styles.barFill,
-                  { width: `${pctBar}%`, backgroundColor: fill },
-                ]}
-              />
+              <View style={[styles.barFill, { width: `${pctBar}%`, backgroundColor: fill }]} />
             </View>
           </View>
         );
@@ -53,20 +47,19 @@ export function StatBarChart({ items, barColor, maxItems = 12 }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 12 },
-  row: { gap: 6 },
+  wrap: { gap: 14 },
+  row: { gap: 8 },
   labelCol: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 8,
   },
-  label: { flex: 1, fontSize: 13, fontWeight: '600' },
   barTrack: {
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
     overflow: 'hidden',
   },
-  barFill: { height: '100%', borderRadius: 3, minWidth: 3 },
-  empty: { fontSize: 13, fontStyle: 'italic' },
+  barFill: { height: '100%', borderRadius: 4, minWidth: 4 },
+  empty: { fontStyle: 'italic' },
 });

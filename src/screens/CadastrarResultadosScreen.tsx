@@ -20,11 +20,15 @@ import {
   cabecalhoColunaProvaResultados,
   exportResumoAplicacaoPdf,
 } from '../utils/exportResumoAplicacaoPdf';
+import { getUiColors, type UiColors } from '../theme/uiColors';
+import type { AppTheme } from '../theme/premium';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CadastrarResultados'>;
 
 export default function CadastrarResultadosScreen({ navigation, route }: Props) {
   const { theme } = useTheme();
+  const ui = useMemo(() => getUiColors(theme), [theme]);
+  const styles = useMemo(() => createCadastrarResultadosStyles(theme, ui), [theme, ui]);
   const resultados = route.params?.resultados ?? [];
   const textoColunaCadastro = useMemo(() => {
     const temNatacao = resultados.some((r) => r.prova === 'natacao');
@@ -39,7 +43,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
   );
   const grayBg = theme.background;
   const cardGlassEnabled = Platform.OS === 'web';
-  const inputBorder = 'rgba(17,24,39,0.12)';
+  const inputBorder = theme.border;
   const [gerandoPdf, setGerandoPdf] = useState(false);
 
   const onGerarPdf = useCallback(async () => {
@@ -69,7 +73,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
               style={styles.backBtn}
               accessibilityLabel="Voltar"
             >
-              <ChevronLeft size={26} color="#6B7280" strokeWidth={2.5} />
+              <ChevronLeft size={26} color={ui.icon} strokeWidth={2.5} />
             </TouchableOpacity>
             <View style={styles.headerTitleWrap}>
               <Text style={styles.pageTitle}>Aplicar Resultado</Text>
@@ -119,7 +123,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
             {resultados.map((r) => (
               <View
                 key={`${r.prova ?? 'corrida'}-${r.corredor}`}
-                style={[styles.resultadoRow, { borderColor: inputBorder, backgroundColor: '#FFFFFF' }]}
+                style={[styles.resultadoRow, { borderColor: inputBorder, backgroundColor: ui.inputBg }]}
               >
                 <Text style={styles.corredorLabel}>
                   {(r.prova === 'natacao' ? 'Nadador' : 'Corredor')} {r.corredor}
@@ -159,149 +163,155 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
   );
 }
 
-/** Estilos alinhados a CadastroScreenModern / AplicarTAFScreen */
-const styles = StyleSheet.create({
-  safe: { flex: 1, position: 'relative' as const },
-  scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 10, paddingBottom: 28 },
-  centerWrap: { flex: 1, alignItems: 'center' as const },
-  headerRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 14,
-  },
-  backBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitleWrap: { flex: 1 },
-  pageTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  formCard: {
-    width: '100%',
-    maxWidth: 720,
-    marginTop: 8,
-    padding: 18,
-    borderRadius: 20,
-  },
-  sectionTitleCadastro: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: 'rgba(17,24,39,0.8)',
-    marginBottom: 10,
-  },
-  introCadastro: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#374151',
-    lineHeight: 19,
-    marginBottom: 16,
-  },
-  introStrong: { fontWeight: '900', color: '#111827' },
-  btnGerarPdf: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    marginBottom: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#111827',
-  },
-  btnGerarPdfDisabled: {
-    opacity: 0.72,
-  },
-  btnGerarPdfText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  dicaPdf: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    marginBottom: 16,
-    lineHeight: 16,
-  },
-  vazioText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#9CA3AF',
-    marginBottom: 8,
-  },
-  tabelaHeaderResumo: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#374151',
-    marginBottom: 8,
-    letterSpacing: 0.2,
-  },
-  resultadoRow: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 10,
-  },
-  corredorLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  nomeText: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  nipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  tempoText: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#15803D',
-  },
-  linhaTempoNota: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'flex-start',
-    gap: 16,
-  },
-  blocoNotaCorrida: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
-  },
-  notaResumoLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#6B7280',
-  },
-  notaResumoValor: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#111827',
-  },
-  notaResumoRepro: {
-    color: '#B91C1C',
-    fontSize: 12,
-  },
-});
+function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
+  const ink = ui.text;
+  const sub = ui.textSecondary;
+  const muted = ui.textMuted;
+  const btnBg = ui.btnDarkBg;
+
+  return StyleSheet.create({
+    safe: { flex: 1, position: 'relative' as const },
+    scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 10, paddingBottom: 28 },
+    centerWrap: { flex: 1, alignItems: 'center' as const },
+    headerRow: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 14,
+    },
+    backBtn: {
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerTitleWrap: { flex: 1 },
+    pageTitle: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: ink,
+      textShadowColor: theme.isDark ? 'transparent' : 'rgba(0,0,0,0.1)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
+    },
+    formCard: {
+      width: '100%',
+      maxWidth: 720,
+      marginTop: 8,
+      padding: 18,
+      borderRadius: 20,
+    },
+    sectionTitleCadastro: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: ink,
+      marginBottom: 10,
+    },
+    introCadastro: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: sub,
+      lineHeight: 19,
+      marginBottom: 16,
+    },
+    introStrong: { fontWeight: '900', color: ink },
+    btnGerarPdf: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      marginBottom: 8,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 14,
+      backgroundColor: btnBg,
+      borderWidth: 1,
+      borderColor: btnBg,
+    },
+    btnGerarPdfDisabled: {
+      opacity: 0.72,
+    },
+    btnGerarPdfText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    dicaPdf: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: muted,
+      marginBottom: 16,
+      lineHeight: 16,
+    },
+    vazioText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: muted,
+      marginBottom: 8,
+    },
+    tabelaHeaderResumo: {
+      fontSize: 12,
+      fontWeight: '900',
+      color: sub,
+      marginBottom: 8,
+      letterSpacing: 0.2,
+    },
+    resultadoRow: {
+      borderRadius: 14,
+      borderWidth: 1,
+      padding: 14,
+      marginBottom: 10,
+    },
+    corredorLabel: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: muted,
+      marginBottom: 4,
+    },
+    nomeText: {
+      fontSize: 15,
+      fontWeight: '900',
+      color: ink,
+      marginBottom: 4,
+    },
+    nipText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: sub,
+      marginBottom: 8,
+    },
+    tempoText: {
+      fontSize: 20,
+      fontWeight: '900',
+      color: theme.isDark ? ink : '#15803D',
+    },
+    linhaTempoNota: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'flex-start',
+      gap: 16,
+    },
+    blocoNotaCorrida: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 8,
+    },
+    notaResumoLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: muted,
+    },
+    notaResumoValor: {
+      fontSize: 14,
+      fontWeight: '900',
+      color: ink,
+    },
+    notaResumoRepro: {
+      color: theme.isDark ? ink : '#B91C1C',
+      fontSize: 12,
+    },
+  });
+}

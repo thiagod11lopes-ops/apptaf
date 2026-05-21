@@ -1,4 +1,6 @@
 import { Platform } from 'react-native';
+import type { TextStyle } from 'react-native';
+import { FONT, fontFamily, createTextStyles } from './typography';
 
 const monoFont = Platform.select({
   web: 'ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace',
@@ -7,34 +9,42 @@ const monoFont = Platform.select({
   default: 'monospace',
 }) as string;
 
-/** Linear / Vercel / Apple — minimal, accent pontual */
+/**
+ * Paleta legível — modo escuro suave (evita preto puro e texto apagado).
+ */
 export const PREMIUM = {
-  accent: '#6366F1',
-  accentMuted: 'rgba(99, 102, 241, 0.14)',
+  accent: '#6B7CFF',
+  accentLight: '#818CF8',
+  accentMuted: 'rgba(107, 124, 255, 0.18)',
 
   dark: {
-    bg: '#000000',
-    elevated: '#09090B',
-    surface: 'rgba(24, 24, 27, 0.65)',
-    text: '#FAFAFA',
-    textSecondary: '#A1A1AA',
-    textMuted: '#71717A',
-    border: 'rgba(255, 255, 255, 0.1)',
-    borderSubtle: 'rgba(255, 255, 255, 0.06)',
+    bg: '#1C1C22',
+    elevated: '#25252D',
+    card: '#2E2E38',
+    cardHover: '#363642',
+    text: '#FFFFFF',
+    textSecondary: '#FFFFFF',
+    textMuted: '#FFFFFF',
+    border: 'rgba(255, 255, 255, 0.12)',
+    borderSubtle: 'rgba(255, 255, 255, 0.08)',
   },
   light: {
-    bg: '#FFFFFF',
-    elevated: '#F4F4F5',
-    surface: 'rgba(255, 255, 255, 0.72)',
-    text: '#09090B',
-    textSecondary: '#52525B',
-    textMuted: '#71717A',
-    border: 'rgba(0, 0, 0, 0.08)',
-    borderSubtle: 'rgba(0, 0, 0, 0.05)',
+    bg: '#F8F9FC',
+    elevated: '#FFFFFF',
+    card: '#FFFFFF',
+    cardHover: '#F4F4F8',
+    text: '#12121A',
+    textSecondary: '#4B4B5C',
+    textMuted: '#6E6E80',
+    border: 'rgba(15, 23, 42, 0.1)',
+    borderSubtle: 'rgba(15, 23, 42, 0.06)',
   },
 
   fontMono: monoFont,
-  radiusPhone: 40,
+  radiusSm: 10,
+  radiusMd: 14,
+  radiusLg: 18,
+  radiusXl: 22,
   minTouch: 48,
 } as const;
 
@@ -60,41 +70,50 @@ export type AppTheme = {
   lossMuted: string;
   monoFont: string;
   accentMuted: string;
+  isDark: boolean;
+  fonts: typeof FONT;
+  textStyles: Record<string, TextStyle>;
 };
 
-export function buildPremiumDarkTheme(): AppTheme {
+export function buildPremiumDarkTheme(fontsLoaded = true): AppTheme {
   const d = PREMIUM.dark;
+  const colors = { text: d.text, textSecondary: d.textSecondary, textMuted: d.textMuted };
   return {
-    primary: PREMIUM.accent,
+    isDark: true,
+    primary: PREMIUM.accentLight,
     background: d.bg,
-    cardBg: d.surface,
+    cardBg: d.card,
     text: d.text,
     textSecondary: d.textSecondary,
     textMuted: d.textMuted,
     border: d.border,
     borderSubtle: d.borderSubtle,
     borderMuted: d.border,
-    error: '#F43F5E',
-    success: '#10B981',
+    error: '#FB7185',
+    success: '#4ADE80',
     shadow: '#000000',
     gradient: [d.elevated, d.bg],
     backgroundSecondary: d.elevated,
-    surface: d.surface,
-    gain: '#10B981',
-    loss: '#F43F5E',
-    gainMuted: 'rgba(16, 185, 129, 0.12)',
-    lossMuted: 'rgba(244, 63, 94, 0.12)',
+    surface: d.card,
+    gain: '#4ADE80',
+    loss: '#FB7185',
+    gainMuted: 'rgba(74, 222, 128, 0.14)',
+    lossMuted: 'rgba(251, 113, 133, 0.14)',
     monoFont: PREMIUM.fontMono,
     accentMuted: PREMIUM.accentMuted,
+    fonts: FONT,
+    textStyles: createTextStyles(colors, fontsLoaded),
   };
 }
 
-export function buildPremiumLightTheme(): AppTheme {
+export function buildPremiumLightTheme(fontsLoaded = true): AppTheme {
   const l = PREMIUM.light;
+  const colors = { text: l.text, textSecondary: l.textSecondary, textMuted: l.textMuted };
   return {
+    isDark: false,
     primary: PREMIUM.accent,
     background: l.bg,
-    cardBg: l.surface,
+    cardBg: l.card,
     text: l.text,
     textSecondary: l.textSecondary,
     textMuted: l.textMuted,
@@ -106,30 +125,14 @@ export function buildPremiumLightTheme(): AppTheme {
     shadow: '#000000',
     gradient: [l.elevated, l.bg],
     backgroundSecondary: l.elevated,
-    surface: l.surface,
+    surface: l.card,
     gain: '#059669',
     loss: '#E11D48',
     gainMuted: 'rgba(5, 150, 105, 0.1)',
     lossMuted: 'rgba(225, 29, 72, 0.1)',
     monoFont: PREMIUM.fontMono,
     accentMuted: PREMIUM.accentMuted,
+    fonts: FONT,
+    textStyles: createTextStyles(colors, fontsLoaded),
   };
 }
-
-/** Classes Tailwind reutilizáveis (dark mode via `dark:` no web quando `class` no html) */
-export const tw = {
-  screen: 'flex-1 bg-white dark:bg-black select-none-touch',
-  glassCard:
-    'rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 shadow-md overflow-hidden',
-  glassCardLg:
-    'rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white/75 dark:bg-zinc-900/55 shadow-xl overflow-hidden',
-  textTitle: 'text-zinc-900 dark:text-zinc-50 text-lg font-semibold tracking-tight',
-  textMuted: 'text-zinc-500 dark:text-zinc-400 text-sm',
-  textAccent: 'text-indigo-600 dark:text-indigo-400',
-  btnPrimary:
-    'min-h-[48px] rounded-2xl bg-indigo-600 dark:bg-indigo-500 px-5 py-3 items-center justify-center shadow-md active:scale-[0.98] transition-premium',
-  btnGhost:
-    'min-h-[48px] rounded-2xl border border-zinc-200 dark:border-white/10 bg-white/50 dark:bg-zinc-900/40 px-5 py-3 items-center justify-center active:scale-[0.98] transition-premium',
-  input:
-    'min-h-[48px] rounded-2xl border border-zinc-200 dark:border-white/10 bg-white/80 dark:bg-zinc-900/50 px-4 text-zinc-900 dark:text-zinc-100',
-} as const;

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Platform, StyleSheet } from 'react-native';
+import { View, Platform, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -7,6 +7,8 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { PhoneFrameShell } from './src/components/premium/PhoneFrameShell';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
+import { useAppFonts } from './src/hooks/useAppFonts';
+import { PREMIUM } from './src/theme/premium';
 
 function AppRoot() {
   const { isDark, theme } = useTheme();
@@ -20,17 +22,14 @@ function AppRoot() {
     body.style.height = '100%';
     body.style.margin = '0';
     body.style.overflow = 'hidden';
+    body.style.fontFamily = 'Inter, system-ui, sans-serif';
     if (root) {
       root.style.height = '100%';
       root.style.display = 'flex';
       root.style.flexDirection = 'column';
     }
-    body.style.backgroundColor = isDark ? '#09090B' : '#E4E4E7';
-    if (isDark) {
-      html.classList.add('dark');
-    } else {
-      html.classList.remove('dark');
-    }
+    body.style.backgroundColor = isDark ? PREMIUM.dark.bg : PREMIUM.light.bg;
+    html.classList.toggle('dark', isDark);
   }, [isDark]);
 
   return (
@@ -43,14 +42,30 @@ function AppRoot() {
   );
 }
 
+function AppWithTheme() {
+  const { fontsLoaded } = useAppFonts();
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={PREMIUM.accentLight} />
+      </View>
+    );
+  }
+
+  return (
+    <ThemeProvider fontsLoaded={fontsLoaded}>
+      <AppRoot />
+    </ThemeProvider>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={styles.ghRoot}>
         <SafeAreaProvider style={styles.ghRoot}>
-          <ThemeProvider>
-            <AppRoot />
-          </ThemeProvider>
+          <AppWithTheme />
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
@@ -63,11 +78,17 @@ const styles = StyleSheet.create({
     width: '100%',
     height: Platform.OS === 'web' ? ('100vh' as unknown as number) : '100%',
     minHeight: Platform.OS === 'web' ? ('100vh' as unknown as number) : undefined,
-    backgroundColor: '#000000',
+    backgroundColor: PREMIUM.dark.bg,
   },
   appRoot: {
     flex: 1,
     width: '100%',
     height: '100%',
+  },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PREMIUM.dark.bg,
   },
 });

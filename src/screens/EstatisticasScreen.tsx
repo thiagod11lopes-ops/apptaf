@@ -72,7 +72,7 @@ export default function EstatisticasScreen() {
         >
           {!s || s.resumo.totalCadastros === 0 ? (
             <Card>
-              <Text style={{ color: theme.textSecondary }}>
+              <Text style={{ color: theme.text }}>
                 Nenhum cadastro no sistema. Cadastre participantes e registre resultados de TAF para
                 gerar estatísticas.
               </Text>
@@ -89,7 +89,7 @@ export default function EstatisticasScreen() {
                 onChange={setTab}
               />
 
-              <Text style={[styles.lead, { color: theme.textMuted }]}>
+              <Text style={[theme.textStyles.bodySecondary, styles.lead]}>
                 Dashboard TAF · notas recalculadas pela norma (sexo, idade, tempo).
               </Text>
 
@@ -134,13 +134,11 @@ export default function EstatisticasScreen() {
 
               {tab === 'geral' && (
                 <StatSection title="Perfil dos cadastrados">
-                  <Text style={[styles.subHeading, { color: theme.textSecondary }]}>Categoria</Text>
+                  <Text style={[theme.textStyles.label, styles.subHeading]}>Categoria</Text>
                   <StatBarChart items={s.porCategoria} barColor={theme.textMuted} />
-                  <Text style={[styles.subHeading, { color: theme.textSecondary }]}>Sexo</Text>
+                  <Text style={[theme.textStyles.label, styles.subHeading]}>Sexo</Text>
                   <StatBarChart items={s.porSexo} barColor={theme.primary} />
-                  <Text style={[styles.subHeading, { color: theme.textSecondary }]}>
-                    Faixa etária
-                  </Text>
+                  <Text style={[theme.textStyles.label, styles.subHeading]}>Faixa etária</Text>
                   <StatBarChart items={s.porFaixaEtaria} barColor={theme.gain} />
                 </StatSection>
               )}

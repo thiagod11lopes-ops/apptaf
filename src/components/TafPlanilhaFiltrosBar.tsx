@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
+import { getUiColors } from '../theme/uiColors';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, Modal } from 'react-native';
 import { Search, Calendar, X } from 'lucide-react-native';
 import { LabelSvgText } from './LabelSvgText';
@@ -30,6 +32,8 @@ export function TafPlanilhaFiltrosBar({
   filtroData,
   onFiltroDataChange,
 }: Props) {
+  const { theme } = useTheme();
+  const ui = useMemo(() => getUiColors(theme), [theme]);
   const [calendarioAberto, setCalendarioAberto] = useState(false);
 
   const isoData = useMemo(() => dataBrParaIso(filtroData) ?? '', [filtroData]);
@@ -54,14 +58,14 @@ export function TafPlanilhaFiltrosBar({
 
   return (
     <View style={styles.root}>
-      <View style={styles.searchRow}>
-        <Search size={18} color="rgba(17,24,39,0.45)" strokeWidth={2.5} />
+      <View style={[styles.searchRow, { borderColor: theme.border, backgroundColor: ui.inputBg }]}>
+        <Search size={18} color={ui.searchIcon} strokeWidth={2.5} />
         <TextInput
           value={filtroBusca}
           onChangeText={onFiltroBuscaChange}
           placeholder="Buscar (mín. 3 caracteres)..."
-          placeholderTextColor="rgba(17,24,39,0.35)"
-          style={styles.searchInput}
+          placeholderTextColor={ui.placeholder}
+          style={[styles.searchInput, { color: ui.text }]}
           autoCorrect={false}
           spellCheck={false}
           autoCapitalize="none"
@@ -70,7 +74,7 @@ export function TafPlanilhaFiltrosBar({
       </View>
 
       <View style={styles.filterBlock}>
-        <LabelSvgText text="Modalidade" color="#374151" fontSize={12} fontWeight={800} width={100} height={18} />
+        <LabelSvgText text="Modalidade" color={ui.text} fontSize={12} fontWeight={800} width={100} height={18} />
         <View style={styles.chipsRow}>
           {MODALIDADES.map((opt) => {
             const active = filtroModalidade === opt.id;
@@ -81,9 +85,16 @@ export function TafPlanilhaFiltrosBar({
                 accessibilityState={{ selected: active }}
                 activeOpacity={0.85}
                 onPress={() => onFiltroModalidadeChange(opt.id)}
-                style={[styles.chip, active ? styles.chipActive : styles.chipIdle]}
+                style={[
+                  styles.chip,
+                  active
+                    ? { borderColor: ui.btnDarkBg, backgroundColor: ui.btnDarkBg }
+                    : { borderColor: theme.borderSubtle, backgroundColor: ui.toggleInactiveBg },
+                ]}
               >
-                <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{opt.label}</Text>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: active ? '#FFFFFF' : ui.text }}>
+                  {opt.label}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -91,33 +102,40 @@ export function TafPlanilhaFiltrosBar({
       </View>
 
       <View style={styles.filterBlock}>
-        <LabelSvgText text="Data" color="#374151" fontSize={12} fontWeight={800} width={56} height={18} />
+        <LabelSvgText text="Data" color={ui.text} fontSize={12} fontWeight={800} width={56} height={18} />
         <View style={styles.dataRow}>
           <TouchableOpacity
             accessibilityLabel="Todas as datas"
             activeOpacity={0.85}
             onPress={() => onFiltroDataChange('')}
-            style={[styles.chip, !filtroData ? styles.chipActive : styles.chipIdle]}
+            style={[
+              styles.chip,
+              !filtroData
+                ? { borderColor: ui.btnDarkBg, backgroundColor: ui.btnDarkBg }
+                : { borderColor: theme.borderSubtle, backgroundColor: ui.toggleInactiveBg },
+            ]}
           >
-            <Text style={[styles.chipText, !filtroData ? styles.chipTextActive : null]}>Todas</Text>
+            <Text style={{ fontSize: 12, fontWeight: '800', color: !filtroData ? '#FFFFFF' : ui.text }}>
+              Todas
+            </Text>
           </TouchableOpacity>
 
           {Platform.OS === 'web' ? (
             <View style={styles.dateWebWrap}>
-              <Calendar size={16} color="rgba(17,24,39,0.5)" strokeWidth={2.5} />
+              <Calendar size={16} color={ui.searchIcon} strokeWidth={2.5} />
               {/* @ts-expect-error input HTML no web */}
               <input
                 type="date"
                 value={isoData}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChangeIsoWeb(e.target.value)}
                 style={{
-                  border: '1px solid rgba(17,24,39,0.12)',
+                  border: `1px solid ${theme.border}`,
                   borderRadius: 10,
                   padding: '8px 10px',
                   fontSize: 14,
                   fontWeight: 700,
-                  color: '#111827',
-                  backgroundColor: 'rgba(255,255,255,0.85)',
+                  color: ui.text,
+                  backgroundColor: ui.inputBg,
                   flex: 1,
                   minWidth: 140,
                 }}
@@ -129,10 +147,10 @@ export function TafPlanilhaFiltrosBar({
                 accessibilityLabel="Abrir calendário"
                 activeOpacity={0.85}
                 onPress={() => setCalendarioAberto(true)}
-                style={styles.dateBtn}
+                style={[styles.dateBtn, { borderColor: theme.border, backgroundColor: ui.inputBg }]}
               >
-                <Calendar size={18} color="#111827" strokeWidth={2.5} />
-                <Text style={styles.dateBtnText}>{filtroData || 'Escolher data'}</Text>
+                <Calendar size={18} color={ui.iconStrong} strokeWidth={2.5} />
+                <Text style={[styles.dateBtnText, { color: ui.text }]}>{filtroData || 'Escolher data'}</Text>
               </TouchableOpacity>
               {filtroData ? (
                 <TouchableOpacity
@@ -140,7 +158,7 @@ export function TafPlanilhaFiltrosBar({
                   onPress={() => onFiltroDataChange('')}
                   style={styles.clearDateBtn}
                 >
-                  <X size={16} color="#6B7280" strokeWidth={2.5} />
+                  <X size={16} color={ui.icon} strokeWidth={2.5} />
                 </TouchableOpacity>
               ) : null}
             </>
@@ -151,23 +169,26 @@ export function TafPlanilhaFiltrosBar({
       {Platform.OS !== 'web' ? (
         <Modal visible={calendarioAberto} transparent animationType="fade" onRequestClose={() => setCalendarioAberto(false)}>
           <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Data do registro</Text>
+            <View style={[styles.modalCard, { backgroundColor: ui.modalBg, borderColor: theme.border }]}>
+              <Text style={[styles.modalTitle, { color: ui.text }]}>Data do registro</Text>
               <TextInput
                 value={filtroData}
                 onChangeText={onChangeDataTexto}
                 placeholder="DD/MM/AAAA"
-                placeholderTextColor="rgba(17,24,39,0.35)"
+                placeholderTextColor={ui.placeholder}
                 keyboardType="number-pad"
-                style={styles.modalDateInput}
+                style={[
+                  styles.modalDateInput,
+                  { borderColor: theme.border, color: ui.text, backgroundColor: ui.inputBg },
+                ]}
                 maxLength={10}
               />
               <View style={styles.modalBtns}>
                 <TouchableOpacity style={styles.modalBtnSec} onPress={() => setCalendarioAberto(false)}>
-                  <Text style={styles.modalBtnSecText}>Fechar</Text>
+                  <Text style={[styles.modalBtnSecText, { color: ui.text }]}>Fechar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.modalBtnPri}
+                  style={[styles.modalBtnPri, { backgroundColor: ui.btnDarkBg }]}
                   onPress={() => setCalendarioAberto(false)}
                 >
                   <Text style={styles.modalBtnPriText}>OK</Text>

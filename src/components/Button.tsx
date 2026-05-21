@@ -1,8 +1,9 @@
 import React from 'react';
-import { Text, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
+import { Text, ActivityIndicator, ViewStyle, TextStyle, StyleSheet } from 'react-native';
 import { PressableScale } from './premium/PressableScale';
-import { tw } from '../theme/premium';
 import { useTheme } from '../contexts/ThemeContext';
+import { PREMIUM } from '../theme/premium';
+import { fontFamily } from '../theme/typography';
 
 interface ButtonProps {
   title: string;
@@ -12,7 +13,6 @@ interface ButtonProps {
   disabled?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
-  className?: string;
 }
 
 export function Button({
@@ -23,37 +23,54 @@ export function Button({
   disabled = false,
   style,
   textStyle,
-  className = '',
 }: ButtonProps) {
-  const { theme } = useTheme();
+  const { theme, fontsLoaded } = useTheme();
   const isDisabled = disabled || loading;
+  const font = fontFamily('semibold', fontsLoaded);
 
-  const variantClass =
-    variant === 'primary'
-      ? tw.btnPrimary
-      : variant === 'outline' || variant === 'ghost'
-        ? tw.btnGhost
-        : `${tw.btnGhost} bg-zinc-100 dark:bg-zinc-800/50`;
+  let bg = theme.primary;
+  let borderColor = 'transparent';
+  let textColor = '#FFFFFF';
+  const borderWidth = variant === 'outline' || variant === 'ghost' ? 1 : 0;
 
-  const textClass =
-    variant === 'primary'
-      ? 'text-white font-semibold text-[15px]'
-      : 'text-zinc-900 dark:text-zinc-100 font-semibold text-[15px]';
+  if (variant === 'secondary' || variant === 'outline' || variant === 'ghost') {
+    bg = theme.cardBg;
+    textColor = theme.text;
+    borderColor = theme.border;
+  }
 
   return (
     <PressableScale
       onPress={onPress}
       disabled={isDisabled}
-      className={`${variantClass} ${className} ${isDisabled ? 'opacity-45' : ''}`}
-      style={style}
+      style={[
+        styles.btn,
+        {
+          backgroundColor: bg,
+          borderWidth,
+          borderColor,
+          opacity: isDisabled ? 0.5 : 1,
+        },
+        style,
+      ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#FFF' : theme.primary} size="small" />
+        <ActivityIndicator color={textColor} size="small" />
       ) : (
-        <Text className={textClass} style={textStyle}>
-          {title}
-        </Text>
+        <Text style={[styles.text, { color: textColor, fontFamily: font }, textStyle]}>{title}</Text>
       )}
     </PressableScale>
   );
 }
+
+const styles = StyleSheet.create({
+  btn: {
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: PREMIUM.radiusMd,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: PREMIUM.minTouch,
+  },
+  text: { fontSize: 15, letterSpacing: 0.2 },
+});

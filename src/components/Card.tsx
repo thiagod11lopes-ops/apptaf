@@ -2,40 +2,28 @@ import React from 'react';
 import { View, ViewStyle, Platform, StyleSheet } from 'react-native';
 import { PressableScale } from './premium/PressableScale';
 import { useTheme } from '../contexts/ThemeContext';
+import { PREMIUM } from '../theme/premium';
 
 interface CardProps {
   children: React.ReactNode;
   style?: ViewStyle;
-  className?: string;
   onPress?: () => void;
   noPadding?: boolean;
-  glass?: boolean;
   elevated?: boolean;
 }
 
-export function Card({
-  children,
-  style,
-  onPress,
-  noPadding,
-  elevated,
-}: CardProps) {
-  const { theme, isDark } = useTheme();
+export function Card({ children, style, onPress, noPadding, elevated }: CardProps) {
+  const { theme } = useTheme();
   const cardStyle = [
     styles.card,
     {
-      backgroundColor: isDark ? 'rgba(24, 24, 27, 0.85)' : 'rgba(255, 255, 255, 0.9)',
-      borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
-      padding: noPadding ? 0 : 16,
+      backgroundColor: theme.cardBg,
+      borderColor: theme.border,
+      padding: noPadding ? 0 : 18,
     },
     elevated && styles.elevated,
+    elevated && theme.isDark && styles.elevatedDark,
     style,
-    Platform.OS === 'web'
-      ? ({
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-        } as object)
-      : undefined,
   ];
 
   if (onPress) {
@@ -51,15 +39,18 @@ export function Card({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: PREMIUM.radiusLg,
     borderWidth: 1,
-    marginBottom: 0,
   },
   elevated: {
-    borderRadius: 20,
+    borderRadius: PREMIUM.radiusXl,
     ...Platform.select({
-      web: { boxShadow: '0 8px 32px rgba(0,0,0,0.12)' } as object,
-      default: { elevation: 4 },
+      web: { boxShadow: '0 4px 24px rgba(15, 23, 42, 0.08)' } as object,
+      default: { elevation: 3 },
     }),
   },
+  elevatedDark: Platform.select({
+    web: { boxShadow: '0 8px 28px rgba(0, 0, 0, 0.35)' } as object,
+    default: { elevation: 6 },
+  }),
 });

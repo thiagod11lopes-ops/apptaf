@@ -25,6 +25,9 @@ import Svg, { Path as SvgPath } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
+import { getUiColors } from '../theme/uiColors';
+import type { AppTheme } from '../theme/premium';
+import { PREMIUM } from '../theme/premium';
 import { Card } from '../components/Card';
 import {
   PermanenciaTafPanel,
@@ -32,6 +35,7 @@ import {
 } from '../components/PermanenciaTafPanel';
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import { addSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
@@ -45,7 +49,9 @@ import {
 } from '../taf/natacaoNota';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
-import { Check, ChevronLeft, Pause, Play } from 'lucide-react-native';
+import { Check, ChevronLeft, Pause, Play, RotateCcw } from 'lucide-react-native';
+import { LandscapeProvaModal } from '../components/premium/LandscapeProvaModal';
+import { lockProvaLandscape, unlockProvaPortrait } from '../utils/provaLandscape';
 import {
   aplicarTafTrialReducer,
   initialTrialTableState,
@@ -96,14 +102,23 @@ function buildStrokePath(points: RubricaPoint[]): string {
     .join(' ');
 }
 
-function buildRubricaSvgDataUrl(strokes: RubricaStroke[], width: number, height: number): string {
+function buildRubricaSvgDataUrl(
+  strokes: RubricaStroke[],
+  width: number,
+  height: number,
+  strokeColor: string,
+  bgColor: string,
+): string {
   const paths = strokes
     .filter((s) => s.length > 0)
-    .map((s) => `<path d="${buildStrokePath(s)}" fill="none" stroke="#111827" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`)
+    .map(
+      (s) =>
+        `<path d="${buildStrokePath(s)}" fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`,
+    )
     .join('');
   const safeWidth = Math.max(1, Math.round(width));
   const safeHeight = Math.max(1, Math.round(height));
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeWidth}" height="${safeHeight}" viewBox="0 0 ${safeWidth} ${safeHeight}"><rect width="100%" height="100%" fill="#ffffff"/>${paths}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeWidth}" height="${safeHeight}" viewBox="0 0 ${safeWidth} ${safeHeight}"><rect width="100%" height="100%" fill="${bgColor}"/>${paths}</svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
@@ -123,13 +138,16 @@ function textoNotaRubricaModal(r: ResultadoCorridaItem): string {
 
 export default function AplicarTAFScreen() {
   const { theme } = useTheme();
+  const ts = theme.textStyles;
+  const ui = useMemo(() => getUiColors(theme), [theme]);
+  const styles = useMemo(() => createAplicarTafStyles(theme, ui), [theme, ui]);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  /** Mesmos tokens visuais da página Cadastro (CadastroScreenModern). */
   const grayBg = theme.background;
-  const cardGlassEnabled = Platform.OS === 'web';
-  const inputBg = '#FFFFFF';
-  const inputBorder = 'rgba(17,24,39,0.12)';
-  const inputTextColor = '#111827';
+  const selectedBgColor = theme.primary;
+  const selectedTextColor = theme.text;
+  const inputBg = theme.cardBg;
+  const inputBorder = ui.inputBorder;
+  const inputTextColor = ui.text;
   const [mostrarProvas, setMostrarProvas] = useState(false);
   const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
   const tipoProvaRef = useRef<TipoProvaTAF | null>(null);
@@ -182,6 +200,11 @@ export default function AplicarTAFScreen() {
   const tempoParadoMsRef = useRef<number | null>(null);
   const cronometroIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const permanenciaLimiteAtingidoRef = useRef(false);
+
+  const [promptPaisagemAberto, setPromptPaisagemAberto] = useState(false);
+  const [modoPaisagemAtivo, setModoPaisagemAtivo] = useState(false);
+  const [ativandoPaisagem, setAtivandoPaisagem] = useState(false);
+  const [webPaisagemSimulada, setWebPaisagemSimulada] = useState(false);
 
   const [resultadoPermanenciaLinhas, setResultadoPermanenciaLinhas] = useState<
     ResultadoPermanenciaOpcao[]
@@ -288,6 +311,26 @@ export default function AplicarTAFScreen() {
     cronometroPausadoTextoRef.current = z;
   }, []);
 
+  const liberarPaisagemProva = useCallback(() => {
+    void unlockProvaPortrait();
+    setModoPaisagemAtivo(false);
+    setWebPaisagemSimulada(false);
+    setPromptPaisagemAberto(false);
+    setAtivandoPaisagem(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      void unlockProvaPortrait();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (corridaEtapa !== 'tabela_corrida') {
+      liberarPaisagemProva();
+    }
+  }, [corridaEtapa, liberarPaisagemProva]);
+
   const iniciarCronometroCorrida = useCallback(() => {
     if (cronometroEstado !== 'inicial' && cronometroEstado !== 'finalizado') return;
     if (cronometroIntervalRef.current) {
@@ -304,6 +347,29 @@ export default function AplicarTAFScreen() {
     cronometroPausadoTextoRef.current = zero;
     cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
   }, [cronometroEstado, tickCronometroDisplay, formatMs]);
+
+  const solicitarIniciarProva = useCallback(() => {
+    if (tipoProva !== 'corrida' && tipoProva !== 'natacao') {
+      iniciarCronometroCorrida();
+      return;
+    }
+    setPromptPaisagemAberto(true);
+  }, [tipoProva, iniciarCronometroCorrida]);
+
+  const ativarPaisagemEIniciar = useCallback(async () => {
+    setAtivandoPaisagem(true);
+    try {
+      const locked = await lockProvaLandscape();
+      if (!locked && Platform.OS === 'web') {
+        setWebPaisagemSimulada(true);
+      }
+      setModoPaisagemAtivo(true);
+      setPromptPaisagemAberto(false);
+      iniciarCronometroCorrida();
+    } finally {
+      setAtivandoPaisagem(false);
+    }
+  }, [iniciarCronometroCorrida]);
 
   const pausarCronometroCorrida = useCallback(() => {
     if (cronometroEstado !== 'rodando' || cronometroInicioRef.current == null) return;
@@ -569,6 +635,19 @@ export default function AplicarTAFScreen() {
     [getElapsedRaceMs],
   );
 
+  const gravarSessaoAplicacao = useCallback(
+    async (resultados: ResultadoCorridaItem[]) => {
+      const tipo = tipoProvaRef.current ?? tipoProva;
+      if (!tipo || resultados.length === 0) return;
+      await addSessaoAplicacao({
+        dataAplicacao: dataHojeBr(),
+        tipoProva: tipo,
+        resultados,
+      });
+    },
+    [tipoProva],
+  );
+
   const onCadastrarResultados = useCallback(async () => {
     if (salvandoResultadosCorrida) return;
     if (tipoProva !== 'corrida' && tipoProva !== 'natacao') {
@@ -716,7 +795,11 @@ export default function AplicarTAFScreen() {
           [
             {
               text: 'OK',
-              onPress: () => navigation.navigate('CadastrarResultados', { resultados }),
+              onPress: () => {
+                void gravarSessaoAplicacao(resultados).then(() => {
+                  navigation.navigate('CadastrarResultados', { resultados });
+                });
+              },
             },
           ],
         );
@@ -727,7 +810,16 @@ export default function AplicarTAFScreen() {
       Alert.alert(
         'Erro',
         'Não foi possível gravar os tempos. Verifique se o cadastro está disponível (IndexedDB no navegador).',
-        [{ text: 'OK', onPress: () => navigation.navigate('CadastrarResultados', { resultados }) }],
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              void gravarSessaoAplicacao(resultados).then(() => {
+                navigation.navigate('CadastrarResultados', { resultados });
+              });
+            },
+          },
+        ],
       );
     } finally {
       setSalvandoResultadosCorrida(false);
@@ -740,6 +832,7 @@ export default function AplicarTAFScreen() {
     salvandoResultadosCorrida,
     temposMilitaresMs,
     tipoProva,
+    gravarSessaoAplicacao,
   ]);
 
   const fecharModalTempoRegistrado = useCallback(() => {
@@ -748,9 +841,11 @@ export default function AplicarTAFScreen() {
     const res = pendingResultadosNavRef.current;
     pendingResultadosNavRef.current = null;
     if (res) {
-      navigation.navigate('CadastrarResultados', { resultados: res });
+      void gravarSessaoAplicacao(res).then(() => {
+        navigation.navigate('CadastrarResultados', { resultados: res });
+      });
     }
-  }, [navigation]);
+  }, [navigation, gravarSessaoAplicacao]);
 
   const iniciarRubricaStroke = useCallback((event: GestureResponderEvent) => {
     const { locationX, locationY } = event.nativeEvent;
@@ -788,6 +883,8 @@ export default function AplicarTAFScreen() {
       strokesProntos,
       rubricaCanvasWidth,
       RUBRICA_CANVAS_HEIGHT,
+      ui.stroke,
+      theme.isDark ? theme.cardBg : '#FFFFFF',
     );
     const res = listaResultadosRubricaNatacao ?? pendingResultadosNavRef.current;
     if (!res || res.length === 0) {
@@ -828,7 +925,9 @@ export default function AplicarTAFScreen() {
     if (modalParcialAviso) {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
-    navigation.navigate('CadastrarResultados', { resultados: atualizados });
+    void gravarSessaoAplicacao(atualizados).then(() => {
+      navigation.navigate('CadastrarResultados', { resultados: atualizados });
+    });
     pendingResultadosNavRef.current = null;
     setModalParcialAviso(null);
   }, [
@@ -836,9 +935,13 @@ export default function AplicarTAFScreen() {
     listaResultadosRubricaNatacao,
     modalParcialAviso,
     navigation,
+    gravarSessaoAplicacao,
     rubricaCanvasWidth,
     rubricaStrokeAtual,
     rubricaStrokes,
+    ui.stroke,
+    theme.cardBg,
+    theme.isDark,
   ]);
 
   /** Ao trocar de participante ou abrir o modal: limpa a área de assinatura para não misturar traços. */
@@ -874,10 +977,11 @@ export default function AplicarTAFScreen() {
   }, []);
 
   const voltarMenuProvas = useCallback(() => {
+    liberarPaisagemProva();
     tipoProvaRef.current = null;
     setTipoProva(null);
     setCorridaEtapa('menu');
-  }, []);
+  }, [liberarPaisagemProva]);
 
   const voltarParticipantes = useCallback(() => {
     setCorridaEtapa('participantes');
@@ -1057,6 +1161,26 @@ export default function AplicarTAFScreen() {
       }
 
       if (ok > 0) {
+        const resultadosPerm: ResultadoCorridaItem[] = [];
+        for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+          const fb = nipFeedbackLinhas[i];
+          const nip = nipsParticipantes[i] ?? '';
+          const resultado = resultadoPermanenciaLinhas[i]!;
+          resultadosPerm.push({
+            corredor: i + 1,
+            nome:
+              fb?.tipo === 'ok'
+                ? (fb.nomeMilitar || '').trim() || `Militar ${i + 1}`
+                : `Militar ${i + 1}`,
+            nip,
+            tempoMs,
+            prova: 'permanencia',
+            notaTexto: resultado === 'aprovado' ? 'Aprovado' : 'REPROVADO',
+            reprovacaoTexto: resultado === 'reprovado' ? 'Reprovado' : undefined,
+          });
+        }
+        pendingResultadosNavRef.current = resultadosPerm;
+
         const aviso =
           naoEncontrados.length > 0
             ? `Registro parcial: não localizado no cadastro: ${naoEncontrados.slice(0, 3).join(', ')}${naoEncontrados.length > 3 ? '…' : ''}.`
@@ -1081,11 +1205,13 @@ export default function AplicarTAFScreen() {
   ]);
 
   const voltarDeTabelaParaNips = useCallback(() => {
+    liberarPaisagemProva();
     resetCronometroCorrida();
     setCorridaEtapa('nips');
-  }, [resetCronometroCorrida]);
+  }, [liberarPaisagemProva, resetCronometroCorrida]);
 
   const iniciarTaf = useCallback(() => {
+    liberarPaisagemProva();
     tipoProvaRef.current = null;
     resetCronometroCorrida();
     setMostrarProvas(true);
@@ -1101,7 +1227,7 @@ export default function AplicarTAFScreen() {
     setModalPermanenciaFinalizadaVisible(false);
     setErroPermanencia('');
     dispatchTrial({ type: 'resetAll' });
-  }, [resetCronometroCorrida]);
+  }, [liberarPaisagemProva, resetCronometroCorrida]);
 
   const tituloProvaCurta =
     tipoProva === 'natacao'
@@ -1130,6 +1256,21 @@ export default function AplicarTAFScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
+      <LandscapeProvaModal
+        visible={
+          promptPaisagemAberto &&
+          corridaEtapa === 'tabela_corrida' &&
+          (tipoProva === 'corrida' || tipoProva === 'natacao') &&
+          (cronometroEstado === 'inicial' || cronometroEstado === 'finalizado')
+        }
+        tituloProva={tituloProvaCurta}
+        loading={ativandoPaisagem}
+        onConfirm={() => {
+          void ativarPaisagemEIniciar();
+        }}
+        onCancel={() => setPromptPaisagemAberto(false)}
+      />
+
       <Modal
         visible={modalPermanenciaFinalizadaVisible}
         transparent
@@ -1254,7 +1395,7 @@ export default function AplicarTAFScreen() {
                         <SvgPath
                           key={`stroke-${indiceRubricaNatacao}-${idx}`}
                           d={buildStrokePath(stroke)}
-                          stroke="#111827"
+                          stroke={ui.stroke}
                           strokeWidth={2.5}
                           fill="none"
                           strokeLinecap="round"
@@ -1264,7 +1405,7 @@ export default function AplicarTAFScreen() {
                       {rubricaStrokeAtual.length > 0 ? (
                         <SvgPath
                           d={buildStrokePath(rubricaStrokeAtual)}
-                          stroke="#111827"
+                          stroke={ui.stroke}
                           strokeWidth={2.5}
                           fill="none"
                           strokeLinecap="round"
@@ -1313,80 +1454,83 @@ export default function AplicarTAFScreen() {
               style={styles.backBtn}
               accessibilityLabel="Voltar"
             >
-              <ChevronLeft size={26} color="#6B7280" strokeWidth={2.5} />
+              <ChevronLeft size={26} color={theme.text} strokeWidth={2.5} />
             </TouchableOpacity>
             <View style={styles.headerTitleWrap}>
-              <Text style={styles.pageTitle}>Aplicar TAF</Text>
+              <Text style={[ts.h2, styles.pageTitle]}>Aplicar TAF</Text>
             </View>
           </View>
 
           {!mostrarProvas ? (
-            <View style={styles.toggleStack}>
+            <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
               <TouchableOpacity
                 accessibilityLabel="Iniciar TAF"
-                activeOpacity={0.85}
                 onPress={iniciarTaf}
-                style={[styles.toggleBtn, styles.toggleBtnActive]}
+                style={[
+                  styles.toggleBtn,
+                  { backgroundColor: selectedBgColor, borderColor: selectedBgColor },
+                ]}
               >
-                <Text style={[styles.toggleBtnText, styles.toggleBtnTextActive]}>Iniciar TAF</Text>
+                <Text style={[ts.caption, { color: selectedTextColor }, styles.toggleBtnText]}>
+                  Iniciar TAF
+                </Text>
               </TouchableOpacity>
             </View>
           ) : null}
 
         {mostrarProvas && corridaEtapa === 'menu' ? (
-          <Card glass={cardGlassEnabled} style={styles.formCard}>
-            <View style={styles.sectionCadastro}>
-              <Text style={styles.sectionTitleCadastro}>Selecione a prova</Text>
-              <TouchableOpacity
-                accessibilityLabel="Corrida"
-                activeOpacity={0.85}
-                onPress={abrirCorrida}
-                style={styles.toggleBtn}
-              >
-                <Text style={styles.toggleBtnText}>Corrida</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel="Natação"
-                activeOpacity={0.85}
-                onPress={abrirNatacao}
-                style={[styles.toggleBtn, styles.toggleBtnSpacing]}
-              >
-                <Text style={styles.toggleBtnText}>Natação</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel="Permanência"
-                activeOpacity={0.85}
-                onPress={abrirPermanencia}
-                style={[styles.toggleBtn, styles.toggleBtnSpacing]}
-              >
-                <Text style={styles.toggleBtnText}>Permanência</Text>
-              </TouchableOpacity>
+          <Card elevated style={styles.formCard}>
+            <View style={styles.section}>
+              <Text style={[ts.label, styles.labelText]}>Selecione a prova</Text>
+              <View style={styles.btnRow}>
+                <TouchableOpacity
+                  accessibilityLabel="Corrida"
+                  onPress={abrirCorrida}
+                  style={[styles.btn, { backgroundColor: theme.primary }]}
+                >
+                  <Text style={[ts.body, styles.btnText]}>Corrida</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityLabel="Natação"
+                  onPress={abrirNatacao}
+                  style={[styles.btn, { backgroundColor: theme.primary }]}
+                >
+                  <Text style={[ts.body, styles.btnText]}>Natação</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityLabel="Permanência"
+                  onPress={abrirPermanencia}
+                  style={[styles.btn, { backgroundColor: theme.primary }]}
+                >
+                  <Text style={[ts.body, styles.btnText]}>Permanência</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </Card>
         ) : null}
 
         {mostrarProvas && corridaEtapa === 'participantes' ? (
-          <Card glass={cardGlassEnabled} style={styles.formCard}>
-            <View style={styles.sectionCadastro}>
+          <Card elevated style={styles.formCard}>
+            <View style={styles.section}>
               <TouchableOpacity
                 accessibilityLabel="Voltar para seleção de provas"
                 activeOpacity={0.85}
                 onPress={voltarMenuProvas}
                 style={styles.btnVoltarCadastro}
               >
-                <Text style={styles.btnVoltarText}>← Voltar</Text>
+                <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
               </TouchableOpacity>
 
-              <Text style={styles.labelTextCadastro}>Número de Participantes</Text>
+              <Text style={[ts.label, styles.labelText]}>Número de Participantes</Text>
               <TextInput
                 value={numeroParticipantesCorrida}
                 onChangeText={onChangeParticipantes}
                 placeholder="0"
-                placeholderTextColor="rgba(17,24,39,0.35)"
+                placeholderTextColor={ui.placeholder}
                 keyboardType="number-pad"
                 maxLength={5}
                 style={[
-                  styles.inputCadastro,
+                  styles.input,
                   { borderColor: inputBorder, backgroundColor: inputBg, color: inputTextColor },
                 ]}
                 autoCorrect={false}
@@ -1397,49 +1541,48 @@ export default function AplicarTAFScreen() {
 
               <TouchableOpacity
                 accessibilityLabel="Confirmar número de participantes"
-                activeOpacity={0.85}
                 onPress={confirmarParticipantes}
-                style={styles.btnCadastro}
+                style={[styles.btn, { backgroundColor: theme.primary }]}
               >
-                <Text style={styles.btnCadastroText}>OK</Text>
+                <Text style={[ts.body, styles.btnText]}>OK</Text>
               </TouchableOpacity>
             </View>
           </Card>
         ) : null}
 
         {mostrarProvas && corridaEtapa === 'nips' ? (
-          <Card glass={cardGlassEnabled} style={styles.formCard}>
-            <View style={styles.sectionCadastro}>
+          <Card elevated style={styles.formCard}>
+            <View style={styles.section}>
               <TouchableOpacity
                 accessibilityLabel="Voltar para número de participantes"
                 activeOpacity={0.85}
                 onPress={voltarParticipantes}
                 style={styles.btnVoltarCadastro}
               >
-                <Text style={styles.btnVoltarText}>← Voltar</Text>
+                <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
               </TouchableOpacity>
 
-              <Text style={styles.sectionTitleCadastro}>
+              <Text style={[ts.label, styles.labelText]}>
                 {tituloProvaCurta} — NIPs dos participantes
               </Text>
-              <Text style={styles.formSubtitleCadastro}>
+              <Text style={[ts.bodySecondary, styles.formSubtitle]}>
                 Preencha o NIP de cada um dos {nParticipantesConfirmado} participantes.
               </Text>
 
             {nipsParticipantes.map((nip, index) => (
               <View key={index} style={styles.nipRow}>
                 <View style={styles.nipLabelRow}>
-                  <LabelNip color="#374151" fontSize={12} fontWeight="800" />
+                  <LabelNip color={ui.label} fontSize={12} fontWeight="800" />
                 </View>
                 <View style={styles.nipInputRow}>
                   <TextInput
                     value={nip}
                     onChangeText={(t) => atualizarNip(index, t)}
                     placeholder="00.0000.00"
-                    placeholderTextColor="rgba(17,24,39,0.35)"
+                    placeholderTextColor={ui.placeholder}
                     keyboardType="number-pad"
                     style={[
-                      styles.inputCadastro,
+                      styles.input,
                       styles.inputNipFlex,
                       { borderColor: inputBorder, backgroundColor: inputBg, color: inputTextColor },
                     ]}
@@ -1451,9 +1594,9 @@ export default function AplicarTAFScreen() {
                     accessibilityLabel={`Confirmar NIP do participante ${index + 1}`}
                     activeOpacity={0.85}
                     onPress={() => verificarNipNoCadastro(index)}
-                    style={styles.btnOkNipCadastro}
+                    style={[styles.btnOkNip, { backgroundColor: theme.primary }]}
                   >
-                    <Text style={styles.btnCadastroText}>OK</Text>
+                    <Text style={[ts.body, styles.btnText]}>OK</Text>
                   </TouchableOpacity>
                   {nipFeedbackLinhas[index]?.tipo === 'ok' ? (
                     <View style={styles.nomeCorredorBeside}>
@@ -1482,26 +1625,26 @@ export default function AplicarTAFScreen() {
               accessibilityLabel={`Preparar ${tituloProvaCurta}`}
               activeOpacity={0.85}
               onPress={tipoProva === 'permanencia' ? prepararPermanencia : prepararProva}
-              style={styles.btnPrepararCorridaCadastro}
+              style={[styles.btn, { backgroundColor: theme.primary }]}
             >
-              <Text style={styles.btnCadastroText}>Preparar {tituloProvaCurta}</Text>
+              <Text style={[ts.body, styles.btnText]}>Preparar {tituloProvaCurta}</Text>
             </TouchableOpacity>
             </View>
           </Card>
         ) : null}
 
         {mostrarProvas && corridaEtapa === 'tabela_permanencia' ? (
-          <Card glass={cardGlassEnabled} style={styles.formCard}>
-            <View style={styles.sectionCadastro}>
+          <Card elevated style={styles.formCard}>
+            <View style={styles.section}>
               <TouchableOpacity
                 accessibilityLabel="Voltar para edição dos NIPs"
                 activeOpacity={0.85}
                 onPress={voltarDeTabelaParaNips}
                 style={styles.btnVoltarCadastro}
               >
-                <Text style={styles.btnVoltarText}>← Voltar</Text>
+                <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
               </TouchableOpacity>
-              <Text style={styles.sectionTitleCadastro}>Permanência preparada</Text>
+              <Text style={[ts.label, styles.labelText]}>Permanência preparada</Text>
               <PermanenciaTafPanel
                 participantes={participantesPermanencia}
                 resultados={resultadoPermanenciaLinhas}
@@ -1529,33 +1672,43 @@ export default function AplicarTAFScreen() {
         ) : null}
 
         {mostrarProvas && corridaEtapa === 'tabela_corrida' ? (
-          <Card glass={cardGlassEnabled} style={styles.formCard}>
-            <View style={styles.sectionCadastro}>
+          <View
+            style={
+              webPaisagemSimulada && Platform.OS === 'web'
+                ? ([
+                    styles.landscapeWebShell,
+                    { backgroundColor: theme.background },
+                  ] as object)
+                : undefined
+            }
+          >
+          <Card elevated style={styles.formCard}>
+            <View style={styles.section}>
             <TouchableOpacity
               accessibilityLabel="Voltar para edição dos NIPs"
               activeOpacity={0.85}
               onPress={voltarDeTabelaParaNips}
               style={styles.btnVoltarCadastro}
             >
-              <Text style={styles.btnVoltarText}>← Voltar</Text>
+              <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
             </TouchableOpacity>
 
-            <Text style={styles.sectionTitleCadastro}>
+            <Text style={[ts.label, styles.labelText]}>
               {tipoProva === 'natacao' ? 'Natação preparada' : 'Corrida preparada'}
             </Text>
 
             {tipoProva === 'corrida' ? (
               <>
-                <Text style={styles.labelTextCadastro}>Número de Voltas</Text>
+                <Text style={[ts.label, styles.labelText]}>Número de Voltas</Text>
                 <TextInput
                   value={numeroVoltas}
                   onChangeText={onChangeNumeroVoltas}
                   placeholder="0"
-                  placeholderTextColor="rgba(17,24,39,0.35)"
+                  placeholderTextColor={ui.placeholder}
                   keyboardType="number-pad"
                   maxLength={4}
                   style={[
-                    styles.inputCadastro,
+                    styles.input,
                     styles.campoVoltasInput,
                     { borderColor: inputBorder, backgroundColor: inputBg, color: inputTextColor },
                   ]}
@@ -1633,7 +1786,7 @@ export default function AplicarTAFScreen() {
                       key={index}
                       style={[
                         styles.tabelaDataRow,
-                        index > 0 ? { borderTopWidth: 1, borderTopColor: 'rgba(17,24,39,0.08)' } : null,
+                        index > 0 ? { borderTopWidth: 1, borderTopColor: ui.rowBorder } : null,
                       ]}
                     >
                       <View style={[styles.tabelaCell, styles.tabelaColCorredor]}>
@@ -1747,16 +1900,29 @@ export default function AplicarTAFScreen() {
 
             <View style={styles.cronometroBloco}>
               <View style={styles.iniciarCorridaRow}>
-                {(cronometroEstado === 'inicial' || cronometroEstado === 'finalizado') ? (
+                {(cronometroEstado === 'inicial' || cronometroEstado === 'finalizado') &&
+                !promptPaisagemAberto ? (
                   <TouchableOpacity
                     accessibilityLabel={`Iniciar ${tituloProvaCurta}`}
                     activeOpacity={0.85}
-                    onPress={iniciarCronometroCorrida}
+                    onPress={solicitarIniciarProva}
                     style={styles.btnIniciarCorridaCadastro}
                   >
                     <Text style={styles.btnIniciarCorridaTextCadastro}>
                       Iniciar {tituloProvaCurta}
                     </Text>
+                  </TouchableOpacity>
+                ) : null}
+                {modoPaisagemAtivo &&
+                (cronometroEstado === 'rodando' || cronometroEstado === 'pausado') ? (
+                  <TouchableOpacity
+                    accessibilityLabel="Voltar para modo retrato"
+                    activeOpacity={0.85}
+                    onPress={liberarPaisagemProva}
+                    style={styles.btnPaisagemRetrato}
+                  >
+                    <RotateCcw size={18} color={ui.iconStrong} strokeWidth={2.5} />
+                    <Text style={[styles.btnPaisagemRetratoText, { color: ui.text }]}>Retrato</Text>
                   </TouchableOpacity>
                 ) : null}
                 {(cronometroEstado === 'rodando' || cronometroEstado === 'pausado') ? (
@@ -1778,7 +1944,7 @@ export default function AplicarTAFScreen() {
                     onPress={pausarCronometroCorrida}
                     style={styles.btnPausaPlayCronometroCadastro}
                   >
-                    <Pause size={22} color="#111827" strokeWidth={2.5} />
+                    <Pause size={22} color={ui.iconStrong} strokeWidth={2.5} />
                   </TouchableOpacity>
                 ) : null}
                 {cronometroEstado === 'pausado' ? (
@@ -1788,7 +1954,7 @@ export default function AplicarTAFScreen() {
                     onPress={continuarCronometroCorrida}
                     style={styles.btnPausaPlayCronometroCadastro}
                   >
-                    <Play size={22} color="#111827" strokeWidth={2.5} />
+                    <Play size={22} color={ui.iconStrong} strokeWidth={2.5} />
                   </TouchableOpacity>
                 ) : null}
                 <View style={styles.cronometroBoxCadastro}>
@@ -1800,7 +1966,7 @@ export default function AplicarTAFScreen() {
                       selectTextOnFocus
                       accessibilityLabel="Editar tempo do cronômetro (pausado)"
                       placeholder="MM:SS"
-                      placeholderTextColor="rgba(17,24,39,0.35)"
+                      placeholderTextColor={ui.placeholder}
                       autoCorrect={false}
                       autoComplete="off"
                       spellCheck={false}
@@ -1854,6 +2020,7 @@ export default function AplicarTAFScreen() {
             </View>
           </View>
           </Card>
+          </View>
         ) : null}
         </View>
       </ScrollView>
@@ -1861,60 +2028,45 @@ export default function AplicarTAFScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColors>) {
+  return StyleSheet.create({
   safe: { flex: 1, position: 'relative' as const },
-  scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 10, paddingBottom: 28 },
+  scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 16 },
   centerWrap: { flex: 1, alignItems: 'center' as const },
   headerRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 14,
+    gap: 12,
+    marginBottom: 16,
   },
   backBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: PREMIUM.minTouch,
+    height: PREMIUM.minTouch,
+    borderRadius: PREMIUM.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitleWrap: { flex: 1 },
   pageTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textAlign: 'center',
   },
   formCard: {
     width: '100%',
     maxWidth: 720,
-    marginTop: 8,
-    padding: 18,
-    borderRadius: 20,
+    marginBottom: 20,
   },
-  sectionCadastro: { marginBottom: 0, width: '100%' },
-  sectionTitleCadastro: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: 'rgba(17,24,39,0.8)',
-    marginBottom: 14,
+  section: { marginBottom: 20, width: '100%' },
+  labelText: {
+    marginBottom: 8,
   },
-  labelTextCadastro: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#374151',
-    marginBottom: 10,
-  },
-  inputCadastro: {
+  input: {
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
+    borderRadius: PREMIUM.radiusMd,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '500',
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}),
   },
   toggleStack: {
@@ -1922,72 +2074,42 @@ const styles = StyleSheet.create({
     maxWidth: 720,
     alignItems: 'stretch',
     padding: 8,
-    borderRadius: 18,
+    borderRadius: PREMIUM.radiusLg,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    marginBottom: 14,
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0 10px 30px rgba(17,24,39,0.10)' } as object)
-      : {}),
+    marginBottom: 20,
   },
   toggleBtn: {
     width: '100%',
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.08)',
-    backgroundColor: 'rgba(17,24,39,0.04)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  toggleBtnSpacing: { marginTop: 10 },
-  toggleBtnActive: {
-    backgroundColor: '#111827',
-    borderColor: '#111827',
   },
   toggleBtnText: {
-    color: '#111827',
-    fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
   },
-  toggleBtnTextActive: {
-    color: '#FFFFFF',
-  },
-  btnCadastro: {
-    marginTop: 8,
+  btnRow: { marginTop: 8, gap: 10 },
+  btn: {
+    marginTop: 6,
     width: '100%',
     paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: '#374151',
+    borderRadius: PREMIUM.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnCadastroText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  btnVoltarCadastro: { alignSelf: 'flex-start', marginBottom: 14 },
-  formSubtitleCadastro: {
-    fontSize: 13,
+  btnText: {
     fontWeight: '700',
-    color: '#374151',
+  },
+  btnVoltarCadastro: { alignSelf: 'flex-start', marginBottom: 14 },
+  formSubtitle: {
     marginBottom: 16,
     lineHeight: 19,
   },
-  btnOkNipCadastro: {
+  btnOkNip: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: '#374151',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.12)',
-  },
-  btnPrepararCorridaCadastro: {
-    marginTop: 16,
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: '#374151',
+    borderRadius: PREMIUM.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2005,48 +2127,48 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ui.modalBg,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
+    borderColor: theme.border,
   },
   modalRubricaCardCadastro: {
     width: '100%',
     maxWidth: 480,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ui.modalBg,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
+    borderColor: theme.border,
   },
   modalRubricaSubtituloCadastro: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#6B7280',
+    color: ui.text,
     marginBottom: 10,
   },
   modalRubricaLinhaCadastro: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#374151',
+    color: ui.text,
     marginBottom: 6,
   },
   modalRubricaLinhaStrong: {
-    color: '#111827',
+    color: ui.text,
     fontWeight: '900',
   },
   modalRubricaLegendaCadastro: {
     marginTop: 8,
     fontSize: 12,
     fontWeight: '800',
-    color: '#374151',
+    color: ui.text,
     marginBottom: 6,
   },
   modalRubricaCanvasWrap: {
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.12)',
+    borderColor: theme.border,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ui.inputBg,
     height: RUBRICA_CANVAS_HEIGHT,
     overflow: 'hidden',
   },
@@ -2057,32 +2179,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.12)',
-    backgroundColor: 'rgba(17,24,39,0.04)',
+    borderColor: theme.border,
+    backgroundColor: ui.toggleInactiveBg,
   },
   modalRubricaBtnSecundarioText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#111827',
+    color: ui.text,
   },
   modalRubricaErroCadastro: {
     marginTop: 8,
     fontSize: 12,
     fontWeight: '700',
-    color: '#B91C1C',
+    color: theme.isDark ? ui.text : '#B91C1C',
   },
   modalTempoMensagemCadastro: {
     fontSize: 16,
     fontWeight: '900',
     textAlign: 'center',
-    color: '#111827',
+    color: ui.text,
     lineHeight: 22,
   },
   modalTempoParcialCadastro: {
     marginTop: 12,
     fontSize: 13,
     fontWeight: '700',
-    color: '#374151',
+    color: ui.text,
     textAlign: 'center',
     lineHeight: 19,
   },
@@ -2092,8 +2214,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.12)',
-    backgroundColor: '#111827',
+    borderColor: theme.border,
+    backgroundColor: ui.btnDarkBg,
     alignItems: 'center',
   },
   modalTempoBtnPrimaryTextCadastro: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
@@ -2106,10 +2228,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
-    backgroundColor: 'rgba(17,24,39,0.04)',
+    borderColor: theme.border,
+    backgroundColor: ui.toggleInactiveBg,
   },
-  btnIniciarCorridaTextCadastro: { color: '#111827', fontSize: 13, fontWeight: '800' },
+  btnIniciarCorridaTextCadastro: { color: ui.text, fontSize: 13, fontWeight: '800' },
   btnPausaPlayCronometroCadastro: {
     width: 52,
     height: 52,
@@ -2117,16 +2239,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
-    backgroundColor: 'rgba(17,24,39,0.04)',
+    borderColor: theme.border,
+    backgroundColor: ui.toggleInactiveBg,
   },
   cronometroBoxCadastro: {
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
-    backgroundColor: '#FFFFFF',
+    borderColor: theme.border,
+    backgroundColor: ui.inputBg,
     minWidth: 132,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2134,13 +2256,13 @@ const styles = StyleSheet.create({
   cronometroTextCadastro: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#111827',
+    color: ui.text,
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
   },
   cronometroInputCadastro: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#111827',
+    color: ui.text,
     minWidth: 120,
     textAlign: 'center',
     paddingVertical: 0,
@@ -2180,37 +2302,32 @@ const styles = StyleSheet.create({
   nomeCorredorBesideText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#111827',
+    color: ui.text,
     lineHeight: 28,
   },
   /** Número do corredor: o dobro do tamanho do texto ao lado, em verde */
   numeroCorredor: {
     fontSize: 26,
     fontWeight: '900',
-    color: '#15803D',
+    color: theme.isDark ? ui.text : theme.success,
   },
   feedbackOk: {
     marginTop: 8,
     fontSize: 12,
     fontWeight: '700',
-    color: '#15803D',
+    color: theme.isDark ? ui.text : theme.success,
   },
   feedbackErro: {
     marginTop: 8,
     fontSize: 12,
     fontWeight: '700',
-    color: '#B91C1C',
-  },
-  btnVoltarText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#374151',
+    color: theme.isDark ? ui.text : '#B91C1C',
   },
   erroText: {
     marginTop: 8,
     fontSize: 13,
     fontWeight: '700',
-    color: '#B91C1C',
+    color: theme.isDark ? ui.text : '#B91C1C',
   },
   campoVoltasInput: {
     width: '100%',
@@ -2222,6 +2339,37 @@ const styles = StyleSheet.create({
   cronometroBloco: {
     width: '100%',
     marginTop: 16,
+  },
+  landscapeWebShell: Platform.select({
+    web: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100vh',
+      height: '100vw',
+      zIndex: 800,
+      transform: 'rotate(90deg) translateY(-100vh)',
+      transformOrigin: 'top left',
+      overflow: 'auto',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    } as object,
+    default: {},
+  }),
+  btnPaisagemRetrato: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: ui.inputBg,
+  },
+  btnPaisagemRetratoText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   iniciarCorridaRow: {
     flexDirection: 'row',
@@ -2237,15 +2385,15 @@ const styles = StyleSheet.create({
   tabelaHeaderRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(17,24,39,0.15)',
+    borderBottomColor: ui.headerBorder,
     paddingVertical: 10,
     paddingHorizontal: 10,
-    backgroundColor: 'rgba(17,24,39,0.04)',
+    backgroundColor: ui.tableHeaderBg,
   },
   tabelaHeaderCell: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#374151',
+    color: ui.text,
   },
   tabelaHeaderVolta: {
     fontSize: 10,
@@ -2265,7 +2413,7 @@ const styles = StyleSheet.create({
   tabelaCellText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#111827',
+    color: ui.text,
   },
   tabelaColCorredor: {
     width: 72,
@@ -2310,7 +2458,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   tabelaNotaRepro: {
-    color: '#B91C1C',
+    color: theme.isDark ? ui.text : '#B91C1C',
     fontSize: 9,
   },
   tabelaCelulaTempo: {
@@ -2338,7 +2486,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   checkVoltaBoxOff: {
-    borderColor: 'rgba(17,24,39,0.25)',
+    borderColor: theme.isDark ? 'rgba(255,255,255,0.35)' : 'rgba(17,24,39,0.25)',
     backgroundColor: 'transparent',
   },
   checkVoltaBoxOn: {
@@ -2348,12 +2496,12 @@ const styles = StyleSheet.create({
   tabelaNumeroVerde: {
     fontSize: 26,
     fontWeight: '900',
-    color: '#15803D',
+    color: theme.isDark ? ui.text : theme.success,
   },
   modalPermanenciaFinalCard: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ui.modalBg,
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
@@ -2366,16 +2514,17 @@ const styles = StyleSheet.create({
   modalPermanenciaFinalTitulo: {
     fontSize: 18,
     fontWeight: '900',
-    color: '#111827',
+    color: ui.text,
     textAlign: 'center',
     letterSpacing: 0.5,
     marginBottom: 10,
   },
   modalPermanenciaFinalSub: {
     fontSize: 14,
-    color: 'rgba(17,24,39,0.65)',
+    color: ui.text,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 20,
   },
-});
+  });
+}

@@ -11,6 +11,8 @@ import { textoNotaCorridaFromCadastro } from '../taf/corrida2400Nota';
 import { textoNotaNatacaoFromCadastro } from '../taf/natacaoNota';
 import { formatTempoNatacaoParaExibicao } from '../taf/tafTimeFormat';
 import { TafPlanilhaFiltrosBar } from './TafPlanilhaFiltrosBar';
+import { useTheme } from '../contexts/ThemeContext';
+import { getUiColors } from '../theme/uiColors';
 import {
   type FiltroModalidadeTaf,
   temRegistroModalidade,
@@ -72,6 +74,8 @@ export function CadastroPlanilhaBlock({
   onEdit,
   onRequestDelete,
 }: CadastroPlanilhaBlockProps) {
+  const { theme } = useTheme();
+  const ui = useMemo(() => getUiColors(theme), [theme]);
   const isAplicacaoTaf = variant === 'aplicacaoTaf';
   const [filtroCategoria, setFiltroCategoria] = useState<'Todos' | Categoria | ''>('Todos');
   const [filtroPostoGrad, setFiltroPostoGrad] = useState<'Todos' | string>('Todos');
@@ -159,10 +163,15 @@ export function CadastroPlanilhaBlock({
     return q;
   }, [filtroBusca, isAplicacaoTaf]);
 
+  const cellTextStyle = useMemo(
+    () => [styles.tableCell, { color: ui.text }],
+    [ui.text],
+  );
+
   const highlightText = useCallback(
     (text: string, queryLower: string, cellStyle?: any, numberOfLines: number = 1) => {
       const value = text || '-';
-      const baseStyle = cellStyle || styles.tableCell;
+      const baseStyle = cellStyle ? [cellStyle, { color: ui.text }] : cellTextStyle;
       const q = queryLower.trim();
       if (!q) {
         return (
@@ -282,22 +291,26 @@ export function CadastroPlanilhaBlock({
         </Text>
       );
     },
-    []
+    [ui.text, cellTextStyle],
   );
 
-  const selectedBg = '#111827';
-  const unselectedBg = 'rgba(17,24,39,0.06)';
+  const selectedBg = ui.selectedBg;
+  const unselectedBg = ui.unselectedBg;
+  const labelInk = ui.text;
+  const segmentInk = (active: boolean) => (active ? '#FFFFFF' : ui.text);
 
   /** Borda esquerda entre colunas da planilha. */
   const colSep = (showLeftDivider: boolean) =>
-    showLeftDivider ? ([styles.tableCol, styles.tableColDivider] as const) : styles.tableCol;
+    showLeftDivider
+      ? ([styles.tableCol, styles.tableColDivider, { borderLeftColor: ui.colDivider }] as const)
+      : styles.tableCol;
 
   return (
     <Card glass={cardGlassEnabled} style={styles.tableCard}>
-      <Text style={styles.tableTitle}>{tableTitle}</Text>
+      <Text style={[styles.tableTitle, { color: ui.text }]}>{tableTitle}</Text>
 
       {cadastros.length === 0 ? (
-        <Text style={styles.tableEmpty}>{emptyMessageWhenNoData}</Text>
+        <Text style={[styles.tableEmpty, { color: ui.text }]}>{emptyMessageWhenNoData}</Text>
       ) : (
         <View>
           {isAplicacaoTaf ? (
@@ -310,14 +323,17 @@ export function CadastroPlanilhaBlock({
               onFiltroDataChange={setFiltroData}
             />
           ) : (
-            <View style={styles.searchWrap}>
-              <Search size={18} color="rgba(17,24,39,0.45)" strokeWidth={2.5} />
+            <View style={[styles.searchWrap, { borderColor: theme.border, backgroundColor: ui.inputBg }]}>
+              <Search size={18} color={ui.searchIcon} strokeWidth={2.5} />
               <TextInput
                 value={filtroBusca}
                 onChangeText={setFiltroBusca}
                 placeholder="Digite para filtrar..."
-                placeholderTextColor="rgba(17,24,39,0.35)"
-                style={[styles.searchInput, { borderColor: 'rgba(17,24,39,0.12)' }]}
+                placeholderTextColor={ui.placeholder}
+                style={[
+                  styles.searchInput,
+                  { borderColor: theme.border, color: ui.text, backgroundColor: ui.inputBg },
+                ]}
                 autoCorrect={false}
                 spellCheck={false}
                 autoComplete="off"
@@ -332,7 +348,7 @@ export function CadastroPlanilhaBlock({
             <View style={styles.filterBlock}>
               <LabelSvgText
                 text="Categoria"
-                color="#374151"
+                color={ui.label}
                 fontSize={12}
                 fontWeight={800}
                 width={100}
@@ -353,7 +369,7 @@ export function CadastroPlanilhaBlock({
                       {opt === 'Todos' ? (
                         <LabelSvgText
                           text="Todos"
-                          color={active ? '#FFFFFF' : '#111827'}
+                          color={segmentInk(active)}
                           fontSize={12}
                           fontWeight={800}
                           width={70}
@@ -362,7 +378,7 @@ export function CadastroPlanilhaBlock({
                       ) : opt === 'Oficiais' ? (
                         <LabelSvgText
                           text="Oficiais"
-                          color={active ? '#FFFFFF' : '#111827'}
+                          color={segmentInk(active)}
                           fontSize={12}
                           fontWeight={800}
                           width={90}
@@ -371,7 +387,7 @@ export function CadastroPlanilhaBlock({
                       ) : (
                         <LabelSvgText
                           text="Praças"
-                          color={active ? '#FFFFFF' : '#111827'}
+                          color={segmentInk(active)}
                           fontSize={12}
                           fontWeight={800}
                           width={70}
@@ -388,7 +404,7 @@ export function CadastroPlanilhaBlock({
               <View style={styles.filterBlock}>
                 <LabelSvgText
                   text="Posto / Graduação"
-                  color="#374151"
+                  color={ui.label}
                   fontSize={12}
                   fontWeight={800}
                   width={170}
@@ -408,11 +424,11 @@ export function CadastroPlanilhaBlock({
                         ]}
                       >
                         {opt === 'SO' ? (
-                          <LabelSO color={active ? '#FFFFFF' : '#111827'} fontSize={12} fontWeight={900} />
+                          <LabelSO color={segmentInk(active)} fontSize={12} fontWeight={900} />
                         ) : (
                           <LabelSvgText
                             text={opt}
-                            color={active ? '#FFFFFF' : '#111827'}
+                            color={segmentInk(active)}
                             fontSize={12}
                             fontWeight={800}
                             width={90}
@@ -429,54 +445,59 @@ export function CadastroPlanilhaBlock({
           ) : null}
 
           {cadastrosFiltradosComBusca.length === 0 ? (
-            <Text style={styles.tableEmpty}>Nenhum resultado encontrado.</Text>
+            <Text style={[styles.tableEmpty, { color: ui.text }]}>Nenhum resultado encontrado.</Text>
           ) : (
             <View>
-              <View style={styles.tableHeaderRow}>
+              <View
+                style={[
+                  styles.tableHeaderRow,
+                  { borderBottomColor: ui.headerBorder, backgroundColor: ui.tableHeaderBg },
+                ]}
+              >
                 {!isAplicacaoTaf ? (
                   <View style={[colSep(false), { flex: 1 }]}>
-                    <LabelSvgText text="Categoria" color="#111827" fontSize={12} fontWeight={800} width={110} height={18} />
+                    <LabelSvgText text="Categoria" color={labelInk} fontSize={12} fontWeight={800} width={110} height={18} />
                   </View>
                 ) : null}
                 <View style={[colSep(!isAplicacaoTaf), { flex: 1 }]}>
-                  <LabelSvgText text="Posto / Graduação" color="#111827" fontSize={12} fontWeight={800} width={160} height={18} />
+                  <LabelSvgText text="Posto / Graduação" color={labelInk} fontSize={12} fontWeight={800} width={160} height={18} />
                 </View>
                 <View style={[colSep(true), { flex: 1, paddingHorizontal: 4 }]}>
-                  <LabelNip color="#111827" fontSize={12} fontWeight={800} />
+                  <LabelNip color={labelInk} fontSize={12} fontWeight={800} />
                 </View>
                 <View style={[colSep(true), { flex: 2 }]}>
-                  <LabelSvgText text="Nome" color="#111827" fontSize={12} fontWeight={800} width={90} height={18} />
+                  <LabelSvgText text="Nome" color={labelInk} fontSize={12} fontWeight={800} width={90} height={18} />
                 </View>
                 {!isAplicacaoTaf ? (
                   <View style={[colSep(true), { flex: 0.9 }]}>
-                    <LabelSvgText text="Gênero" color="#111827" fontSize={12} fontWeight={800} width={72} height={18} />
+                    <LabelSvgText text="Gênero" color={labelInk} fontSize={12} fontWeight={800} width={72} height={18} />
                   </View>
                 ) : null}
                 <View style={[colSep(true), { flex: 1 }]}>
-                  <LabelSvgText text="Idade" color="#111827" fontSize={12} fontWeight={800} width={56} height={18} />
+                  <LabelSvgText text="Idade" color={labelInk} fontSize={12} fontWeight={800} width={56} height={18} />
                 </View>
                 {isAplicacaoTaf ? (
                   <>
                     <View style={[colSep(true), { flex: 0.85 }]}>
-                      <LabelSvgText text="Data" color="#111827" fontSize={12} fontWeight={800} width={48} height={18} />
+                      <LabelSvgText text="Data" color={labelInk} fontSize={12} fontWeight={800} width={48} height={18} />
                     </View>
                     <View style={[colSep(true), { flex: 1 }]}>
-                      <LabelSvgText text="Corrida" color="#111827" fontSize={12} fontWeight={800} width={80} height={18} />
+                      <LabelSvgText text="Corrida" color={labelInk} fontSize={12} fontWeight={800} width={80} height={18} />
                     </View>
                     <View style={[colSep(false), { flex: 0.75 }]}>
-                      <LabelSvgText text="Nota" color="#111827" fontSize={12} fontWeight={800} width={44} height={18} />
+                      <LabelSvgText text="Nota" color={labelInk} fontSize={12} fontWeight={800} width={44} height={18} />
                     </View>
                     <View style={[colSep(true), { flex: 1 }]}>
-                      <LabelSvgText text="Natação" color="#111827" fontSize={12} fontWeight={800} width={90} height={18} />
+                      <LabelSvgText text="Natação" color={labelInk} fontSize={12} fontWeight={800} width={90} height={18} />
                     </View>
                     <View style={[colSep(true), { flex: 1.1 }]}>
-                      <LabelSvgText text="Permanência" color="#111827" fontSize={12} fontWeight={800} width={120} height={18} />
+                      <LabelSvgText text="Permanência" color={labelInk} fontSize={12} fontWeight={800} width={120} height={18} />
                     </View>
                   </>
                 ) : null}
                 {showActions ? (
                   <View style={[colSep(true), { flex: 1 }]}>
-                    <LabelSvgText text="Ações" color="#111827" fontSize={12} fontWeight={800} width={55} height={18} />
+                    <LabelSvgText text="Ações" color={labelInk} fontSize={12} fontWeight={800} width={55} height={18} />
                   </View>
                 ) : null}
               </View>
@@ -484,7 +505,7 @@ export function CadastroPlanilhaBlock({
               {cadastrosFiltradosComBusca.map((c) => {
                 const tempos = temposCorridaNatacao(c);
                 return (
-                  <View key={c.id} style={styles.tableRow}>
+                  <View key={c.id} style={[styles.tableRow, { borderBottomColor: ui.rowBorder }]}>
                     {!isAplicacaoTaf ? (
                       <View style={[colSep(false), { flex: 1, alignItems: 'flex-start' }]}>
                         {highlightText(c.categoria, buscaLower, styles.tableCell, 1)}
@@ -494,7 +515,7 @@ export function CadastroPlanilhaBlock({
                       {c.categoria === 'Oficiais' ? (
                         highlightText(c.oficial || '-', buscaLower, styles.tableCell, 1)
                       ) : c.praca === 'SO' ? (
-                        <LabelSO color="#111827" fontSize={12} fontWeight={900} />
+                        <LabelSO color={labelInk} fontSize={12} fontWeight={900} />
                       ) : (
                         highlightText(c.praca || '-', buscaLower, styles.tableCell, 1)
                       )}
@@ -582,7 +603,7 @@ export function CadastroPlanilhaBlock({
                           onPress={() => onEdit(c)}
                           style={[styles.iconBtn, styles.iconBtnEdit]}
                         >
-                          <Pencil size={16} color="#111827" strokeWidth={3} />
+                          <Pencil size={16} color={labelInk} strokeWidth={3} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           accessibilityLabel="Excluir cadastro"

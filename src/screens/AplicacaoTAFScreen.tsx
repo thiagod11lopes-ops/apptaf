@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
+import { getUiColors, type UiColors } from '../theme/uiColors';
+import type { AppTheme } from '../theme/premium';
 import { Check, ChevronLeft, X } from 'lucide-react-native';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
 import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
@@ -32,6 +34,8 @@ import {
 
 export default function AplicacaoTAFScreen() {
   const { theme } = useTheme();
+  const ui = useMemo(() => getUiColors(theme), [theme]);
+  const styles = useMemo(() => createAplicacaoTafStyles(theme, ui), [theme, ui]);
   const navigation = useNavigation();
 
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
@@ -53,7 +57,8 @@ export default function AplicacaoTAFScreen() {
 
   const grayBg = theme.background;
   const cardGlassEnabled = Platform.OS === 'web';
-  const inputBorder = 'rgba(17,24,39,0.12)';
+  const inputBorder = theme.border;
+  const inputBg = ui.inputBg;
 
   const carregarCadastros = useCallback(() => {
     getAllCadastros()
@@ -250,7 +255,7 @@ export default function AplicacaoTAFScreen() {
               style={styles.backBtn}
               accessibilityLabel="Voltar para Home"
             >
-              <ChevronLeft size={26} color="#6B7280" strokeWidth={2.5} />
+              <ChevronLeft size={26} color={ui.icon} strokeWidth={2.5} />
             </TouchableOpacity>
             <View style={styles.headerTitleWrap}>
               <Text style={styles.pageTitle}>Registrador de TAF</Text>
@@ -293,7 +298,7 @@ export default function AplicacaoTAFScreen() {
                 onPress={fecharModalBusca}
                 style={styles.modalCloseBtn}
               >
-                <X size={18} color="#6B7280" strokeWidth={3} />
+                <X size={18} color={ui.icon} strokeWidth={3} />
               </TouchableOpacity>
             </View>
 
@@ -305,8 +310,8 @@ export default function AplicacaoTAFScreen() {
               value={nomeOuNip}
               onChangeText={setNomeOuNip}
               placeholder="Nome ou NIP"
-              placeholderTextColor="rgba(17,24,39,0.35)"
-              style={[styles.modalInput, { borderColor: inputBorder, color: '#111827' }]}
+              placeholderTextColor={ui.placeholder}
+              style={[styles.modalInput, { borderColor: inputBorder, color: ui.text }]}
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
@@ -345,7 +350,7 @@ export default function AplicacaoTAFScreen() {
                 onPress={fecharModalTempos}
                 style={styles.modalCloseBtn}
               >
-                <X size={18} color="#6B7280" strokeWidth={3} />
+                <X size={18} color={ui.icon} strokeWidth={3} />
               </TouchableOpacity>
             </View>
 
@@ -361,8 +366,8 @@ export default function AplicacaoTAFScreen() {
                 setTempoCorrida(formatMinutosSegundosInput(t));
               }}
               placeholder="MM:SS"
-              placeholderTextColor="rgba(17,24,39,0.35)"
-              style={[styles.modalInput, { borderColor: inputBorder, color: '#111827' }]}
+              placeholderTextColor={ui.placeholder}
+              style={[styles.modalInput, { borderColor: inputBorder, color: ui.text }]}
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
@@ -380,8 +385,8 @@ export default function AplicacaoTAFScreen() {
                 setTempoNatacao(formatMinutosSegundosInput(t));
               }}
               placeholder="MM:SS"
-              placeholderTextColor="rgba(17,24,39,0.35)"
-              style={[styles.modalInput, { borderColor: inputBorder, color: '#111827' }]}
+              placeholderTextColor={ui.placeholder}
+              style={[styles.modalInput, { borderColor: inputBorder, color: ui.text }]}
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
@@ -423,7 +428,7 @@ export default function AplicacaoTAFScreen() {
                 onPress={fecharModalNatacao}
                 style={styles.modalCloseBtn}
               >
-                <X size={18} color="#6B7280" strokeWidth={3} />
+                <X size={18} color={ui.icon} strokeWidth={3} />
               </TouchableOpacity>
             </View>
 
@@ -509,7 +514,7 @@ export default function AplicacaoTAFScreen() {
                 onPress={() => setModalErroAberto(false)}
                 style={styles.modalCloseBtn}
               >
-                <X size={18} color="#6B7280" strokeWidth={3} />
+                <X size={18} color={ui.icon} strokeWidth={3} />
               </TouchableOpacity>
             </View>
 
@@ -531,7 +536,8 @@ export default function AplicacaoTAFScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createAplicacaoTafStyles(theme: AppTheme, ui: UiColors) {
+  return StyleSheet.create({
   safe: { flex: 1, position: 'relative' },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 10 },
   centerWrap: { flex: 1, alignItems: 'center' },
@@ -553,7 +559,7 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#111827',
+    color: ui.text,
     textShadowColor: 'rgba(0,0,0,0.1)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
@@ -567,11 +573,11 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: 16,
     borderRadius: 14,
-    backgroundColor: '#111827',
+    backgroundColor: ui.btnDarkBg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.12)',
+    borderColor: theme.border,
     ...(Platform.OS === 'web'
       ? ({ boxShadow: '0 8px 24px rgba(17,24,39,0.12)' } as object)
       : {}),
@@ -598,22 +604,22 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ui.modalBg,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
+    borderColor: theme.border,
   },
   modalCardTempos: {
     maxHeight: '90%',
   },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  modalTitle: { fontSize: 16, fontWeight: '900', color: '#111827' },
-  modalSubtitle: { fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 12 },
-  modalCloseBtn: { padding: 8, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(17,24,39,0.12)' },
+  modalTitle: { fontSize: 16, fontWeight: '900', color: ui.text },
+  modalSubtitle: { fontSize: 13, fontWeight: '700', color: ui.text, marginBottom: 12 },
+  modalCloseBtn: { padding: 8, borderRadius: 12, borderWidth: 1, borderColor: theme.border },
   fieldLabel: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#374151',
+    color: ui.text,
     marginBottom: 6,
   },
   modalInput: {
@@ -624,21 +630,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ui.inputBg,
   },
   modalBtns: { flexDirection: 'row', gap: 12, justifyContent: 'flex-end' },
   modalBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center' },
-  modalBtnCancel: { borderColor: 'rgba(17,24,39,0.12)', backgroundColor: 'rgba(17,24,39,0.04)' },
-  modalBtnTextCancel: { color: '#111827', fontSize: 13, fontWeight: '900' },
+  modalBtnCancel: { borderColor: theme.border, backgroundColor: ui.toggleInactiveBg },
+  modalBtnTextCancel: { color: ui.text, fontSize: 13, fontWeight: '900' },
   modalBtnPrimary: {
-    borderColor: 'rgba(17,24,39,0.12)',
-    backgroundColor: '#111827',
+    borderColor: theme.border,
+    backgroundColor: ui.btnDarkBg,
   },
   modalBtnTextPrimary: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
   erroTemposText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#B91C1C',
+    color: theme.isDark ? ui.text : '#B91C1C',
     marginBottom: 12,
   },
   checkRow: {
@@ -658,16 +664,17 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   checkBoxOff: {
-    borderColor: 'rgba(17,24,39,0.25)',
-    backgroundColor: '#FFFFFF',
+    borderColor: theme.border,
+    backgroundColor: ui.inputBg,
   },
   checkBoxOn: {
-    borderColor: '#111827',
-    backgroundColor: '#111827',
+    borderColor: ui.btnDarkBg,
+    backgroundColor: ui.btnDarkBg,
   },
   checkLabel: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#111827',
+    color: ui.text,
   },
-});
+  });
+}

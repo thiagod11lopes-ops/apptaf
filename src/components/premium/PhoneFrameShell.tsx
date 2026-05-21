@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Platform, StyleSheet } from 'react-native';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { useTheme } from '../../contexts/ThemeContext';
-import { buildPremiumDarkTheme, buildPremiumLightTheme } from '../../theme/premium';
+import { PREMIUM } from '../../theme/premium';
 
 type Props = {
   children: React.ReactNode;
@@ -10,36 +10,24 @@ type Props = {
 
 export function PhoneFrameShell({ children }: Props) {
   const { usePhoneFrame, isWeb } = useDeviceLayout();
-  const { isDark } = useTheme();
-  const bg = isDark ? buildPremiumDarkTheme().background : buildPremiumLightTheme().background;
+  const { isDark, theme } = useTheme();
 
   useEffect(() => {
-    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    const root = document.documentElement;
-    if (isDark) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    root.style.height = '100%';
-    document.body.style.height = '100%';
-    document.body.style.margin = '0';
-    document.body.style.backgroundColor = isDark ? '#09090B' : '#E4E4E7';
+    if (!isWeb || typeof document === 'undefined') return;
+    document.body.style.backgroundColor = isDark ? '#14141A' : PREMIUM.light.bg;
   }, [isDark, isWeb]);
 
   if (!usePhoneFrame) {
     return (
-      <View style={[styles.fill, { backgroundColor: bg }]} className="select-none-touch">
-        {children}
-      </View>
+      <View style={[styles.fill, { backgroundColor: theme.background }]}>{children}</View>
     );
   }
 
   return (
-    <View style={[styles.desktopOuter]} className="select-none-touch">
+    <View style={styles.desktopOuter}>
       <View style={styles.phoneFrame}>
         <View style={styles.dynamicIsland} />
-        <View style={[styles.phoneScreen, { backgroundColor: bg }]}>{children}</View>
+        <View style={[styles.phoneScreen, { backgroundColor: theme.background }]}>{children}</View>
       </View>
     </View>
   );
@@ -58,7 +46,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#09090B',
+    backgroundColor: '#14141A',
     padding: 24,
   },
   phoneFrame: {
@@ -67,27 +55,23 @@ const styles = StyleSheet.create({
     height: '85%',
     maxHeight: 900,
     borderRadius: 40,
-    borderWidth: 4,
-    borderColor: '#27272A',
+    borderWidth: 3,
+    borderColor: '#3F3F4A',
     overflow: 'hidden',
-    backgroundColor: '#000',
+    backgroundColor: PREMIUM.dark.bg,
     ...Platform.select({
-      web: {
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
-      } as object,
-      default: {
-        elevation: 24,
-      },
+      web: { boxShadow: '0 24px 64px rgba(0, 0, 0, 0.5)' } as object,
+      default: { elevation: 24 },
     }),
   },
   dynamicIsland: {
     position: 'absolute',
     top: 12,
     alignSelf: 'center',
-    width: 120,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#000',
+    width: 112,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#14141A',
     zIndex: 10,
   },
   phoneScreen: {

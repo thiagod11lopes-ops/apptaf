@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
-import { FlashValue } from './FlashValue';
+import { MonoValue } from './MonoValue';
 import { Sparkline } from './Sparkline';
+import { PREMIUM } from '../../theme/premium';
 
 type Props = {
   label: string;
@@ -15,37 +16,34 @@ type Props = {
 
 export function KpiCard({ label, value, hint, variant = 'default', sparkData, flashKey }: Props) {
   const { theme } = useTheme();
+  const ts = theme.textStyles;
   const accentBg =
-    variant === 'gain' ? theme.gainMuted : variant === 'loss' ? theme.lossMuted : 'transparent';
+    variant === 'gain' ? theme.gainMuted : variant === 'loss' ? theme.lossMuted : theme.cardBg;
   const accentBorder =
-    variant === 'gain' ? theme.gain : variant === 'loss' ? theme.loss : theme.borderSubtle;
+    variant === 'gain' ? theme.gain : variant === 'loss' ? theme.loss : theme.border;
 
   return (
     <View
       style={[
         styles.card,
         {
-          backgroundColor: theme.cardBg,
-          borderColor: theme.borderSubtle,
+          backgroundColor: accentBg,
+          borderColor: theme.border,
           borderLeftColor: accentBorder,
         },
-        accentBg !== 'transparent' && { backgroundColor: accentBg },
       ]}
     >
       <View style={styles.top}>
-        <Text style={[styles.label, { color: theme.textSecondary }]} numberOfLines={1}>
+        <Text style={[ts.label, { color: theme.text, textTransform: 'none', fontSize: 12 }]}>
           {label}
         </Text>
         {sparkData && sparkData.length > 1 ? (
-          <Sparkline
-            data={sparkData}
-            variant={variant === 'default' ? 'neutral' : variant}
-          />
+          <Sparkline data={sparkData} variant={variant === 'default' ? 'neutral' : variant} />
         ) : null}
       </View>
-      <FlashValue value={value} variant={variant} size="lg" flashKey={flashKey ?? value} />
+      <MonoValue value={value} variant={variant} size="lg" />
       {hint ? (
-        <Text style={[styles.hint, { color: theme.textMuted }]} numberOfLines={2}>
+        <Text style={[ts.caption, { color: theme.text }]} numberOfLines={2}>
           {hint}
         </Text>
       ) : null}
@@ -58,26 +56,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: '46%',
     minWidth: 140,
-    padding: 14,
-    borderRadius: 16,
+    padding: 16,
+    borderRadius: PREMIUM.radiusLg,
     borderWidth: 1,
     borderLeftWidth: 3,
-    gap: 6,
+    gap: 8,
   },
   top: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    flex: 1,
-  },
-  hint: {
-    fontSize: 11,
-    lineHeight: 15,
   },
 });

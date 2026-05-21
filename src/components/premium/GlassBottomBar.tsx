@@ -6,24 +6,26 @@ import {
   ClipboardList,
   PlayCircle,
   BarChart3,
-  Settings,
+  ListChecks,
 } from 'lucide-react-native';
 import type { RootStackParamList } from '../../navigation/types';
 import { navigateTab } from '../../navigation/navigationRef';
 import { PressableScale } from './PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
+import { PREMIUM } from '../../theme/premium';
+import { fontFamily } from '../../theme/typography';
 
-type TabId = 'Home' | 'Cadastro' | 'AplicarTAF' | 'Estatisticas' | 'Configuracoes';
+type TabId = 'Home' | 'Cadastro' | 'AplicarTAF' | 'Estatisticas' | 'Resultados';
 
 const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
   { id: 'Home', label: 'Início', icon: Home },
   { id: 'Cadastro', label: 'Cadastro', icon: ClipboardList },
   { id: 'AplicarTAF', label: 'Aplicar', icon: PlayCircle },
+  { id: 'Resultados', label: 'Resultados', icon: ListChecks },
   { id: 'Estatisticas', label: 'Stats', icon: BarChart3 },
-  { id: 'Configuracoes', label: 'Ajustes', icon: Settings },
 ];
 
-const HIDDEN_ROUTES: (keyof RootStackParamList)[] = ['CadastrarResultados'];
+const HIDDEN_ROUTES: (keyof RootStackParamList)[] = ['CadastrarResultados', 'Configuracoes'];
 
 type Props = {
   activeRoute: keyof RootStackParamList;
@@ -31,15 +33,17 @@ type Props = {
 
 export function GlassBottomBar({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
-  const { theme, isDark } = useTheme();
+  const { theme, fontsLoaded } = useTheme();
 
   if (HIDDEN_ROUTES.includes(activeRoute)) {
     return null;
   }
 
   const bottomPad = Math.max(insets.bottom, 12);
-  const barBg = isDark ? 'rgba(24, 24, 27, 0.94)' : 'rgba(255, 255, 255, 0.94)';
-  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
+  const labelFont = fontFamily('medium', fontsLoaded);
+  const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
+  const activeBorder = theme.primary;
+  const activeRing = theme.isDark ? '#FFFFFF' : '#111827';
 
   return (
     <View
@@ -47,15 +51,16 @@ export function GlassBottomBar({ activeRoute }: Props) {
         styles.bar,
         {
           bottom: bottomPad,
-          backgroundColor: barBg,
-          borderColor,
+          backgroundColor: theme.cardBg,
+          borderColor: theme.border,
         },
         Platform.OS === 'web'
           ? ({
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
+              boxShadow: theme.isDark
+                ? '0 8px 32px rgba(0,0,0,0.45)'
+                : '0 8px 28px rgba(15,23,42,0.12)',
             } as object)
-          : undefined,
+          : { elevation: 16 },
       ]}
       pointerEvents="box-none"
     >
@@ -63,8 +68,6 @@ export function GlassBottomBar({ activeRoute }: Props) {
         const active = activeRoute === tab.id;
         const isCenter = tab.id === 'AplicarTAF';
         const Icon = tab.icon;
-        const color = active ? theme.primary : theme.textMuted;
-
         if (isCenter) {
           return (
             <PressableScale
@@ -72,11 +75,26 @@ export function GlassBottomBar({ activeRoute }: Props) {
               onPress={() => navigateTab(tab.id)}
               style={styles.centerTab}
               accessibilityLabel={tab.label}
+              accessibilityState={{ selected: active }}
             >
-              <View style={[styles.centerBtn, { backgroundColor: theme.primary }]}>
+              <View
+                style={[
+                  styles.centerBtn,
+                  { backgroundColor: theme.primary },
+                  active && styles.centerBtnActive,
+                  active && { borderColor: activeRing },
+                ]}
+              >
                 <Icon size={26} color="#FFFFFF" strokeWidth={2.2} />
               </View>
-              <Text style={[styles.centerLabel, { color: theme.primary }]}>{tab.label}</Text>
+              <Text
+                style={[
+                  styles.tabLabel,
+                  { color: tabInk, fontFamily: labelFont, fontWeight: '700' },
+                ]}
+              >
+                {tab.label}
+              </Text>
             </PressableScale>
           );
         }
@@ -85,11 +103,25 @@ export function GlassBottomBar({ activeRoute }: Props) {
           <PressableScale
             key={tab.id}
             onPress={() => navigateTab(tab.id)}
-            style={styles.tab}
+            style={[
+              styles.tab,
+              active && styles.tabActive,
+              active && { borderColor: activeBorder, backgroundColor: theme.accentMuted },
+            ]}
             accessibilityLabel={tab.label}
+            accessibilityState={{ selected: active }}
           >
-            <Icon size={22} color={color} strokeWidth={active ? 2.5 : 2} />
-            <Text style={[styles.tabLabel, { color: active ? theme.primary : theme.textMuted }]}>
+            <Icon size={22} color={tabInk} strokeWidth={active ? 2.5 : 2} />
+            <Text
+              style={[
+                styles.tabLabel,
+                {
+                  color: tabInk,
+                  fontFamily: labelFont,
+                  fontWeight: active ? '700' : '500',
+                },
+              ]}
+            >
               {tab.label}
             </Text>
           </PressableScale>
@@ -107,35 +139,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 24,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: PREMIUM.radiusXl,
     borderWidth: 1,
     zIndex: 100,
-    ...Platform.select({
-      web: { boxShadow: '0 8px 32px rgba(0,0,0,0.2)' } as object,
-      default: { elevation: 12 },
-    }),
   },
   tab: {
     flex: 1,
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    paddingVertical: 4,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderRadius: PREMIUM.radiusMd,
   },
-  tabLabel: { fontSize: 10, marginTop: 4, fontWeight: '600' },
+  tabActive: {
+    borderWidth: 2,
+  },
+  tabLabel: { fontSize: 11, marginTop: 4 },
   centerTab: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -18,
+    marginTop: -20,
   },
   centerBtn: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: PREMIUM.radiusLg,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-  centerLabel: { fontSize: 10, marginTop: 4, fontWeight: '700' },
+  centerBtnActive: {
+    borderWidth: 3,
+  },
 });

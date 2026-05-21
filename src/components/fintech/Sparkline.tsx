@@ -13,7 +13,13 @@ type Props = {
 export function Sparkline({ data, width = 72, height = 28, variant = 'neutral' }: Props) {
   const { theme } = useTheme();
   const color =
-    variant === 'gain' ? theme.gain : variant === 'loss' ? theme.loss : theme.textSecondary;
+    variant === 'gain'
+      ? theme.gain
+      : variant === 'loss'
+        ? theme.loss
+        : theme.isDark
+          ? '#FFFFFF'
+          : theme.textSecondary;
 
   if (data.length < 2) {
     return <View style={{ width, height }} />;

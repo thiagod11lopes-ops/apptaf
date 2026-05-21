@@ -12,7 +12,7 @@ export default function NormasScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <Header title="Normas" onBack={() => navigation.goBack()} />
+      <Header title="Normas · CGCFN-108" onBack={() => navigation.goBack()} />
       <NormsContentDisplay normContent={CGCFN_108_NORM_CONTENT} />
     </View>
   );

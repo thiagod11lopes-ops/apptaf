@@ -1,9 +1,11 @@
 import React, { useCallback, useState } from 'react';
 import { View, Platform, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
 import { GlassBottomBar } from '../components/premium/GlassBottomBar';
+import { SettingsTopButton } from '../components/premium/SettingsTopButton';
 import { navigationRef, getCurrentRouteName } from './navigationRef';
 import type { RootStackParamList } from './types';
 
@@ -16,6 +18,7 @@ import AplicacaoTAFScreen from '../screens/AplicacaoTAFScreen';
 import AplicarTAFScreen from '../screens/AplicarTAFScreen';
 import EstatisticasScreen from '../screens/EstatisticasScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
+import ResultadosScreen from '../screens/ResultadosScreen';
 import CadastrarResultadosScreen from '../screens/CadastrarResultadosScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -24,7 +27,9 @@ const BOTTOM_BAR_PADDING = 96;
 
 export default function AppNavigator() {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [activeRoute, setActiveRoute] = useState<keyof RootStackParamList>('Home');
+  const topChromePad = Math.max(insets.top, 8) + 52;
 
   const syncRoute = useCallback(() => {
     setActiveRoute(getCurrentRouteName());
@@ -60,6 +65,7 @@ export default function AppNavigator() {
               flex: 1,
               backgroundColor: theme.background,
               paddingBottom: BOTTOM_BAR_PADDING,
+              paddingTop: topChromePad,
             },
             animation: Platform.OS === 'web' ? 'fade' : 'slide_from_right',
           }}
@@ -77,8 +83,16 @@ export default function AppNavigator() {
             }}
           />
           <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
-          <Stack.Screen name="Configuracoes" component={ConfiguracoesScreen} />
+          <Stack.Screen name="Resultados" component={ResultadosScreen} />
+          <Stack.Screen
+            name="Configuracoes"
+            component={ConfiguracoesScreen}
+            options={{
+              contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: theme.background },
+            }}
+          />
         </Stack.Navigator>
+        <SettingsTopButton activeRoute={activeRoute} />
         <GlassBottomBar activeRoute={activeRoute} />
       </View>
     </NavigationContainer>

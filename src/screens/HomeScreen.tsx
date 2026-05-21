@@ -7,13 +7,15 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Menu } from '../components/Menu';
 import { Card } from '../components/Card';
 import { PressableScale } from '../components/premium/PressableScale';
-import { FileText, ChevronRight } from 'lucide-react-native';
+import { BookOpen, ClipboardList, Users, ChevronRight, Activity } from 'lucide-react-native';
+import { PREMIUM } from '../theme/premium';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 export default function HomeScreen() {
-  const navigation = useNavigation<Nav>();
   const { theme } = useTheme();
+  const ts = theme.textStyles;
+  const navigation = useNavigation<Nav>();
 
   useFocusEffect(useCallback(() => {}, []));
 
@@ -28,14 +30,23 @@ export default function HomeScreen() {
     {
       id: 'normas',
       title: 'Normas',
-      subtitle: 'CGCFN-108 · busca integrada',
+      subtitle: 'CGCFN-108 · Planilha de Consulta',
+      Icon: BookOpen,
       onPress: () => goTo('Normas'),
     },
     {
       id: 'registro',
       title: 'Registrador de TAF',
       subtitle: 'Histórico e filtros',
+      Icon: ClipboardList,
       onPress: () => goTo('AplicacaoTAF'),
+    },
+    {
+      id: 'cadastro',
+      title: 'Cadastro',
+      subtitle: 'Participantes e planilha',
+      Icon: Users,
+      onPress: () => goTo('Cadastro'),
     },
   ];
 
@@ -46,21 +57,22 @@ export default function HomeScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.hero}>
-        <View style={[styles.badge, { backgroundColor: theme.accentMuted, borderColor: theme.primary }]}>
-          <Text style={[styles.badgeText, { color: theme.primary }]}>TAF · Premium</Text>
+        <View style={[styles.badge, { backgroundColor: theme.accentMuted }]}>
+          <Activity size={14} color={theme.text} strokeWidth={2.5} />
+          <Text style={[ts.label, styles.badgeLabel, { color: '#FFFFFF' }]}>
+            Sistema TAF
+          </Text>
         </View>
-        <Text style={[styles.title, { color: theme.text }]}>TAF</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Teste de Aptidão Física
-        </Text>
+        <Text style={[ts.hero, styles.heroTitle]}>TAF</Text>
+        <Text style={[ts.bodySecondary, styles.heroSub]}>Teste de Aptidão Física</Text>
       </View>
 
       <PressableScale onPress={() => goTo('AplicarTAF')} style={styles.ctaWrap}>
-        <Card elevated>
+        <Card elevated style={styles.ctaCard}>
           <View style={styles.ctaRow}>
             <View style={styles.ctaText}>
-              <Text style={[styles.ctaTitle, { color: theme.text }]}>Aplicar TAF</Text>
-              <Text style={[styles.ctaSub, { color: theme.textSecondary }]}>
+              <Text style={ts.h1}>Aplicar TAF</Text>
+              <Text style={[ts.caption, styles.ctaGap]}>
                 Corrida · Natação · Permanência
               </Text>
             </View>
@@ -71,62 +83,39 @@ export default function HomeScreen() {
         </Card>
       </PressableScale>
 
-      <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>ACESSO RÁPIDO</Text>
+      <Text style={[ts.label, styles.sectionLabel]}>Acesso rápido</Text>
       <Menu options={quickLinks} />
-
-      <PressableScale onPress={() => goTo('Cadastro')} style={styles.linkWrap}>
-        <Card>
-          <View style={styles.linkRow}>
-            <FileText size={20} color={theme.primary} strokeWidth={2} />
-            <View style={styles.linkText}>
-              <Text style={[styles.linkTitle, { color: theme.text }]}>Cadastro</Text>
-              <Text style={[styles.linkSub, { color: theme.textSecondary }]}>
-                Participantes e planilha
-              </Text>
-            </View>
-            <ChevronRight size={20} color={theme.textMuted} />
-          </View>
-        </Card>
-      </PressableScale>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 32 },
-  hero: { marginBottom: 24, alignItems: 'center' },
+  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 36 },
+  hero: { marginBottom: 28, alignItems: 'center', width: '100%' },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  title: { fontSize: 32, fontWeight: '800', letterSpacing: -0.5 },
-  subtitle: { fontSize: 15, marginTop: 4 },
-  ctaWrap: { marginBottom: 20 },
+  badgeLabel: { textTransform: 'none', letterSpacing: 0.3, fontSize: 12 },
+  heroTitle: { textAlign: 'center', width: '100%' },
+  heroSub: { marginTop: 6, textAlign: 'center', width: '100%' },
+  ctaWrap: { marginBottom: 24 },
+  ctaCard: { borderWidth: 0 },
   ctaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  ctaText: { flex: 1, paddingRight: 12 },
-  ctaTitle: { fontSize: 18, fontWeight: '800' },
-  ctaSub: { fontSize: 13, marginTop: 4 },
+  ctaText: { flex: 1, paddingRight: 14 },
+  ctaGap: { marginTop: 6 },
   ctaBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 52,
+    height: 52,
+    borderRadius: PREMIUM.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 10,
-  },
-  linkWrap: { marginTop: 8 },
-  linkRow: { flexDirection: 'row', alignItems: 'center', minHeight: 48 },
-  linkText: { flex: 1, marginLeft: 12 },
-  linkTitle: { fontSize: 16, fontWeight: '700' },
-  linkSub: { fontSize: 13, marginTop: 2 },
+  sectionLabel: { marginBottom: 12 },
 });

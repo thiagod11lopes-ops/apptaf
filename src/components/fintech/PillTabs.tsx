@@ -30,7 +30,7 @@ export function PillTabs<T extends string>({ options, value, onChange }: Props<T
             <Text
               style={[
                 styles.label,
-                { color: active ? theme.text : theme.textSecondary },
+                { color: theme.isDark ? '#FFFFFF' : active ? theme.text : theme.textSecondary },
                 active && styles.labelActive,
               ]}
             >

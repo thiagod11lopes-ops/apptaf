@@ -1,54 +1,40 @@
 import React from 'react';
-import { View, Text, StyleSheet, Switch } from 'react-native';
+import { View, Text, Switch } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
-import { FINTECH } from '../theme/fintech';
+import { tw } from '../theme/premium';
 
 export default function ConfiguracoesScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
   const navigation = useNavigation();
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View className="flex-1 bg-white dark:bg-black select-none-touch">
       <Header title="Configurações" onBack={() => navigation.goBack()} />
-      <View style={styles.content}>
-        <Card elevated>
-          <View style={styles.row}>
-            <View style={styles.rowText}>
-              <Text style={[styles.label, { color: theme.text }]}>Modo escuro (OLED)</Text>
-              <Text style={[styles.hint, { color: theme.textMuted }]}>
-                Dashboard profissional · cores de status suaves
+      <View className="p-4 gap-3">
+        <Card elevated className="p-4">
+          <View className="flex-row items-center justify-between min-h-[48px]">
+            <View className="flex-1 pr-3">
+              <Text className={tw.textTitle}>Aparência</Text>
+              <Text className={`${tw.textMuted} mt-1`}>
+                {isDark ? 'Escuro OLED · glassmorphism' : 'Claro · minimal'}
               </Text>
             </View>
             <Switch
               value={isDark}
               onValueChange={toggleTheme}
-              trackColor={{ false: theme.borderMuted, true: theme.gainMuted }}
-              thumbColor={isDark ? theme.gain : theme.textSecondary}
+              trackColor={{ false: '#E4E4E7', true: theme.accentMuted }}
+              thumbColor={isDark ? theme.primary : '#FAFAFA'}
             />
           </View>
         </Card>
-        <Text style={[styles.footer, { color: theme.textMuted }]}>
-          Interface otimizada para PWA mobile-first · animações rápidas (150–200ms)
+        <Text className={`${tw.textMuted} text-center px-4`}>
+          No desktop, o app aparece dentro de um frame de smartphone. No celular, ocupa 100% da tela
+          (PWA).
         </Text>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 16, gap: 12, maxWidth: 480, alignSelf: 'center', width: '100%' },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  rowText: { flex: 1 },
-  label: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  hint: { fontSize: 12, lineHeight: 17 },
-  footer: { fontSize: 11, textAlign: 'center', marginTop: 8 },
-});

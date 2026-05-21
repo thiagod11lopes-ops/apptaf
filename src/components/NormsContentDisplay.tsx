@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput } from 'react-native';
+import { View, Text, ScrollView, TextInput } from 'react-native';
 import { Search } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { FINTECH } from '../theme/fintech';
+import { tw } from '../theme/premium';
 
 type Props = {
   normContent: string;
@@ -15,7 +15,10 @@ export function NormsContentDisplay({ normContent }: Props) {
   const highlightedContent = useMemo(() => {
     if (!searchQuery.trim()) {
       return (
-        <Text style={[styles.normText, { color: theme.text, fontFamily: theme.monoFont }]}>
+        <Text
+          className="text-[13px] leading-[22px] text-zinc-800 dark:text-zinc-200"
+          style={{ fontFamily: theme.monoFont }}
+        >
           {normContent}
         </Text>
       );
@@ -26,16 +29,15 @@ export function NormsContentDisplay({ normContent }: Props) {
     const parts = normContent.split(regex);
 
     return (
-      <Text style={[styles.normText, { color: theme.text, fontFamily: theme.monoFont }]}>
+      <Text
+        className="text-[13px] leading-[22px] text-zinc-800 dark:text-zinc-200"
+        style={{ fontFamily: theme.monoFont }}
+      >
         {parts.map((part, index) =>
           regex.test(part) ? (
             <Text
               key={index}
-              style={{
-                backgroundColor: theme.gainMuted,
-                color: theme.gain,
-                fontWeight: '700',
-              }}
+              className="bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-semibold"
             >
               {part}
             </Text>
@@ -45,25 +47,15 @@ export function NormsContentDisplay({ normContent }: Props) {
         )}
       </Text>
     );
-  }, [normContent, searchQuery, theme]);
+  }, [normContent, searchQuery, theme.monoFont]);
 
   return (
-    <View style={styles.container}>
-      <View
-        style={[
-          styles.searchBar,
-          {
-            backgroundColor: theme.cardBg,
-            borderColor: theme.borderSubtle,
-          },
-        ]}
-      >
-        <Search size={18} color={theme.textMuted} style={styles.searchIcon} />
+    <View className="flex-1 px-4 select-none-touch">
+      <View className={`${tw.input} flex-row items-center mb-4`}>
+        <Search size={18} color={theme.textMuted} />
         <TextInput
-          style={[
-            styles.searchInput,
-            { color: theme.text, fontFamily: theme.monoFont },
-          ]}
+          className="flex-1 ml-3 text-[15px] text-zinc-900 dark:text-zinc-100"
+          style={{ fontFamily: theme.monoFont }}
           placeholder="Buscar na norma..."
           placeholderTextColor={theme.textMuted}
           value={searchQuery}
@@ -71,7 +63,7 @@ export function NormsContentDisplay({ normContent }: Props) {
         />
       </View>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{ paddingBottom: 24 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -80,33 +72,3 @@ export function NormsContentDisplay({ normContent }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: FINTECH.radiusMd,
-    paddingHorizontal: 12,
-    marginBottom: 16,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    height: 44,
-    fontSize: 15,
-  },
-  scrollContent: {
-    paddingBottom: 24,
-  },
-  normText: {
-    fontSize: 13,
-    lineHeight: 22,
-  },
-});

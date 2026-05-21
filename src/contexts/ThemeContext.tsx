@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useMemo, ReactNode } from 'react';
-import { buildFintechDarkTheme, fintechLightTheme, type AppTheme } from '../theme/fintech';
+import { buildPremiumDarkTheme, buildPremiumLightTheme, type AppTheme } from '../theme/premium';
 
 export type Theme = AppTheme;
 
@@ -13,7 +13,7 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDark] = useState(true);
-  const theme = useMemo(() => (isDark ? buildFintechDarkTheme() : fintechLightTheme), [isDark]);
+  const theme = useMemo(() => (isDark ? buildPremiumDarkTheme() : buildPremiumLightTheme()), [isDark]);
   const value = useMemo(
     () => ({ theme, isDark, toggleTheme: () => setIsDark((d) => !d) }),
     [theme, isDark],

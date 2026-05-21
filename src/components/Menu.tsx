@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
-import { useTheme } from '../contexts/ThemeContext';
-import { FINTECH } from '../theme/fintech';
+import { PressableScale } from './premium/PressableScale';
+import { tw } from '../theme/premium';
 
 interface MenuOption {
   id: string;
@@ -17,59 +17,22 @@ interface Props {
 }
 
 export function Menu({ options, visible = true }: Props) {
-  const { theme } = useTheme();
   if (!visible) return null;
   return (
-    <View style={styles.wrap}>
+    <View className="gap-2">
       {options.map((opt) => (
-        <TouchableOpacity
+        <PressableScale
           key={opt.id}
           onPress={opt.onPress}
-          activeOpacity={0.7}
-          style={[
-            styles.item,
-            {
-              backgroundColor: theme.cardBg,
-              borderColor: theme.borderSubtle,
-            },
-          ]}
+          className={`${tw.glassCard} flex-row items-center min-h-[56px] px-4 py-4 active:scale-[0.98]`}
         >
-          <View style={styles.textBlock}>
-            <Text style={[styles.title, { color: theme.text }]}>{opt.title}</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{opt.subtitle}</Text>
+          <View className="flex-1 pr-2">
+            <Text className={tw.textTitle}>{opt.title}</Text>
+            <Text className={`${tw.textMuted} mt-0.5`}>{opt.subtitle}</Text>
           </View>
-          <ChevronRight size={20} color={theme.textMuted} strokeWidth={2} />
-        </TouchableOpacity>
+          <ChevronRight size={20} className="text-zinc-400" color="#A1A1AA" strokeWidth={2} />
+        </PressableScale>
       ))}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { gap: 8 },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 0,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: FINTECH.radiusLg,
-    borderWidth: 1,
-    ...Platform.select({
-      web: { transition: 'background-color 150ms ease' } as object,
-      default: {},
-    }),
-  },
-  textBlock: { flex: 1, paddingRight: 8 },
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 2,
-    letterSpacing: 0.2,
-  },
-  subtitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    lineHeight: 18,
-  },
-});

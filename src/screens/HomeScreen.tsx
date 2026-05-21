@@ -1,179 +1,95 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Platform, Image, useWindowDimensions } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, ScrollView } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import { useTheme } from '../contexts/ThemeContext';
 import { Menu } from '../components/Menu';
 import { Card } from '../components/Card';
-import { MonoValue } from '../components/fintech/MonoValue';
-import { FINTECH } from '../theme/fintech';
-import { Zap } from 'lucide-react-native';
+import { PressableScale } from '../components/premium/PressableScale';
+import { tw } from '../theme/premium';
+import { FileText, ChevronRight } from 'lucide-react-native';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const { theme } = useTheme();
-  const { width, height } = useWindowDimensions();
-  const [menuVisible, setMenuVisible] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      setMenuVisible(true);
-    }, []),
-  );
+  useFocusEffect(useCallback(() => {}, []));
 
   const goTo = useCallback(
-    (screen: 'Normas' | 'Cadastro' | 'AplicacaoTAF' | 'AplicarTAF' | 'Estatisticas' | 'Configuracoes') => {
-      setMenuVisible(false);
-      setTimeout(() => navigation.navigate(screen), 120);
+    (screen: keyof RootStackParamList) => {
+      navigation.navigate(screen as never);
     },
     [navigation],
   );
 
-  const menuOptionsAntesRegistrar = [
-    { id: 'normas', title: 'Normas', subtitle: 'CGCFN-108 · busca e tabelas', onPress: () => goTo('Normas') },
-    { id: 'cadastro', title: 'Cadastro', subtitle: 'Participantes e planilha', onPress: () => goTo('Cadastro') },
-    { id: 'aplicacao-taf', title: 'Registrador de TAF', subtitle: 'Histórico e filtros', onPress: () => goTo('AplicacaoTAF') },
-  ];
-
-  const menuOptionsDepoisRegistrar = [
-    { id: 'estatisticas', title: 'Estatísticas', subtitle: 'Dashboard e métricas', onPress: () => goTo('Estatisticas') },
-    { id: 'configuracoes', title: 'Configurações', subtitle: 'Tema e preferências', onPress: () => goTo('Configuracoes') },
+  const quickLinks = [
+    {
+      id: 'normas',
+      title: 'Normas',
+      subtitle: 'CGCFN-108 · busca integrada',
+      onPress: () => goTo('Normas'),
+    },
+    {
+      id: 'registro',
+      title: 'Registrador de TAF',
+      subtitle: 'Histórico e filtros',
+      onPress: () => goTo('AplicacaoTAF'),
+    },
   ];
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: theme.background },
-        Platform.OS !== 'web' && { width, height },
-      ]}
+    <ScrollView
+      className="flex-1 bg-white dark:bg-black select-none-touch"
+      contentContainerClassName="px-5 pt-6 pb-8"
+      showsVerticalScrollIndicator={false}
     >
-      <Image
-        source={require('../../Fundo.png')}
-        style={[styles.fundo, { width, height, opacity: 0.35 }]}
-        resizeMode="cover"
-      />
-      <View style={[styles.overlay, { width, height }]} />
-      <View style={styles.content}>
-        <View style={styles.hero}>
-          <View style={[styles.badge, { backgroundColor: theme.gainMuted, borderColor: theme.gain }]}>
-            <Zap size={14} color={theme.gain} strokeWidth={2.5} />
-            <Text style={[styles.badgeText, { color: theme.gain }]}>TAF · Alta performance</Text>
-          </View>
-          <MonoValue size="xl">TAF</MonoValue>
-          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Teste de Aptidão Física
+      <View className="mb-8">
+        <View className="self-start px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 mb-4">
+          <Text className="text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold tracking-wider uppercase">
+            Premium · PWA
           </Text>
         </View>
-
-        {menuVisible ? (
-          <>
-            <Menu options={menuOptionsAntesRegistrar} />
-            <Card onPress={() => goTo('AplicarTAF')} style={styles.ctaCard} elevated>
-              <View style={styles.ctaInner}>
-                <View>
-                  <Text style={[styles.ctaTitle, { color: theme.text }]}>Aplicar TAF</Text>
-                  <Text style={[styles.ctaSubtitle, { color: theme.textSecondary }]}>
-                    Corrida · Natação · Permanência
-                  </Text>
-                </View>
-                <View style={[styles.ctaPill, { backgroundColor: theme.primary }]}>
-                  <Text style={styles.ctaPillText}>Iniciar</Text>
-                </View>
-              </View>
-            </Card>
-            <Menu options={menuOptionsDepoisRegistrar} />
-          </>
-        ) : null}
+        <Text className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+          TAF
+        </Text>
+        <Text className={`${tw.textMuted} mt-1 text-base`}>
+          Teste de Aptidão Física
+        </Text>
       </View>
-    </View>
+
+      <PressableScale onPress={() => goTo('AplicarTAF')} className="mb-6">
+        <Card className="p-5 border-indigo-500/20 dark:border-indigo-400/25">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 pr-3">
+              <Text className="text-xl font-bold text-zinc-900 dark:text-white">Aplicar TAF</Text>
+              <Text className={`${tw.textMuted} mt-1`}>
+                Corrida · Natação · Permanência
+              </Text>
+            </View>
+            <View className="min-h-[48px] min-w-[48px] rounded-2xl bg-indigo-600 dark:bg-indigo-500 items-center justify-center shadow-md">
+              <ChevronRight size={22} color="#FFF" strokeWidth={2.5} />
+            </View>
+          </View>
+        </Card>
+      </PressableScale>
+
+      <Text className="text-xs font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-500 mb-3">
+        Acesso rápido
+      </Text>
+      <Menu options={quickLinks} />
+
+      <PressableScale
+        onPress={() => goTo('Cadastro')}
+        className={`${tw.glassCard} mt-3 flex-row items-center min-h-[56px] px-4 py-4`}
+      >
+        <FileText size={20} color="#6366F1" strokeWidth={2} />
+        <View className="flex-1 ml-3">
+          <Text className={tw.textTitle}>Cadastro</Text>
+          <Text className={tw.textMuted}>Participantes e planilha</Text>
+        </View>
+        <ChevronRight size={20} color="#A1A1AA" />
+      </PressableScale>
+    </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    width: '100%',
-    minHeight: '100%',
-    ...(Platform.OS === 'web' && { minHeight: '100vh' }),
-  },
-  fundo: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.82)',
-  },
-  content: {
-    flex: 1,
-    paddingTop: Platform.OS === 'web' ? 32 : 48,
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    maxWidth: 480,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  hero: {
-    alignItems: 'center',
-    marginBottom: 28,
-    gap: 6,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: FINTECH.radiusSm,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  subtitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  ctaCard: {
-    marginBottom: 12,
-    paddingVertical: 4,
-  },
-  ctaInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  ctaTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  ctaSubtitle: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  ctaPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: FINTECH.radiusMd,
-    minWidth: 72,
-    alignItems: 'center',
-  },
-  ctaPillText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-});

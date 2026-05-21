@@ -59,7 +59,7 @@ export default function EstatisticasScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View className="flex-1 bg-white dark:bg-black select-none-touch">
       <Header title="Estatísticas" onBack={() => navigation.goBack()} />
       {loading ? (
         <View style={styles.centered}>

@@ -1,7 +1,9 @@
 import React from 'react';
+import { View, Platform } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
+import { GlassBottomBar } from '../components/premium/GlassBottomBar';
 import HomeScreen from '../screens/HomeScreen';
 import NormasScreen from '../screens/NormasScreen';
 import CadastroScreenModern from '../screens/CadastroScreenModern';
@@ -11,23 +13,16 @@ import EstatisticasScreen from '../screens/EstatisticasScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
 import CadastrarResultadosScreen from '../screens/CadastrarResultadosScreen';
 
-/** Linha de resultado da prova (enviada para cadastro). */
 export type ResultadoCorridaItem = {
   corredor: number;
   nome: string;
   tempoMs: number;
   nip: string;
-  /** Define rótulos na tela de resumo e coluna no cadastro (corrida vs natação). */
   prova?: 'corrida' | 'natacao';
-  /** Nota da prova (corrida ou natação feminina), se calculada nesta sessão */
   notaTexto?: string;
-  /** Campo NORA exibido no fluxo de rúbrica da natação. */
   noraTexto?: string;
-  /** Texto de reprovação no fluxo de rúbrica da natação (se houver). */
   reprovacaoTexto?: string;
-  /** Rúbrica digitada no modal sequencial da natação. */
   rubricaCandidato?: string;
-  /** Rúbrica desenhada no modal sequencial da natação (SVG data URL). */
   rubricaCandidatoSvg?: string;
 };
 
@@ -43,6 +38,8 @@ export type RootStackParamList = {
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+const BOTTOM_BAR_PADDING = 96;
 
 export default function AppNavigator() {
   const { theme, isDark } = useTheme();
@@ -63,23 +60,33 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      <Stack.Navigator
-        initialRouteName="Home"
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: theme.background },
-          animation: 'slide_from_right',
-        }}
-      >
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="Normas" component={NormasScreen} />
-        <Stack.Screen name="Cadastro" component={CadastroScreenModern} />
-        <Stack.Screen name="AplicacaoTAF" component={AplicacaoTAFScreen} />
-        <Stack.Screen name="AplicarTAF" component={AplicarTAFScreen} />
-        <Stack.Screen name="CadastrarResultados" component={CadastrarResultadosScreen} />
-        <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
-        <Stack.Screen name="Configuracoes" component={ConfiguracoesScreen} />
-      </Stack.Navigator>
+      <View className="flex-1 bg-white dark:bg-black select-none-touch">
+        <Stack.Navigator
+          initialRouteName="Home"
+          screenOptions={{
+            headerShown: false,
+            contentStyle: {
+              backgroundColor: theme.background,
+              paddingBottom: BOTTOM_BAR_PADDING,
+            },
+            animation: Platform.OS === 'web' ? 'fade' : 'slide_from_right',
+          }}
+        >
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Normas" component={NormasScreen} />
+          <Stack.Screen name="Cadastro" component={CadastroScreenModern} />
+          <Stack.Screen name="AplicacaoTAF" component={AplicacaoTAFScreen} />
+          <Stack.Screen name="AplicarTAF" component={AplicarTAFScreen} />
+          <Stack.Screen
+            name="CadastrarResultados"
+            component={CadastrarResultadosScreen}
+            options={{ contentStyle: { paddingBottom: 0 } }}
+          />
+          <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
+          <Stack.Screen name="Configuracoes" component={ConfiguracoesScreen} />
+        </Stack.Navigator>
+        <GlassBottomBar />
+      </View>
     </NavigationContainer>
   );
 }

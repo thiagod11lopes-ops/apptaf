@@ -1,51 +1,58 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, TouchableOpacity, Platform } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
-import { FINTECH } from '../theme/fintech';
+import { View, ViewStyle, Platform } from 'react-native';
+import { PressableScale } from './premium/PressableScale';
+import { tw } from '../theme/premium';
 
 interface CardProps {
   children: React.ReactNode;
   style?: ViewStyle;
+  className?: string;
   onPress?: () => void;
   noPadding?: boolean;
   glass?: boolean;
-  /** Destaque tipo painel de trading */
   elevated?: boolean;
 }
 
-export function Card({ children, style, onPress, noPadding, glass, elevated }: CardProps) {
-  const { theme } = useTheme();
-  const cardStyle = [
-    styles.card,
-    {
-      backgroundColor: glass
-        ? 'rgba(17, 17, 19, 0.72)'
-        : elevated
-          ? theme.backgroundSecondary
-          : theme.cardBg,
-      borderColor: glass ? FINTECH.borderMuted : theme.borderSubtle,
-      padding: noPadding ? 0 : 16,
-    },
-    style,
-  ];
+export function Card({
+  children,
+  style,
+  className = '',
+  onPress,
+  noPadding,
+  glass,
+  elevated,
+}: CardProps) {
+  const base = elevated ? tw.glassCardLg : glass ? tw.glassCard : tw.glassCard;
+  const pad = noPadding ? '' : ' p-4';
 
   if (onPress) {
     return (
-      <TouchableOpacity activeOpacity={0.75} onPress={onPress} style={cardStyle}>
+      <PressableScale
+        onPress={onPress}
+        className={`${base}${pad} ${className}`}
+        style={[
+          style,
+          Platform.OS === 'web'
+            ? ({ backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' } as object)
+            : undefined,
+        ]}
+      >
         {children}
-      </TouchableOpacity>
+      </PressableScale>
     );
   }
-  return <View style={cardStyle}>{children}</View>;
-}
 
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: FINTECH.radiusLg,
-    borderWidth: 1,
-    ...Platform.select({
-      web: { boxShadow: '0 0 0 1px rgba(255,255,255,0.03)' },
-      default: { elevation: 0 },
-    }),
-  },
-});
+  return (
+    <View
+      className={`${base}${pad} ${className}`}
+      style={[
+        style,
+        Platform.OS === 'web'
+          ? ({ backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' } as object)
+          : undefined,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}

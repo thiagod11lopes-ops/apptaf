@@ -49,9 +49,7 @@ import {
 } from '../taf/natacaoNota';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
-import { Check, ChevronLeft, Pause, Play, RotateCcw } from 'lucide-react-native';
-import { LandscapeProvaModal } from '../components/premium/LandscapeProvaModal';
-import { lockProvaLandscape, unlockProvaPortrait } from '../utils/provaLandscape';
+import { Check, ChevronLeft, Pause, Play } from 'lucide-react-native';
 import {
   aplicarTafTrialReducer,
   initialTrialTableState,
@@ -201,11 +199,6 @@ export default function AplicarTAFScreen() {
   const cronometroIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const permanenciaLimiteAtingidoRef = useRef(false);
 
-  const [promptPaisagemAberto, setPromptPaisagemAberto] = useState(false);
-  const [modoPaisagemAtivo, setModoPaisagemAtivo] = useState(false);
-  const [ativandoPaisagem, setAtivandoPaisagem] = useState(false);
-  const [webPaisagemSimulada, setWebPaisagemSimulada] = useState(false);
-
   const [resultadoPermanenciaLinhas, setResultadoPermanenciaLinhas] = useState<
     ResultadoPermanenciaOpcao[]
   >([]);
@@ -311,26 +304,6 @@ export default function AplicarTAFScreen() {
     cronometroPausadoTextoRef.current = z;
   }, []);
 
-  const liberarPaisagemProva = useCallback(() => {
-    void unlockProvaPortrait();
-    setModoPaisagemAtivo(false);
-    setWebPaisagemSimulada(false);
-    setPromptPaisagemAberto(false);
-    setAtivandoPaisagem(false);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      void unlockProvaPortrait();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (corridaEtapa !== 'tabela_corrida') {
-      liberarPaisagemProva();
-    }
-  }, [corridaEtapa, liberarPaisagemProva]);
-
   const iniciarCronometroCorrida = useCallback(() => {
     if (cronometroEstado !== 'inicial' && cronometroEstado !== 'finalizado') return;
     if (cronometroIntervalRef.current) {
@@ -347,29 +320,6 @@ export default function AplicarTAFScreen() {
     cronometroPausadoTextoRef.current = zero;
     cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
   }, [cronometroEstado, tickCronometroDisplay, formatMs]);
-
-  const solicitarIniciarProva = useCallback(() => {
-    if (tipoProva !== 'corrida' && tipoProva !== 'natacao') {
-      iniciarCronometroCorrida();
-      return;
-    }
-    setPromptPaisagemAberto(true);
-  }, [tipoProva, iniciarCronometroCorrida]);
-
-  const ativarPaisagemEIniciar = useCallback(async () => {
-    setAtivandoPaisagem(true);
-    try {
-      const locked = await lockProvaLandscape();
-      if (!locked && Platform.OS === 'web') {
-        setWebPaisagemSimulada(true);
-      }
-      setModoPaisagemAtivo(true);
-      setPromptPaisagemAberto(false);
-      iniciarCronometroCorrida();
-    } finally {
-      setAtivandoPaisagem(false);
-    }
-  }, [iniciarCronometroCorrida]);
 
   const pausarCronometroCorrida = useCallback(() => {
     if (cronometroEstado !== 'rodando' || cronometroInicioRef.current == null) return;
@@ -977,11 +927,10 @@ export default function AplicarTAFScreen() {
   }, []);
 
   const voltarMenuProvas = useCallback(() => {
-    liberarPaisagemProva();
     tipoProvaRef.current = null;
     setTipoProva(null);
     setCorridaEtapa('menu');
-  }, [liberarPaisagemProva]);
+  }, []);
 
   const voltarParticipantes = useCallback(() => {
     setCorridaEtapa('participantes');
@@ -1205,13 +1154,11 @@ export default function AplicarTAFScreen() {
   ]);
 
   const voltarDeTabelaParaNips = useCallback(() => {
-    liberarPaisagemProva();
     resetCronometroCorrida();
     setCorridaEtapa('nips');
-  }, [liberarPaisagemProva, resetCronometroCorrida]);
+  }, [resetCronometroCorrida]);
 
   const iniciarTaf = useCallback(() => {
-    liberarPaisagemProva();
     tipoProvaRef.current = null;
     resetCronometroCorrida();
     setMostrarProvas(true);
@@ -1227,7 +1174,7 @@ export default function AplicarTAFScreen() {
     setModalPermanenciaFinalizadaVisible(false);
     setErroPermanencia('');
     dispatchTrial({ type: 'resetAll' });
-  }, [liberarPaisagemProva, resetCronometroCorrida]);
+  }, [resetCronometroCorrida]);
 
   const tituloProvaCurta =
     tipoProva === 'natacao'
@@ -1256,21 +1203,6 @@ export default function AplicarTAFScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
-      <LandscapeProvaModal
-        visible={
-          promptPaisagemAberto &&
-          corridaEtapa === 'tabela_corrida' &&
-          (tipoProva === 'corrida' || tipoProva === 'natacao') &&
-          (cronometroEstado === 'inicial' || cronometroEstado === 'finalizado')
-        }
-        tituloProva={tituloProvaCurta}
-        loading={ativandoPaisagem}
-        onConfirm={() => {
-          void ativarPaisagemEIniciar();
-        }}
-        onCancel={() => setPromptPaisagemAberto(false)}
-      />
-
       <Modal
         visible={modalPermanenciaFinalizadaVisible}
         transparent
@@ -1672,16 +1604,6 @@ export default function AplicarTAFScreen() {
         ) : null}
 
         {mostrarProvas && corridaEtapa === 'tabela_corrida' ? (
-          <View
-            style={
-              webPaisagemSimulada && Platform.OS === 'web'
-                ? ([
-                    styles.landscapeWebShell,
-                    { backgroundColor: theme.background },
-                  ] as object)
-                : undefined
-            }
-          >
           <Card elevated style={styles.formCard}>
             <View style={styles.section}>
             <TouchableOpacity
@@ -1900,29 +1822,16 @@ export default function AplicarTAFScreen() {
 
             <View style={styles.cronometroBloco}>
               <View style={styles.iniciarCorridaRow}>
-                {(cronometroEstado === 'inicial' || cronometroEstado === 'finalizado') &&
-                !promptPaisagemAberto ? (
+                {(cronometroEstado === 'inicial' || cronometroEstado === 'finalizado') ? (
                   <TouchableOpacity
                     accessibilityLabel={`Iniciar ${tituloProvaCurta}`}
                     activeOpacity={0.85}
-                    onPress={solicitarIniciarProva}
+                    onPress={iniciarCronometroCorrida}
                     style={styles.btnIniciarCorridaCadastro}
                   >
                     <Text style={styles.btnIniciarCorridaTextCadastro}>
                       Iniciar {tituloProvaCurta}
                     </Text>
-                  </TouchableOpacity>
-                ) : null}
-                {modoPaisagemAtivo &&
-                (cronometroEstado === 'rodando' || cronometroEstado === 'pausado') ? (
-                  <TouchableOpacity
-                    accessibilityLabel="Voltar para modo retrato"
-                    activeOpacity={0.85}
-                    onPress={liberarPaisagemProva}
-                    style={styles.btnPaisagemRetrato}
-                  >
-                    <RotateCcw size={18} color={ui.iconStrong} strokeWidth={2.5} />
-                    <Text style={[styles.btnPaisagemRetratoText, { color: ui.text }]}>Retrato</Text>
                   </TouchableOpacity>
                 ) : null}
                 {(cronometroEstado === 'rodando' || cronometroEstado === 'pausado') ? (
@@ -2020,7 +1929,6 @@ export default function AplicarTAFScreen() {
             </View>
           </View>
           </Card>
-          </View>
         ) : null}
         </View>
       </ScrollView>
@@ -2339,37 +2247,6 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   cronometroBloco: {
     width: '100%',
     marginTop: 16,
-  },
-  landscapeWebShell: Platform.select({
-    web: {
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      width: '100vh',
-      height: '100vw',
-      zIndex: 800,
-      transform: 'rotate(90deg) translateY(-100vh)',
-      transformOrigin: 'top left',
-      overflow: 'auto',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-    } as object,
-    default: {},
-  }),
-  btnPaisagemRetrato: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-    borderColor: theme.border,
-    backgroundColor: ui.inputBg,
-  },
-  btnPaisagemRetratoText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   iniciarCorridaRow: {
     flexDirection: 'row',

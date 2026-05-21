@@ -28,8 +28,7 @@
     },
     "plugins": [
       "expo-sharing",
-      "expo-font",
-      "expo-screen-orientation"
+      "expo-font"
     ]
   }
 }

@@ -43,9 +43,10 @@ function AppRoot() {
 }
 
 function AppWithTheme() {
-  const { fontsLoaded } = useAppFonts();
+  const { fontsLoaded, fontError } = useAppFonts();
+  const ready = fontsLoaded || (Platform.OS === 'web' && !!fontError);
 
-  if (!fontsLoaded) {
+  if (!ready) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={PREMIUM.accentLight} />
@@ -54,7 +55,7 @@ function AppWithTheme() {
   }
 
   return (
-    <ThemeProvider fontsLoaded={fontsLoaded}>
+    <ThemeProvider fontsLoaded={fontsLoaded && !fontError}>
       <AppRoot />
     </ThemeProvider>
   );

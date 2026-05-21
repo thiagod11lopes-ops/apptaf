@@ -54,8 +54,7 @@ export function buildResumoAplicacaoHtml(
       const situacao = escapeHtml(
         r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : 'Aprovado'),
       );
-      const rubrica =
-        r.prova === 'natacao' ? celulaRubricaPdf(r) : '—';
+      const rubrica = celulaRubricaPdf(r);
       return `<tr>
         <td>${papel} ${r.corredor}</td>
         <td>${escapeHtml(r.nome)}</td>

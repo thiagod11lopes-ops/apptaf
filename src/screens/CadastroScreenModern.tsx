@@ -18,6 +18,14 @@ import { LabelNip } from '../components/LabelNip';
 import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
 import { addCadastro, deleteCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
+import {
+  notaCorridaParaPersistencia,
+  textoNotaCorridaFromCadastro,
+} from '../taf/corrida2400Nota';
+import {
+  notaNatacaoParaPersistencia,
+  textoNotaNatacaoFromCadastro,
+} from '../taf/natacaoNota';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -140,22 +148,41 @@ export default function CadastroScreenModern() {
     const id = editandoId ?? `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const anterior = editandoId ? cadastros.find((c) => c.id === editandoId) : undefined;
     const legacyTempo = anterior ? (anterior as CadastroItem & { tempo?: string }).tempo : undefined;
+    const tempoCorridaSalvo = (anterior?.tempoCorrida ?? legacyTempo ?? '').trim();
+    const tempoNatacaoSalvo = (anterior?.tempoNatacao ?? '').trim();
+    const dataNasc = dataNascimento.trim();
     const novoCadastro: CadastroItem = {
       id,
       // Reaplica a máscara/filtragem numérica para evitar que o corretor
       // injete texto (ex.: "Beliscar") no valor salvo.
       nip: nipFinal,
       nome: nome.trim(),
-      dataNascimento: dataNascimento.trim(),
+      dataNascimento: dataNasc,
       sexo,
       categoria,
       // Se ainda não selecionou o oficial, mantém vazio (mostra '-' na tabela).
       oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
       praca: categoria === 'Praças' ? pracaSelecionada : undefined,
-      tempoCorrida: anterior?.tempoCorrida ?? legacyTempo,
-      tempoNatacao: anterior?.tempoNatacao,
-      notaCorrida: anterior?.notaCorrida,
-      notaNatacao: anterior?.notaNatacao,
+      tempoCorrida: tempoCorridaSalvo || undefined,
+      tempoNatacao: tempoNatacaoSalvo || undefined,
+      notaCorrida: tempoCorridaSalvo
+        ? notaCorridaParaPersistencia(
+            textoNotaCorridaFromCadastro({
+              tempoCorrida: tempoCorridaSalvo,
+              dataNascimento: dataNasc,
+              sexo,
+            }),
+          )
+        : undefined,
+      notaNatacao: tempoNatacaoSalvo
+        ? notaNatacaoParaPersistencia(
+            textoNotaNatacaoFromCadastro({
+              tempoNatacao: tempoNatacaoSalvo,
+              dataNascimento: dataNasc,
+              sexo,
+            }),
+          )
+        : undefined,
       resultadoNatacao: anterior?.resultadoNatacao,
     };
 

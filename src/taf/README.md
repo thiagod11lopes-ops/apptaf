@@ -9,10 +9,11 @@
 
 ## Corrida 2400 m — notas (50 a 100), feminino e masculino
 
-`corrida2400Nota.ts` — tabelas por **faixa etária** (18–25 … 46–50 anos). Os limites numéricos coincidem com a norma em ambos os sexos (faixas “acima de X até Y” no feminino equivalem à mesma classificação por limite superior).
+`corrida2400Nota.ts` — **duas tabelas** (F e M), mesmas faixas etárias: 18–25, 26–33, 34–39, 40–45, 46–49 e **50 anos ou mais**. Tempos máximos de término em MM:SS por nota; tempo pior que o limite da nota 50 → **REPROVADO**. `sexo` indefinido usa a **tabela masculina**.
 
-- `textoNotaCorrida(tempoMs, idadeAnos, sexo?)` — `"100"`…`"50"`, `"REPROVADO"` ou `"—"`.
-- `notaCorrida2400(tempoMs, idadeAnos)` — resultado estruturado.
+- `textoNotaCorrida(tempoMs, idadeAnos, sexo)` — `"100"`…`"50"`, `"REPROVADO"` ou `"—"`.
+- `textoNotaCorridaFromCadastro({ tempoCorrida, dataNascimento, sexo })` — recalcula sempre pela norma (uso na planilha e ao salvar).
+- `notaCorrida2400(tempoMs, idadeAnos, sexo)` — resultado estruturado.
 
 Aliases legados: `textoNotaCorridaMasculina`, `notaCorrida2400Masculino`, `faixaEtariaCorridaMasculina`.
 

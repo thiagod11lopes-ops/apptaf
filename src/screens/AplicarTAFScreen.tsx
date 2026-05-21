@@ -30,9 +30,14 @@ import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
-import { textoNotaCorrida } from '../taf/corrida2400Nota';
-import { textoNotaNatacao } from '../taf/natacaoNota';
-import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
+import {
+  notaCorridaParaPersistencia,
+  textoNotaCorridaFromCadastro,
+} from '../taf/corrida2400Nota';
+import {
+  notaNatacaoParaPersistencia,
+  textoNotaNatacaoFromCadastro,
+} from '../taf/natacaoNota';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
 import { Check, ChevronLeft, Pause, Play } from 'lucide-react-native';
@@ -94,6 +99,20 @@ function buildRubricaSvgDataUrl(strokes: RubricaStroke[], width: number, height:
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+/** Situação no modal de rúbrica — corrida e natação (alinhada ao PDF). */
+function textoSituacaoRubricaModal(r: ResultadoCorridaItem): string {
+  if (r.reprovacaoTexto) return r.reprovacaoTexto;
+  if (r.notaTexto === 'REPROVADO') return 'Reprovado';
+  if (r.notaTexto != null && r.notaTexto !== '') return 'Aprovado';
+  return '—';
+}
+
+function textoNotaRubricaModal(r: ResultadoCorridaItem): string {
+  const t = r.notaTexto ?? r.noraTexto;
+  if (t == null || t === '') return '—';
+  return t;
+}
+
 export default function AplicarTAFScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -130,6 +149,10 @@ export default function AplicarTAFScreen() {
   const [modalTempoRegistradoVisible, setModalTempoRegistradoVisible] = useState(false);
   const [modalParcialAviso, setModalParcialAviso] = useState<string | null>(null);
   const pendingResultadosNavRef = useRef<ResultadoCorridaItem[] | null>(null);
+  /** Lista espelhada em estado para o modal de rúbrica re-renderizar ao mudar o participante. */
+  const [listaResultadosRubricaNatacao, setListaResultadosRubricaNatacao] = useState<
+    ResultadoCorridaItem[] | null
+  >(null);
   const [modalRubricaNatacaoVisible, setModalRubricaNatacaoVisible] = useState(false);
   const [indiceRubricaNatacao, setIndiceRubricaNatacao] = useState(0);
   const [, setRubricasNatacaoSvg] = useState<string[]>([]);
@@ -343,8 +366,14 @@ export default function AplicarTAFScreen() {
         out.push('—');
         continue;
       }
-      const idade = idadeFromDataNascimento(fb.dataNascimento);
-      out.push(textoNotaCorrida(ms, idade, fb.sexo));
+      const tempoStr = formatMsByModality('corrida', ms);
+      out.push(
+        textoNotaCorridaFromCadastro({
+          tempoCorrida: tempoStr,
+          dataNascimento: fb.dataNascimento,
+          sexo: fb.sexo,
+        }),
+      );
     }
     return out;
   }, [
@@ -365,8 +394,14 @@ export default function AplicarTAFScreen() {
         out.push('—');
         continue;
       }
-      const idade = idadeFromDataNascimento(fb.dataNascimento);
-      out.push(textoNotaNatacao(ms, idade, fb.sexo));
+      const tempoStr = formatMsByModality('natacao', ms);
+      out.push(
+        textoNotaNatacaoFromCadastro({
+          tempoNatacao: tempoStr,
+          dataNascimento: fb.dataNascimento,
+          sexo: fb.sexo,
+        }),
+      );
     }
     return out;
   }, [
@@ -532,16 +567,26 @@ export default function AplicarTAFScreen() {
       if (prova === 'corrida') {
         const fbOk = nipFeedbackLinhas[i];
         if (fbOk?.tipo === 'ok' && temposMilitaresMs[i] != null) {
-          const idade = idadeFromDataNascimento(fbOk.dataNascimento);
-          const t = textoNotaCorrida(temposMilitaresMs[i]!, idade, fbOk.sexo);
-          notaTexto = t === '—' ? undefined : t;
+          const tempoStr = formatMsByModality('corrida', temposMilitaresMs[i]!);
+          notaTexto = notaCorridaParaPersistencia(
+            textoNotaCorridaFromCadastro({
+              tempoCorrida: tempoStr,
+              dataNascimento: fbOk.dataNascimento,
+              sexo: fbOk.sexo,
+            }),
+          );
         }
       } else if (prova === 'natacao') {
         const fbOk = nipFeedbackLinhas[i];
         if (fbOk?.tipo === 'ok' && temposMilitaresMs[i] != null) {
-          const idade = idadeFromDataNascimento(fbOk.dataNascimento);
-          const t = textoNotaNatacao(temposMilitaresMs[i]!, idade, fbOk.sexo);
-          notaTexto = t === '—' ? undefined : t;
+          const tempoStr = formatMsByModality('natacao', temposMilitaresMs[i]!);
+          notaTexto = notaNatacaoParaPersistencia(
+            textoNotaNatacaoFromCadastro({
+              tempoNatacao: tempoStr,
+              dataNascimento: fbOk.dataNascimento,
+              sexo: fbOk.sexo,
+            }),
+          );
         }
       }
 
@@ -573,27 +618,30 @@ export default function AplicarTAFScreen() {
           continue;
         }
         const tempoStr = formatMsByModality(prova, r.tempoMs);
-        const idadeCad = idadeFromDataNascimento(busca.cadastro.dataNascimento);
         const atualizado: CadastroItemPersist =
           prova === 'natacao'
-            ? (() => {
-                const notaStr = textoNotaNatacao(r.tempoMs, idadeCad, busca.cadastro.sexo);
-                const notaNatacao = notaStr === '—' ? undefined : notaStr;
-                return {
-                  ...busca.cadastro,
-                  tempoNatacao: tempoStr,
-                  notaNatacao,
-                };
-              })()
-            : (() => {
-                const notaStr = textoNotaCorrida(r.tempoMs, idadeCad, busca.cadastro.sexo);
-                const notaCorrida = notaStr === '—' ? undefined : notaStr;
-                return {
-                  ...busca.cadastro,
-                  tempoCorrida: tempoStr,
-                  notaCorrida,
-                };
-              })();
+            ? {
+                ...busca.cadastro,
+                tempoNatacao: tempoStr,
+                notaNatacao: notaNatacaoParaPersistencia(
+                  textoNotaNatacaoFromCadastro({
+                    tempoNatacao: tempoStr,
+                    dataNascimento: busca.cadastro.dataNascimento,
+                    sexo: busca.cadastro.sexo,
+                  }),
+                ),
+              }
+            : {
+                ...busca.cadastro,
+                tempoCorrida: tempoStr,
+                notaCorrida: notaCorridaParaPersistencia(
+                  textoNotaCorridaFromCadastro({
+                    tempoCorrida: tempoStr,
+                    dataNascimento: busca.cadastro.dataNascimento,
+                    sexo: busca.cadastro.sexo,
+                  }),
+                ),
+              };
         await addCadastro(atualizado);
         const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);
         if (idx >= 0) listaAtual[idx] = atualizado;
@@ -607,14 +655,16 @@ export default function AplicarTAFScreen() {
           naoEncontrados.length > 0
             ? `Registro parcial: não foi possível localizar no cadastro: ${naoEncontrados.slice(0, 5).join(', ')}${naoEncontrados.length > 5 ? '…' : ''}.`
             : null;
-        if (prova === 'natacao' && resultados.length > 0) {
+        if ((prova === 'natacao' || prova === 'corrida') && resultados.length > 0) {
           setModalParcialAviso(avisoParcial);
           setRubricasNatacaoSvg(Array.from({ length: resultados.length }, () => ''));
           setIndiceRubricaNatacao(0);
           setErroRubricaNatacao('');
           setRubricaStrokes([]);
           setRubricaStrokeAtual([]);
-          pendingResultadosNavRef.current = resultados;
+          const copiaResultados = resultados.map((r) => ({ ...r }));
+          setListaResultadosRubricaNatacao(copiaResultados);
+          pendingResultadosNavRef.current = copiaResultados;
           setModalRubricaNatacaoVisible(true);
         } else {
           setModalParcialAviso(avisoParcial);
@@ -700,10 +750,11 @@ export default function AplicarTAFScreen() {
       rubricaCanvasWidth,
       RUBRICA_CANVAS_HEIGHT,
     );
-    const res = pendingResultadosNavRef.current;
+    const res = listaResultadosRubricaNatacao ?? pendingResultadosNavRef.current;
     if (!res || res.length === 0) {
       setModalRubricaNatacaoVisible(false);
       setIndiceRubricaNatacao(0);
+      setListaResultadosRubricaNatacao(null);
       setRubricasNatacaoSvg([]);
       setErroRubricaNatacao('');
       setRubricaStrokes([]);
@@ -721,16 +772,16 @@ export default function AplicarTAFScreen() {
       return next;
     });
     pendingResultadosNavRef.current = atualizados;
+    setListaResultadosRubricaNatacao(atualizados);
     const proximo = indiceRubricaNatacao + 1;
     if (proximo < atualizados.length) {
       setIndiceRubricaNatacao(proximo);
       setErroRubricaNatacao('');
-      setRubricaStrokes([]);
-      setRubricaStrokeAtual([]);
       return;
     }
     setModalRubricaNatacaoVisible(false);
     setIndiceRubricaNatacao(0);
+    setListaResultadosRubricaNatacao(null);
     setRubricasNatacaoSvg([]);
     setErroRubricaNatacao('');
     setRubricaStrokes([]);
@@ -743,12 +794,21 @@ export default function AplicarTAFScreen() {
     setModalParcialAviso(null);
   }, [
     indiceRubricaNatacao,
+    listaResultadosRubricaNatacao,
     modalParcialAviso,
     navigation,
     rubricaCanvasWidth,
     rubricaStrokeAtual,
     rubricaStrokes,
   ]);
+
+  /** Ao trocar de participante ou abrir o modal: limpa a área de assinatura para não misturar traços. */
+  useEffect(() => {
+    if (!modalRubricaNatacaoVisible) return;
+    setRubricaStrokes([]);
+    setRubricaStrokeAtual([]);
+    setErroRubricaNatacao('');
+  }, [indiceRubricaNatacao, modalRubricaNatacaoVisible]);
 
   const onChangeParticipantes = useCallback((text: string) => {
     const apenasDigitos = text.replace(/\D/g, '');
@@ -933,111 +993,112 @@ export default function AplicarTAFScreen() {
       >
         <View style={styles.modalTempoOverlay}>
           <View style={styles.modalRubricaCardCadastro}>
-            {pendingResultadosNavRef.current?.[indiceRubricaNatacao] ? (
-              <>
-                <Text style={styles.modalRubricaTituloCadastro}>
-                  Natação - Participante {indiceRubricaNatacao + 1} de{' '}
-                  {pendingResultadosNavRef.current?.length ?? 0}
-                </Text>
-                <Text style={styles.modalRubricaLinhaCadastro}>
-                  Modalidade: <Text style={styles.modalRubricaLinhaStrong}>Natação</Text>
-                </Text>
-                <Text style={styles.modalRubricaLinhaCadastro}>
-                  Nome:{' '}
-                  <Text style={styles.modalRubricaLinhaStrong}>
-                    {pendingResultadosNavRef.current[indiceRubricaNatacao].nome}
+            {(() => {
+              const lista = listaResultadosRubricaNatacao;
+              const participanteAtual = lista?.[indiceRubricaNatacao];
+              const totalLista = lista?.length ?? 0;
+              if (!participanteAtual) return null;
+              const modProva = participanteAtual.prova ?? 'corrida';
+              const tituloModalidade = modProva === 'natacao' ? 'Natação' : 'Corrida';
+              return (
+                <View key={`rubrica-participante-${indiceRubricaNatacao}`}>
+                  <Text style={styles.modalRubricaSubtituloCadastro}>
+                    Participante {indiceRubricaNatacao + 1} de {totalLista}
                   </Text>
-                </Text>
-                <Text style={styles.modalRubricaLinhaCadastro}>
-                  NIP:{' '}
-                  <Text style={styles.modalRubricaLinhaStrong}>
-                    {pendingResultadosNavRef.current[indiceRubricaNatacao].nip || '—'}
+                  <Text style={styles.modalRubricaLinhaCadastro}>
+                    Modalidade:{' '}
+                    <Text style={styles.modalRubricaLinhaStrong}>{tituloModalidade}</Text>
                   </Text>
-                </Text>
-                <Text style={styles.modalRubricaLinhaCadastro}>
-                  Tempo de prova:{' '}
-                  <Text style={styles.modalRubricaLinhaStrong}>
-                    {formatMsByModality(
-                      'natacao',
-                      pendingResultadosNavRef.current[indiceRubricaNatacao].tempoMs,
-                    )}
+                  <Text style={styles.modalRubricaLinhaCadastro}>
+                    Nome:{' '}
+                    <Text style={styles.modalRubricaLinhaStrong}>{participanteAtual.nome}</Text>
                   </Text>
-                </Text>
-                <Text style={styles.modalRubricaLinhaCadastro}>
-                  NORA:{' '}
-                  <Text style={styles.modalRubricaLinhaStrong}>
-                    {pendingResultadosNavRef.current[indiceRubricaNatacao].noraTexto || '—'}
+                  <Text style={styles.modalRubricaLinhaCadastro}>
+                    NIP:{' '}
+                    <Text style={styles.modalRubricaLinhaStrong}>
+                      {participanteAtual.nip || '—'}
+                    </Text>
                   </Text>
-                </Text>
-                <Text style={styles.modalRubricaLinhaCadastro}>
-                  Reprovação:{' '}
-                  <Text style={styles.modalRubricaLinhaStrong}>
-                    {pendingResultadosNavRef.current[indiceRubricaNatacao].reprovacaoTexto || '—'}
+                  <Text style={styles.modalRubricaLinhaCadastro}>
+                    Tempo de prova:{' '}
+                    <Text style={styles.modalRubricaLinhaStrong}>
+                      {formatMsByModality(modProva, participanteAtual.tempoMs)}
+                    </Text>
                   </Text>
-                </Text>
-                <Text style={styles.modalRubricaLegendaCadastro}>Rúbrica do candidato</Text>
-                <View
-                  style={styles.modalRubricaCanvasWrap}
-                  onLayout={(e) => {
-                    const w = e.nativeEvent.layout.width;
-                    if (w > 0) setRubricaCanvasWidth(w);
-                  }}
-                  onStartShouldSetResponder={() => true}
-                  onMoveShouldSetResponder={() => true}
-                  onResponderGrant={iniciarRubricaStroke}
-                  onResponderMove={moverRubricaStroke}
-                  onResponderRelease={finalizarRubricaStroke}
-                  onResponderTerminate={finalizarRubricaStroke}
-                >
-                  <Svg width="100%" height={RUBRICA_CANVAS_HEIGHT}>
-                    {rubricaStrokes.map((stroke, idx) => (
-                      <SvgPath
-                        key={`rubrica-${idx}`}
-                        d={buildStrokePath(stroke)}
-                        stroke="#111827"
-                        strokeWidth={2.5}
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    ))}
-                    {rubricaStrokeAtual.length > 0 ? (
-                      <SvgPath
-                        d={buildStrokePath(rubricaStrokeAtual)}
-                        stroke="#111827"
-                        strokeWidth={2.5}
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    ) : null}
-                  </Svg>
+                  <Text style={styles.modalRubricaLinhaCadastro}>
+                    NOTA:{' '}
+                    <Text style={styles.modalRubricaLinhaStrong}>
+                      {textoNotaRubricaModal(participanteAtual)}
+                    </Text>
+                  </Text>
+                  <Text style={styles.modalRubricaLinhaCadastro}>
+                    Situação:{' '}
+                    <Text style={styles.modalRubricaLinhaStrong}>
+                      {textoSituacaoRubricaModal(participanteAtual)}
+                    </Text>
+                  </Text>
+                  <Text style={styles.modalRubricaLegendaCadastro}>Rúbrica do candidato</Text>
+                  <View
+                    style={styles.modalRubricaCanvasWrap}
+                    onLayout={(e) => {
+                      const w = e.nativeEvent.layout.width;
+                      if (w > 0) setRubricaCanvasWidth(w);
+                    }}
+                    onStartShouldSetResponder={() => true}
+                    onMoveShouldSetResponder={() => true}
+                    onResponderGrant={iniciarRubricaStroke}
+                    onResponderMove={moverRubricaStroke}
+                    onResponderRelease={finalizarRubricaStroke}
+                    onResponderTerminate={finalizarRubricaStroke}
+                  >
+                    <Svg width="100%" height={RUBRICA_CANVAS_HEIGHT}>
+                      {rubricaStrokes.map((stroke, idx) => (
+                        <SvgPath
+                          key={`stroke-${indiceRubricaNatacao}-${idx}`}
+                          d={buildStrokePath(stroke)}
+                          stroke="#111827"
+                          strokeWidth={2.5}
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      ))}
+                      {rubricaStrokeAtual.length > 0 ? (
+                        <SvgPath
+                          d={buildStrokePath(rubricaStrokeAtual)}
+                          stroke="#111827"
+                          strokeWidth={2.5}
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      ) : null}
+                    </Svg>
+                  </View>
+                  <TouchableOpacity
+                    accessibilityLabel="Limpar rúbrica"
+                    activeOpacity={0.85}
+                    onPress={limparRubricaNatacaoAtual}
+                    style={styles.modalRubricaBtnSecundario}
+                  >
+                    <Text style={styles.modalRubricaBtnSecundarioText}>Limpar assinatura</Text>
+                  </TouchableOpacity>
+                  {erroRubricaNatacao ? (
+                    <Text style={styles.modalRubricaErroCadastro}>{erroRubricaNatacao}</Text>
+                  ) : null}
+                  <TouchableOpacity
+                    accessibilityLabel="Confirmar rúbrica do candidato"
+                    activeOpacity={0.85}
+                    onPress={confirmarRubricaNatacao}
+                    style={styles.modalTempoBtnPrimaryCadastro}
+                  >
+                    <Text style={styles.modalTempoBtnPrimaryTextCadastro}>
+                      {indiceRubricaNatacao + 1 < totalLista ? 'Próximo' : 'Finalizar'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  accessibilityLabel="Limpar rúbrica"
-                  activeOpacity={0.85}
-                  onPress={limparRubricaNatacaoAtual}
-                  style={styles.modalRubricaBtnSecundario}
-                >
-                  <Text style={styles.modalRubricaBtnSecundarioText}>Limpar assinatura</Text>
-                </TouchableOpacity>
-                {erroRubricaNatacao ? (
-                  <Text style={styles.modalRubricaErroCadastro}>{erroRubricaNatacao}</Text>
-                ) : null}
-                <TouchableOpacity
-                  accessibilityLabel="Confirmar rúbrica do candidato"
-                  activeOpacity={0.85}
-                  onPress={confirmarRubricaNatacao}
-                  style={styles.modalTempoBtnPrimaryCadastro}
-                >
-                  <Text style={styles.modalTempoBtnPrimaryTextCadastro}>
-                    {indiceRubricaNatacao + 1 < (pendingResultadosNavRef.current?.length ?? 0)
-                      ? 'Próximo'
-                      : 'Finalizar'}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            ) : null}
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -1726,11 +1787,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(17,24,39,0.10)',
   },
-  modalRubricaTituloCadastro: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#111827',
-    marginBottom: 12,
+  modalRubricaSubtituloCadastro: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6B7280',
+    marginBottom: 10,
   },
   modalRubricaLinhaCadastro: {
     fontSize: 13,

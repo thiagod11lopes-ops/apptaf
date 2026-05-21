@@ -14,6 +14,14 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Check, ChevronLeft, X } from 'lucide-react-native';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
 import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import {
+  notaCorridaParaPersistencia,
+  textoNotaCorridaFromCadastro,
+} from '../taf/corrida2400Nota';
+import {
+  notaNatacaoParaPersistencia,
+  textoNotaNatacaoFromCadastro,
+} from '../taf/natacaoNota';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import {
   formatMinutosSegundosInput,
@@ -154,8 +162,24 @@ export default function AplicacaoTAFScreen() {
       praca: c.praca,
       tempoCorrida: tc || undefined,
       tempoNatacao: tn || undefined,
-      notaCorrida: c.notaCorrida,
-      notaNatacao: c.notaNatacao,
+      notaCorrida: tc
+        ? notaCorridaParaPersistencia(
+            textoNotaCorridaFromCadastro({
+              tempoCorrida: tc,
+              dataNascimento: c.dataNascimento,
+              sexo: c.sexo,
+            }),
+          )
+        : undefined,
+      notaNatacao: tn
+        ? notaNatacaoParaPersistencia(
+            textoNotaNatacaoFromCadastro({
+              tempoNatacao: tn,
+              dataNascimento: c.dataNascimento,
+              sexo: c.sexo,
+            }),
+          )
+        : undefined,
       resultadoNatacao: c.resultadoNatacao,
     };
 

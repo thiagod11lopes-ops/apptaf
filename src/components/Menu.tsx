@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { FINTECH } from '../theme/fintech';
 
 interface MenuOption {
   id: string;
@@ -23,15 +25,20 @@ export function Menu({ options, visible = true }: Props) {
         <TouchableOpacity
           key={opt.id}
           onPress={opt.onPress}
-          activeOpacity={0.85}
+          activeOpacity={0.7}
           style={[
             styles.item,
-            styles.itemGlass,
-            Platform.OS === 'web' && styles.itemBlur,
+            {
+              backgroundColor: theme.cardBg,
+              borderColor: theme.borderSubtle,
+            },
           ]}
         >
-          <Text style={[styles.title, { color: '#FFFFFF' }]}>{opt.title}</Text>
-          <Text style={[styles.subtitle, { color: 'rgba(255,255,255,0.92)' }]}>{opt.subtitle}</Text>
+          <View style={styles.textBlock}>
+            <Text style={[styles.title, { color: theme.text }]}>{opt.title}</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{opt.subtitle}</Text>
+          </View>
+          <ChevronRight size={20} color={theme.textMuted} strokeWidth={2} />
         </TouchableOpacity>
       ))}
     </View>
@@ -39,47 +46,30 @@ export function Menu({ options, visible = true }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: {},
+  wrap: { gap: 8 },
   item: {
-    marginBottom: 12,
-    padding: 20,
-    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 0,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: FINTECH.radiusLg,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
-    ...(Platform.OS === 'web' && {
-      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-    } as any),
+    ...Platform.select({
+      web: { transition: 'background-color 150ms ease' } as object,
+      default: {},
+    }),
   },
-  itemGlass: {
-    backgroundColor: 'rgba(255, 255, 255, 0.42)',
-    borderColor: 'rgba(255, 255, 255, 0.7)',
-  },
-  itemBlur: Platform.select({
-    web: {
-      backdropFilter: 'blur(0.84px)',
-      WebkitBackdropFilter: 'blur(0.84px)',
-    } as any,
-    default: {},
-  }),
+  textBlock: { flex: 1, paddingRight: 8 },
   title: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.95)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
-    ...(Platform.OS === 'web' && { textShadow: '0 2px 6px rgba(0,0,0,0.95), 0 1px 3px rgba(0,0,0,0.9)' } as any),
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+    letterSpacing: 0.2,
   },
   subtitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-    ...(Platform.OS === 'web' && { textShadow: '0 2px 4px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,0.8)' } as any),
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
   },
 });

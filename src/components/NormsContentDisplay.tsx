@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput } from 'react-native';
-import { useTheme } from '../../contexts/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
+import { Search } from 'lucide-react-native';
+import { useTheme } from '../contexts/ThemeContext';
+import { FINTECH } from '../theme/fintech';
 
 type Props = {
   normContent: string;
@@ -13,38 +14,67 @@ export function NormsContentDisplay({ normContent }: Props) {
 
   const highlightedContent = useMemo(() => {
     if (!searchQuery.trim()) {
-      return <Text style={[styles.normText, { color: theme.text }]}>{normContent}</Text>;
+      return (
+        <Text style={[styles.normText, { color: theme.text, fontFamily: theme.monoFont }]}>
+          {normContent}
+        </Text>
+      );
     }
 
-    const regex = new RegExp(`(${searchQuery.trim()})`, 'gi');
+    const q = searchQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${q})`, 'gi');
     const parts = normContent.split(regex);
 
     return (
-      <Text style={[styles.normText, { color: theme.text }]}>
+      <Text style={[styles.normText, { color: theme.text, fontFamily: theme.monoFont }]}>
         {parts.map((part, index) =>
           regex.test(part) ? (
-            <Text key={index} style={styles.highlight}> {part} </Text>
+            <Text
+              key={index}
+              style={{
+                backgroundColor: theme.gainMuted,
+                color: theme.gain,
+                fontWeight: '700',
+              }}
+            >
+              {part}
+            </Text>
           ) : (
             part
           ),
         )}
       </Text>
     );
-  }, [normContent, searchQuery, theme.text]);
+  }, [normContent, searchQuery, theme]);
 
   return (
     <View style={styles.container}>
-      <View style={[styles.searchBar, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-        <Ionicons name="search" size={20} color={theme.textSecondary} style={styles.searchIcon} />
+      <View
+        style={[
+          styles.searchBar,
+          {
+            backgroundColor: theme.cardBg,
+            borderColor: theme.borderSubtle,
+          },
+        ]}
+      >
+        <Search size={18} color={theme.textMuted} style={styles.searchIcon} />
         <TextInput
-          style={[styles.searchInput, { color: theme.text, backgroundColor: theme.cardBg }]}
+          style={[
+            styles.searchInput,
+            { color: theme.text, fontFamily: theme.monoFont },
+          ]}
           placeholder="Buscar na norma..."
-          placeholderTextColor={theme.textSecondary}
+          placeholderTextColor={theme.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
       </View>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {highlightedContent}
       </ScrollView>
     </View>
@@ -60,27 +90,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: FINTECH.radiusMd,
     paddingHorizontal: 12,
     marginBottom: 16,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    height: 40,
-    fontSize: 16,
+    height: 44,
+    fontSize: 15,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 24,
   },
   normText: {
-    fontSize: 15,
-    lineHeight: 24,
-  },
-  highlight: {
-    backgroundColor: 'yellow',
-    fontWeight: 'bold',
+    fontSize: 13,
+    lineHeight: 22,
   },
 });

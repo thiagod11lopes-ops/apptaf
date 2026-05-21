@@ -1,12 +1,14 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Platform, Image, useWindowDimensions } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { useTheme } from '../contexts/ThemeContext';
 import { Menu } from '../components/Menu';
 import { Card } from '../components/Card';
+import { MonoValue } from '../components/fintech/MonoValue';
+import { FINTECH } from '../theme/fintech';
+import { Zap } from 'lucide-react-native';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -19,52 +21,69 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       setMenuVisible(true);
-    }, [])
+    }, []),
   );
 
   const goTo = useCallback(
     (screen: 'Normas' | 'Cadastro' | 'AplicacaoTAF' | 'AplicarTAF' | 'Estatisticas' | 'Configuracoes') => {
       setMenuVisible(false);
-      setTimeout(() => navigation.navigate(screen), 150);
+      setTimeout(() => navigation.navigate(screen), 120);
     },
-    [navigation]
+    [navigation],
   );
 
   const menuOptionsAntesRegistrar = [
-    { id: 'normas', title: 'Normas', subtitle: 'Documentos e normas organizados', onPress: () => goTo('Normas') },
-    { id: 'cadastro', title: 'Cadastro', subtitle: 'Cadastrar informações no sistema', onPress: () => goTo('Cadastro') },
-    { id: 'aplicacao-taf', title: 'Registrador de TAF', subtitle: 'Registro de dados dos testes', onPress: () => goTo('AplicacaoTAF') },
+    { id: 'normas', title: 'Normas', subtitle: 'CGCFN-108 · busca e tabelas', onPress: () => goTo('Normas') },
+    { id: 'cadastro', title: 'Cadastro', subtitle: 'Participantes e planilha', onPress: () => goTo('Cadastro') },
+    { id: 'aplicacao-taf', title: 'Registrador de TAF', subtitle: 'Histórico e filtros', onPress: () => goTo('AplicacaoTAF') },
   ];
 
   const menuOptionsDepoisRegistrar = [
-    { id: 'estatisticas', title: 'Estatísticas', subtitle: 'Análise e métricas dos dados', onPress: () => goTo('Estatisticas') },
-    { id: 'configuracoes', title: 'Configurações', subtitle: 'Ajustes gerais do sistema', onPress: () => goTo('Configuracoes') },
+    { id: 'estatisticas', title: 'Estatísticas', subtitle: 'Dashboard e métricas', onPress: () => goTo('Estatisticas') },
+    { id: 'configuracoes', title: 'Configurações', subtitle: 'Tema e preferências', onPress: () => goTo('Configuracoes') },
   ];
 
-  const gradientColors: [string, string] = [theme.gradient[0], theme.gradient[1]];
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }, Platform.OS !== 'web' && { width, height }]}>
-      <LinearGradient
-        colors={gradientColors}
-        style={styles.gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: theme.background },
+        Platform.OS !== 'web' && { width, height },
+      ]}
+    >
       <Image
         source={require('../../Fundo.png')}
-        style={[styles.fundo, { width, height }]}
+        style={[styles.fundo, { width, height, opacity: 0.35 }]}
         resizeMode="cover"
       />
+      <View style={[styles.overlay, { width, height }]} />
       <View style={styles.content}>
-        <Text style={styles.welcome}>TAF</Text>
-        <Text style={styles.subtitle}>Teste de Aptidão Física</Text>
+        <View style={styles.hero}>
+          <View style={[styles.badge, { backgroundColor: theme.gainMuted, borderColor: theme.gain }]}>
+            <Zap size={14} color={theme.gain} strokeWidth={2.5} />
+            <Text style={[styles.badgeText, { color: theme.gain }]}>TAF · Alta performance</Text>
+          </View>
+          <MonoValue size="xl">TAF</MonoValue>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Teste de Aptidão Física
+          </Text>
+        </View>
+
         {menuVisible ? (
           <>
             <Menu options={menuOptionsAntesRegistrar} />
-            <Card glass onPress={() => goTo('AplicarTAF')} style={styles.aplicarTafCard}>
-              <Text style={styles.aplicarTafTitle}>Aplicar TAF</Text>
-              <Text style={styles.aplicarTafSubtitle}>Aplicar o Teste de Aptidão Física</Text>
+            <Card onPress={() => goTo('AplicarTAF')} style={styles.ctaCard} elevated>
+              <View style={styles.ctaInner}>
+                <View>
+                  <Text style={[styles.ctaTitle, { color: theme.text }]}>Aplicar TAF</Text>
+                  <Text style={[styles.ctaSubtitle, { color: theme.textSecondary }]}>
+                    Corrida · Natação · Permanência
+                  </Text>
+                </View>
+                <View style={[styles.ctaPill, { backgroundColor: theme.primary }]}>
+                  <Text style={styles.ctaPillText}>Iniciar</Text>
+                </View>
+              </View>
             </Card>
             <Menu options={menuOptionsDepoisRegistrar} />
           </>
@@ -81,9 +100,6 @@ const styles = StyleSheet.create({
     minHeight: '100%',
     ...(Platform.OS === 'web' && { minHeight: '100vh' }),
   },
-  gradient: {
-    ...StyleSheet.absoluteFillObject,
-  },
   fundo: {
     position: 'absolute',
     top: 0,
@@ -91,64 +107,73 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.82)',
+  },
   content: {
     flex: 1,
-    paddingTop: Platform.OS === 'web' ? 24 : 28,
-    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'web' ? 32 : 48,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    maxWidth: 480,
+    width: '100%',
+    alignSelf: 'center',
   },
-  welcome: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginBottom: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 8,
-    ...(Platform.OS === 'web' && { textShadow: '0 3px 8px rgba(0,0,0,0.9), 0 1px 3px rgba(0,0,0,0.8)' }),
+  hero: {
+    alignItems: 'center',
+    marginBottom: 28,
+    gap: 6,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: FINTECH.radiusSm,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   subtitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.9)',
+    fontSize: 15,
+    fontWeight: '500',
     textAlign: 'center',
-    marginBottom: 32,
-    textShadowColor: 'rgba(0, 0, 0, 0.85)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
-    ...(Platform.OS === 'web' && { textShadow: '0 2px 6px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.7)' }),
   },
-  /** Card “Aplicar TAF” (sem ação por enquanto): mesmo visual do Menu. */
-  aplicarTafCard: {
+  ctaCard: {
     marginBottom: 12,
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
-    ...(Platform.OS === 'web' && {
-      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-    }),
+    paddingVertical: 4,
   },
-  aplicarTafTitle: {
-    fontSize: 18,
+  ctaInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ctaTitle: {
+    fontSize: 17,
     fontWeight: '800',
-    color: '#FFFFFF',
     marginBottom: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.95)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
-    ...(Platform.OS === 'web' && { textShadow: '0 2px 6px rgba(0,0,0,0.95), 0 1px 3px rgba(0,0,0,0.9)' }),
   },
-  aplicarTafSubtitle: {
+  ctaSubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  ctaPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: FINTECH.radiusMd,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  ctaPillText: {
+    color: '#FFF',
     fontSize: 14,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.92)',
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-    ...(Platform.OS === 'web' && { textShadow: '0 2px 4px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,0.8)' }),
+    fontWeight: '800',
   },
 });

@@ -1,17 +1,25 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
+import {
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  ViewStyle,
+  TextStyle,
+  Platform,
+} from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { FINTECH } from '../theme/fintech';
 
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'gain' | 'loss';
   loading?: boolean;
   disabled?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
-  /** Visual "vidro"/desfoque (compatível com web via backdrop-filter). */
-  glass?: boolean;
+  compact?: boolean;
 }
 
 export function Button({
@@ -22,39 +30,55 @@ export function Button({
   disabled = false,
   style,
   textStyle,
-  glass = false,
+  compact,
 }: ButtonProps) {
   const { theme } = useTheme();
   const isDisabled = disabled || loading;
-  const bg =
-    glass
-      ? variant === 'outline'
-        ? 'transparent'
-        : 'rgba(255, 255, 255, 0.18)'
-      : variant === 'primary'
-        ? theme.primary
-        : variant === 'outline'
-          ? 'transparent'
-          : theme.backgroundSecondary;
 
-  const borderWidth = glass ? 1 : variant === 'outline' ? 2 : 0;
-  const borderColor = glass ? 'rgba(255, 255, 255, 0.45)' : variant === 'outline' ? theme.primary : 'transparent';
-  const textColor = glass ? '#FFFFFF' : variant === 'primary' ? '#FFF' : theme.primary;
+  let bg = theme.primary;
+  let borderColor = 'transparent';
+  let textColor = '#FFFFFF';
+  const borderWidth = variant === 'outline' || variant === 'ghost' ? 1 : 0;
+
+  switch (variant) {
+    case 'secondary':
+      bg = theme.backgroundSecondary;
+      textColor = theme.text;
+      borderColor = theme.borderSubtle;
+      break;
+    case 'outline':
+      bg = 'transparent';
+      textColor = theme.text;
+      borderColor = theme.borderMuted;
+      break;
+    case 'ghost':
+      bg = 'transparent';
+      textColor = theme.textSecondary;
+      borderColor = theme.borderSubtle;
+      break;
+    case 'gain':
+      bg = theme.gainMuted;
+      textColor = theme.gain;
+      borderColor = theme.gain;
+      break;
+    case 'loss':
+      bg = theme.lossMuted;
+      textColor = theme.loss;
+      borderColor = theme.loss;
+      break;
+    default:
+      break;
+  }
 
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={isDisabled}
-      activeOpacity={0.85}
+      activeOpacity={0.7}
       style={[
         styles.btn,
-        { backgroundColor: bg, borderWidth, borderColor },
-        glass && Platform.OS === 'web'
-          ? ({
-              backdropFilter: 'blur(0.84px)',
-              WebkitBackdropFilter: 'blur(0.84px)',
-            } as any)
-          : null,
+        compact && styles.btnCompact,
+        { backgroundColor: bg, borderWidth, borderColor, opacity: isDisabled ? 0.45 : 1 },
         style,
       ]}
     >
@@ -70,11 +94,19 @@ export function Button({
 const styles = StyleSheet.create({
   btn: {
     paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    paddingHorizontal: 20,
+    borderRadius: FINTECH.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 48,
+    ...Platform.select({
+      web: { transition: 'opacity 150ms ease' } as object,
+    }),
   },
-  text: { fontSize: 16, fontWeight: '600' },
+  btnCompact: {
+    minHeight: 40,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  text: { fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
 });

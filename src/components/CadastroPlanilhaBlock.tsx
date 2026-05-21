@@ -9,6 +9,7 @@ import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { idadeDisplayFromDataNascimento } from '../utils/idadeFromDataNascimento';
 import { textoNotaCorridaFromCadastro } from '../taf/corrida2400Nota';
 import { textoNotaNatacaoFromCadastro } from '../taf/natacaoNota';
+import { formatTempoNatacaoParaExibicao } from '../taf/tafTimeFormat';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -507,7 +508,12 @@ export function CadastroPlanilhaBlock({
                           )}
                         </View>
                         <View style={[colSep(true), { flex: 1 }]}>
-                          {highlightText(tempos.natacao || '-', buscaLower, styles.tableCell, 1)}
+                          {highlightText(
+                            formatTempoNatacaoParaExibicao(tempos.natacao) || '-',
+                            buscaLower,
+                            styles.tableCell,
+                            1,
+                          )}
                         </View>
                         <View style={[colSep(false), { flex: 0.75 }]}>
                           {highlightText(

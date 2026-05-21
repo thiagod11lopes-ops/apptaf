@@ -4,7 +4,7 @@ import { formatMsByModality, parseTafPerformanceInput } from '../taf/tafTimeForm
 
 export type UseTafTimeFormatResult = {
   modality: TafModality;
-  /** Formata ms para exibição (MM:SS ou “N S” na natação). */
+  /** Formata ms para exibição (MM:SS). */
   formatMs: (ms: number) => string;
   /** Converte texto editado pelo utilizador → ms (ou null). */
   parseInput: (text: string) => number | null;

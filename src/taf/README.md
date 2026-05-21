@@ -5,7 +5,7 @@
 `tafTimeFormat.ts` — `formatMsByModality`, `parseTafPerformanceInput`, etc.
 
 - **Corrida:** exibição `MM:SS`.
-- **Natação:** exibição `N S` (segundos inteiros + espaço + `S` maiúsculo, ex.: `60 S`).
+- **Natação:** exibição `MM:SS` (igual à corrida; ex.: `01:30`).
 
 ## Corrida 2400 m — notas (50 a 100), feminino e masculino
 
@@ -21,7 +21,7 @@ Integração: **Aplicar TAF** (coluna Nota + `notaCorrida` no cadastro) e planil
 
 ## Natação 50 m — notas (50 a 100), feminino e masculino
 
-`natacaoNota.ts` — duas tabelas (F e M), tempos máximos em **MM:SS** por nota; faixas **18–30**, **31–40**, **41–49**, **50+**. `sexo` indefinido usa a **tabela masculina**. Entrada de tempo: `90 S` (cronômetro) ou `01:30` (MM:SS).
+`natacaoNota.ts` — duas tabelas (F e M), tempos máximos em **MM:SS** por nota; faixas **18–30**, **31–40**, **41–49**, **50+**. `sexo` indefinido usa a **tabela masculina**. Cronômetro e cadastro em **MM:SS**.
 
 - `textoNotaNatacao(tempoMs, idadeAnos, sexo)` — `"100"`…`"50"`, `"REPROVADO"` ou `"—"`.
 - `textoNotaNatacaoFromCadastro({ tempoNatacao, dataNascimento, sexo })` — recalcula pela norma.

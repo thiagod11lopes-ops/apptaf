@@ -130,7 +130,7 @@ export default function AplicarTAFScreen() {
     tipoProvaRef.current = tipoProva;
   }, [tipoProva]);
   const { formatMs, parseInput } = useTafTimeFormat(tipoProva);
-  /** Sempre o `formatMs` da modalidade atual (evita MM:SS no lugar de segundos na natação). */
+  /** Sempre o `formatMs` da modalidade atual (corrida e natação: MM:SS). */
   const formatMsDisplayRef = useRef(formatMs);
   formatMsDisplayRef.current = formatMs;
   const [corridaEtapa, setCorridaEtapa] = useState<CorridaEtapa>('menu');
@@ -200,9 +200,7 @@ export default function AplicarTAFScreen() {
     if (ms == null) {
       Alert.alert(
         'Tempo inválido',
-        tipoProva === 'natacao'
-          ? 'Use segundos inteiros (ex.: 66 ou 66 S).'
-          : 'Use MM:SS ou HH:MM:SS (ex.: 05:30 ou 01:05:30). Segundos entre 00 e 59.',
+        'Use MM:SS ou HH:MM:SS (ex.: 01:30 ou 01:05:30). Segundos entre 00 e 59.',
       );
       return false;
     }
@@ -264,8 +262,7 @@ export default function AplicarTAFScreen() {
     setTempoExibido(zero);
     setCronometroPausadoTexto(zero);
     cronometroPausadoTextoRef.current = zero;
-    const tickMs = tipoProvaRef.current === 'natacao' ? 100 : 1000;
-    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, tickMs);
+    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
   }, [cronometroEstado, tickCronometroDisplay, formatMs]);
 
   const pausarCronometroCorrida = useCallback(() => {
@@ -289,8 +286,7 @@ export default function AplicarTAFScreen() {
     cronometroInicioRef.current = Date.now();
     setCronometroEstado('rodando');
     tickCronometroDisplay();
-    const tickMs = tipoProvaRef.current === 'natacao' ? 100 : 1000;
-    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, tickMs);
+    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
   }, [cronometroEstado, tickCronometroDisplay, aplicarTempoCronometroPausado]);
 
   const pararCronometroCorrida = useCallback(() => {
@@ -1563,18 +1559,14 @@ export default function AplicarTAFScreen() {
                       onBlur={onBlurCronometroPausado}
                       selectTextOnFocus
                       accessibilityLabel="Editar tempo do cronômetro (pausado)"
-                      placeholder={tipoProva === 'natacao' ? 'Ex.: 60 S' : 'MM:SS'}
+                      placeholder="MM:SS"
                       placeholderTextColor="rgba(17,24,39,0.35)"
                       autoCorrect={false}
                       autoComplete="off"
                       spellCheck={false}
                       {...(Platform.OS === 'ios' ? { textContentType: 'none' as const } : {})}
                       keyboardType={
-                        tipoProva === 'natacao'
-                          ? 'number-pad'
-                          : Platform.OS === 'ios'
-                            ? 'numbers-and-punctuation'
-                            : 'default'
+                        Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'
                       }
                       style={[
                         styles.cronometroInputCadastro,

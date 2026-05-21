@@ -23,6 +23,7 @@ import {
   textoNotaNatacaoFromCadastro,
 } from '../taf/natacaoNota';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
+import { dataHojeBr } from '../utils/tafRegistro';
 import {
   formatMinutosSegundosInput,
   tempoMinutosSegundosValido,
@@ -151,6 +152,7 @@ export default function AplicacaoTAFScreen() {
 
     setErroTempos('');
 
+    const hoje = dataHojeBr();
     const atualizado: CadastroItemPersist = {
       id: c.id,
       nip: c.nip,
@@ -162,6 +164,8 @@ export default function AplicacaoTAFScreen() {
       praca: c.praca,
       tempoCorrida: tc || undefined,
       tempoNatacao: tn || undefined,
+      dataTafCorrida: tc ? hoje : c.dataTafCorrida,
+      dataTafNatacao: tn ? hoje : c.dataTafNatacao,
       notaCorrida: tc
         ? notaCorridaParaPersistencia(
             textoNotaCorridaFromCadastro({
@@ -272,7 +276,7 @@ export default function AplicacaoTAFScreen() {
             variant="aplicacaoTaf"
             cadastros={cadastros}
             cardGlassEnabled={cardGlassEnabled}
-            tableTitle="Cadastros"
+            tableTitle="Registros TAF"
             emptyMessageWhenNoData="Nenhum cadastro ainda. Cadastre militares na página de Cadastro."
             showActions={false}
           />

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform } from 'react-native';
-import { Pencil, Trash2 } from 'lucide-react-native';
+import { Pencil, Trash2, Search } from 'lucide-react-native';
 import { Card } from './Card';
 import { LabelNip } from './LabelNip';
 import { LabelSO } from './LabelSO';
@@ -10,6 +10,13 @@ import { idadeDisplayFromDataNascimento } from '../utils/idadeFromDataNascimento
 import { textoNotaCorridaFromCadastro } from '../taf/corrida2400Nota';
 import { textoNotaNatacaoFromCadastro } from '../taf/natacaoNota';
 import { formatTempoNatacaoParaExibicao } from '../taf/tafTimeFormat';
+import { TafPlanilhaFiltrosBar } from './TafPlanilhaFiltrosBar';
+import {
+  type FiltroModalidadeTaf,
+  temRegistroModalidade,
+  dataRegistroCoincide,
+  dataExibicaoRegistro,
+} from '../utils/tafRegistro';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -69,6 +76,8 @@ export function CadastroPlanilhaBlock({
   const [filtroCategoria, setFiltroCategoria] = useState<'Todos' | Categoria | ''>('Todos');
   const [filtroPostoGrad, setFiltroPostoGrad] = useState<'Todos' | string>('Todos');
   const [filtroBusca, setFiltroBusca] = useState<string>('');
+  const [filtroModalidade, setFiltroModalidade] = useState<FiltroModalidadeTaf>('Todos');
+  const [filtroData, setFiltroData] = useState<string>('');
 
   const postoGradOptions = useMemo(() => {
     const oficiais = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG'];
@@ -90,6 +99,13 @@ export function CadastroPlanilhaBlock({
   }, [filtroPostoGrad, postoGradOptions, filtroCategoria]);
 
   const cadastrosFiltrados = useMemo(() => {
+    if (isAplicacaoTaf) {
+      return cadastros.filter((c) => {
+        if (!temRegistroModalidade(c, filtroModalidade)) return false;
+        if (!dataRegistroCoincide(c, filtroModalidade, filtroData)) return false;
+        return true;
+      });
+    }
     return cadastros.filter((c) => {
       const categoriaOk = filtroCategoria === 'Todos' || c.categoria === filtroCategoria;
       if (!categoriaOk) return false;
@@ -98,10 +114,11 @@ export function CadastroPlanilhaBlock({
       const postoGrad = c.categoria === 'Oficiais' ? c.oficial || '' : c.praca || '';
       return postoGrad === filtroPostoGrad;
     });
-  }, [cadastros, filtroCategoria, filtroPostoGrad]);
+  }, [cadastros, filtroCategoria, filtroPostoGrad, isAplicacaoTaf, filtroModalidade, filtroData]);
 
   const cadastrosFiltradosComBusca = useMemo(() => {
     const q = filtroBusca.trim().toLowerCase();
+    if (isAplicacaoTaf && q.length > 0 && q.length < 3) return cadastrosFiltrados;
     if (!q) return cadastrosFiltrados;
 
     const qDigits = q.replace(/\D/g, '');
@@ -122,7 +139,8 @@ export function CadastroPlanilhaBlock({
       });
       const perm = permanenciaLabel(c);
       const gen = generoPlanilhaLabel(c);
-      const haystack = `${c.categoria} ${postoGrad} ${c.nip} ${c.nome} ${gen} masculino feminino homem mulher gênero genero ${c.dataNascimento} ${idadeTxt} ${tCorr} ${nCor} ${tNat} ${nNat} ${perm} permanência aprovado reprovado`
+      const dataReg = `${c.dataTafCorrida || ''} ${c.dataTafNatacao || ''} ${c.dataTafPermanencia || ''}`;
+      const haystack = `${c.categoria} ${postoGrad} ${c.nip} ${c.nome} ${gen} masculino feminino homem mulher gênero genero ${c.dataNascimento} ${idadeTxt} ${tCorr} ${nCor} ${tNat} ${nNat} ${perm} permanência corrida natação natacao aprovado reprovado ${dataReg}`
         .toLowerCase()
         .trim();
 
@@ -135,7 +153,11 @@ export function CadastroPlanilhaBlock({
     });
   }, [cadastrosFiltrados, filtroBusca]);
 
-  const buscaLower = useMemo(() => filtroBusca.trim().toLowerCase(), [filtroBusca]);
+  const buscaLower = useMemo(() => {
+    const q = filtroBusca.trim().toLowerCase();
+    if (isAplicacaoTaf && q.length > 0 && q.length < 3) return '';
+    return q;
+  }, [filtroBusca, isAplicacaoTaf]);
 
   const highlightText = useCallback(
     (text: string, queryLower: string, cellStyle?: any, numberOfLines: number = 1) => {
@@ -278,29 +300,34 @@ export function CadastroPlanilhaBlock({
         <Text style={styles.tableEmpty}>{emptyMessageWhenNoData}</Text>
       ) : (
         <View>
-          <View style={styles.searchWrap}>
-            <LabelSvgText
-              text="Buscar"
-              color="#374151"
-              fontSize={12}
-              fontWeight={800}
-              width={60}
-              height={18}
+          {isAplicacaoTaf ? (
+            <TafPlanilhaFiltrosBar
+              filtroBusca={filtroBusca}
+              onFiltroBuscaChange={setFiltroBusca}
+              filtroModalidade={filtroModalidade}
+              onFiltroModalidadeChange={setFiltroModalidade}
+              filtroData={filtroData}
+              onFiltroDataChange={setFiltroData}
             />
-            <TextInput
-              value={filtroBusca}
-              onChangeText={setFiltroBusca}
-              placeholder="Digite para filtrar..."
-              placeholderTextColor="rgba(17,24,39,0.35)"
-              style={[styles.searchInput, { borderColor: 'rgba(17,24,39,0.12)' }]}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              autoCapitalize="none"
-              textContentType="none"
-            />
-          </View>
+          ) : (
+            <View style={styles.searchWrap}>
+              <Search size={18} color="rgba(17,24,39,0.45)" strokeWidth={2.5} />
+              <TextInput
+                value={filtroBusca}
+                onChangeText={setFiltroBusca}
+                placeholder="Digite para filtrar..."
+                placeholderTextColor="rgba(17,24,39,0.35)"
+                style={[styles.searchInput, { borderColor: 'rgba(17,24,39,0.12)' }]}
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="off"
+                autoCapitalize="none"
+                textContentType="none"
+              />
+            </View>
+          )}
 
+          {!isAplicacaoTaf ? (
           <View style={styles.filtersWrap}>
             <View style={styles.filterBlock}>
               <LabelSvgText
@@ -399,6 +426,7 @@ export function CadastroPlanilhaBlock({
               </View>
             ) : null}
           </View>
+          ) : null}
 
           {cadastrosFiltradosComBusca.length === 0 ? (
             <Text style={styles.tableEmpty}>Nenhum resultado encontrado.</Text>
@@ -429,6 +457,9 @@ export function CadastroPlanilhaBlock({
                 </View>
                 {isAplicacaoTaf ? (
                   <>
+                    <View style={[colSep(true), { flex: 0.85 }]}>
+                      <LabelSvgText text="Data" color="#111827" fontSize={12} fontWeight={800} width={48} height={18} />
+                    </View>
                     <View style={[colSep(true), { flex: 1 }]}>
                       <LabelSvgText text="Corrida" color="#111827" fontSize={12} fontWeight={800} width={80} height={18} />
                     </View>
@@ -489,6 +520,14 @@ export function CadastroPlanilhaBlock({
                     </View>
                     {isAplicacaoTaf ? (
                       <>
+                        <View style={[colSep(true), { flex: 0.85 }]}>
+                          {highlightText(
+                            dataExibicaoRegistro(c, filtroModalidade),
+                            buscaLower,
+                            styles.tableCell,
+                            1,
+                          )}
+                        </View>
                         <View style={[colSep(true), { flex: 1 }]}>
                           {highlightText(tempos.corrida || '-', buscaLower, styles.tableCell, 1)}
                         </View>
@@ -629,18 +668,22 @@ const styles = StyleSheet.create({
 
   searchWrap: {
     marginBottom: 12,
-    gap: 8,
-  },
-  searchInput: {
-    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.12)',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 4,
     backgroundColor: 'rgba(255,255,255,0.70)',
+  },
+  searchInput: {
+    flex: 1,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#111827',
+    paddingVertical: 8,
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
   },
 

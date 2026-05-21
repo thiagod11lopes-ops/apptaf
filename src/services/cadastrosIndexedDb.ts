@@ -21,6 +21,10 @@ export type CadastroItemPersist = {
   resultadoPermanencia?: 'aprovado' | 'reprovado';
   /** Tempo registrado na permanência (MM:SS, ex.: 10:00) */
   tempoPermanencia?: string;
+  /** Data do registro TAF (DD/MM/AAAA) por modalidade */
+  dataTafCorrida?: string;
+  dataTafNatacao?: string;
+  dataTafPermanencia?: string;
 };
 
 const DB_NAME = 'taf_cadastros_db';

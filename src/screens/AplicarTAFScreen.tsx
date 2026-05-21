@@ -33,6 +33,7 @@ import {
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
+import { dataHojeBr } from '../utils/tafRegistro';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
 import {
   notaCorridaParaPersistencia,
@@ -653,11 +654,13 @@ export default function AplicarTAFScreen() {
           continue;
         }
         const tempoStr = formatMsByModality(prova, r.tempoMs);
+        const hoje = dataHojeBr();
         const atualizado: CadastroItemPersist =
           prova === 'natacao'
             ? {
                 ...busca.cadastro,
                 tempoNatacao: tempoStr,
+                dataTafNatacao: hoje,
                 notaNatacao: notaNatacaoParaPersistencia(
                   textoNotaNatacaoFromCadastro({
                     tempoNatacao: tempoStr,
@@ -669,6 +672,7 @@ export default function AplicarTAFScreen() {
             : {
                 ...busca.cadastro,
                 tempoCorrida: tempoStr,
+                dataTafCorrida: hoje,
                 notaCorrida: notaCorridaParaPersistencia(
                   textoNotaCorridaFromCadastro({
                     tempoCorrida: tempoStr,
@@ -992,10 +996,7 @@ export default function AplicarTAFScreen() {
     );
     resetCronometroCorrida();
     setCorridaEtapa('tabela_permanencia');
-    setTimeout(() => {
-      iniciarCronometroCorrida();
-    }, 80);
-  }, [nParticipantesConfirmado, nipFeedbackLinhas, resetCronometroCorrida, iniciarCronometroCorrida]);
+  }, [nParticipantesConfirmado, nipFeedbackLinhas, resetCronometroCorrida]);
 
   const togglePermanenciaResultado = useCallback(
     (index: number, opcao: 'aprovado' | 'reprovado') => {
@@ -1047,6 +1048,7 @@ export default function AplicarTAFScreen() {
           ...busca.cadastro,
           resultadoPermanencia: resultado,
           tempoPermanencia: tempoStr,
+          dataTafPermanencia: dataHojeBr(),
         };
         await addCadastro(atualizado);
         const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);

@@ -1,18 +1,19 @@
 import React, { useCallback } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
+import { useTheme } from '../contexts/ThemeContext';
 import { Menu } from '../components/Menu';
 import { Card } from '../components/Card';
 import { PressableScale } from '../components/premium/PressableScale';
-import { tw } from '../theme/premium';
 import { FileText, ChevronRight } from 'lucide-react-native';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
+  const { theme } = useTheme();
 
   useFocusEffect(useCallback(() => {}, []));
 
@@ -40,56 +41,92 @@ export default function HomeScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-white dark:bg-black select-none-touch"
-      contentContainerClassName="px-5 pt-6 pb-8"
+      style={[styles.scroll, { backgroundColor: theme.background }]}
+      contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View className="mb-8">
-        <View className="self-start px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 mb-4">
-          <Text className="text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold tracking-wider uppercase">
-            Premium · PWA
-          </Text>
+      <View style={styles.hero}>
+        <View style={[styles.badge, { backgroundColor: theme.accentMuted, borderColor: theme.primary }]}>
+          <Text style={[styles.badgeText, { color: theme.primary }]}>TAF · Premium</Text>
         </View>
-        <Text className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          TAF
-        </Text>
-        <Text className={`${tw.textMuted} mt-1 text-base`}>
+        <Text style={[styles.title, { color: theme.text }]}>TAF</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
           Teste de Aptidão Física
         </Text>
       </View>
 
-      <PressableScale onPress={() => goTo('AplicarTAF')} className="mb-6">
-        <Card className="p-5 border-indigo-500/20 dark:border-indigo-400/25">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 pr-3">
-              <Text className="text-xl font-bold text-zinc-900 dark:text-white">Aplicar TAF</Text>
-              <Text className={`${tw.textMuted} mt-1`}>
+      <PressableScale onPress={() => goTo('AplicarTAF')} style={styles.ctaWrap}>
+        <Card elevated>
+          <View style={styles.ctaRow}>
+            <View style={styles.ctaText}>
+              <Text style={[styles.ctaTitle, { color: theme.text }]}>Aplicar TAF</Text>
+              <Text style={[styles.ctaSub, { color: theme.textSecondary }]}>
                 Corrida · Natação · Permanência
               </Text>
             </View>
-            <View className="min-h-[48px] min-w-[48px] rounded-2xl bg-indigo-600 dark:bg-indigo-500 items-center justify-center shadow-md">
+            <View style={[styles.ctaBtn, { backgroundColor: theme.primary }]}>
               <ChevronRight size={22} color="#FFF" strokeWidth={2.5} />
             </View>
           </View>
         </Card>
       </PressableScale>
 
-      <Text className="text-xs font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-500 mb-3">
-        Acesso rápido
-      </Text>
+      <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>ACESSO RÁPIDO</Text>
       <Menu options={quickLinks} />
 
-      <PressableScale
-        onPress={() => goTo('Cadastro')}
-        className={`${tw.glassCard} mt-3 flex-row items-center min-h-[56px] px-4 py-4`}
-      >
-        <FileText size={20} color="#6366F1" strokeWidth={2} />
-        <View className="flex-1 ml-3">
-          <Text className={tw.textTitle}>Cadastro</Text>
-          <Text className={tw.textMuted}>Participantes e planilha</Text>
-        </View>
-        <ChevronRight size={20} color="#A1A1AA" />
+      <PressableScale onPress={() => goTo('Cadastro')} style={styles.linkWrap}>
+        <Card>
+          <View style={styles.linkRow}>
+            <FileText size={20} color={theme.primary} strokeWidth={2} />
+            <View style={styles.linkText}>
+              <Text style={[styles.linkTitle, { color: theme.text }]}>Cadastro</Text>
+              <Text style={[styles.linkSub, { color: theme.textSecondary }]}>
+                Participantes e planilha
+              </Text>
+            </View>
+            <ChevronRight size={20} color={theme.textMuted} />
+          </View>
+        </Card>
       </PressableScale>
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 32 },
+  hero: { marginBottom: 24, alignItems: 'center' },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  title: { fontSize: 32, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { fontSize: 15, marginTop: 4 },
+  ctaWrap: { marginBottom: 20 },
+  ctaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  ctaText: { flex: 1, paddingRight: 12 },
+  ctaTitle: { fontSize: 18, fontWeight: '800' },
+  ctaSub: { fontSize: 13, marginTop: 4 },
+  ctaBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 10,
+  },
+  linkWrap: { marginTop: 8 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', minHeight: 48 },
+  linkText: { flex: 1, marginLeft: 12 },
+  linkTitle: { fontSize: 16, fontWeight: '700' },
+  linkSub: { fontSize: 13, marginTop: 2 },
+});

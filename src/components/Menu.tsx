@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { PressableScale } from './premium/PressableScale';
-import { tw } from '../theme/premium';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface MenuOption {
   id: string;
@@ -17,22 +17,47 @@ interface Props {
 }
 
 export function Menu({ options, visible = true }: Props) {
+  const { theme, isDark } = useTheme();
   if (!visible) return null;
+
   return (
-    <View className="gap-2">
+    <View style={styles.wrap}>
       {options.map((opt) => (
         <PressableScale
           key={opt.id}
           onPress={opt.onPress}
-          className={`${tw.glassCard} flex-row items-center min-h-[56px] px-4 py-4 active:scale-[0.98]`}
+          style={[
+            styles.item,
+            {
+              backgroundColor: isDark ? 'rgba(24, 24, 27, 0.85)' : 'rgba(255, 255, 255, 0.9)',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+            },
+          ]}
         >
-          <View className="flex-1 pr-2">
-            <Text className={tw.textTitle}>{opt.title}</Text>
-            <Text className={`${tw.textMuted} mt-0.5`}>{opt.subtitle}</Text>
+          <View style={styles.textBlock}>
+            <Text style={[styles.title, { color: theme.text }]}>{opt.title}</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{opt.subtitle}</Text>
           </View>
-          <ChevronRight size={20} className="text-zinc-400" color="#A1A1AA" strokeWidth={2} />
+          <ChevronRight size={20} color={theme.textMuted} strokeWidth={2} />
         </PressableScale>
       ))}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  wrap: { gap: 8 },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 56,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  textBlock: { flex: 1, paddingRight: 8 },
+  title: { fontSize: 16, fontWeight: '700' },
+  subtitle: { fontSize: 13, marginTop: 2 },
+});

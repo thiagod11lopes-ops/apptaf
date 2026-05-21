@@ -11,7 +11,7 @@ export default function ConfiguracoesScreen() {
   const navigation = useNavigation();
 
   return (
-    <View className="flex-1 bg-white dark:bg-black select-none-touch">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <Header title="Configurações" onBack={() => navigation.goBack()} />
       <View className="p-4 gap-3">
         <Card elevated className="p-4">

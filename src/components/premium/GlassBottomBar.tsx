@@ -9,7 +9,7 @@ import {
   BarChart3,
   Settings,
 } from 'lucide-react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useNavigationState } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
 import { PressableScale } from './PressableScale';
@@ -29,12 +29,14 @@ const HIDDEN_ROUTES: (keyof RootStackParamList)[] = ['CadastrarResultados'];
 
 export function GlassBottomBar() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const route = useRoute();
+  const routeName = useNavigationState((state) => {
+    if (!state || state.index == null) return 'Home';
+    return (state.routes[state.index]?.name ?? 'Home') as keyof RootStackParamList;
+  });
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
 
-  const routeName = route.name as keyof RootStackParamList;
-  if (HIDDEN_ROUTES.includes(routeName)) {
+  if (!routeName || HIDDEN_ROUTES.includes(routeName)) {
     return null;
   }
 
@@ -42,7 +44,7 @@ export function GlassBottomBar() {
 
   const BarWrap = ({ children }: { children: React.ReactNode }) => (
     <View
-      className="absolute left-4 right-4 z-50 rounded-3xl overflow-hidden border border-white/10 dark:border-white/10 shadow-xl"
+      className="absolute left-4 right-4 z-50 rounded-3xl overflow-hidden border border-white/10 shadow-xl"
       style={{ bottom: bottomPad }}
     >
       {Platform.OS === 'ios' ? (
@@ -55,15 +57,15 @@ export function GlassBottomBar() {
         </BlurView>
       ) : (
         <View
-          className="bg-white/80 dark:bg-zinc-900/75"
-          style={
+          style={[
+            { backgroundColor: isDark ? 'rgba(24, 24, 27, 0.92)' : 'rgba(255, 255, 255, 0.92)' },
             Platform.OS === 'web'
               ? ({
                   backdropFilter: 'blur(20px)',
                   WebkitBackdropFilter: 'blur(20px)',
                 } as object)
-              : undefined
-          }
+              : undefined,
+          ]}
         >
           {children}
         </View>
@@ -85,13 +87,23 @@ export function GlassBottomBar() {
               <PressableScale
                 key={tab.id}
                 onPress={() => navigation.navigate(tab.id)}
-                className="items-center justify-center -mt-6"
+                className="items-center justify-center"
+                style={{ marginTop: -20 }}
                 accessibilityLabel={tab.label}
               >
-                <View className="w-14 h-14 rounded-2xl bg-indigo-600 dark:bg-indigo-500 items-center justify-center shadow-lg border border-white/20">
+                <View
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 16,
+                    backgroundColor: theme.primary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
                   <Icon size={26} color="#FFFFFF" strokeWidth={2.2} />
                 </View>
-                <Text className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 mt-1">
+                <Text style={{ fontSize: 10, fontWeight: '600', color: theme.primary, marginTop: 4 }}>
                   {tab.label}
                 </Text>
               </PressableScale>
@@ -102,14 +114,17 @@ export function GlassBottomBar() {
             <PressableScale
               key={tab.id}
               onPress={() => navigation.navigate(tab.id)}
-              className="flex-1 min-h-[48px] items-center justify-center py-2"
+              style={{ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 }}
               accessibilityLabel={tab.label}
             >
               <Icon size={22} color={color} strokeWidth={active ? 2.5 : 2} />
               <Text
-                className={`text-[10px] mt-1 font-medium ${
-                  active ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 dark:text-zinc-500'
-                }`}
+                style={{
+                  fontSize: 10,
+                  marginTop: 4,
+                  fontWeight: '500',
+                  color: active ? theme.primary : theme.textMuted,
+                }}
               >
                 {tab.label}
               </Text>

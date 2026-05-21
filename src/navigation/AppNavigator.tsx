@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Platform } from 'react-native';
+import { View, Platform, StyleSheet } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
@@ -60,7 +60,7 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      <View className="flex-1 bg-white dark:bg-black select-none-touch">
+      <View style={[styles.root, { backgroundColor: theme.background }]}>
         <Stack.Navigator
           initialRouteName="Home"
           screenOptions={{
@@ -80,7 +80,7 @@ export default function AppNavigator() {
           <Stack.Screen
             name="CadastrarResultados"
             component={CadastrarResultadosScreen}
-            options={{ contentStyle: { paddingBottom: 0 } }}
+            options={{ contentStyle: { paddingBottom: 0, backgroundColor: theme.background } }}
           />
           <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
           <Stack.Screen name="Configuracoes" component={ConfiguracoesScreen} />
@@ -90,3 +90,11 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+});

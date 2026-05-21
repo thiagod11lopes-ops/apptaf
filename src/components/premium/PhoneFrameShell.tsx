@@ -1,19 +1,17 @@
 import React, { useEffect } from 'react';
-import { View, Platform } from 'react-native';
+import { View, Platform, StyleSheet } from 'react-native';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { useTheme } from '../../contexts/ThemeContext';
+import { buildPremiumDarkTheme, buildPremiumLightTheme } from '../../theme/premium';
 
 type Props = {
   children: React.ReactNode;
 };
 
-/**
- * Mobile/PWA: 100% da tela.
- * Desktop web: frame de smartphone ultra-moderno centralizado.
- */
 export function PhoneFrameShell({ children }: Props) {
   const { usePhoneFrame, isWeb } = useDeviceLayout();
   const { isDark } = useTheme();
+  const bg = isDark ? buildPremiumDarkTheme().background : buildPremiumLightTheme().background;
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -31,31 +29,70 @@ export function PhoneFrameShell({ children }: Props) {
 
   if (!usePhoneFrame) {
     return (
-      <View className="flex-1 w-full h-full min-h-full bg-white dark:bg-black select-none-touch">
+      <View style={[styles.fill, { backgroundColor: bg }]} className="select-none-touch">
         {children}
       </View>
     );
   }
 
   return (
-    <View className="flex-1 min-h-screen w-full items-center justify-center bg-zinc-200 dark:bg-zinc-950 p-6 md:p-10 select-none-touch">
-      <View
-        className="relative w-full max-w-[400px] h-[85vh] max-h-[900px] rounded-[40px] border-4 border-zinc-800 ring-1 ring-zinc-700 shadow-2xl overflow-hidden bg-black"
-        style={{ aspectRatio: 9 / 19.5 }}
-      >
-        {/* Dynamic Island */}
-        <View
-          className="absolute top-3 left-0 right-0 z-50 items-center pointer-events-none"
-          accessibilityElementsHidden
-        >
-          <View className="w-[120px] h-[28px] rounded-full bg-black border border-white/5 shadow-lg" />
-        </View>
-
-        {/* Área do app */}
-        <View className="flex-1 w-full h-full pt-10 overflow-hidden bg-white dark:bg-black">
-          {children}
-        </View>
+    <View style={[styles.desktopOuter]} className="select-none-touch">
+      <View style={styles.phoneFrame}>
+        <View style={styles.dynamicIsland} />
+        <View style={[styles.phoneScreen, { backgroundColor: bg }]}>{children}</View>
       </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    minHeight: Platform.OS === 'web' ? ('100vh' as unknown as number) : undefined,
+  },
+  desktopOuter: {
+    flex: 1,
+    minHeight: Platform.OS === 'web' ? ('100vh' as unknown as number) : undefined,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#09090B',
+    padding: 24,
+  },
+  phoneFrame: {
+    width: '100%',
+    maxWidth: 400,
+    height: '85%',
+    maxHeight: 900,
+    borderRadius: 40,
+    borderWidth: 4,
+    borderColor: '#27272A',
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+      } as object,
+      default: {
+        elevation: 24,
+      },
+    }),
+  },
+  dynamicIsland: {
+    position: 'absolute',
+    top: 12,
+    alignSelf: 'center',
+    width: 120,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#000',
+    zIndex: 10,
+  },
+  phoneScreen: {
+    flex: 1,
+    paddingTop: 44,
+    overflow: 'hidden',
+  },
+});

@@ -19,11 +19,12 @@ Aliases legados: `textoNotaCorridaMasculina`, `notaCorrida2400Masculino`, `faixa
 
 Integração: **Aplicar TAF** (coluna Nota + `notaCorrida` no cadastro) e planilha do **Registrador de TAF**.
 
-## Natação — notas (50 a 100), feminino e masculino
+## Natação 50 m — notas (50 a 100), feminino e masculino
 
-`natacaoNota.ts` — duas tabelas (F e M), tempos em **segundos** como limites máximos por nota e faixa etária (18–25 … 46–50). `sexo` indefinido usa a **tabela masculina**.
+`natacaoNota.ts` — duas tabelas (F e M), tempos máximos em **MM:SS** por nota; faixas **18–30**, **31–40**, **41–49**, **50+**. `sexo` indefinido usa a **tabela masculina**. Entrada de tempo: `90 S` (cronômetro) ou `01:30` (MM:SS).
 
 - `textoNotaNatacao(tempoMs, idadeAnos, sexo)` — `"100"`…`"50"`, `"REPROVADO"` ou `"—"`.
+- `textoNotaNatacaoFromCadastro({ tempoNatacao, dataNascimento, sexo })` — recalcula pela norma.
 - `notaNatacao(tempoMs, idadeAnos, sexo)` — resultado estruturado.
 
 Aliases legados: `textoNotaNatacaoFeminina`, `notaNatacaoFeminina`.

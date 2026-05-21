@@ -1,84 +1,104 @@
 /**
- * Notas da prova de natação — feminino e masculino.
- * Tempos em segundos como limites máximos por nota (50–100); mesma lógica cumulativa
- * que corrida 2400 m. Sexo indefinido usa tabela masculina (alinhado ao cadastro padrão).
+ * Notas da prova de natação (50 m) — tabelas masculina e feminina.
+ * Tempos máximos em MM:SS por nota (50–100); tempo de chegada <= limite → nota.
+ * Faixas: 18–30, 31–40, 41–49, 50 anos ou mais.
  */
 
-import { parseTafPerformanceInput } from './tafTimeFormat';
+import { tempoStringParaSegundos } from '../utils/calcularIdade';
+import { msParaSegundosProvaInteiros } from '../utils/formatRaceTime';
 import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
+import { parseTafPerformanceInput } from './tafTimeFormat';
 
 const NOTAS_DESC = [100, 90, 80, 70, 60, 50] as const;
 
-/** Faixas etárias da natação (tabelas F/M próprias; independentes da corrida). */
-type FaixaEtariaNatacao =
-  | '18-25'
-  | '26-30'
-  | '31-35'
-  | '36-40'
-  | '41-45'
-  | '46-50';
-
-function faixaEtariaNatacao(idadeAnos: number): FaixaEtariaNatacao | null {
-  if (idadeAnos >= 18 && idadeAnos <= 25) return '18-25';
-  if (idadeAnos >= 26 && idadeAnos <= 30) return '26-30';
-  if (idadeAnos >= 31 && idadeAnos <= 35) return '31-35';
-  if (idadeAnos >= 36 && idadeAnos <= 40) return '36-40';
-  if (idadeAnos >= 41 && idadeAnos <= 45) return '41-45';
-  if (idadeAnos >= 46 && idadeAnos <= 50) return '46-50';
-  return null;
+/** Converte MM:SS da norma em segundos. */
+function mmssParaSegundos(mmss: string): number {
+  const sec = tempoStringParaSegundos(mmss);
+  if (sec == null) throw new Error(`Tempo inválido na norma de natação: ${mmss}`);
+  return sec;
 }
 
-/** Feminino — limites em segundos [100, 90, 80, 70, 60, 50]. */
-const TABELA_F_18_25 = [60, 65, 70, 75, 80, 85] as const;
-const TABELA_F_26_30 = [62, 67, 72, 77, 82, 87] as const;
-const TABELA_F_31_35 = [64, 69, 74, 79, 84, 89] as const;
-const TABELA_F_36_40 = [66, 71, 76, 81, 86, 91] as const;
-const TABELA_F_41_45 = [68, 73, 78, 83, 88, 93] as const;
-const TABELA_F_46_50 = [70, 75, 80, 85, 90, 95] as const;
+/**
+ * Linha da norma: tempos na ordem 50, 60, 70, 80, 90, 100 →
+ * limites internos em segundos [100, 90, 80, 70, 60, 50].
+ */
+function limitesNatacaoPorNota(
+  t50: string,
+  t60: string,
+  t70: string,
+  t80: string,
+  t90: string,
+  t100: string,
+): readonly number[] {
+  return [t100, t90, t80, t70, t60, t50].map(mmssParaSegundos) as readonly number[];
+}
 
-/** Masculino — limites em segundos [100, 90, 80, 70, 60, 50]. */
-const TABELA_M_18_25 = [50, 55, 60, 65, 70, 75] as const;
-const TABELA_M_26_30 = [52, 57, 62, 67, 72, 77] as const;
-const TABELA_M_31_35 = [54, 59, 64, 69, 74, 79] as const;
-const TABELA_M_36_40 = [56, 61, 66, 71, 76, 81] as const;
-const TABELA_M_41_45 = [58, 63, 68, 73, 78, 83] as const;
-const TABELA_M_46_50 = [60, 65, 70, 75, 80, 85] as const;
+export type FaixaEtariaNatacao = '18-30' | '31-40' | '41-49' | '50+';
 
-const FAIXA_TABELA_F: Record<FaixaEtariaNatacao, readonly number[]> = {
-  '18-25': TABELA_F_18_25,
-  '26-30': TABELA_F_26_30,
-  '31-35': TABELA_F_31_35,
-  '36-40': TABELA_F_36_40,
-  '41-45': TABELA_F_41_45,
-  '46-50': TABELA_F_46_50,
-};
+/** Masculino 50 m — limites em segundos [100, 90, 80, 70, 60, 50]. */
+const M_18_30 = limitesNatacaoPorNota('01:30', '01:20', '01:10', '01:00', '00:50', '00:40');
+const M_31_40 = limitesNatacaoPorNota('01:35', '01:25', '01:15', '01:05', '00:55', '00:45');
+const M_41_49 = limitesNatacaoPorNota('01:40', '01:30', '01:20', '01:10', '01:00', '00:50');
+const M_ACIMA_50 = limitesNatacaoPorNota('01:45', '01:35', '01:25', '01:15', '01:05', '00:55');
+
+/** Feminino 50 m — limites em segundos [100, 90, 80, 70, 60, 50]. */
+const F_18_30 = limitesNatacaoPorNota('02:20', '02:10', '02:00', '01:50', '01:40', '01:30');
+const F_31_40 = limitesNatacaoPorNota('02:25', '02:15', '02:05', '01:55', '01:45', '01:35');
+const F_41_49 = limitesNatacaoPorNota('02:30', '02:20', '02:10', '02:00', '01:50', '01:40');
+const F_ACIMA_50 = limitesNatacaoPorNota('02:35', '02:25', '02:15', '02:05', '01:55', '01:45');
 
 const FAIXA_TABELA_M: Record<FaixaEtariaNatacao, readonly number[]> = {
-  '18-25': TABELA_M_18_25,
-  '26-30': TABELA_M_26_30,
-  '31-35': TABELA_M_31_35,
-  '36-40': TABELA_M_36_40,
-  '41-45': TABELA_M_41_45,
-  '46-50': TABELA_M_46_50,
+  '18-30': M_18_30,
+  '31-40': M_31_40,
+  '41-49': M_41_49,
+  '50+': M_ACIMA_50,
 };
+
+const FAIXA_TABELA_F: Record<FaixaEtariaNatacao, readonly number[]> = {
+  '18-30': F_18_30,
+  '31-40': F_31_40,
+  '41-49': F_41_49,
+  '50+': F_ACIMA_50,
+};
+
+/** F = tabela feminina; M ou indefinido = tabela masculina. */
+export function sexoTabelaNatacao(sexo?: 'M' | 'F'): 'M' | 'F' {
+  return sexo === 'F' ? 'F' : 'M';
+}
+
+/**
+ * Faixa etária para natação 50 m.
+ * Abaixo de 18 anos retorna null (sem nota na UI).
+ */
+export function faixaEtariaNatacao(idadeAnos: number): FaixaEtariaNatacao | null {
+  if (idadeAnos < 18) return null;
+  if (idadeAnos <= 30) return '18-30';
+  if (idadeAnos <= 40) return '31-40';
+  if (idadeAnos <= 49) return '41-49';
+  return '50+';
+}
+
+function tabelaNatacao(sexo: 'M' | 'F' | undefined): Record<FaixaEtariaNatacao, readonly number[]> {
+  return sexoTabelaNatacao(sexo) === 'F' ? FAIXA_TABELA_F : FAIXA_TABELA_M;
+}
 
 export type NotaNatacaoResult =
   | { kind: 'nota'; valor: (typeof NOTAS_DESC)[number] }
   | { kind: 'reprovado' }
   | { kind: 'fora_tabela' };
 
-function tabelaNatacao(sexo: 'M' | 'F' | undefined): Record<FaixaEtariaNatacao, readonly number[]> {
-  return sexo === 'F' ? FAIXA_TABELA_F : FAIXA_TABELA_M;
-}
-
 /**
- * Nota de natação a partir do tempo (ms), idade e sexo (F = tabela feminina; M ou indefinido = masculina).
+ * Nota de natação a partir do tempo (ms), idade e sexo.
  */
-export function notaNatacao(tempoMs: number, idadeAnos: number, sexo: 'M' | 'F' | undefined): NotaNatacaoResult {
+export function notaNatacao(
+  tempoMs: number,
+  idadeAnos: number,
+  sexo: 'M' | 'F' | undefined,
+): NotaNatacaoResult {
   const faixa = faixaEtariaNatacao(idadeAnos);
   if (!faixa) return { kind: 'fora_tabela' };
 
-  const sec = tempoMs / 1000;
+  const sec = msParaSegundosProvaInteiros(tempoMs);
   if (!Number.isFinite(sec) || sec < 0) return { kind: 'reprovado' };
 
   const limites = tabelaNatacao(sexo)[faixa];
@@ -91,7 +111,7 @@ export function notaNatacao(tempoMs: number, idadeAnos: number, sexo: 'M' | 'F' 
 }
 
 /**
- * Texto para UI / cadastro: "100" … "50", "REPROVADO", ou "—" (idade fora da faixa / inválida).
+ * Texto para UI / cadastro: "100" … "50", "REPROVADO", ou "—".
  */
 export function textoNotaNatacao(
   tempoMs: number,

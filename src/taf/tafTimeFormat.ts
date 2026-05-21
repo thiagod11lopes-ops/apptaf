@@ -28,6 +28,9 @@ export function parseTafPerformanceInput(modality: TafModality, text: string): n
   if (modality === 'corrida') {
     return parseFormatoElapsedParaMs(t);
   }
+  /** Norma em MM:SS (ex.: 01:30) ou exibição do app em segundos (ex.: 90 S). */
+  const mmssMs = parseFormatoElapsedParaMs(t);
+  if (mmssMs != null) return mmssMs;
   let n = t
     .replace(/\s*segundos?\s*$/i, '')
     .replace(/\s*seg\s*$/i, '')

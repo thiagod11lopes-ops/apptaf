@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Image } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
@@ -7,8 +7,10 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Menu } from '../components/Menu';
 import { Card } from '../components/Card';
 import { PressableScale } from '../components/premium/PressableScale';
-import { BookOpen, ClipboardList, Users, ChevronRight, Activity } from 'lucide-react-native';
+import { BookOpen, ClipboardList, Users, ChevronRight } from 'lucide-react-native';
 import { PREMIUM } from '../theme/premium';
+
+const appLogo = require('../../assets/icon.png');
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -16,7 +18,6 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const navigation = useNavigation<Nav>();
-
   useFocusEffect(useCallback(() => {}, []));
 
   const goTo = useCallback(
@@ -58,7 +59,7 @@ export default function HomeScreen() {
     >
       <View style={styles.hero}>
         <View style={[styles.badge, { backgroundColor: theme.accentMuted }]}>
-          <Activity size={14} color={theme.text} strokeWidth={2.5} />
+          <Image source={appLogo} style={styles.badgeLogo} resizeMode="contain" accessibilityLabel="TAF" />
           <Text style={[ts.label, styles.badgeLabel, { color: '#FFFFFF' }]}>
             Sistema TAF
           </Text>
@@ -102,6 +103,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 16,
   },
+  badgeLogo: { width: 18, height: 18, borderRadius: 4 },
   badgeLabel: { textTransform: 'none', letterSpacing: 0.3, fontSize: 12 },
   heroTitle: { textAlign: 'center', width: '100%' },
   heroSub: { marginTop: 6, textAlign: 'center', width: '100%' },

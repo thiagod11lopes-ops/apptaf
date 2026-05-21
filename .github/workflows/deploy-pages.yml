@@ -35,6 +35,14 @@ jobs:
           EXPO_BASE_URL: /apptaf
         run: npm run build:web
 
+      - name: Manifest e metadados web
+        env:
+          EXPO_BASE_URL: /apptaf
+        run: node scripts/patch-web-dist.mjs
+
+      - name: Copiar ícone PWA
+        run: mkdir -p dist/assets && cp assets/icon.png dist/assets/icon.png
+
       - name: Enviar para GitHub Pages
         uses: actions/upload-pages-artifact@v3
         with:

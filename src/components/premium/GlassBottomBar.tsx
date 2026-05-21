@@ -11,6 +11,8 @@ import {
 import type { RootStackParamList } from '../../navigation/types';
 import { navigateTab } from '../../navigation/navigationRef';
 import { PressableScale } from './PressableScale';
+import { TabBarIcon } from './TabBarIcon';
+import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { useTheme } from '../../contexts/ThemeContext';
 import { PREMIUM } from '../../theme/premium';
 import { fontFamily } from '../../theme/typography';
@@ -34,6 +36,8 @@ type Props = {
 export function GlassBottomBar({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, fontsLoaded } = useTheme();
+  const { usePhoneFrame } = useDeviceLayout();
+  const compactTabs = usePhoneFrame;
 
   if (HIDDEN_ROUTES.includes(activeRoute)) {
     return null;
@@ -59,8 +63,10 @@ export function GlassBottomBar({ activeRoute }: Props) {
               boxShadow: theme.isDark
                 ? '0 8px 32px rgba(0,0,0,0.45)'
                 : '0 8px 28px rgba(15,23,42,0.12)',
+              zIndex: 1000,
+              isolation: 'isolate',
             } as object)
-          : { elevation: 16 },
+          : { elevation: 24 },
       ]}
       pointerEvents="box-none"
     >
@@ -85,16 +91,19 @@ export function GlassBottomBar({ activeRoute }: Props) {
                   active && { borderColor: activeRing },
                 ]}
               >
-                <Icon size={26} color="#FFFFFF" strokeWidth={2.2} />
+                <TabBarIcon tabId={tab.id} LucideIcon={Icon} size={26} color="#FFFFFF" strokeWidth={2.2} />
               </View>
-              <Text
-                style={[
-                  styles.tabLabel,
-                  { color: tabInk, fontFamily: labelFont, fontWeight: '700' },
-                ]}
-              >
-                {tab.label}
-              </Text>
+              {!compactTabs && (
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    { color: tabInk, fontFamily: labelFont, fontWeight: '700' },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {tab.label}
+                </Text>
+              )}
             </PressableScale>
           );
         }
@@ -111,19 +120,29 @@ export function GlassBottomBar({ activeRoute }: Props) {
             accessibilityLabel={tab.label}
             accessibilityState={{ selected: active }}
           >
-            <Icon size={22} color={tabInk} strokeWidth={active ? 2.5 : 2} />
-            <Text
-              style={[
-                styles.tabLabel,
-                {
-                  color: tabInk,
-                  fontFamily: labelFont,
-                  fontWeight: active ? '700' : '500',
-                },
-              ]}
-            >
-              {tab.label}
-            </Text>
+            <TabBarIcon
+              tabId={tab.id}
+              LucideIcon={Icon}
+              size={22}
+              color={tabInk}
+              strokeWidth={active ? 2.5 : 2}
+            />
+            {!compactTabs ? (
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color: tabInk,
+                    fontFamily: labelFont,
+                    fontWeight: active ? '700' : '500',
+                  },
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {tab.label}
+              </Text>
+            ) : null}
           </PressableScale>
         );
       })}
@@ -143,7 +162,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: PREMIUM.radiusXl,
     borderWidth: 1,
-    zIndex: 100,
+    zIndex: 1000,
+    overflow: 'hidden',
   },
   tab: {
     flex: 1,

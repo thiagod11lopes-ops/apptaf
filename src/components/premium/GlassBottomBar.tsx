@@ -20,11 +20,11 @@ import { fontFamily } from '../../theme/typography';
 type TabId = 'Home' | 'Cadastro' | 'AplicarTAF' | 'Estatisticas' | 'Resultados';
 
 const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
-  { id: 'Home', label: 'Início', icon: Home },
+  { id: 'Home', label: 'Iniciar', icon: Home },
   { id: 'Cadastro', label: 'Cadastro', icon: ClipboardList },
   { id: 'AplicarTAF', label: 'Aplicar', icon: PlayCircle },
-  { id: 'Resultados', label: 'Resultados', icon: ListChecks },
-  { id: 'Estatisticas', label: 'Stats', icon: BarChart3 },
+  { id: 'Resultados', label: 'Resultado', icon: ListChecks },
+  { id: 'Estatisticas', label: 'Estatísticas', icon: BarChart3 },
 ];
 
 const HIDDEN_ROUTES: (keyof RootStackParamList)[] = ['CadastrarResultados', 'Configuracoes'];
@@ -37,7 +37,7 @@ export function GlassBottomBar({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, fontsLoaded } = useTheme();
   const { usePhoneFrame } = useDeviceLayout();
-  const compactTabs = usePhoneFrame;
+  const labelStyle = usePhoneFrame ? styles.tabLabelCompact : styles.tabLabel;
 
   if (HIDDEN_ROUTES.includes(activeRoute)) {
     return null;
@@ -57,6 +57,7 @@ export function GlassBottomBar({ activeRoute }: Props) {
           bottom: bottomPad,
           backgroundColor: theme.cardBg,
           borderColor: theme.border,
+          paddingHorizontal: usePhoneFrame ? 6 : 10,
         },
         Platform.OS === 'web'
           ? ({
@@ -93,17 +94,16 @@ export function GlassBottomBar({ activeRoute }: Props) {
               >
                 <TabBarIcon tabId={tab.id} LucideIcon={Icon} size={26} color="#FFFFFF" strokeWidth={2.2} />
               </View>
-              {!compactTabs && (
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    { color: tabInk, fontFamily: labelFont, fontWeight: '700' },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {tab.label}
-                </Text>
-              )}
+              <Text
+                style={[
+                  labelStyle,
+                  { color: tabInk, fontFamily: labelFont, fontWeight: '700' },
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {tab.label}
+              </Text>
             </PressableScale>
           );
         }
@@ -114,6 +114,7 @@ export function GlassBottomBar({ activeRoute }: Props) {
             onPress={() => navigateTab(tab.id)}
             style={[
               styles.tab,
+              usePhoneFrame && styles.tabCompact,
               active && styles.tabActive,
               active && { borderColor: activeBorder, backgroundColor: theme.accentMuted },
             ]}
@@ -127,22 +128,20 @@ export function GlassBottomBar({ activeRoute }: Props) {
               color={tabInk}
               strokeWidth={active ? 2.5 : 2}
             />
-            {!compactTabs ? (
-              <Text
-                style={[
-                  styles.tabLabel,
-                  {
-                    color: tabInk,
-                    fontFamily: labelFont,
-                    fontWeight: active ? '700' : '500',
-                  },
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {tab.label}
-              </Text>
-            ) : null}
+            <Text
+              style={[
+                labelStyle,
+                {
+                  color: tabInk,
+                  fontFamily: labelFont,
+                  fontWeight: active ? '700' : '500',
+                },
+              ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {tab.label}
+            </Text>
           </PressableScale>
         );
       })}
@@ -178,7 +177,9 @@ const styles = StyleSheet.create({
   tabActive: {
     borderWidth: 2,
   },
-  tabLabel: { fontSize: 11, marginTop: 4 },
+  tabLabel: { fontSize: 11, marginTop: 4, textAlign: 'center', maxWidth: '100%' },
+  tabLabelCompact: { fontSize: 9, marginTop: 3, textAlign: 'center', maxWidth: '100%', letterSpacing: -0.2 },
+  tabCompact: { paddingHorizontal: 2, minWidth: 0 },
   centerTab: {
     alignItems: 'center',
     justifyContent: 'center',

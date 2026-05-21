@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, Text, Platform } from 'react-native';
+import { View, Text, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import {
   Home,
   ClipboardList,
@@ -9,9 +8,8 @@ import {
   BarChart3,
   Settings,
 } from 'lucide-react-native';
-import { useNavigation, useNavigationState } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../../navigation/AppNavigator';
+import type { RootStackParamList } from '../../navigation/types';
+import { navigateTab } from '../../navigation/navigationRef';
 import { PressableScale } from './PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -27,111 +25,117 @@ const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
 
 const HIDDEN_ROUTES: (keyof RootStackParamList)[] = ['CadastrarResultados'];
 
-export function GlassBottomBar() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const routeName = useNavigationState((state) => {
-    if (!state || state.index == null) return 'Home';
-    return (state.routes[state.index]?.name ?? 'Home') as keyof RootStackParamList;
-  });
+type Props = {
+  activeRoute: keyof RootStackParamList;
+};
+
+export function GlassBottomBar({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
 
-  if (!routeName || HIDDEN_ROUTES.includes(routeName)) {
+  if (HIDDEN_ROUTES.includes(activeRoute)) {
     return null;
   }
 
   const bottomPad = Math.max(insets.bottom, 12);
-
-  const BarWrap = ({ children }: { children: React.ReactNode }) => (
-    <View
-      className="absolute left-4 right-4 z-50 rounded-3xl overflow-hidden border border-white/10 shadow-xl"
-      style={{ bottom: bottomPad }}
-    >
-      {Platform.OS === 'ios' ? (
-        <BlurView
-          intensity={isDark ? 48 : 72}
-          tint={isDark ? 'dark' : 'light'}
-          style={{ width: '100%' }}
-        >
-          {children}
-        </BlurView>
-      ) : (
-        <View
-          style={[
-            { backgroundColor: isDark ? 'rgba(24, 24, 27, 0.92)' : 'rgba(255, 255, 255, 0.92)' },
-            Platform.OS === 'web'
-              ? ({
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                } as object)
-              : undefined,
-          ]}
-        >
-          {children}
-        </View>
-      )}
-    </View>
-  );
+  const barBg = isDark ? 'rgba(24, 24, 27, 0.94)' : 'rgba(255, 255, 255, 0.94)';
+  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
 
   return (
-    <BarWrap>
-      <View className="flex-row items-center justify-between px-2 py-2">
-        {TABS.map((tab) => {
-          const active = routeName === tab.id;
-          const isCenter = tab.id === 'AplicarTAF';
-          const Icon = tab.icon;
-          const color = active ? theme.primary : theme.textMuted;
+    <View
+      style={[
+        styles.bar,
+        {
+          bottom: bottomPad,
+          backgroundColor: barBg,
+          borderColor,
+        },
+        Platform.OS === 'web'
+          ? ({
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+            } as object)
+          : undefined,
+      ]}
+      pointerEvents="box-none"
+    >
+      {TABS.map((tab) => {
+        const active = activeRoute === tab.id;
+        const isCenter = tab.id === 'AplicarTAF';
+        const Icon = tab.icon;
+        const color = active ? theme.primary : theme.textMuted;
 
-          if (isCenter) {
-            return (
-              <PressableScale
-                key={tab.id}
-                onPress={() => navigation.navigate(tab.id)}
-                className="items-center justify-center"
-                style={{ marginTop: -20 }}
-                accessibilityLabel={tab.label}
-              >
-                <View
-                  style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 16,
-                    backgroundColor: theme.primary,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Icon size={26} color="#FFFFFF" strokeWidth={2.2} />
-                </View>
-                <Text style={{ fontSize: 10, fontWeight: '600', color: theme.primary, marginTop: 4 }}>
-                  {tab.label}
-                </Text>
-              </PressableScale>
-            );
-          }
-
+        if (isCenter) {
           return (
             <PressableScale
               key={tab.id}
-              onPress={() => navigation.navigate(tab.id)}
-              style={{ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 }}
+              onPress={() => navigateTab(tab.id)}
+              style={styles.centerTab}
               accessibilityLabel={tab.label}
             >
-              <Icon size={22} color={color} strokeWidth={active ? 2.5 : 2} />
-              <Text
-                style={{
-                  fontSize: 10,
-                  marginTop: 4,
-                  fontWeight: '500',
-                  color: active ? theme.primary : theme.textMuted,
-                }}
-              >
-                {tab.label}
-              </Text>
+              <View style={[styles.centerBtn, { backgroundColor: theme.primary }]}>
+                <Icon size={26} color="#FFFFFF" strokeWidth={2.2} />
+              </View>
+              <Text style={[styles.centerLabel, { color: theme.primary }]}>{tab.label}</Text>
             </PressableScale>
           );
-        })}
-      </View>
-    </BarWrap>
+        }
+
+        return (
+          <PressableScale
+            key={tab.id}
+            onPress={() => navigateTab(tab.id)}
+            style={styles.tab}
+            accessibilityLabel={tab.label}
+          >
+            <Icon size={22} color={color} strokeWidth={active ? 2.5 : 2} />
+            <Text style={[styles.tabLabel, { color: active ? theme.primary : theme.textMuted }]}>
+              {tab.label}
+            </Text>
+          </PressableScale>
+        );
+      })}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  bar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 24,
+    borderWidth: 1,
+    zIndex: 100,
+    ...Platform.select({
+      web: { boxShadow: '0 8px 32px rgba(0,0,0,0.2)' } as object,
+      default: { elevation: 12 },
+    }),
+  },
+  tab: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  tabLabel: { fontSize: 10, marginTop: 4, fontWeight: '600' },
+  centerTab: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -18,
+  },
+  centerBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerLabel: { fontSize: 10, marginTop: 4, fontWeight: '700' },
+});

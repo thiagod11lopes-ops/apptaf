@@ -1,9 +1,14 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Platform, StyleSheet } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
 import { GlassBottomBar } from '../components/premium/GlassBottomBar';
+import { navigationRef, getCurrentRouteName } from './navigationRef';
+import type { RootStackParamList } from './types';
+
+export type { ResultadoCorridaItem, RootStackParamList } from './types';
+
 import HomeScreen from '../screens/HomeScreen';
 import NormasScreen from '../screens/NormasScreen';
 import CadastroScreenModern from '../screens/CadastroScreenModern';
@@ -13,36 +18,17 @@ import EstatisticasScreen from '../screens/EstatisticasScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
 import CadastrarResultadosScreen from '../screens/CadastrarResultadosScreen';
 
-export type ResultadoCorridaItem = {
-  corredor: number;
-  nome: string;
-  tempoMs: number;
-  nip: string;
-  prova?: 'corrida' | 'natacao';
-  notaTexto?: string;
-  noraTexto?: string;
-  reprovacaoTexto?: string;
-  rubricaCandidato?: string;
-  rubricaCandidatoSvg?: string;
-};
-
-export type RootStackParamList = {
-  Home: undefined;
-  Normas: undefined;
-  Cadastro: undefined;
-  AplicacaoTAF: undefined;
-  AplicarTAF: undefined;
-  Estatisticas: undefined;
-  Configuracoes: undefined;
-  CadastrarResultados: { resultados: ResultadoCorridaItem[] };
-};
-
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const BOTTOM_BAR_PADDING = 96;
 
 export default function AppNavigator() {
   const { theme, isDark } = useTheme();
+  const [activeRoute, setActiveRoute] = useState<keyof RootStackParamList>('Home');
+
+  const syncRoute = useCallback(() => {
+    setActiveRoute(getCurrentRouteName());
+  }, []);
 
   const navTheme = {
     ...DefaultTheme,
@@ -59,13 +45,19 @@ export default function AppNavigator() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
-      <View style={[styles.root, { backgroundColor: theme.background }]}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      onReady={syncRoute}
+      onStateChange={syncRoute}
+    >
+      <View style={[styles.shell, { backgroundColor: theme.background }]}>
         <Stack.Navigator
           initialRouteName="Home"
           screenOptions={{
             headerShown: false,
             contentStyle: {
+              flex: 1,
               backgroundColor: theme.background,
               paddingBottom: BOTTOM_BAR_PADDING,
             },
@@ -80,19 +72,21 @@ export default function AppNavigator() {
           <Stack.Screen
             name="CadastrarResultados"
             component={CadastrarResultadosScreen}
-            options={{ contentStyle: { paddingBottom: 0, backgroundColor: theme.background } }}
+            options={{
+              contentStyle: { flex: 1, paddingBottom: 0, backgroundColor: theme.background },
+            }}
           />
           <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
           <Stack.Screen name="Configuracoes" component={ConfiguracoesScreen} />
         </Stack.Navigator>
-        <GlassBottomBar />
+        <GlassBottomBar activeRoute={activeRoute} />
       </View>
     </NavigationContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  shell: {
     flex: 1,
     width: '100%',
     height: '100%',

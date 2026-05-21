@@ -17,6 +17,10 @@ export type CadastroItemPersist = {
   notaNatacao?: string;
   /** Resultado da prova de natação (Registrador de TAF) */
   resultadoNatacao?: 'aprovado' | 'reprovado';
+  /** Resultado da prova de permanência (Aplicar TAF) */
+  resultadoPermanencia?: 'aprovado' | 'reprovado';
+  /** Tempo registrado na permanência (MM:SS, ex.: 10:00) */
+  tempoPermanencia?: string;
 };
 
 const DB_NAME = 'taf_cadastros_db';

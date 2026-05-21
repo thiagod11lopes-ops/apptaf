@@ -22,9 +22,9 @@ function temposCorridaNatacao(c: CadastroItemPersist) {
   };
 }
 
-/** Resultado do modal Permanência (persistido em `resultadoNatacao`). */
+/** Resultado da prova de permanência. */
 function permanenciaLabel(c: CadastroItemPersist): string {
-  const r = c.resultadoNatacao;
+  const r = c.resultadoPermanencia ?? c.resultadoNatacao;
   if (r === 'aprovado') return 'Aprovado';
   if (r === 'reprovado') return 'Reprovado';
   return '-';

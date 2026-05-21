@@ -26,6 +26,10 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
+import {
+  PermanenciaTafPanel,
+  type ResultadoPermanenciaOpcao,
+} from '../components/PermanenciaTafPanel';
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
@@ -59,9 +63,12 @@ function formatNipInput(value: string) {
 
 const MAX_PARTICIPANTES = 200;
 
-type CorridaEtapa = 'menu' | 'participantes' | 'nips' | 'tabela_corrida';
+/** Duração da prova de permanência — ao atingir, exibe modal de finalização. */
+const PERMANENCIA_DURACAO_MS = 10 * 60 * 1000;
 
-type TipoProvaTAF = 'corrida' | 'natacao';
+type CorridaEtapa = 'menu' | 'participantes' | 'nips' | 'tabela_corrida' | 'tabela_permanencia';
+
+type TipoProvaTAF = 'corrida' | 'natacao' | 'permanencia';
 
 /** Cronômetro da corrida: pode pausar e retomar antes de parar de vez. */
 type CronometroCorridaEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
@@ -129,7 +136,8 @@ export default function AplicarTAFScreen() {
   useLayoutEffect(() => {
     tipoProvaRef.current = tipoProva;
   }, [tipoProva]);
-  const { formatMs, parseInput } = useTafTimeFormat(tipoProva);
+  const modalityTime: TafModality = tipoProva === 'natacao' ? 'natacao' : 'corrida';
+  const { formatMs, parseInput } = useTafTimeFormat(modalityTime);
   /** Sempre o `formatMs` da modalidade atual (corrida e natação: MM:SS). */
   const formatMsDisplayRef = useRef(formatMs);
   formatMsDisplayRef.current = formatMs;
@@ -172,15 +180,45 @@ export default function AplicarTAFScreen() {
   /** Tempo final (ms) após “Parar corrida” — usado ao marcar última volta com corrida parada. */
   const tempoParadoMsRef = useRef<number | null>(null);
   const cronometroIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const permanenciaLimiteAtingidoRef = useRef(false);
+
+  const [resultadoPermanenciaLinhas, setResultadoPermanenciaLinhas] = useState<
+    ResultadoPermanenciaOpcao[]
+  >([]);
+  const [modalPermanenciaFinalizadaVisible, setModalPermanenciaFinalizadaVisible] =
+    useState(false);
+  const [erroPermanencia, setErroPermanencia] = useState('');
+
+  const finalizarPermanenciaPorTempo = useCallback(() => {
+    if (permanenciaLimiteAtingidoRef.current) return;
+    permanenciaLimiteAtingidoRef.current = true;
+    if (cronometroIntervalRef.current) {
+      clearInterval(cronometroIntervalRef.current);
+      cronometroIntervalRef.current = null;
+    }
+    cronometroInicioRef.current = null;
+    segmentoAcumuladoMsRef.current = PERMANENCIA_DURACAO_MS;
+    tempoParadoMsRef.current = PERMANENCIA_DURACAO_MS;
+    const fmt = formatMs(PERMANENCIA_DURACAO_MS);
+    setTempoExibido(fmt);
+    setCronometroPausadoTexto(fmt);
+    cronometroPausadoTextoRef.current = fmt;
+    setCronometroEstado('finalizado');
+    setModalPermanenciaFinalizadaVisible(true);
+  }, [formatMs]);
 
   const tickCronometroDisplay = useCallback(() => {
     if (cronometroInicioRef.current == null) return;
     const ms = segmentoAcumuladoMsRef.current + Date.now() - cronometroInicioRef.current;
+    if (tipoProvaRef.current === 'permanencia' && ms >= PERMANENCIA_DURACAO_MS) {
+      finalizarPermanenciaPorTempo();
+      return;
+    }
     setTempoExibido(formatMsDisplayRef.current(ms));
-  }, []);
+  }, [finalizarPermanenciaPorTempo]);
 
   const getElapsedRaceMs = useCallback((): number | null => {
-    const mod: TafModality = tipoProva === 'natacao' ? 'natacao' : 'corrida';
+    const mod: TafModality = modalityTime;
     if (cronometroEstado === 'rodando' && cronometroInicioRef.current != null) {
       return segmentoAcumuladoMsRef.current + Date.now() - cronometroInicioRef.current;
     }
@@ -193,7 +231,7 @@ export default function AplicarTAFScreen() {
       return tempoParadoMsRef.current;
     }
     return null;
-  }, [cronometroEstado, tipoProva]);
+  }, [cronometroEstado, modalityTime]);
 
   const aplicarTempoCronometroPausado = useCallback((): boolean => {
     const ms = parseInput(cronometroPausadoTexto.trim());
@@ -241,6 +279,7 @@ export default function AplicarTAFScreen() {
     cronometroInicioRef.current = null;
     segmentoAcumuladoMsRef.current = 0;
     tempoParadoMsRef.current = null;
+    permanenciaLimiteAtingidoRef.current = false;
     setCronometroEstado('inicial');
     const z = formatMsDisplayRef.current(0);
     setTempoExibido(z);
@@ -824,6 +863,12 @@ export default function AplicarTAFScreen() {
     setCorridaEtapa('participantes');
   }, []);
 
+  const abrirPermanencia = useCallback(() => {
+    tipoProvaRef.current = 'permanencia';
+    setTipoProva('permanencia');
+    setCorridaEtapa('participantes');
+  }, []);
+
   const voltarMenuProvas = useCallback(() => {
     tipoProvaRef.current = null;
     setTipoProva(null);
@@ -924,10 +969,114 @@ export default function AplicarTAFScreen() {
     dispatchTrial({
       type: 'prepararProva',
       nParticipantes: nParticipantesConfirmado,
-      tipoProva,
+      tipoProva: tipoProva === 'natacao' ? 'natacao' : 'corrida',
     });
     setCorridaEtapa('tabela_corrida');
   }, [resetCronometroCorrida, nParticipantesConfirmado, tipoProva]);
+
+  const prepararPermanencia = useCallback(() => {
+    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+      if (nipFeedbackLinhas[i]?.tipo !== 'ok') {
+        Alert.alert(
+          'NIPs pendentes',
+          'Confirme o NIP de todos os participantes (botão OK em cada linha).',
+        );
+        return;
+      }
+    }
+    permanenciaLimiteAtingidoRef.current = false;
+    setModalPermanenciaFinalizadaVisible(false);
+    setErroPermanencia('');
+    setResultadoPermanenciaLinhas(
+      Array.from({ length: nParticipantesConfirmado }, () => null),
+    );
+    resetCronometroCorrida();
+    setCorridaEtapa('tabela_permanencia');
+    setTimeout(() => {
+      iniciarCronometroCorrida();
+    }, 80);
+  }, [nParticipantesConfirmado, nipFeedbackLinhas, resetCronometroCorrida, iniciarCronometroCorrida]);
+
+  const togglePermanenciaResultado = useCallback(
+    (index: number, opcao: 'aprovado' | 'reprovado') => {
+      setErroPermanencia('');
+      setResultadoPermanenciaLinhas((prev) => {
+        const next = [...prev];
+        next[index] = prev[index] === opcao ? null : opcao;
+        return next;
+      });
+    },
+    [],
+  );
+
+  const onCadastrarPermanencia = useCallback(async () => {
+    const faltam = resultadoPermanenciaLinhas.findIndex(
+      (r) => r !== 'aprovado' && r !== 'reprovado',
+    );
+    if (faltam >= 0) {
+      setErroPermanencia('Marque Aprovado ou Reprovado para todos os participantes.');
+      return;
+    }
+    setErroPermanencia('');
+    setSalvandoResultadosCorrida(true);
+    const tempoMs =
+      tempoParadoMsRef.current ??
+      segmentoAcumuladoMsRef.current ??
+      PERMANENCIA_DURACAO_MS;
+    const tempoStr = formatMsByModality('corrida', tempoMs);
+
+    try {
+      let cadastrosInicial = await getAllCadastros();
+      const listaAtual = [...cadastrosInicial];
+      let ok = 0;
+      const naoEncontrados: string[] = [];
+
+      for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+        const nip = nipsParticipantes[i] ?? '';
+        let busca = buscarCadastroPorNomeOuNip(listaAtual, nip);
+        const fb = nipFeedbackLinhas[i];
+        if (busca.kind !== 'found' && fb?.tipo === 'ok' && fb.nomeMilitar.trim()) {
+          busca = buscarCadastroPorNomeOuNip(listaAtual, fb.nomeMilitar);
+        }
+        if (busca.kind !== 'found') {
+          naoEncontrados.push(fb?.tipo === 'ok' ? fb.nomeMilitar : `Participante ${i + 1}`);
+          continue;
+        }
+        const resultado = resultadoPermanenciaLinhas[i]!;
+        const atualizado: CadastroItemPersist = {
+          ...busca.cadastro,
+          resultadoPermanencia: resultado,
+          tempoPermanencia: tempoStr,
+        };
+        await addCadastro(atualizado);
+        const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);
+        if (idx >= 0) listaAtual[idx] = atualizado;
+        ok += 1;
+      }
+
+      if (ok > 0) {
+        const aviso =
+          naoEncontrados.length > 0
+            ? `Registro parcial: não localizado no cadastro: ${naoEncontrados.slice(0, 3).join(', ')}${naoEncontrados.length > 3 ? '…' : ''}.`
+            : null;
+        setModalParcialAviso(aviso);
+        setModalTempoRegistradoVisible(true);
+      } else {
+        Alert.alert(
+          'Nenhum registro salvo',
+          'Não foi possível localizar os militares no cadastro.',
+        );
+      }
+    } finally {
+      setSalvandoResultadosCorrida(false);
+    }
+  }, [
+    resultadoPermanenciaLinhas,
+    nParticipantesConfirmado,
+    nipsParticipantes,
+    nipFeedbackLinhas,
+    formatMs,
+  ]);
 
   const voltarDeTabelaParaNips = useCallback(() => {
     resetCronometroCorrida();
@@ -946,14 +1095,65 @@ export default function AplicarTAFScreen() {
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
     setNumeroVoltas('');
+    setResultadoPermanenciaLinhas([]);
+    setModalPermanenciaFinalizadaVisible(false);
+    setErroPermanencia('');
     dispatchTrial({ type: 'resetAll' });
   }, [resetCronometroCorrida]);
 
-  const tituloProvaCurta = tipoProva === 'natacao' ? 'Natação' : 'Corrida';
-  const labelAtleta = tipoProva === 'natacao' ? 'Nadador' : 'Corredor';
+  const tituloProvaCurta =
+    tipoProva === 'natacao'
+      ? 'Natação'
+      : tipoProva === 'permanencia'
+        ? 'Permanência'
+        : 'Corrida';
+  const labelAtleta =
+    tipoProva === 'natacao'
+      ? 'Nadador'
+      : tipoProva === 'permanencia'
+        ? 'Militar'
+        : 'Corredor';
+
+  const participantesPermanencia = useMemo(
+    () =>
+      Array.from({ length: nParticipantesConfirmado }, (_, index) => {
+        const fb = nipFeedbackLinhas[index];
+        return {
+          index,
+          nome: fb?.tipo === 'ok' ? fb.nomeMilitar : `Participante ${index + 1}`,
+        };
+      }),
+    [nParticipantesConfirmado, nipFeedbackLinhas],
+  );
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
+      <Modal
+        visible={modalPermanenciaFinalizadaVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalPermanenciaFinalizadaVisible(false)}
+        accessibilityViewIsModal
+      >
+        <View style={styles.modalTempoOverlay}>
+          <View style={styles.modalPermanenciaFinalCard}>
+            <Text style={styles.modalPermanenciaFinalTitulo}>PERMANÊNCIA FINALIZADA</Text>
+            <Text style={styles.modalPermanenciaFinalSub}>
+              O tempo de 10 minutos foi atingido. Continue marcando Aprovado ou Reprovado e
+              aplique o resultado quando terminar.
+            </Text>
+            <TouchableOpacity
+              accessibilityLabel="Fechar aviso de permanência finalizada"
+              activeOpacity={0.85}
+              onPress={() => setModalPermanenciaFinalizadaVisible(false)}
+              style={styles.modalTempoBtnPrimaryCadastro}
+            >
+              <Text style={styles.modalTempoBtnPrimaryTextCadastro}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={modalTempoRegistradoVisible}
         transparent
@@ -1154,7 +1354,7 @@ export default function AplicarTAFScreen() {
               <TouchableOpacity
                 accessibilityLabel="Permanência"
                 activeOpacity={0.85}
-                onPress={() => {}}
+                onPress={abrirPermanencia}
                 style={[styles.toggleBtn, styles.toggleBtnSpacing]}
               >
                 <Text style={styles.toggleBtnText}>Permanência</Text>
@@ -1279,11 +1479,49 @@ export default function AplicarTAFScreen() {
             <TouchableOpacity
               accessibilityLabel={`Preparar ${tituloProvaCurta}`}
               activeOpacity={0.85}
-              onPress={prepararProva}
+              onPress={tipoProva === 'permanencia' ? prepararPermanencia : prepararProva}
               style={styles.btnPrepararCorridaCadastro}
             >
               <Text style={styles.btnCadastroText}>Preparar {tituloProvaCurta}</Text>
             </TouchableOpacity>
+            </View>
+          </Card>
+        ) : null}
+
+        {mostrarProvas && corridaEtapa === 'tabela_permanencia' ? (
+          <Card glass={cardGlassEnabled} style={styles.formCard}>
+            <View style={styles.sectionCadastro}>
+              <TouchableOpacity
+                accessibilityLabel="Voltar para edição dos NIPs"
+                activeOpacity={0.85}
+                onPress={voltarDeTabelaParaNips}
+                style={styles.btnVoltarCadastro}
+              >
+                <Text style={styles.btnVoltarText}>← Voltar</Text>
+              </TouchableOpacity>
+              <Text style={styles.sectionTitleCadastro}>Permanência preparada</Text>
+              <PermanenciaTafPanel
+                participantes={participantesPermanencia}
+                resultados={resultadoPermanenciaLinhas}
+                onToggleResultado={togglePermanenciaResultado}
+                tempoExibido={tempoExibido}
+                cronometroEstado={cronometroEstado}
+                cronometroPausadoTexto={cronometroPausadoTexto}
+                onCronometroPausadoTextoChange={onCronometroPausadoTextoChange}
+                onBlurCronometroPausado={onBlurCronometroPausado}
+                onIniciarCronometro={iniciarCronometroCorrida}
+                onPararCronometro={pararCronometroCorrida}
+                onPausarCronometro={pausarCronometroCorrida}
+                onContinuarCronometro={continuarCronometroCorrida}
+                onAplicarResultado={() => {
+                  void onCadastrarPermanencia();
+                }}
+                salvando={salvandoResultadosCorrida}
+                erroAplicar={erroPermanencia}
+                inputBorder={inputBorder}
+                inputBg={inputBg}
+                inputTextColor={inputTextColor}
+              />
             </View>
           </Card>
         ) : null}
@@ -2109,5 +2347,33 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '900',
     color: '#15803D',
+  },
+  modalPermanenciaFinalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  modalPermanenciaFinalTitulo: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#111827',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  modalPermanenciaFinalSub: {
+    fontSize: 14,
+    color: 'rgba(17,24,39,0.65)',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
   },
 });

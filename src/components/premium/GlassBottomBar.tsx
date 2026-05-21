@@ -47,7 +47,6 @@ export function GlassBottomBar({ activeRoute }: Props) {
   const labelFont = fontFamily('medium', fontsLoaded);
   const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
   const activeBorder = theme.primary;
-  const activeRing = theme.isDark ? '#FFFFFF' : '#111827';
 
   return (
     <View
@@ -73,40 +72,7 @@ export function GlassBottomBar({ activeRoute }: Props) {
     >
       {TABS.map((tab) => {
         const active = activeRoute === tab.id;
-        const isCenter = tab.id === 'AplicarTAF';
         const Icon = tab.icon;
-        if (isCenter) {
-          return (
-            <PressableScale
-              key={tab.id}
-              onPress={() => navigateTab(tab.id)}
-              style={styles.centerTab}
-              accessibilityLabel={tab.label}
-              accessibilityState={{ selected: active }}
-            >
-              <View
-                style={[
-                  styles.centerBtn,
-                  { backgroundColor: theme.primary },
-                  active && styles.centerBtnActive,
-                  active && { borderColor: activeRing },
-                ]}
-              >
-                <TabBarIcon tabId={tab.id} LucideIcon={Icon} size={26} color="#FFFFFF" strokeWidth={2.2} />
-              </View>
-              <Text
-                style={[
-                  labelStyle,
-                  { color: tabInk, fontFamily: labelFont, fontWeight: '700' },
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {tab.label}
-              </Text>
-            </PressableScale>
-          );
-        }
 
         return (
           <PressableScale
@@ -180,21 +146,4 @@ const styles = StyleSheet.create({
   tabLabel: { fontSize: 11, marginTop: 4, textAlign: 'center', maxWidth: '100%' },
   tabLabelCompact: { fontSize: 9, marginTop: 3, textAlign: 'center', maxWidth: '100%', letterSpacing: -0.2 },
   tabCompact: { paddingHorizontal: 2, minWidth: 0 },
-  centerTab: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -20,
-  },
-  centerBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: PREMIUM.radiusLg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  centerBtnActive: {
-    borderWidth: 3,
-  },
 });

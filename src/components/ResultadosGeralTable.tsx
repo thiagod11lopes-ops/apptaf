@@ -14,11 +14,11 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   useReactTable,
+  type Header,
   type SortingState,
 } from '@tanstack/react-table';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { Card } from './Card';
 import { SearchHighlightText } from './SearchHighlightText';
 import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
 import { PREMIUM } from '../theme/premium';
@@ -34,6 +34,14 @@ const COL = {
 } as const;
 
 const columnHelper = createColumnHelper<ResultadoGeralItem>();
+
+/** Largura real do cabeçalho (grupos = soma das colunas folha). */
+function larguraHeader(header: Header<ResultadoGeralItem, unknown>): number {
+  if (header.subHeaders.length > 0) {
+    return header.subHeaders.reduce((sum, sub) => sum + sub.getSize(), 0);
+  }
+  return header.getSize();
+}
 
 function situacaoCor(situacao: string, theme: { gain: string; loss: string; textMuted: string }) {
   if (situacao === 'Aprovado') return theme.gain;
@@ -62,11 +70,6 @@ function StatusBadge({ status }: { status: 'Completo' | 'Parcial' }) {
   );
 }
 
-type TableMeta = {
-  buscaLower: string;
-  textColor: string;
-};
-
 type Props = {
   data: ResultadoGeralItem[];
   buscaLower: string;
@@ -75,7 +78,6 @@ type Props = {
 export function ResultadosGeralTable({ data, buscaLower }: Props) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
-  const t = theme.tokens;
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const cellBase = useMemo(
@@ -218,10 +220,9 @@ export function ResultadosGeralTable({ data, buscaLower }: Props) {
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    meta: { buscaLower, textColor: ui.text } satisfies TableMeta,
   });
 
-  const tableWidth = table.getTotalSize();
+  const tableWidth = table.getAllLeafColumns().reduce((sum, col) => sum + col.getSize(), 0);
   const headerGroups = table.getHeaderGroups();
   const isSubHeaderRow = (depth: number) => depth === headerGroups.length - 1;
 
@@ -234,14 +235,17 @@ export function ResultadosGeralTable({ data, buscaLower }: Props) {
   };
 
   return (
-    <Card
-      noPadding
-      elevated
-      style={
+    <View
+      style={[
+        styles.tableShell,
+        {
+          borderColor: theme.border,
+          backgroundColor: theme.surface,
+        },
         Platform.OS === 'web'
-          ? ([styles.tableCard, { boxShadow: t.shadowCard }] as const)
-          : styles.tableCard
-      }
+          ? ({ boxShadow: 'none', overflowX: 'hidden' } as object)
+          : null,
+      ]}
     >
       <ScrollView
         horizontal
@@ -249,11 +253,11 @@ export function ResultadosGeralTable({ data, buscaLower }: Props) {
         nestedScrollEnabled
         bounces={false}
         style={styles.tableScroll}
-        contentContainerStyle={styles.tableScrollContent}
+        contentContainerStyle={[styles.tableScrollContent, { width: tableWidth }]}
       >
         <View style={[styles.tableFrame, { width: tableWidth }]}>
           <LinearGradient
-            colors={[...t.gradientPrimaryBtn]}
+            colors={[...theme.tokens.gradientPrimaryBtn]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={[styles.headerBlock, { width: tableWidth }]}
@@ -271,7 +275,7 @@ export function ResultadosGeralTable({ data, buscaLower }: Props) {
                   const meta = header.column.columnDef.meta as
                     | { align?: 'left' | 'center'; groupStart?: boolean }
                     | undefined;
-                  const w = header.getSize();
+                  const w = larguraHeader(header);
                   const isPlaceholder = header.isPlaceholder;
                   const subRow = isSubHeaderRow(headerGroup.depth);
 
@@ -351,31 +355,35 @@ export function ResultadosGeralTable({ data, buscaLower }: Props) {
           })}
         </View>
       </ScrollView>
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tableCard: {
+  tableShell: {
     width: '100%',
-    alignSelf: 'stretch',
+    maxWidth: '100%',
+    alignSelf: 'flex-start',
     overflow: 'hidden',
     borderRadius: PREMIUM.radiusLg,
+    borderWidth: 1,
   },
   tableScroll: {
-    width: '100%',
+    maxWidth: '100%',
     overflow: 'hidden',
   },
   tableScrollContent: {
     flexGrow: 0,
+    flexShrink: 0,
   },
   tableFrame: {
     overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
   headerBlock: {
     overflow: 'hidden',
-    borderTopLeftRadius: PREMIUM.radiusLg - 2,
-    borderTopRightRadius: PREMIUM.radiusLg - 2,
+    borderTopLeftRadius: PREMIUM.radiusLg - 1,
+    borderTopRightRadius: PREMIUM.radiusLg - 1,
   },
   headerRow: {
     flexDirection: 'row',
@@ -390,7 +398,7 @@ const styles = StyleSheet.create({
   },
   headerCellWrap: {
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     overflow: 'hidden',
   },
   headerLabelRow: {
@@ -427,7 +435,7 @@ const styles = StyleSheet.create({
   },
   bodyCell: {
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     overflow: 'hidden',
   },
   colCenter: { alignItems: 'center' },

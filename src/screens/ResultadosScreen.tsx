@@ -67,15 +67,15 @@ export default function ResultadosScreen() {
       >
         <AppHeader
           title="Resultados"
-          subtitle="Histórico · consulta · pendências · resultado geral"
+          subtitle="Histórico · consulta · resultado geral · pendências"
         />
 
         <SubTabs
           options={[
             { id: 'historico', label: 'Histórico' },
             { id: 'consulta', label: 'Consultar' },
-            { id: 'pendencia', label: 'Pendência Parcial' },
             { id: 'geral', label: 'Resultado Geral' },
+            { id: 'pendencia', label: 'Pendência Parcial' },
           ]}
           value={aba}
           onChange={setAba}
@@ -136,10 +136,10 @@ export default function ResultadosScreen() {
           </>
         ) : aba === 'consulta' ? (
           <ResultadosConsultaPanel />
-        ) : aba === 'pendencia' ? (
-          <ResultadosPendenciaParcialPanel />
-        ) : (
+        ) : aba === 'geral' ? (
           <ResultadosGeralPanel />
+        ) : (
+          <ResultadosPendenciaParcialPanel />
         )}
       </ScrollView>
     </SafeAreaView>

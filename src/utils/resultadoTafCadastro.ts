@@ -121,6 +121,21 @@ export function listarPendenciasParciais(cadastros: CadastroItemPersist[]): Pend
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
+export type ResultadoGeralItem = ResultadoTafLinha & {
+  statusTaf: 'Completo' | 'Parcial';
+};
+
+/** Militares com TAF iniciado (ao menos uma modalidade), completo ou incompleto. */
+export function listarResultadosGeral(cadastros: CadastroItemPersist[]): ResultadoGeralItem[] {
+  return cadastros
+    .filter(cadastroComAlgumResultadoTaf)
+    .map((c) => ({
+      ...cadastroParaLinhaResultado(c),
+      statusTaf: cadastroComTafCompleto(c) ? ('Completo' as const) : ('Parcial' as const),
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
 export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTafLinha {
   const t = tempos(c);
   const temCorrida = !!(t.corrida || (c.notaCorrida || '').trim());

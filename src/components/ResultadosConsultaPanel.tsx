@@ -17,6 +17,7 @@ import { PressableScale } from './premium/PressableScale';
 import { ConfirmacaoExcluirResultadoModal } from './sismav/ConfirmacaoExcluirResultadoModal';
 import { addCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
 import { ProvaComColunaRubrica } from './ProvaComColunaRubrica';
+import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput, nipDigitos } from '../utils/nipFormat';
 import {
   cadastroComAlgumResultadoTaf,
@@ -96,6 +97,42 @@ export function ResultadosConsultaPanel() {
   useEffect(() => {
     void carregarBase();
   }, [carregarBase]);
+
+  const sincronizarCampoPar = useCallback(
+    (origem: 'nip' | 'nome', valor: string) => {
+      const v = valor.trim();
+      if (!v) {
+        if (origem === 'nip') setNome('');
+        else setNip('');
+        return;
+      }
+      const resultado = buscarCadastroPorNomeOuNip(todosCadastros, valor);
+      if (resultado.kind !== 'found') return;
+      if (origem === 'nip') {
+        setNome(resultado.cadastro.nome?.trim() ?? '');
+      } else {
+        setNip(formatNipInput(resultado.cadastro.nip ?? ''));
+      }
+    },
+    [todosCadastros],
+  );
+
+  const onChangeNip = useCallback(
+    (texto: string) => {
+      const formatado = formatNipInput(texto);
+      setNip(formatado);
+      sincronizarCampoPar('nip', formatado);
+    },
+    [sincronizarCampoPar],
+  );
+
+  const onChangeNome = useCallback(
+    (texto: string) => {
+      setNome(texto);
+      sincronizarCampoPar('nome', texto);
+    },
+    [sincronizarCampoPar],
+  );
 
   const executarBusca = useCallback(async () => {
     setAviso(null);
@@ -227,7 +264,7 @@ export function ResultadosConsultaPanel() {
           <LabelNip color={theme.text} fontSize={14} fontWeight={600} />
           <TextInput
             value={nip}
-            onChangeText={(t) => setNip(formatNipInput(t))}
+            onChangeText={onChangeNip}
             placeholder="00.0000.00"
             placeholderTextColor={theme.textMuted}
             style={inputStyle}
@@ -240,7 +277,7 @@ export function ResultadosConsultaPanel() {
           <Text style={[ts.label, styles.labelGap]}>Nome</Text>
           <TextInput
             value={nome}
-            onChangeText={setNome}
+            onChangeText={onChangeNome}
             placeholder="Nome do militar"
             placeholderTextColor={theme.textMuted}
             style={inputStyle}

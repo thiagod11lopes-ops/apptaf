@@ -16,6 +16,7 @@ import { SubTabs } from '../components/sismav/SubTabs';
 import { PressableScale } from '../components/premium/PressableScale';
 import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
 import { ResultadosPendenciaParcialPanel } from '../components/ResultadosPendenciaParcialPanel';
+import { ResultadosGeralPanel } from '../components/ResultadosGeralPanel';
 import type { RootStackParamList } from '../navigation/types';
 import {
   getAllSessoesAplicacao,
@@ -26,7 +27,7 @@ import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Resultados'>;
-type AbaResultados = 'historico' | 'consulta' | 'pendencia';
+type AbaResultados = 'historico' | 'consulta' | 'pendencia' | 'geral';
 
 export default function ResultadosScreen() {
   const { theme } = useTheme();
@@ -66,7 +67,7 @@ export default function ResultadosScreen() {
       >
         <AppHeader
           title="Resultados"
-          subtitle="Histórico · consulta · pendências parciais"
+          subtitle="Histórico · consulta · pendências · resultado geral"
         />
 
         <SubTabs
@@ -74,6 +75,7 @@ export default function ResultadosScreen() {
             { id: 'historico', label: 'Histórico' },
             { id: 'consulta', label: 'Consultar' },
             { id: 'pendencia', label: 'Pendência Parcial' },
+            { id: 'geral', label: 'Resultado Geral' },
           ]}
           value={aba}
           onChange={setAba}
@@ -134,8 +136,10 @@ export default function ResultadosScreen() {
           </>
         ) : aba === 'consulta' ? (
           <ResultadosConsultaPanel />
-        ) : (
+        ) : aba === 'pendencia' ? (
           <ResultadosPendenciaParcialPanel />
+        ) : (
+          <ResultadosGeralPanel />
         )}
       </ScrollView>
     </SafeAreaView>

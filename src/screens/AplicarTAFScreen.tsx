@@ -38,6 +38,7 @@ import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { addSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
+import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
@@ -836,8 +837,8 @@ export default function AplicarTAFScreen() {
       strokesProntos,
       rubricaCanvasWidth,
       RUBRICA_CANVAS_HEIGHT,
-      ui.stroke,
-      theme.isDark ? theme.cardBg : '#FFFFFF',
+      RUBRICA_COR_TRACO,
+      RUBRICA_COR_FUNDO,
     );
     const res = listaResultadosRubricaNatacao ?? pendingResultadosNavRef.current;
     if (!res || res.length === 0) {
@@ -893,9 +894,6 @@ export default function AplicarTAFScreen() {
     rubricaCanvasWidth,
     rubricaStrokeAtual,
     rubricaStrokes,
-    ui.stroke,
-    theme.cardBg,
-    theme.isDark,
   ]);
 
   /** Ao trocar de participante ou abrir o modal: limpa a área de assinatura para não misturar traços. */
@@ -1359,7 +1357,7 @@ export default function AplicarTAFScreen() {
                         <SvgPath
                           key={`stroke-${indiceRubricaNatacao}-${idx}`}
                           d={buildStrokePath(stroke)}
-                          stroke={ui.stroke}
+                          stroke={RUBRICA_COR_TRACO}
                           strokeWidth={2.5}
                           fill="none"
                           strokeLinecap="round"
@@ -1369,7 +1367,7 @@ export default function AplicarTAFScreen() {
                       {rubricaStrokeAtual.length > 0 ? (
                         <SvgPath
                           d={buildStrokePath(rubricaStrokeAtual)}
-                          stroke={ui.stroke}
+                          stroke={RUBRICA_COR_TRACO}
                           strokeWidth={2.5}
                           fill="none"
                           strokeLinecap="round"
@@ -2108,7 +2106,7 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     borderWidth: 1,
     borderColor: theme.border,
     borderRadius: 12,
-    backgroundColor: ui.inputBg,
+    backgroundColor: '#FFFFFF',
     height: RUBRICA_CANVAS_HEIGHT,
     overflow: 'hidden',
   },

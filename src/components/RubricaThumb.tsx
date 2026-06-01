@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Image, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { RUBRICA_NATIVA_ALTURA, RUBRICA_NATIVA_LARGURA } from '../utils/rubricaConstants';
+import { normalizarRubricaSvgDataUrl } from '../utils/rubricaSvgNormalize';
 
 export { RUBRICA_NATIVA_ALTURA, RUBRICA_NATIVA_LARGURA } from '../utils/rubricaConstants';
 
@@ -21,7 +22,8 @@ export function RubricaCell({
   const { width: screenW } = useWindowDimensions();
   const colMax = Math.min(maxWidth, Math.max(200, screenW * 0.42));
 
-  if (!svgUri?.trim()) {
+  const uri = normalizarRubricaSvgDataUrl(svgUri);
+  if (!uri) {
     return <Text style={styles.vazio}>—</Text>;
   }
 
@@ -32,7 +34,7 @@ export function RubricaCell({
   return (
     <View style={[styles.cell, { width: imgW, height: imgH }]}>
       <Image
-        source={{ uri: svgUri }}
+        source={{ uri }}
         style={{ width: imgW, height: imgH }}
         resizeMode="contain"
         accessibilityLabel="Rúbrica do candidato"

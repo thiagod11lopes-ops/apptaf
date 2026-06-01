@@ -1,8 +1,9 @@
 import { RUBRICA_NATIVA_ALTURA, RUBRICA_NATIVA_LARGURA } from './rubricaConstants';
+import { normalizarRubricaSvgDataUrl } from './rubricaSvgNormalize';
 
 /** HTML da coluna Rúbrica para PDF — sem fundo, imagem em resolução nativa. */
 export function celulaRubricaHtml(svgUri?: string | null): string {
-  const svg = svgUri?.trim() ?? '';
+  const svg = normalizarRubricaSvgDataUrl(svgUri) ?? '';
   if (svg.startsWith('data:image/svg')) {
     return `<img src="${svg}" alt="Rúbrica" class="rubrica-img" width="${RUBRICA_NATIVA_LARGURA}" height="${RUBRICA_NATIVA_ALTURA}"/>`;
   }

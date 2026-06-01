@@ -4,6 +4,16 @@ import {
 } from './rubricaConstants';
 import { rubricaSvgParaPdf } from './rubricaSvgNormalize';
 
+/** Tipografia da tabela nos PDFs (+50% fonte, −15% altura de linha vs. compacto anterior). */
+const PDF_TABELA_FONT_PX = 14;
+const PDF_TABELA_TH_FONT_PX = 12;
+const PDF_TABELA_LINE_HEIGHT = 0.98;
+const PDF_TABELA_PAD_V = 2;
+const PDF_TABELA_PAD_H = 4;
+const PDF_TABELA_TH_PAD_V = 3;
+const PDF_COL_RUBRICA_LINE_HEIGHT = 0.94;
+const PDF_COL_RUBRICA_MAX_EXTRA = 4;
+
 /** HTML da coluna Rúbrica para PDF — compacto, traço reforçado para boa leitura. */
 export function celulaRubricaHtml(svgUri?: string | null): string {
   const svg = rubricaSvgParaPdf(svgUri) ?? '';
@@ -16,12 +26,12 @@ export function celulaRubricaHtml(svgUri?: string | null): string {
 export const RUBRICA_PDF_STYLES = `
   td.col-rubrica {
     background: transparent !important;
-    padding: 2px 3px !important;
+    padding: ${Math.round(2 * 0.85)}px ${Math.round(3 * 0.85)}px !important;
     text-align: center;
     vertical-align: middle;
     width: ${RUBRICA_PDF_LARGURA + 14}px;
-    max-height: ${RUBRICA_PDF_ALTURA + 5}px;
-    line-height: 1.1;
+    max-height: ${Math.round((RUBRICA_PDF_ALTURA + PDF_COL_RUBRICA_MAX_EXTRA) * 0.85)}px;
+    line-height: ${PDF_COL_RUBRICA_LINE_HEIGHT};
   }
   .rubrica-img {
     width: ${RUBRICA_PDF_LARGURA}px;
@@ -39,27 +49,28 @@ export const RUBRICA_PDF_STYLES = `
   }
   .rubrica-vazio {
     color: #94a3b8;
-    font-size: 9px;
-    line-height: 1;
+    font-size: ${PDF_TABELA_FONT_PX}px;
+    line-height: ${PDF_COL_RUBRICA_LINE_HEIGHT};
   }
 `;
 
-/** Estilos de tabela compacta para PDFs com rúbrica (altura de linha ~metade). */
+/** Estilos de tabela para PDFs com rúbrica. */
 export const PDF_TABELA_COMPACTA_STYLES = `
-  table.resultados-taf { width: 100%; border-collapse: collapse; font-size: 9px; }
+  table.resultados-taf { width: 100%; border-collapse: collapse; font-size: ${PDF_TABELA_FONT_PX}px; }
   table.resultados-taf th,
   table.resultados-taf td {
     border: 1px solid #ccc;
-    padding: 2px 4px;
+    padding: ${PDF_TABELA_PAD_V}px ${PDF_TABELA_PAD_H}px;
     text-align: left;
     vertical-align: middle;
-    line-height: 1.15;
+    line-height: ${PDF_TABELA_LINE_HEIGHT};
   }
   table.resultados-taf th {
     background: #e8eef5;
     font-weight: 700;
-    padding: 3px 4px;
-    font-size: 8px;
+    padding: ${PDF_TABELA_TH_PAD_V}px ${PDF_TABELA_PAD_H}px;
+    font-size: ${PDF_TABELA_TH_FONT_PX}px;
+    line-height: ${PDF_TABELA_LINE_HEIGHT};
   }
   table.resultados-taf th.col-rubrica,
   table.resultados-taf td.col-rubrica {

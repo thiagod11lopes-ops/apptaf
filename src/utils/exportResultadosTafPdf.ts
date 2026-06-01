@@ -54,9 +54,9 @@ export function buildResultadosTafHtml(
   <title>Resultados TAF</title>
   <style>
     @page { size: A4 landscape; margin: 8mm; }
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 12px; }
-    h1 { font-size: 16px; margin: 0 0 4px; }
-    .sub { color: #444; margin-bottom: 12px; font-size: 11px; }
+    body { font-family: Arial, sans-serif; font-size: 17px; color: #111; padding: 12px; line-height: 1.15; }
+    h1 { font-size: 24px; margin: 0 0 4px; line-height: 1.15; }
+    .sub { color: #444; margin-bottom: 12px; font-size: 17px; line-height: 1.15; }
     ${PDF_TABELA_COMPACTA_STYLES}
     ${RUBRICA_PDF_STYLES}
   </style>

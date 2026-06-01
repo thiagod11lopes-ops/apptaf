@@ -80,10 +80,10 @@ export function buildResumoAplicacaoHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>${escapeHtml(titulo)}</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #111827; }
-    h1 { font-size: 18px; margin: 0 0 8px; }
-    .meta { font-size: 12px; color: #6B7280; margin-bottom: 16px; }
-    .intro { font-size: 13px; margin-bottom: 20px; line-height: 1.5; color: #374151; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #111827; line-height: 1.15; }
+    h1 { font-size: 27px; margin: 0 0 8px; line-height: 1.15; }
+    .meta { font-size: 18px; color: #6B7280; margin-bottom: 16px; line-height: 1.15; }
+    .intro { font-size: 20px; margin-bottom: 20px; line-height: 1.28; color: #374151; }
     .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
     ${PDF_TABELA_COMPACTA_STYLES}
     ${RUBRICA_PDF_STYLES}

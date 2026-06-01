@@ -80,6 +80,48 @@ export async function addSessaoAplicacao(
   return id;
 }
 
+export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicacaoTaf | null> {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(id);
+      req.onsuccess = () => resolve((req.result as SessaoAplicacaoTaf) ?? null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const req = tx.objectStore(STORE_NAME).put(sessao);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // silencioso — mesmo padrão de add
+  }
+}
+
+export async function deleteSessaoAplicacao(id: string): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const req = tx.objectStore(STORE_NAME).delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // silencioso
+  }
+}
+
 export function tituloTipoProva(tipo: TipoProvaAplicada): string {
   switch (tipo) {
     case 'natacao':

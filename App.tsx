@@ -8,11 +8,14 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { PhoneFrameShell } from './src/components/premium/PhoneFrameShell';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
+import { AdminHistoricoApp } from './src/admin/AdminHistoricoApp';
+import { isAdminHistoricoAccess } from './src/utils/adminHistoricoAccess';
 import { useAppFonts } from './src/hooks/useAppFonts';
 import { PREMIUM } from './src/theme/premium';
 
 function AppRoot() {
   const { isDark, theme, themeMode } = useTheme();
+  const adminHistorico = Platform.OS === 'web' && isAdminHistoricoAccess();
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -33,6 +36,15 @@ function AppRoot() {
     body.style.backgroundColor = theme.tokens.bg;
     html.classList.toggle('dark', isDark);
   }, [isDark, themeMode, theme.tokens.bg]);
+
+  if (adminHistorico) {
+    return (
+      <View style={[styles.appRoot, { backgroundColor: theme.background }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <AdminHistoricoApp />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.appRoot, { backgroundColor: theme.background }]}>

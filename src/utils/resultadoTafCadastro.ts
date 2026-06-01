@@ -125,7 +125,10 @@ export type ResultadoGeralItem = ResultadoTafLinha & {
   statusTaf: 'Completo' | 'Parcial';
 };
 
-/** Militares com TAF iniciado (ao menos uma modalidade), completo ou incompleto. */
+/**
+ * Militares com TAF no cadastro (ao menos uma modalidade).
+ * A aba Resultado Geral usa {@link listarResultadosGeralFromHistorico} (somente sessões do Histórico).
+ */
 export function listarResultadosGeral(cadastros: CadastroItemPersist[]): ResultadoGeralItem[] {
   return cadastros
     .filter(cadastroComAlgumResultadoTaf)

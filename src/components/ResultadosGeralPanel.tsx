@@ -13,10 +13,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Card } from './Card';
 import { ResultadosGeralTable } from './ResultadosGeralTable';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
-import {
-  listarResultadosGeral,
-  type ResultadoGeralItem,
-} from '../utils/resultadoTafCadastro';
+import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
+import { listarResultadosGeralFromHistorico } from '../utils/resultadoGeralHistorico';
 import { nipDigitos } from '../utils/nipFormat';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
@@ -54,8 +53,10 @@ export function ResultadosGeralPanel() {
 
   const carregar = useCallback(() => {
     setCarregando(true);
-    getAllCadastros()
-      .then((cadastros) => setLista(listarResultadosGeral(cadastros)))
+    Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
+      .then(([cadastros, sessoes]) =>
+        setLista(listarResultadosGeralFromHistorico(sessoes, cadastros)),
+      )
       .catch(() => setLista([]))
       .finally(() => setCarregando(false));
   }, []);
@@ -93,7 +94,8 @@ export function ResultadosGeralPanel() {
   return (
     <View style={styles.wrap}>
       <Text style={[ts.bodySecondary, styles.intro, { color: theme.textSecondary }]}>
-        Visão consolidada de todos os militares que realizaram o TAF (prova completa ou em andamento).
+        Visão consolidada a partir do Histórico de aplicações. Só aparecem modalidades registradas em
+        sessões salvas; ao excluir uma sessão, os dados somem desta tabela.
       </Text>
 
       <View
@@ -133,7 +135,7 @@ export function ResultadosGeralPanel() {
         <Text style={[ts.caption, { color: theme.textMuted }]}>
           {buscaAtiva
             ? `${linhasVisiveis.length} de ${lista.length} militar${lista.length !== 1 ? 'es' : ''}`
-            : `${lista.length} militar${lista.length !== 1 ? 'es' : ''} com TAF registrado`}
+            : `${lista.length} militar${lista.length !== 1 ? 'es' : ''} no histórico`}
           {' · '}
           Toque no cabeçalho para ordenar
         </Text>
@@ -146,10 +148,11 @@ export function ResultadosGeralPanel() {
       {!carregando && lista.length === 0 ? (
         <Card elevated style={styles.emptyCard}>
           <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
-            Nenhum militar com TAF registrado ainda.
+            Nenhuma sessão no histórico ainda.
           </Text>
           <Text style={[ts.caption, styles.emptyHint, { color: theme.textMuted, textAlign: 'center' }]}>
-            Os resultados aparecerão aqui após aplicar corrida, natação ou permanência.
+            Aplique provas em Aplicar TAF ou cadastre sessões no histórico; os dados consolidados
+            aparecerão aqui.
           </Text>
         </Card>
       ) : null}

@@ -62,13 +62,13 @@ type ColDef = {
 const COLUNAS: ColDef[] = [
   { key: 'nip', label: 'NIP', flex: 1, minWidth: 108 },
   { key: 'nome', label: 'Nome', flex: 1.6, minWidth: 140 },
-  { key: 'status', label: 'Status do TAF', flex: 1, minWidth: 108, align: 'center' },
-  { key: 'notaC', label: 'Nota Corrida', flex: 0.9, minWidth: 88, align: 'center' },
-  { key: 'sitC', label: 'Situação Corrida', flex: 1.05, minWidth: 108, align: 'center' },
-  { key: 'notaN', label: 'Nota Natação', flex: 0.95, minWidth: 92, align: 'center' },
-  { key: 'sitN', label: 'Situação Natação', flex: 1.05, minWidth: 112, align: 'center' },
+  { key: 'status', label: 'Status', flex: 0.85, minWidth: 80, align: 'center' },
+  { key: 'notaC', label: 'Nota', flex: 0.65, minWidth: 56, align: 'center' },
+  { key: 'sitC', label: 'Situação', flex: 0.85, minWidth: 76, align: 'center' },
+  { key: 'notaN', label: 'Nota', flex: 0.65, minWidth: 56, align: 'center' },
+  { key: 'sitN', label: 'Situação', flex: 0.85, minWidth: 76, align: 'center' },
   { key: 'perm', label: 'Permanência', flex: 1, minWidth: 96, align: 'center' },
-  { key: 'sitP', label: 'Situação Permanência', flex: 1.15, minWidth: 128, align: 'center' },
+  { key: 'sitP', label: 'Situação', flex: 0.85, minWidth: 76, align: 'center' },
 ];
 
 function StatusBadge({ status }: { status: 'Completo' | 'Parcial' }) {

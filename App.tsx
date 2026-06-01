@@ -1,3 +1,4 @@
+import './global.css';
 import React, { useEffect } from 'react';
 import { View, Platform, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -11,7 +12,7 @@ import { useAppFonts } from './src/hooks/useAppFonts';
 import { PREMIUM } from './src/theme/premium';
 
 function AppRoot() {
-  const { isDark, theme } = useTheme();
+  const { isDark, theme, themeMode } = useTheme();
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -22,15 +23,16 @@ function AppRoot() {
     body.style.height = '100%';
     body.style.margin = '0';
     body.style.overflow = 'hidden';
-    body.style.fontFamily = 'Inter, system-ui, sans-serif';
+    body.style.fontFamily = '"Segoe UI", Inter, system-ui, sans-serif';
+    html.setAttribute('data-theme', themeMode);
     if (root) {
       root.style.height = '100%';
       root.style.display = 'flex';
       root.style.flexDirection = 'column';
     }
-    body.style.backgroundColor = isDark ? PREMIUM.dark.bg : PREMIUM.light.bg;
+    body.style.backgroundColor = theme.tokens.bg;
     html.classList.toggle('dark', isDark);
-  }, [isDark]);
+  }, [isDark, themeMode, theme.tokens.bg]);
 
   return (
     <View style={[styles.appRoot, { backgroundColor: theme.background }]}>

@@ -6,6 +6,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
 import { GlassBottomBar } from '../components/premium/GlassBottomBar';
 import { SettingsTopButton } from '../components/premium/SettingsTopButton';
+import { AppShell } from '../components/sismav/AppShell';
+import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { navigationRef, getCurrentRouteName } from './navigationRef';
 import type { RootStackParamList } from './types';
 
@@ -28,8 +30,10 @@ const BOTTOM_BAR_PADDING = 96;
 export default function AppNavigator() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { useSidebarShell } = useDeviceLayout();
   const [activeRoute, setActiveRoute] = useState<keyof RootStackParamList>('Home');
-  const topChromePad = Math.max(insets.top, 8) + 52;
+  const topChromePad = useSidebarShell ? Math.max(insets.top, 8) + 8 : Math.max(insets.top, 8) + 52;
+  const bottomPad = useSidebarShell ? 24 : BOTTOM_BAR_PADDING;
 
   const syncRoute = useCallback(() => {
     setActiveRoute(getCurrentRouteName());
@@ -56,20 +60,21 @@ export default function AppNavigator() {
       onReady={syncRoute}
       onStateChange={syncRoute}
     >
-      <View style={[styles.shell, { backgroundColor: theme.background }]}>
-        <Stack.Navigator
-          initialRouteName="Home"
-          screenOptions={{
-            headerShown: false,
-            contentStyle: {
-              flex: 1,
-              backgroundColor: theme.background,
-              paddingBottom: BOTTOM_BAR_PADDING,
-              paddingTop: topChromePad,
-            },
-            animation: Platform.OS === 'web' ? 'fade' : 'slide_from_right',
-          }}
-        >
+      <View style={[styles.shell, { backgroundColor: 'transparent' }]}>
+        <AppShell activeRoute={activeRoute} fullWidth={activeRoute === 'Cadastro'}>
+          <Stack.Navigator
+            initialRouteName="Home"
+            screenOptions={{
+              headerShown: false,
+              contentStyle: {
+                flex: 1,
+                backgroundColor: 'transparent',
+                paddingBottom: bottomPad,
+                paddingTop: topChromePad,
+              },
+              animation: Platform.OS === 'web' ? 'fade' : 'slide_from_right',
+            }}
+          >
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="Normas" component={NormasScreen} />
           <Stack.Screen name="Cadastro" component={CadastroScreenModern} />
@@ -91,7 +96,8 @@ export default function AppNavigator() {
               contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: theme.background },
             }}
           />
-        </Stack.Navigator>
+          </Stack.Navigator>
+        </AppShell>
         <SettingsTopButton activeRoute={activeRoute} />
         <GlassBottomBar activeRoute={activeRoute} />
       </View>

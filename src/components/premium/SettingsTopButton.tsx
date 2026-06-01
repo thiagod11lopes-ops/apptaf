@@ -6,6 +6,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { navigateTab } from '../../navigation/navigationRef';
 import type { RootStackParamList } from '../../navigation/types';
 import { PressableScale } from './PressableScale';
+import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { PREMIUM } from '../../theme/premium';
 
 type Props = {
@@ -17,12 +18,16 @@ const HIDE_ON: (keyof RootStackParamList)[] = ['Configuracoes', 'CadastrarResult
 export function SettingsTopButton({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { useSidebarShell } = useDeviceLayout();
 
-  if (HIDE_ON.includes(activeRoute)) {
+  if (HIDE_ON.includes(activeRoute) || useSidebarShell) {
     return null;
   }
 
   const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
+  const compacto = activeRoute === 'Home';
+  const iconSize = compacto ? 11 : 22;
+  const btnSize = compacto ? 24 : PREMIUM.minTouch;
 
   return (
     <View
@@ -34,6 +39,8 @@ export function SettingsTopButton({ activeRoute }: Props) {
         style={[
           styles.btn,
           {
+            width: btnSize,
+            height: btnSize,
             backgroundColor: theme.cardBg,
             borderColor: theme.border,
           },
@@ -43,7 +50,7 @@ export function SettingsTopButton({ activeRoute }: Props) {
         ]}
         accessibilityLabel="Ajustes"
       >
-        <Settings size={22} color={tabInk} strokeWidth={2.2} />
+        <Settings size={iconSize} color={tabInk} strokeWidth={compacto ? 2 : 2.2} />
       </PressableScale>
     </View>
   );
@@ -56,8 +63,6 @@ const styles = StyleSheet.create({
     zIndex: 200,
   },
   btn: {
-    width: PREMIUM.minTouch,
-    height: PREMIUM.minTouch,
     borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
     alignItems: 'center',

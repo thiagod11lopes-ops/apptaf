@@ -9,10 +9,20 @@ export const FONT = {
 } as const;
 
 const fallback = Platform.select({
-  web: 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+  web: '"Segoe UI", Inter, system-ui, -apple-system, sans-serif',
   ios: 'System',
   android: 'sans-serif',
   default: 'sans-serif',
+}) as string;
+
+export const FONT_BRAND = Platform.select({
+  web: 'Syne, system-ui, sans-serif',
+  default: 'System',
+}) as string;
+
+export const FONT_BRAND_SUB = Platform.select({
+  web: '"DM Sans", system-ui, sans-serif',
+  default: 'System',
 }) as string;
 
 export function fontFamily(weight: keyof typeof FONT = 'regular', loaded: boolean): string {
@@ -71,6 +81,31 @@ export function createTextStyles(
       lineHeight: 14,
       letterSpacing: 0.8,
       textTransform: 'uppercase',
+      color: colors.textMuted,
+    },
+    microLabel: {
+      ...f('semibold'),
+      fontSize: 11,
+      lineHeight: 14,
+      letterSpacing: 0.05 * 11,
+      textTransform: 'uppercase',
+      color: colors.textMuted,
+    },
+    brandTitle: {
+      fontFamily: FONT_BRAND,
+      fontWeight: '800',
+      fontSize: 28,
+      lineHeight: 34,
+      letterSpacing: -0.6,
+      color: colors.text,
+    },
+    brandSubtitle: {
+      fontFamily: FONT_BRAND_SUB,
+      fontSize: 11,
+      lineHeight: 14,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      opacity: 0.52,
       color: colors.textMuted,
     },
     mono: {

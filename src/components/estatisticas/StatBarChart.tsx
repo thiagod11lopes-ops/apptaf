@@ -12,7 +12,7 @@ type Props = {
 export function StatBarChart({ items, barColor, maxItems = 12 }: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
-  const fill = barColor ?? theme.primary;
+  const fill = barColor ?? theme.chartColors[0];
   const slice = items.filter((i) => i.valor > 0).slice(0, maxItems);
   const max = Math.max(1, ...slice.map((i) => i.valor));
 

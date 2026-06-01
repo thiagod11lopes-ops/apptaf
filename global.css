@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import './src/theme/themes.css';
 
 @layer base {
   html,
@@ -8,11 +6,22 @@
   #root {
     height: 100%;
     min-height: 100%;
+    margin: 0;
   }
 
-  /* PWA: evita seleção acidental no mobile/web */
+  html {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+  }
+
   * {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--primary-500);
+    outline-offset: 2px;
   }
 }
 
@@ -22,9 +31,7 @@
     user-select: none;
   }
 
-  .transition-premium {
-    transition-property: all;
-    transition-duration: 300ms;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 }

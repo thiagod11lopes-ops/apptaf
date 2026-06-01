@@ -32,7 +32,7 @@ export default function ConfiguracoesScreen() {
           </View>
         </Card>
         <Text style={[ts.caption, styles.footer]}>
-          Tipografia Inter · cores ajustadas para contraste confortável em telas escuras.
+          Design SISMAV · tema claro/escuro com persistência local.
         </Text>
       </View>
     </View>

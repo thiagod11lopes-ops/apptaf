@@ -14,8 +14,8 @@ export function PhoneFrameShell({ children }: Props) {
 
   useEffect(() => {
     if (!isWeb || typeof document === 'undefined') return;
-    document.body.style.backgroundColor = isDark ? '#14141A' : PREMIUM.light.bg;
-  }, [isDark, isWeb]);
+    document.body.style.backgroundColor = theme.tokens.bg;
+  }, [isDark, isWeb, theme.tokens.bg]);
 
   if (!usePhoneFrame) {
     return (

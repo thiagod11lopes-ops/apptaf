@@ -36,17 +36,17 @@ type Props = {
 export function GlassBottomBar({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, fontsLoaded } = useTheme();
-  const { usePhoneFrame } = useDeviceLayout();
+  const { usePhoneFrame, useSidebarShell } = useDeviceLayout();
   const labelStyle = usePhoneFrame ? styles.tabLabelCompact : styles.tabLabel;
 
-  if (HIDDEN_ROUTES.includes(activeRoute)) {
+  if (HIDDEN_ROUTES.includes(activeRoute) || useSidebarShell) {
     return null;
   }
 
   const bottomPad = Math.max(insets.bottom, 12);
   const labelFont = fontFamily('medium', fontsLoaded);
-  const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
-  const activeBorder = theme.primary;
+  const tabInk = theme.text;
+  const activeBorder = theme.tokens.primary600;
 
   return (
     <View

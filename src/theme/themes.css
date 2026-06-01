@@ -1,0 +1,243 @@
+/**
+ * Design tokens SISMAV — tema claro (:root) e escuro ([data-theme='dark'])
+ * Importado via global.css no bundle web.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;1,9..40,400&family=Syne:wght@700;800&display=swap');
+
+:root {
+  --primary-50: #eff6ff;
+  --primary-300: #93c5fd;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-800: #1e3a8a;
+
+  --success: #059669;
+  --danger: #dc2626;
+  --warning-500: #f59e0b;
+
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-on-primary: #ffffff;
+
+  --bg: #eef2f7;
+  --bg-subtle: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --input-bg: #ffffff;
+
+  --gradient-header: linear-gradient(135deg, #0f172a 0%, #1e3a5f 45%, #1d4ed8 100%);
+  --gradient-app-bg: linear-gradient(180deg, #eef2f7 0%, #f1f5f9 40%, #f8fafc 100%);
+  --gradient-panel-body: linear-gradient(180deg, var(--bg-subtle) 0%, var(--surface) 100%);
+  --gradient-sidebar: linear-gradient(180deg, #0f172a 0%, #1e3a5f 55%, #1d4ed8 100%);
+  --gradient-primary-btn: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  --gradient-danger-btn: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-card: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --shadow-card-hover: 0 8px 24px rgba(15, 23, 42, 0.12);
+  --shadow-modal: 0 24px 48px rgba(15, 23, 42, 0.22);
+  --overlay-bg: rgba(15, 23, 42, 0.55);
+
+  --radius-xl: 1.25rem;
+  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+  --radius-sm: 0.5rem;
+
+  --table-row-hover: rgba(37, 99, 235, 0.06);
+
+  --chart-1: #2563eb;
+  --chart-2: #059669;
+  --chart-3: #d97706;
+  --chart-4: #7c3aed;
+  --chart-5: #db2777;
+  --chart-grid: #e2e8f0;
+  --chart-axis: #64748b;
+
+  --font-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-brand: 'Syne', system-ui, sans-serif;
+  --font-brand-sub: 'DM Sans', system-ui, sans-serif;
+
+  --transition-fast: 0.15s ease;
+  --transition-ui: 0.18s ease;
+}
+
+[data-theme='dark'] {
+  --primary-50: #1e3a5f;
+  --primary-300: #60a5fa;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-800: #93c5fd;
+
+  --success: #34d399;
+  --danger: #f87171;
+  --warning-500: #fbbf24;
+
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-on-primary: #ffffff;
+
+  --bg: #0b1220;
+  --bg-subtle: #111827;
+  --surface: #1a2538;
+  --border: #3d4f69;
+  --border-strong: #4b5f7a;
+  --input-bg: #152030;
+
+  --gradient-app-bg: linear-gradient(180deg, #0b1220 0%, #0f172a 50%, #111827 100%);
+  --gradient-panel-body: linear-gradient(180deg, #111827 0%, #1a2538 100%);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 24px 56px rgba(0, 0, 0, 0.55);
+  --overlay-bg: rgba(2, 6, 23, 0.72);
+
+  --table-row-hover: rgba(96, 165, 250, 0.1);
+
+  --chart-grid: #334155;
+  --chart-axis: #94a3b8;
+}
+
+/* —— Layout shell (web) —— */
+.app {
+  display: flex;
+  flex-direction: row;
+  min-height: 100%;
+  height: 100%;
+  background: var(--gradient-app-bg);
+  font-family: var(--font-body);
+  color: var(--text);
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  width: 11.75rem;
+  min-height: 100vh;
+  flex-shrink: 0;
+  background: var(--gradient-sidebar);
+  box-shadow: 4px 0 24px rgba(15, 23, 42, 0.18);
+  z-index: 50;
+}
+
+.app-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+.app-main--full {
+  max-width: none;
+}
+
+.app-footer {
+  padding: 0.75rem 1.5rem 1.25rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+/* —— Header —— */
+.app-header__title {
+  font-family: var(--font-brand);
+  font-weight: 800;
+  font-size: 1.75rem;
+  letter-spacing: -0.03em;
+  background: linear-gradient(90deg, #ffffff 0%, #93c5fd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.app-header__rule {
+  width: 1.75rem;
+  height: 2px;
+  margin-top: 0.5rem;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--primary-600), var(--primary-300));
+}
+
+.app-header__subtitle {
+  font-family: var(--font-brand-sub);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  opacity: 0.52;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+}
+
+/* —— Animations —— */
+@keyframes modern-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modern-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modern-overlay {
+  animation: modern-overlay-in var(--transition-ui) forwards;
+}
+
+.modern-modal-shell {
+  animation: modern-modal-in 0.22s ease forwards;
+}
+
+.sub-tab-panel {
+  animation: fade-in-up 0.2s ease forwards;
+}
+
+@media (max-width: 767px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .app-sidebar {
+    position: relative;
+    width: 100%;
+    min-height: auto;
+  }
+
+  .app-main {
+    padding: 1rem;
+  }
+}

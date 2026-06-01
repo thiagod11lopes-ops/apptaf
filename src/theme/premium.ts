@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import type { TextStyle } from 'react-native';
 import { FONT, fontFamily, createTextStyles } from './typography';
+import { SISMAV_DARK, SISMAV_LIGHT, type SismavScheme } from './sismavTokens';
 
 const monoFont = Platform.select({
   web: 'ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace',
@@ -9,42 +10,38 @@ const monoFont = Platform.select({
   default: 'monospace',
 }) as string;
 
-/**
- * Paleta legível — modo escuro suave (evita preto puro e texto apagado).
- */
+/** Compatibilidade com imports legados — valores espelham SISMAV. */
 export const PREMIUM = {
-  accent: '#6B7CFF',
-  accentLight: '#818CF8',
-  accentMuted: 'rgba(107, 124, 255, 0.18)',
-
+  accent: SISMAV_LIGHT.primary600,
+  accentLight: SISMAV_LIGHT.primary500,
+  accentMuted: 'rgba(37, 99, 235, 0.12)',
   dark: {
-    bg: '#1C1C22',
-    elevated: '#25252D',
-    card: '#2E2E38',
-    cardHover: '#363642',
-    text: '#FFFFFF',
-    textSecondary: '#FFFFFF',
-    textMuted: '#FFFFFF',
-    border: 'rgba(255, 255, 255, 0.12)',
-    borderSubtle: 'rgba(255, 255, 255, 0.08)',
+    bg: SISMAV_DARK.bg,
+    elevated: SISMAV_DARK.bgSubtle,
+    card: SISMAV_DARK.surface,
+    cardHover: '#22304a',
+    text: SISMAV_DARK.text,
+    textSecondary: '#cbd5e1',
+    textMuted: SISMAV_DARK.textMuted,
+    border: SISMAV_DARK.border,
+    borderSubtle: 'rgba(61, 79, 105, 0.65)',
   },
   light: {
-    bg: '#F8F9FC',
-    elevated: '#FFFFFF',
-    card: '#FFFFFF',
-    cardHover: '#F4F4F8',
-    text: '#12121A',
-    textSecondary: '#4B4B5C',
-    textMuted: '#6E6E80',
-    border: 'rgba(15, 23, 42, 0.1)',
-    borderSubtle: 'rgba(15, 23, 42, 0.06)',
+    bg: SISMAV_LIGHT.bg,
+    elevated: SISMAV_LIGHT.bgSubtle,
+    card: SISMAV_LIGHT.surface,
+    cardHover: '#f1f5f9',
+    text: SISMAV_LIGHT.text,
+    textSecondary: '#334155',
+    textMuted: SISMAV_LIGHT.textMuted,
+    border: SISMAV_LIGHT.border,
+    borderSubtle: 'rgba(226, 232, 240, 0.9)',
   },
-
   fontMono: monoFont,
-  radiusSm: 10,
-  radiusMd: 14,
-  radiusLg: 18,
-  radiusXl: 22,
+  radiusSm: SISMAV_LIGHT.radiusSm,
+  radiusMd: SISMAV_LIGHT.radiusMd,
+  radiusLg: SISMAV_LIGHT.radiusLg,
+  radiusXl: SISMAV_LIGHT.radiusXl,
   minTouch: 48,
 } as const;
 
@@ -73,66 +70,50 @@ export type AppTheme = {
   isDark: boolean;
   fonts: typeof FONT;
   textStyles: Record<string, TextStyle>;
+  tokens: SismavScheme;
+  chartColors: [string, string, string, string, string];
 };
 
-export function buildPremiumDarkTheme(fontsLoaded = true): AppTheme {
-  const d = PREMIUM.dark;
-  const colors = { text: d.text, textSecondary: d.textSecondary, textMuted: d.textMuted };
+function buildTheme(scheme: SismavScheme, isDark: boolean, fontsLoaded: boolean): AppTheme {
+  const colors = {
+    text: scheme.text,
+    textSecondary: isDark ? '#cbd5e1' : '#334155',
+    textMuted: scheme.textMuted,
+  };
   return {
-    isDark: true,
-    primary: PREMIUM.accentLight,
-    background: d.bg,
-    cardBg: d.card,
-    text: d.text,
-    textSecondary: d.textSecondary,
-    textMuted: d.textMuted,
-    border: d.border,
-    borderSubtle: d.borderSubtle,
-    borderMuted: d.border,
-    error: '#FB7185',
-    success: '#4ADE80',
-    shadow: '#000000',
-    gradient: [d.elevated, d.bg],
-    backgroundSecondary: d.elevated,
-    surface: d.card,
-    gain: '#4ADE80',
-    loss: '#FB7185',
-    gainMuted: 'rgba(74, 222, 128, 0.14)',
-    lossMuted: 'rgba(251, 113, 133, 0.14)',
+    isDark,
+    primary: scheme.primary600,
+    background: scheme.bg,
+    cardBg: scheme.surface,
+    text: scheme.text,
+    textSecondary: colors.textSecondary,
+    textMuted: scheme.textMuted,
+    border: scheme.border,
+    borderSubtle: isDark ? 'rgba(61, 79, 105, 0.55)' : scheme.border,
+    borderMuted: scheme.borderStrong,
+    error: scheme.danger,
+    success: scheme.success,
+    shadow: '#0f172a',
+    gradient: [scheme.gradientAppBg[0], scheme.gradientAppBg[2]],
+    backgroundSecondary: scheme.bgSubtle,
+    surface: scheme.surface,
+    gain: scheme.success,
+    loss: scheme.danger,
+    gainMuted: isDark ? 'rgba(52, 211, 153, 0.14)' : 'rgba(5, 150, 105, 0.1)',
+    lossMuted: isDark ? 'rgba(248, 113, 113, 0.14)' : 'rgba(220, 38, 38, 0.1)',
     monoFont: PREMIUM.fontMono,
-    accentMuted: PREMIUM.accentMuted,
+    accentMuted: isDark ? 'rgba(37, 99, 235, 0.22)' : 'rgba(37, 99, 235, 0.1)',
     fonts: FONT,
     textStyles: createTextStyles(colors, fontsLoaded),
+    tokens: scheme,
+    chartColors: [scheme.chart1, scheme.chart2, scheme.chart3, scheme.chart4, scheme.chart5],
   };
 }
 
+export function buildPremiumDarkTheme(fontsLoaded = true): AppTheme {
+  return buildTheme(SISMAV_DARK, true, fontsLoaded);
+}
+
 export function buildPremiumLightTheme(fontsLoaded = true): AppTheme {
-  const l = PREMIUM.light;
-  const colors = { text: l.text, textSecondary: l.textSecondary, textMuted: l.textMuted };
-  return {
-    isDark: false,
-    primary: PREMIUM.accent,
-    background: l.bg,
-    cardBg: l.card,
-    text: l.text,
-    textSecondary: l.textSecondary,
-    textMuted: l.textMuted,
-    border: l.border,
-    borderSubtle: l.borderSubtle,
-    borderMuted: l.border,
-    error: '#E11D48',
-    success: '#059669',
-    shadow: '#000000',
-    gradient: [l.elevated, l.bg],
-    backgroundSecondary: l.elevated,
-    surface: l.card,
-    gain: '#059669',
-    loss: '#E11D48',
-    gainMuted: 'rgba(5, 150, 105, 0.1)',
-    lossMuted: 'rgba(225, 29, 72, 0.1)',
-    monoFont: PREMIUM.fontMono,
-    accentMuted: PREMIUM.accentMuted,
-    fonts: FONT,
-    textStyles: createTextStyles(colors, fontsLoaded),
-  };
+  return buildTheme(SISMAV_LIGHT, false, fontsLoaded);
 }

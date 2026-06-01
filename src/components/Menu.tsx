@@ -1,9 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { ChevronRight, type LucideIcon } from 'lucide-react-native';
 import { PressableScale } from './premium/PressableScale';
 import { useTheme } from '../contexts/ThemeContext';
-import { PREMIUM } from '../theme/premium';
 
 export interface MenuOption {
   id: string;
@@ -23,6 +22,7 @@ const CARD_MIN_HEIGHT = 76;
 export function Menu({ options, visible = true }: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
+  const t = theme.tokens;
   if (!visible) return null;
 
   return (
@@ -36,9 +36,14 @@ export function Menu({ options, visible = true }: Props) {
             style={[
               styles.item,
               {
-                backgroundColor: theme.cardBg,
+                backgroundColor: theme.surface,
                 borderColor: theme.border,
               },
+              Platform.OS === 'web'
+                ? ({
+                    boxShadow: t.shadowCard,
+                  } as object)
+                : { elevation: 2 },
             ]}
           >
             <View style={[styles.iconWrap, { backgroundColor: theme.accentMuted }]}>
@@ -68,13 +73,13 @@ const styles = StyleSheet.create({
     minHeight: CARD_MIN_HEIGHT,
     height: CARD_MIN_HEIGHT,
     paddingHorizontal: 16,
-    borderRadius: PREMIUM.radiusLg,
+    borderRadius: 16,
     borderWidth: 1,
   },
   iconWrap: {
     width: 44,
     height: 44,
-    borderRadius: PREMIUM.radiusMd,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },

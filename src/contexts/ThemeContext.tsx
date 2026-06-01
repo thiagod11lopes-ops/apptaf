@@ -1,16 +1,37 @@
-import React, { createContext, useContext, useState, useMemo, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  ReactNode,
+} from 'react';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildPremiumDarkTheme, buildPremiumLightTheme, type AppTheme } from '../theme/premium';
+import { THEME_STORAGE_KEY } from '../theme/sismavTokens';
 
 export type Theme = AppTheme;
+export type ThemeMode = 'light' | 'dark';
 
 type ThemeContextType = {
   theme: Theme;
   isDark: boolean;
+  themeMode: ThemeMode;
   fontsLoaded: boolean;
   toggleTheme: () => void;
+  alternarTema: () => void;
+  setThemeMode: (mode: ThemeMode) => void;
 };
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
+
+function applyDomTheme(mode: ThemeMode) {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+  document.documentElement.setAttribute('data-theme', mode);
+  document.documentElement.classList.toggle('dark', mode === 'dark');
+}
 
 export function ThemeProvider({
   children,
@@ -19,15 +40,49 @@ export function ThemeProvider({
   children: ReactNode;
   fontsLoaded?: boolean;
 }) {
-  const [isDark, setIsDark] = useState(true);
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('light');
+
+  useEffect(() => {
+    AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
+      if (stored === 'light' || stored === 'dark') {
+        setThemeModeState(stored);
+      }
+    });
+  }, []);
+
+  const isDark = themeMode === 'dark';
+
+  useEffect(() => {
+    applyDomTheme(themeMode);
+    AsyncStorage.setItem(THEME_STORAGE_KEY, themeMode).catch(() => {});
+  }, [themeMode]);
+
+  const setThemeMode = useCallback((mode: ThemeMode) => {
+    setThemeModeState(mode);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setThemeModeState((m) => (m === 'dark' ? 'light' : 'dark'));
+  }, []);
+
   const theme = useMemo(
     () => (isDark ? buildPremiumDarkTheme(fontsLoaded) : buildPremiumLightTheme(fontsLoaded)),
     [isDark, fontsLoaded],
   );
+
   const value = useMemo(
-    () => ({ theme, isDark, fontsLoaded, toggleTheme: () => setIsDark((d) => !d) }),
-    [theme, isDark, fontsLoaded],
+    () => ({
+      theme,
+      isDark,
+      themeMode,
+      fontsLoaded,
+      toggleTheme,
+      alternarTema: toggleTheme,
+      setThemeMode,
+    }),
+    [theme, isDark, themeMode, fontsLoaded, toggleTheme, setThemeMode],
   );
+
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 

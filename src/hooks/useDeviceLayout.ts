@@ -16,7 +16,9 @@ export function useDeviceLayout() {
     isDesktopWeb,
     isMobileWeb,
     isNative,
-    /** PWA full-bleed no celular; frame no desktop */
-    usePhoneFrame: isDesktopWeb,
+    /** Shell SISMAV com sidebar no desktop web */
+    useSidebarShell: isDesktopWeb,
+    /** Frame de telefone desativado — layout institucional full-width */
+    usePhoneFrame: false,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,16 +11,86 @@ import {
 } from 'react-native';
 import { Plus, Trash2 } from 'lucide-react-native';
 import { RubricaCaptureModal } from '../components/RubricaCaptureModal';
+import { LabelNip } from '../components/LabelNip';
 import { useTheme } from '../contexts/ThemeContext';
+import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
+import { formatNipInput, nipDigitos } from '../utils/nipFormat';
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import { tituloTipoProva } from '../services/resultadosAplicadosIndexedDb';
 import { formatMsByModality, parseTafPerformanceInput } from '../taf/tafTimeFormat';
+import {
+  notaCorridaParaPersistencia,
+  textoNotaCorridaFromCadastro,
+} from '../taf/corrida2400Nota';
+import {
+  notaNatacaoParaPersistencia,
+  textoNotaNatacaoFromCadastro,
+} from '../taf/natacaoNota';
+import { PERMANENCIA_TEMPO_PDF_PADRAO } from '../utils/exportResultadosTafPdf';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
 
 const TIPOS: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia'];
+const PERMANENCIA_TEMPO_MS = 10 * 60 * 1000;
+
+function situacaoFromNota(nota?: string | null): string | undefined {
+  const t = (nota ?? '').trim();
+  if (!t || t === '—') return undefined;
+  if (t === 'REPROVADO') return 'Reprovado';
+  return 'Aprovado';
+}
+
+function tempoTextoInicial(tipo: TipoProvaAplicada, tempoMs: number): string {
+  if (tipo === 'permanencia') return PERMANENCIA_TEMPO_PDF_PADRAO;
+  return tempoTextoFromMs(tipo, tempoMs);
+}
+
+function notaPatchFromTempo(
+  tipo: TipoProvaAplicada,
+  tempoTexto: string,
+  nip: string,
+  nome: string,
+  cadastros: CadastroItemPersist[],
+): Partial<ResultadoCorridaItem> {
+  if (tipo === 'permanencia') return {};
+  const tempo = tempoTexto.trim();
+  if (!tempo) {
+    return { notaTexto: '', reprovacaoTexto: '' };
+  }
+
+  const busca = buscarCadastroPorNomeOuNip(cadastros, nip.trim() || nome.trim());
+  if (busca.kind !== 'found') {
+    return { notaTexto: '—', reprovacaoTexto: undefined };
+  }
+
+  const { dataNascimento, sexo } = busca.cadastro;
+  if (tipo === 'corrida') {
+    const notaRaw = textoNotaCorridaFromCadastro({
+      tempoCorrida: tempo,
+      dataNascimento,
+      sexo,
+    });
+    const notaTexto = notaCorridaParaPersistencia(notaRaw) ?? (notaRaw === '—' ? '—' : undefined);
+    return {
+      notaTexto: notaTexto ?? '—',
+      reprovacaoTexto: situacaoFromNota(notaTexto ?? notaRaw),
+    };
+  }
+
+  const notaRaw = textoNotaNatacaoFromCadastro({
+    tempoNatacao: tempo,
+    dataNascimento,
+    sexo,
+  });
+  const notaTexto = notaNatacaoParaPersistencia(notaRaw) ?? (notaRaw === '—' ? '—' : undefined);
+  return {
+    notaTexto: notaTexto ?? '—',
+    reprovacaoTexto: situacaoFromNota(notaTexto ?? notaRaw),
+  };
+}
 
 function novoParticipante(tipo: TipoProvaAplicada, indice: number): ResultadoCorridaItem {
   return {
@@ -73,13 +143,18 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
   );
   const [temposTexto, setTemposTexto] = useState<string[]>(() =>
     (initial?.resultados ?? []).map((r) =>
-      tempoTextoFromMs(initial?.tipoProva ?? 'corrida', r.tempoMs),
+      tempoTextoInicial(initial?.tipoProva ?? 'corrida', r.tempoMs),
     ),
   );
   const [rubricaWizard, setRubricaWizard] = useState<{
     lista: ResultadoCorridaItem[];
     indice: number;
   } | null>(null);
+  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
+
+  useEffect(() => {
+    void getAllCadastros().then(setCadastros);
+  }, []);
 
   const inputStyle = useMemo(
     () => [
@@ -90,18 +165,30 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
     [ui, theme.border],
   );
 
-  const syncTemposLength = useCallback((lista: ResultadoCorridaItem[]) => {
-    setTemposTexto((prev) => {
-      const next = [...prev];
-      while (next.length < lista.length) next.push('');
-      return next.slice(0, lista.length);
-    });
-  }, []);
+  const syncTemposLength = useCallback(
+    (lista: ResultadoCorridaItem[], tipo: TipoProvaAplicada) => {
+      setTemposTexto((prev) => {
+        const next = [...prev];
+        while (next.length < lista.length) {
+          next.push(tipo === 'permanencia' ? PERMANENCIA_TEMPO_PDF_PADRAO : '');
+        }
+        return next.slice(0, lista.length);
+      });
+    },
+    [],
+  );
 
   const alterarTipo = useCallback(
     (tipo: TipoProvaAplicada) => {
       setTipoProva(tipo);
       setResultados((prev) => prev.map((r) => ({ ...r, prova: tipo })));
+      if (tipo === 'permanencia') {
+        setTemposTexto((prev) => prev.map(() => PERMANENCIA_TEMPO_PDF_PADRAO));
+      } else {
+        setTemposTexto((prev) =>
+          prev.map((t) => (t === PERMANENCIA_TEMPO_PDF_PADRAO ? '' : t)),
+        );
+      }
     },
     [],
   );
@@ -109,20 +196,22 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
   const adicionarParticipante = useCallback(() => {
     setResultados((prev) => {
       const next = [...prev, novoParticipante(tipoProva, prev.length)];
-      syncTemposLength(next);
+      syncTemposLength(next, tipoProva);
       return next;
     });
-    setTemposTexto((prev) => [...prev, '']);
   }, [tipoProva, syncTemposLength]);
 
-  const removerParticipante = useCallback((index: number) => {
-    setResultados((prev) => {
-      const next = prev.filter((_, i) => i !== index).map((r, i) => ({ ...r, corredor: i + 1 }));
-      syncTemposLength(next);
-      return next;
-    });
-    setTemposTexto((prev) => prev.filter((_, i) => i !== index));
-  }, [syncTemposLength]);
+  const removerParticipante = useCallback(
+    (index: number) => {
+      setResultados((prev) => {
+        const next = prev.filter((_, i) => i !== index).map((r, i) => ({ ...r, corredor: i + 1 }));
+        syncTemposLength(next, tipoProva);
+        return next;
+      });
+      setTemposTexto((prev) => prev.filter((_, i) => i !== index));
+    },
+    [syncTemposLength, tipoProva],
+  );
 
   const atualizarCampo = useCallback(
     (index: number, patch: Partial<ResultadoCorridaItem>) => {
@@ -131,11 +220,121 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
     [],
   );
 
+  const onChangeNip = useCallback(
+    (index: number, texto: string) => {
+      const formatado = formatNipInput(texto);
+      setResultados((prev) =>
+        prev.map((r, i) => {
+          if (i !== index) return r;
+          if (!formatado.trim()) {
+            return { ...r, nip: '', nome: '', notaTexto: '', reprovacaoTexto: '' };
+          }
+          const busca = buscarCadastroPorNomeOuNip(cadastros, formatado);
+          const base =
+            busca.kind === 'found'
+              ? {
+                  nip: formatado,
+                  nome: (busca.cadastro.nome ?? '').trim(),
+                }
+              : { nip: formatado };
+          const tempo = temposTexto[index] ?? '';
+          return {
+            ...r,
+            ...base,
+            ...notaPatchFromTempo(tipoProva, tempo, base.nip ?? formatado, base.nome ?? r.nome, cadastros),
+          };
+        }),
+      );
+    },
+    [cadastros, temposTexto, tipoProva],
+  );
+
+  const onChangeNome = useCallback(
+    (index: number, texto: string) => {
+      setResultados((prev) =>
+        prev.map((r, i) => {
+          if (i !== index) return r;
+          if (!texto.trim()) {
+            return { ...r, nome: '', nip: '', notaTexto: '', reprovacaoTexto: '' };
+          }
+          const busca = buscarCadastroPorNomeOuNip(cadastros, texto);
+          const base =
+            busca.kind === 'found'
+              ? {
+                  nome: texto,
+                  nip: formatNipInput(busca.cadastro.nip ?? ''),
+                }
+              : { nome: texto };
+          const tempo = temposTexto[index] ?? '';
+          return {
+            ...r,
+            ...base,
+            ...notaPatchFromTempo(
+              tipoProva,
+              tempo,
+              base.nip ?? r.nip,
+              base.nome ?? texto,
+              cadastros,
+            ),
+          };
+        }),
+      );
+    },
+    [cadastros, temposTexto, tipoProva],
+  );
+
+  const onChangeTempo = useCallback(
+    (index: number, texto: string) => {
+      if (tipoProva === 'permanencia') return;
+      setTemposTexto((prev) => {
+        const next = [...prev];
+        next[index] = texto;
+        return next;
+      });
+      setResultados((prev) =>
+        prev.map((r, i) => {
+          if (i !== index) return r;
+          return {
+            ...r,
+            ...notaPatchFromTempo(tipoProva, texto, r.nip ?? '', r.nome ?? '', cadastros),
+          };
+        }),
+      );
+    },
+    [cadastros, tipoProva],
+  );
+
+  const avisosCadastro = useMemo(() => {
+    return resultados.map((r) => {
+      const digits = nipDigitos(r.nip);
+      const nome = (r.nome ?? '').trim();
+      const podeValidar = digits.length >= 8 || nome.length >= 3;
+      if (!podeValidar) return null;
+
+      const porNip = digits.length > 0 ? buscarCadastroPorNomeOuNip(cadastros, r.nip) : { kind: 'none' as const };
+      if (porNip.kind === 'found') return null;
+      if (porNip.kind === 'ambiguous') {
+        return 'Vários cadastros correspondem ao NIP informado.';
+      }
+
+      const porNome = nome.length >= 2 ? buscarCadastroPorNomeOuNip(cadastros, nome) : { kind: 'none' as const };
+      if (porNome.kind === 'found') return null;
+      if (porNome.kind === 'ambiguous') {
+        return 'Vários cadastros correspondem ao nome informado.';
+      }
+
+      return 'NIP e nome não encontrados no cadastro do sistema.';
+    });
+  }, [resultados, cadastros]);
+
   const montarListaParaSalvar = useCallback((): ResultadoCorridaItem[] => {
     return resultados.map((r, i) => ({
       ...r,
       prova: tipoProva,
-      tempoMs: msFromTempoTexto(tipoProva, temposTexto[i] ?? ''),
+      tempoMs:
+        tipoProva === 'permanencia'
+          ? PERMANENCIA_TEMPO_MS
+          : msFromTempoTexto(tipoProva, temposTexto[i] ?? ''),
       corredor: i + 1,
       nome: (r.nome ?? '').trim(),
       nip: (r.nip ?? '').trim(),
@@ -311,39 +510,49 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
             </TouchableOpacity>
           </View>
 
+          <View style={styles.nipField}>
+            <LabelNip color={theme.textMuted} fontSize={11} fontWeight={600} />
+            <TextInput
+              value={r.nip}
+              onChangeText={(t) => onChangeNip(index, t)}
+              style={[inputStyle, styles.inputAfterLabel]}
+              placeholder="00.0000.00"
+              placeholderTextColor={ui.placeholder}
+              keyboardType="numeric"
+              autoCorrect={false}
+            />
+            {avisosCadastro[index] ? (
+              <Text style={[styles.avisoCadastro, { color: theme.loss }]}>{avisosCadastro[index]}</Text>
+            ) : null}
+          </View>
+
           <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Nome</Text>
           <TextInput
             value={r.nome}
-            onChangeText={(t) => atualizarCampo(index, { nome: t })}
+            onChangeText={(t) => onChangeNome(index, t)}
             style={inputStyle}
             placeholder="Nome completo"
             placeholderTextColor={ui.placeholder}
-          />
-
-          <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>NIP</Text>
-          <TextInput
-            value={r.nip}
-            onChangeText={(t) => atualizarCampo(index, { nip: t })}
-            style={inputStyle}
-            placeholder="00.0000.00"
-            placeholderTextColor={ui.placeholder}
+            autoCorrect={false}
           />
 
           <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>
-            Tempo {tipoProva === 'permanencia' ? '(MM:SS ou texto)' : '(MM:SS)'}
+            Tempo {tipoProva === 'permanencia' ? '' : '(MM:SS)'}
           </Text>
           <TextInput
-            value={temposTexto[index] ?? ''}
-            onChangeText={(t) =>
-              setTemposTexto((prev) => {
-                const next = [...prev];
-                next[index] = t;
-                return next;
-              })
+            value={
+              tipoProva === 'permanencia'
+                ? PERMANENCIA_TEMPO_PDF_PADRAO
+                : (temposTexto[index] ?? '')
             }
-            style={inputStyle}
-            placeholder="00:00"
+            onChangeText={(t) => onChangeTempo(index, t)}
+            style={[
+              inputStyle,
+              tipoProva === 'permanencia' ? styles.inputReadonly : null,
+            ]}
+            placeholder={tipoProva === 'permanencia' ? PERMANENCIA_TEMPO_PDF_PADRAO : '00:00'}
             placeholderTextColor={ui.placeholder}
+            editable={tipoProva !== 'permanencia'}
           />
 
           <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Nota</Text>
@@ -410,6 +619,15 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '800', marginBottom: 16 },
   label: { fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase' },
   fieldLabel: { fontSize: 11, fontWeight: '600', marginTop: 8, marginBottom: 4 },
+  nipField: { marginTop: 4 },
+  inputAfterLabel: { marginTop: 4 },
+  inputReadonly: { opacity: 0.85 },
+  avisoCadastro: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 6,
+    lineHeight: 16,
+  },
   input: {
     borderWidth: 1,
     borderRadius: PREMIUM.radiusMd,

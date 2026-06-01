@@ -51,25 +51,58 @@ function linhaCombinaBusca(item: ResultadoGeralItem, q: string, qDigits: string)
   return false;
 }
 
-type ColDef = {
-  key: string;
-  label: string;
-  flex: number;
-  minWidth: number;
-  align?: 'left' | 'center';
-};
+const W = {
+  nip: 112,
+  nome: 168,
+  status: 88,
+  nota: 62,
+  situacao: 84,
+  permanencia: 104,
+} as const;
 
-const COLUNAS: ColDef[] = [
-  { key: 'nip', label: 'NIP', flex: 1, minWidth: 108 },
-  { key: 'nome', label: 'Nome', flex: 1.6, minWidth: 140 },
-  { key: 'status', label: 'Status', flex: 0.85, minWidth: 80, align: 'center' },
-  { key: 'notaC', label: 'Nota', flex: 0.65, minWidth: 56, align: 'center' },
-  { key: 'sitC', label: 'Situação', flex: 0.85, minWidth: 76, align: 'center' },
-  { key: 'notaN', label: 'Nota', flex: 0.65, minWidth: 56, align: 'center' },
-  { key: 'sitN', label: 'Situação', flex: 0.85, minWidth: 76, align: 'center' },
-  { key: 'perm', label: 'Permanência', flex: 1, minWidth: 96, align: 'center' },
-  { key: 'sitP', label: 'Situação', flex: 0.85, minWidth: 76, align: 'center' },
+const LARGURA_CORRIDA = W.nota + W.situacao;
+const LARGURA_NATACAO = W.nota + W.situacao;
+const LARGURA_PERMANENCIA = W.permanencia + W.situacao;
+
+const LARGURA_TABELA =
+  W.nip +
+  W.nome +
+  W.status +
+  LARGURA_CORRIDA +
+  LARGURA_NATACAO +
+  LARGURA_PERMANENCIA;
+
+type ColDataKey =
+  | 'nip'
+  | 'nome'
+  | 'status'
+  | 'notaC'
+  | 'sitC'
+  | 'notaN'
+  | 'sitN'
+  | 'perm'
+  | 'sitP';
+
+const COLUNAS_DADOS: { key: ColDataKey; width: number; align?: 'left' | 'center' }[] = [
+  { key: 'nip', width: W.nip },
+  { key: 'nome', width: W.nome },
+  { key: 'status', width: W.status, align: 'center' },
+  { key: 'notaC', width: W.nota, align: 'center' },
+  { key: 'sitC', width: W.situacao, align: 'center' },
+  { key: 'notaN', width: W.nota, align: 'center' },
+  { key: 'sitN', width: W.situacao, align: 'center' },
+  { key: 'perm', width: W.permanencia, align: 'center' },
+  { key: 'sitP', width: W.situacao, align: 'center' },
 ];
+
+function colStyle(width: number, align?: 'left' | 'center', groupStart?: boolean) {
+  return [
+    styles.col,
+    { width, flexShrink: 0, flexGrow: 0 },
+    align === 'center' ? styles.colCenter : null,
+    groupStart ? styles.colGroupStart : null,
+  ];
+}
 
 function StatusBadge({ status }: { status: 'Completo' | 'Parcial' }) {
   const { theme } = useTheme();
@@ -130,7 +163,6 @@ export function ResultadosGeralPanel() {
   }, [lista, filtroBusca]);
 
   const buscaAtiva = filtroBusca.trim().length >= MIN_BUSCA;
-  const tableMinWidth = COLUNAS.reduce((s, c) => s + c.minWidth, 0);
 
   const cellBase = useMemo(
     () => [styles.cell, { color: ui.text }],
@@ -224,8 +256,13 @@ export function ResultadosGeralPanel() {
             Platform.OS === 'web' ? ({ boxShadow: t.shadowCard } as object) : undefined,
           ]}
         >
-          <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'}>
-            <View style={[styles.tableInner, { minWidth: Math.max(tableMinWidth, 720) }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator
+            nestedScrollEnabled
+            contentContainerStyle={styles.tableScrollContent}
+          >
+            <View style={[styles.tableInner, { width: LARGURA_TABELA }]}>
               <LinearGradient
                 colors={[...t.gradientPrimaryBtn]}
                 start={{ x: 0, y: 0 }}
@@ -233,137 +270,145 @@ export function ResultadosGeralPanel() {
                 style={styles.headerGradient}
               >
                 <View style={styles.headerRow}>
-                  {COLUNAS.map((col) => (
-                    <View
-                      key={col.key}
-                      style={[
-                        styles.col,
-                        { flex: col.flex, minWidth: col.minWidth },
-                        col.align === 'center' ? styles.colCenter : null,
-                      ]}
-                    >
-                      <Text style={styles.headerCell}>{col.label}</Text>
-                    </View>
-                  ))}
+                  <View style={colStyle(W.nip)}>
+                    <Text style={styles.headerCell}>NIP</Text>
+                  </View>
+                  <View style={colStyle(W.nome)}>
+                    <Text style={styles.headerCell}>Nome</Text>
+                  </View>
+                  <View style={colStyle(W.status, 'center')}>
+                    <Text style={[styles.headerCell, styles.headerCellCenter]}>Status</Text>
+                  </View>
+                  <View style={colStyle(LARGURA_CORRIDA, 'center', true)}>
+                    <Text style={[styles.headerCell, styles.headerCellCenter]}>Corrida</Text>
+                  </View>
+                  <View style={colStyle(LARGURA_NATACAO, 'center', true)}>
+                    <Text style={[styles.headerCell, styles.headerCellCenter]}>Natação</Text>
+                  </View>
+                  <View style={colStyle(LARGURA_PERMANENCIA, 'center', true)}>
+                    <Text style={[styles.headerCell, styles.headerCellCenter]}>Permanência</Text>
+                  </View>
+                </View>
+                <View style={[styles.headerRow, styles.headerSubRow]}>
+                  <View style={colStyle(W.nip)} />
+                  <View style={colStyle(W.nome)} />
+                  <View style={colStyle(W.status)} />
+                  <View style={colStyle(W.nota, 'center', true)}>
+                    <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Nota</Text>
+                  </View>
+                  <View style={colStyle(W.situacao, 'center')}>
+                    <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Situação</Text>
+                  </View>
+                  <View style={colStyle(W.nota, 'center', true)}>
+                    <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Nota</Text>
+                  </View>
+                  <View style={colStyle(W.situacao, 'center')}>
+                    <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Situação</Text>
+                  </View>
+                  <View style={colStyle(W.permanencia, 'center', true)}>
+                    <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Permanência</Text>
+                  </View>
+                  <View style={colStyle(W.situacao, 'center')}>
+                    <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Situação</Text>
+                  </View>
                 </View>
               </LinearGradient>
 
               {linhasVisiveis.map((item, index) => {
                 const zebra = index % 2 === 1;
+                const renderCelula = (colKey: ColDataKey) => {
+                  switch (colKey) {
+                    case 'nip':
+                      return (
+                        <SearchHighlightText
+                          text={item.nip}
+                          queryLower={buscaLower}
+                          style={[cellBase, styles.nipCell]}
+                          numberOfLines={1}
+                        />
+                      );
+                    case 'nome':
+                      return (
+                        <SearchHighlightText
+                          text={item.nome}
+                          queryLower={buscaLower}
+                          style={cellBase}
+                          numberOfLines={2}
+                        />
+                      );
+                    case 'status':
+                      return <StatusBadge status={item.statusTaf} />;
+                    case 'notaC':
+                      return (
+                        <SearchHighlightText text={item.notaCorrida} queryLower={buscaLower} style={cellBase} />
+                      );
+                    case 'sitC':
+                      return (
+                        <SearchHighlightText
+                          text={item.situacaoCorrida}
+                          queryLower={buscaLower}
+                          style={[cellBase, { color: situacaoCor(item.situacaoCorrida, theme) }]}
+                        />
+                      );
+                    case 'notaN':
+                      return (
+                        <SearchHighlightText text={item.notaNatacao} queryLower={buscaLower} style={cellBase} />
+                      );
+                    case 'sitN':
+                      return (
+                        <SearchHighlightText
+                          text={item.situacaoNatacao}
+                          queryLower={buscaLower}
+                          style={[cellBase, { color: situacaoCor(item.situacaoNatacao, theme) }]}
+                        />
+                      );
+                    case 'perm':
+                      return (
+                        <SearchHighlightText
+                          text={item.permanenciaTempo}
+                          queryLower={buscaLower}
+                          style={cellBase}
+                        />
+                      );
+                    case 'sitP':
+                      return (
+                        <SearchHighlightText
+                          text={item.situacaoPermanencia}
+                          queryLower={buscaLower}
+                          style={[cellBase, { color: situacaoCor(item.situacaoPermanencia, theme) }]}
+                        />
+                      );
+                    default:
+                      return null;
+                  }
+                };
+
                 return (
                   <View
                     key={item.id}
                     style={[
                       styles.dataRow,
+                      { width: LARGURA_TABELA },
                       {
                         backgroundColor: zebra ? theme.backgroundSecondary : 'transparent',
                         borderBottomColor: theme.border,
                       },
                     ]}
                   >
-                    <View style={[styles.col, { flex: COLUNAS[0].flex, minWidth: COLUNAS[0].minWidth }]}>
-                      <SearchHighlightText
-                        text={item.nip}
-                        queryLower={buscaLower}
-                        style={[cellBase, styles.nipCell]}
-                        numberOfLines={1}
-                      />
-                    </View>
-                    <View style={[styles.col, { flex: COLUNAS[1].flex, minWidth: COLUNAS[1].minWidth }]}>
-                      <SearchHighlightText
-                        text={item.nome}
-                        queryLower={buscaLower}
-                        style={cellBase}
-                        numberOfLines={2}
-                      />
-                    </View>
-                    <View
-                      style={[
-                        styles.col,
-                        styles.colCenter,
-                        { flex: COLUNAS[2].flex, minWidth: COLUNAS[2].minWidth },
-                      ]}
-                    >
-                      <StatusBadge status={item.statusTaf} />
-                    </View>
-                    <View
-                      style={[
-                        styles.col,
-                        styles.colCenter,
-                        { flex: COLUNAS[3].flex, minWidth: COLUNAS[3].minWidth },
-                      ]}
-                    >
-                      <SearchHighlightText
-                        text={item.notaCorrida}
-                        queryLower={buscaLower}
-                        style={cellBase}
-                      />
-                    </View>
-                    <View
-                      style={[
-                        styles.col,
-                        styles.colCenter,
-                        { flex: COLUNAS[4].flex, minWidth: COLUNAS[4].minWidth },
-                      ]}
-                    >
-                      <SearchHighlightText
-                        text={item.situacaoCorrida}
-                        queryLower={buscaLower}
-                        style={[cellBase, { color: situacaoCor(item.situacaoCorrida, theme) }]}
-                      />
-                    </View>
-                    <View
-                      style={[
-                        styles.col,
-                        styles.colCenter,
-                        { flex: COLUNAS[5].flex, minWidth: COLUNAS[5].minWidth },
-                      ]}
-                    >
-                      <SearchHighlightText
-                        text={item.notaNatacao}
-                        queryLower={buscaLower}
-                        style={cellBase}
-                      />
-                    </View>
-                    <View
-                      style={[
-                        styles.col,
-                        styles.colCenter,
-                        { flex: COLUNAS[6].flex, minWidth: COLUNAS[6].minWidth },
-                      ]}
-                    >
-                      <SearchHighlightText
-                        text={item.situacaoNatacao}
-                        queryLower={buscaLower}
-                        style={[cellBase, { color: situacaoCor(item.situacaoNatacao, theme) }]}
-                      />
-                    </View>
-                    <View
-                      style={[
-                        styles.col,
-                        styles.colCenter,
-                        { flex: COLUNAS[7].flex, minWidth: COLUNAS[7].minWidth },
-                      ]}
-                    >
-                      <SearchHighlightText
-                        text={item.permanenciaTempo}
-                        queryLower={buscaLower}
-                        style={cellBase}
-                      />
-                    </View>
-                    <View
-                      style={[
-                        styles.col,
-                        styles.colCenter,
-                        { flex: COLUNAS[8].flex, minWidth: COLUNAS[8].minWidth },
-                      ]}
-                    >
-                      <SearchHighlightText
-                        text={item.situacaoPermanencia}
-                        queryLower={buscaLower}
-                        style={[cellBase, { color: situacaoCor(item.situacaoPermanencia, theme) }]}
-                      />
-                    </View>
+                    {COLUNAS_DADOS.map((col) => (
+                      <View
+                        key={col.key}
+                        style={[
+                          ...colStyle(col.width, col.align),
+                          (col.key === 'notaC' || col.key === 'notaN' || col.key === 'perm') && {
+                            borderLeftWidth: StyleSheet.hairlineWidth,
+                            borderLeftColor: theme.border,
+                          },
+                        ]}
+                      >
+                        {renderCelula(col.key)}
+                      </View>
+                    ))}
                   </View>
                 );
               })}
@@ -410,6 +455,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: PREMIUM.radiusLg,
   },
+  tableScrollContent: {
+    flexGrow: 1,
+  },
   tableInner: { paddingBottom: 4 },
   headerGradient: {
     borderTopLeftRadius: PREMIUM.radiusLg - 2,
@@ -418,8 +466,15 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 8,
+    width: LARGURA_TABELA,
+  },
+  headerSubRow: {
+    paddingTop: 0,
+    paddingBottom: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.25)',
   },
   headerCell: {
     fontSize: 11,
@@ -428,6 +483,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
+  headerSubCell: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.92)',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  headerCellCenter: { textAlign: 'center', width: '100%' },
   dataRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -436,11 +499,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   col: {
-    minWidth: 0,
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
   colCenter: { alignItems: 'center' },
+  colGroupStart: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: 'rgba(255,255,255,0.2)',
+  },
   cell: {
     fontSize: 12,
     fontWeight: '600',

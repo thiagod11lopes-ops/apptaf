@@ -85,6 +85,24 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
   }
 }
 
+export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<void> {
+  if (items.length === 0) return;
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      for (const item of items) {
+        store.put(item);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    // Sem impedir a funcionalidade da UI.
+  }
+}
+
 export async function deleteCadastro(id: string): Promise<void> {
   try {
     const db = await openDb();

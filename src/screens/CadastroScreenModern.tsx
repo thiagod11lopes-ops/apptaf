@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,11 @@ import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft, X } from 'lucide-react-native';
 import { Card } from '../components/Card';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
+const CarregarPlanilhaCadastro = React.lazy(() =>
+  import('../components/CarregarPlanilhaCadastro').then((m) => ({
+    default: m.CarregarPlanilhaCadastro,
+  })),
+);
 import { LabelNip } from '../components/LabelNip';
 import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
@@ -249,19 +254,15 @@ export default function CadastroScreenModern() {
     if (editandoId === id) setEditandoId(null);
   }
 
-  useEffect(() => {
-    let mounted = true;
+  const recarregarCadastros = useCallback(() => {
     getAllCadastros()
-      .then((items) => {
-        if (!mounted) return;
-        setCadastros(items as CadastroItem[]);
-      })
+      .then((items) => setCadastros(items as CadastroItem[]))
       .catch(() => undefined);
-
-    return () => {
-      mounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    recarregarCadastros();
+  }, [recarregarCadastros]);
 
   useEffect(() => {
     if (!modalCadastroSucesso) return;
@@ -379,7 +380,7 @@ export default function CadastroScreenModern() {
                 <View style={styles.section}>
                   <FieldLabel>Oficial</FieldLabel>
                   <View style={styles.optionGrid}>
-                    {['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG'].map((opt) => {
+                    {['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG', 'CALTE'].map((opt) => {
                       const active = oficialSelecionado === opt;
                       return (
                         <TouchableOpacity
@@ -611,6 +612,18 @@ export default function CadastroScreenModern() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {mostrarTabela ? (
+            <Suspense
+              fallback={
+                <View style={{ width: '100%', maxWidth: 720, paddingVertical: 12, alignItems: 'center' }}>
+                  <ActivityIndicator color={theme.primary} />
+                </View>
+              }
+            >
+              <CarregarPlanilhaCadastro onImportComplete={recarregarCadastros} />
+            </Suspense>
+          ) : null}
 
           {mostrarTabela ? <View style={{ height: 16 }} /> : null}
 

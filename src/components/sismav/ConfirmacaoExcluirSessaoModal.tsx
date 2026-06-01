@@ -2,10 +2,10 @@ import React from 'react';
 import { View, Text, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Trash2, AlertTriangle } from 'lucide-react-native';
-import { ModernModal } from '../components/sismav/ModernModal';
-import { PressableScale } from '../components/premium/PressableScale';
-import { useTheme } from '../contexts/ThemeContext';
-import { tituloTipoProva, type SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
+import { ModernModal } from './ModernModal';
+import { PressableScale } from '../premium/PressableScale';
+import { useTheme } from '../../contexts/ThemeContext';
+import { tituloTipoProva, type SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
 
 type Props = {
   sessao: SessaoAplicacaoTaf | null;
@@ -70,7 +70,7 @@ export function ConfirmacaoExcluirSessaoModal({ sessao, loading = false, onClose
             A sessão de <Text style={styles.strong}>{tituloTipoProva(sessao.tipoProva)}</Text> em{' '}
             <Text style={styles.strong}>{sessao.dataAplicacao}</Text> (
             {sessao.resultados.length} participante{sessao.resultados.length !== 1 ? 's' : ''}) será removida
-            do histórico do app e deste painel.
+            permanentemente do histórico de aplicações.
           </Text>
           <Text style={[styles.hint, { color: theme.textMuted }]}>
             Esta ação não pode ser desfeita.

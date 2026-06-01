@@ -5,20 +5,23 @@ import {
   StyleSheet,
   ScrollView,
   SafeAreaView,
+  TouchableOpacity,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ChevronRight } from 'lucide-react-native';
+import { ChevronRight, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { SubTabs } from '../components/sismav/SubTabs';
+import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoExcluirSessaoModal';
 import { PressableScale } from '../components/premium/PressableScale';
 import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
 import { ResultadosPendenciaParcialPanel } from '../components/ResultadosPendenciaParcialPanel';
 import { ResultadosGeralPanel } from '../components/ResultadosGeralPanel';
 import type { RootStackParamList } from '../navigation/types';
 import {
+  deleteSessaoAplicacao,
   getAllSessoesAplicacao,
   tituloTipoProva,
   type SessaoAplicacaoTaf,
@@ -37,6 +40,9 @@ export default function ResultadosScreen() {
   const [aba, setAba] = useState<AbaResultados>('historico');
   const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [sessaoParaExcluir, setSessaoParaExcluir] = useState<SessaoAplicacaoTaf | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+  const [erroExclusao, setErroExclusao] = useState<string | null>(null);
 
   const carregar = useCallback(() => {
     setCarregando(true);
@@ -57,6 +63,22 @@ export default function ResultadosScreen() {
     },
     [navigation],
   );
+
+  const executarExclusao = useCallback(async () => {
+    if (!sessaoParaExcluir) return;
+    setExcluindo(true);
+    setErroExclusao(null);
+    try {
+      await deleteSessaoAplicacao(sessaoParaExcluir.id);
+      setSessaoParaExcluir(null);
+      await carregar();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Não foi possível excluir a sessão.';
+      setErroExclusao(msg);
+    } finally {
+      setExcluindo(false);
+    }
+  }, [sessaoParaExcluir, carregar]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: 'transparent' }]}>
@@ -89,6 +111,12 @@ export default function ResultadosScreen() {
               </Text>
             ) : null}
 
+            {erroExclusao ? (
+              <Text style={[ts.caption, styles.erroExclusao, { color: theme.loss }]}>
+                {erroExclusao}
+              </Text>
+            ) : null}
+
             {!carregando && sessoes.length === 0 ? (
               <Card elevated style={styles.emptyCard}>
                 <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
@@ -108,29 +136,41 @@ export default function ResultadosScreen() {
               ).length;
 
               return (
-                <PressableScale
-                  key={sessao.id}
-                  onPress={() => abrirSessao(sessao)}
-                  style={styles.itemPress}
-                >
+                <View key={sessao.id} style={styles.itemPress}>
                   <Card elevated style={styles.sessaoCard}>
                     <View style={styles.sessaoRow}>
-                      <View style={styles.sessaoText}>
-                        <Text style={[ts.label, { color: theme.primary }]}>{titulo}</Text>
-                        <Text style={[ts.h2, { color: ui.text, marginTop: 4 }]}>
-                          {sessao.dataAplicacao}
-                        </Text>
-                        <Text style={[ts.caption, { color: theme.textMuted, marginTop: 6 }]}>
-                          {qtd} participante{qtd !== 1 ? 's' : ''}
-                          {sessao.tipoProva === 'permanencia'
-                            ? ` · ${aprovados} aprovado${aprovados !== 1 ? 's' : ''}`
-                            : null}
-                        </Text>
-                      </View>
-                      <ChevronRight size={22} color={ui.icon} strokeWidth={2.5} />
+                      <PressableScale
+                        onPress={() => abrirSessao(sessao)}
+                        style={styles.sessaoMain}
+                      >
+                        <View style={styles.sessaoText}>
+                          <Text style={[ts.label, { color: theme.primary }]}>{titulo}</Text>
+                          <Text style={[ts.h2, { color: ui.text, marginTop: 4 }]}>
+                            {sessao.dataAplicacao}
+                          </Text>
+                          <Text style={[ts.caption, { color: theme.textMuted, marginTop: 6 }]}>
+                            {qtd} participante{qtd !== 1 ? 's' : ''}
+                            {sessao.tipoProva === 'permanencia'
+                              ? ` · ${aprovados} aprovado${aprovados !== 1 ? 's' : ''}`
+                              : null}
+                          </Text>
+                        </View>
+                        <ChevronRight size={22} color={ui.icon} strokeWidth={2.5} />
+                      </PressableScale>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setErroExclusao(null);
+                          setSessaoParaExcluir(sessao);
+                        }}
+                        style={[styles.trashBtn, { borderColor: theme.loss }]}
+                        accessibilityLabel="Excluir sessão do histórico"
+                        accessibilityRole="button"
+                      >
+                        <Trash2 size={20} color={theme.loss} strokeWidth={2.2} />
+                      </TouchableOpacity>
                     </View>
                   </Card>
-                </PressableScale>
+                </View>
               );
             })}
           </>
@@ -142,6 +182,15 @@ export default function ResultadosScreen() {
           <ResultadosPendenciaParcialPanel />
         )}
       </ScrollView>
+
+      <ConfirmacaoExcluirSessaoModal
+        sessao={sessaoParaExcluir}
+        loading={excluindo}
+        onClose={() => {
+          if (!excluindo) setSessaoParaExcluir(null);
+        }}
+        onConfirm={() => void executarExclusao()}
+      />
     </SafeAreaView>
   );
 }
@@ -205,9 +254,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: PREMIUM.minTouch,
+    gap: 10,
+  },
+  sessaoMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: PREMIUM.minTouch,
   },
   sessaoText: {
     flex: 1,
     paddingRight: 8,
+  },
+  trashBtn: {
+    padding: 10,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+  },
+  erroExclusao: {
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 18,
   },
 });

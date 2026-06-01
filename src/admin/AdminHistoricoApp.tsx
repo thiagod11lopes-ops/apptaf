@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Plus, Pencil, Trash2, ExternalLink, RefreshCw } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { ConfirmacaoExcluirSessaoModal } from './ConfirmacaoExcluirSessaoModal';
+import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoExcluirSessaoModal';
 import { SessaoHistoricoEditor, type SessaoDraft } from './SessaoHistoricoEditor';
 import {
   addSessaoAplicacao,

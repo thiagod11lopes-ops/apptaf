@@ -16,16 +16,6 @@ function permanenciaTempoParaPdf(linha: ResultadoTafLinha): string {
   return temPermanencia ? PERMANENCIA_TEMPO_PDF_PADRAO : '—';
 }
 
-function notaComRubricaHtml(nota: string, rubricaSvg?: string): string {
-  return `<div class="nota-rubrica-linha"><span class="nota-valor">${escapeHtml(nota)}</span>${celulaRubricaHtml(rubricaSvg)}</div>`;
-}
-
-function situacaoPermanenciaComRubricaHtml(linha: ResultadoTafLinha): string {
-  const sit = escapeHtml(linha.situacaoPermanencia);
-  const rubrica = celulaRubricaHtml(linha.rubricaPermanenciaSvg);
-  return `<div class="nota-rubrica-linha"><span class="nota-valor">${sit}</span>${rubrica}</div>`;
-}
-
 function escapeHtml(s: string): string {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -44,12 +34,15 @@ export function buildResultadosTafHtml(
       (r) => `<tr>
         <td>${escapeHtml(r.nip)}</td>
         <td>${escapeHtml(r.nome)}</td>
-        <td class="nota nota-com-rubrica">${notaComRubricaHtml(r.notaCorrida, r.rubricaCorridaSvg)}</td>
+        <td class="nota">${escapeHtml(r.notaCorrida)}</td>
         <td>${escapeHtml(r.situacaoCorrida)}</td>
-        <td class="nota nota-com-rubrica">${notaComRubricaHtml(r.notaNatacao, r.rubricaNatacaoSvg)}</td>
+        <td class="col-rubrica">${celulaRubricaHtml(r.rubricaCorridaSvg)}</td>
+        <td class="nota">${escapeHtml(r.notaNatacao)}</td>
         <td>${escapeHtml(r.situacaoNatacao)}</td>
+        <td class="col-rubrica">${celulaRubricaHtml(r.rubricaNatacaoSvg)}</td>
         <td>${escapeHtml(permanenciaTempoParaPdf(r))}</td>
-        <td class="nota-com-rubrica">${situacaoPermanenciaComRubricaHtml(r)}</td>
+        <td>${escapeHtml(r.situacaoPermanencia)}</td>
+        <td class="col-rubrica">${celulaRubricaHtml(r.rubricaPermanenciaSvg)}</td>
       </tr>`,
     )
     .join('');
@@ -60,16 +53,15 @@ export function buildResultadosTafHtml(
   <meta charset="utf-8"/>
   <title>Resultados TAF</title>
   <style>
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 landscape; margin: 8mm; }
     body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 12px; }
     h1 { font-size: 16px; margin: 0 0 4px; }
     .sub { color: #444; margin-bottom: 12px; font-size: 11px; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: middle; }
     th { background: #e8eef5; font-weight: 700; }
+    th.col-rubrica, td.col-rubrica { text-align: center; }
     .nota { font-weight: 700; text-align: center; }
-    .repro { color: #b00020; font-weight: 700; }
-    .aprov { color: #0d6b2d; font-weight: 700; }
     ${RUBRICA_PDF_STYLES}
   </style>
 </head>
@@ -83,13 +75,16 @@ export function buildResultadosTafHtml(
         <th>Nome</th>
         <th>Nota corrida</th>
         <th>Situação corrida</th>
+        <th class="col-rubrica">Rúbrica</th>
         <th>Nota natação</th>
         <th>Situação natação</th>
+        <th class="col-rubrica">Rúbrica</th>
         <th>Permanência (tempo)</th>
         <th>Situação permanência</th>
+        <th class="col-rubrica">Rúbrica</th>
       </tr>
     </thead>
-    <tbody>${rows || '<tr><td colspan="8">Nenhum registro</td></tr>'}</tbody>
+    <tbody>${rows || '<tr><td colspan="11">Nenhum registro</td></tr>'}</tbody>
   </table>
 </body>
 </html>`;

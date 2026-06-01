@@ -1,28 +1,34 @@
-/** HTML da miniatura de rúbrica para PDF / impressão. */
-export function celulaRubricaHtml(svgUri?: string | null, textoFallback?: string): string {
+import { RUBRICA_NATIVA_ALTURA, RUBRICA_NATIVA_LARGURA } from './rubricaConstants';
+
+/** HTML da coluna Rúbrica para PDF — sem fundo, imagem em resolução nativa. */
+export function celulaRubricaHtml(svgUri?: string | null): string {
   const svg = svgUri?.trim() ?? '';
   if (svg.startsWith('data:image/svg')) {
-    return `<div class="rubrica-cell"><img src="${svg}" alt="Rúbrica" class="rubrica-img"/></div>`;
+    return `<img src="${svg}" alt="Rúbrica" class="rubrica-img" width="${RUBRICA_NATIVA_LARGURA}" height="${RUBRICA_NATIVA_ALTURA}"/>`;
   }
-  const texto = textoFallback?.trim();
-  if (texto) return `<span class="rubrica-texto">${escapeHtmlAttr(texto)}</span>`;
   return '<span class="rubrica-vazio">—</span>';
 }
 
-function escapeHtmlAttr(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 export const RUBRICA_PDF_STYLES = `
-  .nota-com-rubrica { vertical-align: top; }
-  .nota-rubrica-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .nota-valor { font-weight: 700; min-width: 2.5em; }
-  .rubrica-cell { display: inline-block; }
-  .rubrica-img { width: 100px; height: 36px; object-fit: contain; display: block; }
-  .rubrica-vazio { color: #94a3b8; font-size: 10px; }
-  .rubrica-texto { font-size: 10px; color: #64748b; }
+  td.col-rubrica {
+    background: transparent !important;
+    padding: 4px 6px;
+    text-align: center;
+    vertical-align: middle;
+    width: ${RUBRICA_NATIVA_LARGURA + 24}px;
+  }
+  .rubrica-img {
+    width: ${RUBRICA_NATIVA_LARGURA}px;
+    height: ${RUBRICA_NATIVA_ALTURA}px;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+    background: none;
+    border: none;
+  }
+  .rubrica-vazio {
+    color: #94a3b8;
+    font-size: 10px;
+  }
 `;

@@ -3,6 +3,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import { formatMsByModality } from '../taf/tafTimeFormat';
+import { celulaRubricaHtml, RUBRICA_PDF_STYLES } from './rubricaHtml';
 
 function escapeHtml(s: string): string {
   return String(s)
@@ -10,16 +11,6 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function celulaRubricaPdf(r: ResultadoCorridaItem): string {
-  const svg = r.rubricaCandidatoSvg ?? '';
-  if (svg) {
-    return `<img src="${svg}" alt="Rúbrica" class="rubrica-img"/>`;
-  }
-  const texto = r.rubricaCandidato?.trim();
-  if (texto) return escapeHtml(texto);
-  return '—';
 }
 
 /** A4 paisagem em pontos (72 PPI) — usado no PDF nativo e como referência de layout. */
@@ -59,7 +50,7 @@ export function buildResumoAplicacaoHtml(
   const temNotas = resultados.some((r) => r.notaTexto != null && r.notaTexto !== '');
 
   /** Colunas fixas do PDF: Nadador/Corredor, Nome, NIP, Tempo, Nota, Situação, Rúbrica do candidato */
-  const theadPdf = `<th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th>Rúbrica do candidato</th>`;
+  const theadPdf = `<th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th>`;
 
   const rows = resultados
     .map((r) => {
@@ -69,7 +60,7 @@ export function buildResumoAplicacaoHtml(
       const situacao = escapeHtml(
         r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : 'Aprovado'),
       );
-      const rubrica = celulaRubricaPdf(r);
+      const rubrica = celulaRubricaHtml(r.rubricaCandidatoSvg);
       return `<tr>
         <td>${papel} ${r.corredor}</td>
         <td>${escapeHtml(r.nome)}</td>
@@ -77,7 +68,7 @@ export function buildResumoAplicacaoHtml(
         <td class="tempo">${escapeHtml(formatMsByModality(r.prova ?? 'corrida', r.tempoMs))}</td>
         <td class="nota">${nota}</td>
         <td class="repro">${situacao}</td>
-        <td class="rubrica">${rubrica}</td>
+        <td class="col-rubrica">${rubrica}</td>
       </tr>`;
     })
     .join('');
@@ -98,8 +89,7 @@ export function buildResumoAplicacaoHtml(
     th { background: #f3f4f6; font-weight: 800; color: #374151; }
     .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
     .nota { font-weight: 800; text-align: center; }
-    td.rubrica { min-width: 120px; max-width: 200px; }
-    .rubrica-img { width: 160px; height: 56px; object-fit: contain; display: block; vertical-align: top; }
+    ${RUBRICA_PDF_STYLES}
     ${PRINT_LANDSCAPE_CSS}
   </style>
 </head>

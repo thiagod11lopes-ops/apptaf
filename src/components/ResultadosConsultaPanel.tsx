@@ -16,7 +16,7 @@ import { LabelNip } from './LabelNip';
 import { PressableScale } from './premium/PressableScale';
 import { ConfirmacaoExcluirResultadoModal } from './sismav/ConfirmacaoExcluirResultadoModal';
 import { addCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
-import { RubricaThumb } from './RubricaThumb';
+import { ProvaComColunaRubrica } from './ProvaComColunaRubrica';
 import { formatNipInput, nipDigitos } from '../utils/nipFormat';
 import {
   cadastroComAlgumResultadoTaf,
@@ -314,86 +314,77 @@ export function ResultadosConsultaPanel() {
             <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
             <Text style={[ts.h2, { color: ui.text, marginBottom: 12, fontSize: 18 }]}>{r.nome}</Text>
 
-            <View style={styles.provaBlock}>
-              <View style={styles.provaHeader}>
-                <Text style={[ts.caption, styles.provaTitulo, { color: theme.textSecondary }]}>
-                  Corrida
-                </Text>
-                {podeExcluirCorrida ? (
+            <ProvaComColunaRubrica
+              titulo="Corrida"
+              rubricaSvg={r.rubricaCorridaSvg}
+              headerRight={
+                podeExcluirCorrida ? (
                   <PressableScale
                     onPress={() => abrirExclusao('corrida')}
-                    style={[styles.trashBtn, { borderColor: theme.border, backgroundColor: theme.lossMuted }]}
+                    style={[styles.trashBtn, { borderColor: theme.border }]}
                     accessibilityLabel="Excluir resultado de corrida"
                   >
                     <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
                   </PressableScale>
-                ) : null}
-              </View>
-              <View style={styles.valorRubricaRow}>
-                <View style={styles.provaRow}>
-                  <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
-                  <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCorrida}</Text>
-                </View>
-                <RubricaThumb svgUri={r.rubricaCorridaSvg} />
+                ) : null
+              }
+            >
+              <View style={styles.provaRow}>
+                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCorrida}</Text>
               </View>
               <Text style={[ts.caption, situacaoStyle(r.situacaoCorrida, theme)]}>
                 {r.situacaoCorrida}
               </Text>
-            </View>
+            </ProvaComColunaRubrica>
 
-            <View style={styles.provaBlock}>
-              <View style={styles.provaHeader}>
-                <Text style={[ts.caption, styles.provaTitulo, { color: theme.textSecondary }]}>
-                  Natação
-                </Text>
-                {podeExcluirNatacao ? (
+            <ProvaComColunaRubrica
+              titulo="Natação"
+              rubricaSvg={r.rubricaNatacaoSvg}
+              headerRight={
+                podeExcluirNatacao ? (
                   <PressableScale
                     onPress={() => abrirExclusao('natacao')}
-                    style={[styles.trashBtn, { borderColor: theme.border, backgroundColor: theme.lossMuted }]}
+                    style={[styles.trashBtn, { borderColor: theme.border }]}
                     accessibilityLabel="Excluir resultado de natação"
                   >
                     <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
                   </PressableScale>
-                ) : null}
-              </View>
-              <View style={styles.valorRubricaRow}>
-                <View style={styles.provaRow}>
-                  <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
-                  <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaNatacao}</Text>
-                </View>
-                <RubricaThumb svgUri={r.rubricaNatacaoSvg} />
+                ) : null
+              }
+            >
+              <View style={styles.provaRow}>
+                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaNatacao}</Text>
               </View>
               <Text style={[ts.caption, situacaoStyle(r.situacaoNatacao, theme)]}>
                 {r.situacaoNatacao}
               </Text>
-            </View>
+            </ProvaComColunaRubrica>
 
-            <View style={styles.provaBlock}>
-              <View style={styles.provaHeader}>
-                <Text style={[ts.caption, styles.provaTitulo, { color: theme.textSecondary }]}>
-                  Permanência
-                </Text>
-                {podeExcluirPermanencia ? (
+            <ProvaComColunaRubrica
+              titulo="Permanência"
+              rubricaSvg={r.rubricaPermanenciaSvg}
+              headerRight={
+                podeExcluirPermanencia ? (
                   <PressableScale
                     onPress={() => abrirExclusao('permanencia')}
-                    style={[styles.trashBtn, { borderColor: theme.border, backgroundColor: theme.lossMuted }]}
+                    style={[styles.trashBtn, { borderColor: theme.border }]}
                     accessibilityLabel="Excluir resultado de permanência"
                   >
                     <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
                   </PressableScale>
-                ) : null}
-              </View>
+                ) : null
+              }
+            >
               <View style={styles.provaRow}>
                 <Text style={[ts.caption, { color: theme.textMuted }]}>Tempo: </Text>
                 <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.permanenciaTempo}</Text>
               </View>
-              <View style={styles.valorRubricaRow}>
-                <Text style={[ts.caption, situacaoStyle(r.situacaoPermanencia, theme)]}>
-                  {r.situacaoPermanencia}
-                </Text>
-                <RubricaThumb svgUri={r.rubricaPermanenciaSvg} />
-              </View>
-            </View>
+              <Text style={[ts.caption, situacaoStyle(r.situacaoPermanencia, theme)]}>
+                {r.situacaoPermanencia}
+              </Text>
+            </ProvaComColunaRubrica>
           </Card>
         );
       })}
@@ -495,19 +486,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   resultCard: { padding: 16, marginBottom: 12 },
-  provaBlock: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(128,128,128,0.35)',
-  },
-  provaHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  provaTitulo: { fontWeight: '800', textTransform: 'uppercase' },
   trashBtn: {
     width: 36,
     height: 36,
@@ -515,16 +493,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   provaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 2 },
-  valorRubricaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    flexWrap: 'wrap',
-    marginBottom: 4,
-  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',

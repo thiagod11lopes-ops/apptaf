@@ -95,13 +95,8 @@ const COLUNAS_DADOS: { key: ColDataKey; width: number; align?: 'left' | 'center'
   { key: 'sitP', width: W.situacao, align: 'center' },
 ];
 
-function colStyle(width: number, align?: 'left' | 'center', groupStart?: boolean) {
-  return [
-    styles.col,
-    { width, flexShrink: 0, flexGrow: 0 },
-    align === 'center' ? styles.colCenter : null,
-    groupStart ? styles.colGroupStart : null,
-  ];
+function colStyle(width: number, align?: 'left' | 'center') {
+  return [styles.col, { width, flexShrink: 0, flexGrow: 0 }, align === 'center' ? styles.colCenter : null];
 }
 
 function StatusBadge({ status }: { status: 'Completo' | 'Parcial' }) {
@@ -250,6 +245,7 @@ export function ResultadosGeralPanel() {
 
       {!carregando && linhasVisiveis.length > 0 ? (
         <Card
+          noPadding
           elevated
           style={[
             styles.tableCard,
@@ -260,14 +256,16 @@ export function ResultadosGeralPanel() {
             horizontal
             showsHorizontalScrollIndicator
             nestedScrollEnabled
+            bounces={false}
+            style={styles.tableScroll}
             contentContainerStyle={styles.tableScrollContent}
           >
-            <View style={[styles.tableInner, { width: LARGURA_TABELA }]}>
+            <View style={styles.tableFrame}>
               <LinearGradient
                 colors={[...t.gradientPrimaryBtn]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={styles.headerGradient}
+                style={styles.headerBlock}
               >
                 <View style={styles.headerRow}>
                   <View style={colStyle(W.nip)}>
@@ -279,13 +277,13 @@ export function ResultadosGeralPanel() {
                   <View style={colStyle(W.status, 'center')}>
                     <Text style={[styles.headerCell, styles.headerCellCenter]}>Status</Text>
                   </View>
-                  <View style={colStyle(LARGURA_CORRIDA, 'center', true)}>
+                  <View style={colStyle(LARGURA_CORRIDA, 'center')}>
                     <Text style={[styles.headerCell, styles.headerCellCenter]}>Corrida</Text>
                   </View>
-                  <View style={colStyle(LARGURA_NATACAO, 'center', true)}>
+                  <View style={colStyle(LARGURA_NATACAO, 'center')}>
                     <Text style={[styles.headerCell, styles.headerCellCenter]}>Natação</Text>
                   </View>
-                  <View style={colStyle(LARGURA_PERMANENCIA, 'center', true)}>
+                  <View style={colStyle(LARGURA_PERMANENCIA, 'center')}>
                     <Text style={[styles.headerCell, styles.headerCellCenter]}>Permanência</Text>
                   </View>
                 </View>
@@ -293,19 +291,19 @@ export function ResultadosGeralPanel() {
                   <View style={colStyle(W.nip)} />
                   <View style={colStyle(W.nome)} />
                   <View style={colStyle(W.status)} />
-                  <View style={colStyle(W.nota, 'center', true)}>
+                  <View style={[colStyle(W.nota, 'center'), styles.colGroupDivider]}>
                     <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Nota</Text>
                   </View>
                   <View style={colStyle(W.situacao, 'center')}>
                     <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Situação</Text>
                   </View>
-                  <View style={colStyle(W.nota, 'center', true)}>
+                  <View style={[colStyle(W.nota, 'center'), styles.colGroupDivider]}>
                     <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Nota</Text>
                   </View>
                   <View style={colStyle(W.situacao, 'center')}>
                     <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Situação</Text>
                   </View>
-                  <View style={colStyle(W.permanencia, 'center', true)}>
+                  <View style={[colStyle(W.permanencia, 'center'), styles.colGroupDivider]}>
                     <Text style={[styles.headerSubCell, styles.headerCellCenter]}>Permanência</Text>
                   </View>
                   <View style={colStyle(W.situacao, 'center')}>
@@ -388,7 +386,6 @@ export function ResultadosGeralPanel() {
                     key={item.id}
                     style={[
                       styles.dataRow,
-                      { width: LARGURA_TABELA },
                       {
                         backgroundColor: zebra ? theme.backgroundSecondary : 'transparent',
                         borderBottomColor: theme.border,
@@ -400,10 +397,8 @@ export function ResultadosGeralPanel() {
                         key={col.key}
                         style={[
                           ...colStyle(col.width, col.align),
-                          (col.key === 'notaC' || col.key === 'notaN' || col.key === 'perm') && {
-                            borderLeftWidth: StyleSheet.hairlineWidth,
-                            borderLeftColor: theme.border,
-                          },
+                          (col.key === 'notaC' || col.key === 'notaN' || col.key === 'perm') &&
+                            styles.colGroupDividerBody,
                         ]}
                       >
                         {renderCelula(col.key)}
@@ -451,24 +446,33 @@ const styles = StyleSheet.create({
   emptyCard: { padding: 22 },
   emptyHint: { marginTop: 8, lineHeight: 18 },
   tableCard: {
-    padding: 0,
+    width: '100%',
+    alignSelf: 'stretch',
     overflow: 'hidden',
     borderRadius: PREMIUM.radiusLg,
   },
-  tableScrollContent: {
-    flexGrow: 1,
+  tableScroll: {
+    width: '100%',
+    overflow: 'hidden',
   },
-  tableInner: { paddingBottom: 4 },
-  headerGradient: {
+  tableScrollContent: {
+    flexGrow: 0,
+  },
+  tableFrame: {
+    width: LARGURA_TABELA,
+    overflow: 'hidden',
+  },
+  headerBlock: {
+    width: LARGURA_TABELA,
+    overflow: 'hidden',
     borderTopLeftRadius: PREMIUM.radiusLg - 2,
     borderTopRightRadius: PREMIUM.radiusLg - 2,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
     width: LARGURA_TABELA,
+    paddingVertical: 10,
   },
   headerSubRow: {
     paddingTop: 0,
@@ -490,22 +494,26 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
-  headerCellCenter: { textAlign: 'center', width: '100%' },
+  headerCellCenter: { textAlign: 'center', alignSelf: 'stretch' },
   dataRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: LARGURA_TABELA,
     paddingVertical: 11,
-    paddingHorizontal: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   col: {
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    overflow: 'hidden',
   },
   colCenter: { alignItems: 'center' },
-  colGroupStart: {
+  colGroupDivider: {
     borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: 'rgba(255,255,255,0.2)',
+    borderLeftColor: 'rgba(255,255,255,0.22)',
+  },
+  colGroupDividerBody: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: 'rgba(17,24,39,0.1)',
   },
   cell: {
     fontSize: 12,

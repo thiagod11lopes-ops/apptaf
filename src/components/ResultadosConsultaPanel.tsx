@@ -16,17 +16,24 @@ import { LabelNip } from './LabelNip';
 import { PressableScale } from './premium/PressableScale';
 import { ConfirmacaoExcluirResultadoModal } from './sismav/ConfirmacaoExcluirResultadoModal';
 import { addCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
-import { formatNipInput } from '../utils/nipFormat';
+import { RubricaThumb } from './RubricaThumb';
+import { formatNipInput, nipDigitos } from '../utils/nipFormat';
 import {
   cadastroComAlgumResultadoTaf,
   cadastroParaLinhaResultado,
   filtrarCadastrosPorNipNome,
-  linhasResultadoFromCadastros,
+  mesclarRubricasNaLinha,
   temAvaliacaoCorrida,
   temAvaliacaoNatacao,
   temAvaliacaoPermanencia,
   type ResultadoTafLinha,
 } from '../utils/resultadoTafCadastro';
+import {
+  carregarRubricasDasSessoesPorNip,
+  mesclarRubricas,
+  rubricasDoCadastro,
+  type RubricasPorNip,
+} from '../utils/rubricasDasSessoes';
 import {
   limparResultadoModalidadeCadastro,
   type ModalidadeResultadoTaf,
@@ -39,6 +46,20 @@ function situacaoStyle(situacao: string, theme: { gain: string; loss: string; te
   if (situacao === 'Aprovado') return { color: theme.gain, fontWeight: '700' as const };
   if (situacao === 'Reprovado') return { color: theme.loss, fontWeight: '700' as const };
   return { color: theme.textMuted };
+}
+
+function linhasComRubricasMescladas(
+  cadastros: Awaited<ReturnType<typeof getAllCadastros>>,
+  rubricasSessoes: Map<string, RubricasPorNip>,
+): ResultadoTafLinha[] {
+  return cadastros
+    .filter(cadastroComAlgumResultadoTaf)
+    .map((c) => {
+      const linha = cadastroParaLinhaResultado(c);
+      const key = nipDigitos(c.nip);
+      const rub = mesclarRubricas(rubricasDoCadastro(c), key ? rubricasSessoes.get(key) : undefined);
+      return mesclarRubricasNaLinha(linha, rub);
+    });
 }
 
 export function ResultadosConsultaPanel() {
@@ -55,6 +76,7 @@ export function ResultadosConsultaPanel() {
   const [carregandoPdf, setCarregandoPdf] = useState(false);
   const [modalTodosPdf, setModalTodosPdf] = useState(false);
   const [todosCadastros, setTodosCadastros] = useState<Awaited<ReturnType<typeof getAllCadastros>>>([]);
+  const [rubricasSessoes, setRubricasSessoes] = useState<Map<string, RubricasPorNip>>(new Map());
   const [excluindo, setExcluindo] = useState(false);
   const [confirmarExclusao, setConfirmarExclusao] = useState<{
     cadastroId: string;
@@ -65,7 +87,9 @@ export function ResultadosConsultaPanel() {
 
   const carregarBase = useCallback(async () => {
     const lista = await getAllCadastros();
+    const rub = await carregarRubricasDasSessoesPorNip();
     setTodosCadastros(lista);
+    setRubricasSessoes(rub);
     return lista;
   }, []);
 
@@ -92,14 +116,14 @@ export function ResultadosConsultaPanel() {
     const comResultado = cadastrados.filter(cadastroComAlgumResultadoTaf);
 
     setBuscou(true);
-    setLinhas(comResultado.map(cadastroParaLinhaResultado));
+    setLinhas(linhasComRubricasMescladas(comResultado, rubricasSessoes));
 
     if (cadastrados.length === 0) {
       setMensagemBusca('Dados não Encontrados no Sistema');
     } else if (comResultado.length === 0) {
       setMensagemBusca('Militar Cadastrado não realizou TAF');
     }
-  }, [nip, nome, todosCadastros, carregarBase]);
+  }, [nip, nome, todosCadastros, rubricasSessoes, carregarBase]);
 
   const handleBaixar = useCallback(async () => {
     setAviso(null);
@@ -133,7 +157,7 @@ export function ResultadosConsultaPanel() {
     try {
       const lista = todosCadastros.length ? todosCadastros : await carregarBase();
       const comResultado = lista.filter(cadastroComAlgumResultadoTaf);
-      const todasLinhas = linhasResultadoFromCadastros(comResultado);
+      const todasLinhas = linhasComRubricasMescladas(comResultado, rubricasSessoes);
       if (todasLinhas.length === 0) {
         setAviso('Nenhum integrante com resultado registrado no sistema.');
         return;
@@ -147,7 +171,7 @@ export function ResultadosConsultaPanel() {
     } finally {
       setCarregandoPdf(false);
     }
-  }, [todosCadastros, carregarBase]);
+  }, [todosCadastros, rubricasSessoes, carregarBase]);
 
   const executarExclusaoModalidade = useCallback(async () => {
     if (!confirmarExclusao) return;
@@ -169,7 +193,9 @@ export function ResultadosConsultaPanel() {
           setMensagemBusca('Militar Cadastrado não realizou TAF');
           return prev.filter((l) => l.id !== atualizado.id);
         }
-        const linha = cadastroParaLinhaResultado(atualizado);
+        const key = nipDigitos(atualizado.nip);
+        const rub = mesclarRubricas(rubricasDoCadastro(atualizado), key ? rubricasSessoes.get(key) : undefined);
+        const linha = mesclarRubricasNaLinha(cadastroParaLinhaResultado(atualizado), rub);
         return prev.map((l) => (l.id === atualizado.id ? linha : l));
       });
       setConfirmarExclusao(null);
@@ -178,7 +204,7 @@ export function ResultadosConsultaPanel() {
     } finally {
       setExcluindo(false);
     }
-  }, [confirmarExclusao, todosCadastros, carregarBase]);
+  }, [confirmarExclusao, todosCadastros, rubricasSessoes, carregarBase]);
 
   const inputStyle = [
     styles.input,
@@ -303,9 +329,12 @@ export function ResultadosConsultaPanel() {
                   </PressableScale>
                 ) : null}
               </View>
-              <View style={styles.provaRow}>
-                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
-                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCorrida}</Text>
+              <View style={styles.valorRubricaRow}>
+                <View style={styles.provaRow}>
+                  <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+                  <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCorrida}</Text>
+                </View>
+                <RubricaThumb svgUri={r.rubricaCorridaSvg} />
               </View>
               <Text style={[ts.caption, situacaoStyle(r.situacaoCorrida, theme)]}>
                 {r.situacaoCorrida}
@@ -327,9 +356,12 @@ export function ResultadosConsultaPanel() {
                   </PressableScale>
                 ) : null}
               </View>
-              <View style={styles.provaRow}>
-                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
-                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaNatacao}</Text>
+              <View style={styles.valorRubricaRow}>
+                <View style={styles.provaRow}>
+                  <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+                  <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaNatacao}</Text>
+                </View>
+                <RubricaThumb svgUri={r.rubricaNatacaoSvg} />
               </View>
               <Text style={[ts.caption, situacaoStyle(r.situacaoNatacao, theme)]}>
                 {r.situacaoNatacao}
@@ -355,9 +387,12 @@ export function ResultadosConsultaPanel() {
                 <Text style={[ts.caption, { color: theme.textMuted }]}>Tempo: </Text>
                 <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.permanenciaTempo}</Text>
               </View>
-              <Text style={[ts.caption, situacaoStyle(r.situacaoPermanencia, theme)]}>
-                {r.situacaoPermanencia}
-              </Text>
+              <View style={styles.valorRubricaRow}>
+                <Text style={[ts.caption, situacaoStyle(r.situacaoPermanencia, theme)]}>
+                  {r.situacaoPermanencia}
+                </Text>
+                <RubricaThumb svgUri={r.rubricaPermanenciaSvg} />
+              </View>
             </View>
           </Card>
         );
@@ -482,6 +517,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   provaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 2 },
+  valorRubricaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',

@@ -12,6 +12,9 @@ export type ResultadoTafLinha = {
   situacaoNatacao: string;
   permanenciaTempo: string;
   situacaoPermanencia: string;
+  rubricaCorridaSvg?: string;
+  rubricaNatacaoSvg?: string;
+  rubricaPermanenciaSvg?: string;
 };
 
 function tempos(c: CadastroItemPersist) {
@@ -134,6 +137,25 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
     situacaoNatacao: situacaoDeNota(c.notaNatacao, temNatacao),
     permanenciaTempo: temPerm ? t.permanencia || '—' : '—',
     situacaoPermanencia: temPerm ? situacaoPermanencia(c) : '—',
+    rubricaCorridaSvg: temCorrida ? c.rubricaCorridaSvg : undefined,
+    rubricaNatacaoSvg: temNatacao ? c.rubricaNatacaoSvg : undefined,
+    rubricaPermanenciaSvg: temPerm ? c.rubricaPermanenciaSvg : undefined,
+  };
+}
+
+export function mesclarRubricasNaLinha(
+  linha: ResultadoTafLinha,
+  rubricas: {
+    corrida?: string;
+    natacao?: string;
+    permanencia?: string;
+  },
+): ResultadoTafLinha {
+  return {
+    ...linha,
+    rubricaCorridaSvg: linha.rubricaCorridaSvg ?? rubricas.corrida,
+    rubricaNatacaoSvg: linha.rubricaNatacaoSvg ?? rubricas.natacao,
+    rubricaPermanenciaSvg: linha.rubricaPermanenciaSvg ?? rubricas.permanencia,
   };
 }
 

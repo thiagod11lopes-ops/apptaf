@@ -25,6 +25,10 @@ export type CadastroItemPersist = {
   dataTafCorrida?: string;
   dataTafNatacao?: string;
   dataTafPermanencia?: string;
+  /** Rúbrica do candidato (SVG data URL) por modalidade */
+  rubricaCorridaSvg?: string;
+  rubricaNatacaoSvg?: string;
+  rubricaPermanenciaSvg?: string;
 };
 
 const DB_NAME = 'taf_cadastros_db';

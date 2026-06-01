@@ -2,6 +2,7 @@ import { Platform, Alert } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoTafLinha } from './resultadoTafCadastro';
+import { celulaRubricaHtml, RUBRICA_PDF_STYLES } from './rubricaHtml';
 
 const PDF_A4_LANDSCAPE_WIDTH = 842;
 const PDF_A4_LANDSCAPE_HEIGHT = 595;
@@ -13,6 +14,16 @@ function permanenciaTempoParaPdf(linha: ResultadoTafLinha): string {
   const temPermanencia =
     linha.situacaoPermanencia !== '—' || linha.permanenciaTempo !== '—';
   return temPermanencia ? PERMANENCIA_TEMPO_PDF_PADRAO : '—';
+}
+
+function notaComRubricaHtml(nota: string, rubricaSvg?: string): string {
+  return `<div class="nota-rubrica-linha"><span class="nota-valor">${escapeHtml(nota)}</span>${celulaRubricaHtml(rubricaSvg)}</div>`;
+}
+
+function situacaoPermanenciaComRubricaHtml(linha: ResultadoTafLinha): string {
+  const sit = escapeHtml(linha.situacaoPermanencia);
+  const rubrica = celulaRubricaHtml(linha.rubricaPermanenciaSvg);
+  return `<div class="nota-rubrica-linha"><span class="nota-valor">${sit}</span>${rubrica}</div>`;
 }
 
 function escapeHtml(s: string): string {
@@ -33,12 +44,12 @@ export function buildResultadosTafHtml(
       (r) => `<tr>
         <td>${escapeHtml(r.nip)}</td>
         <td>${escapeHtml(r.nome)}</td>
-        <td class="nota">${escapeHtml(r.notaCorrida)}</td>
+        <td class="nota nota-com-rubrica">${notaComRubricaHtml(r.notaCorrida, r.rubricaCorridaSvg)}</td>
         <td>${escapeHtml(r.situacaoCorrida)}</td>
-        <td class="nota">${escapeHtml(r.notaNatacao)}</td>
+        <td class="nota nota-com-rubrica">${notaComRubricaHtml(r.notaNatacao, r.rubricaNatacaoSvg)}</td>
         <td>${escapeHtml(r.situacaoNatacao)}</td>
         <td>${escapeHtml(permanenciaTempoParaPdf(r))}</td>
-        <td>${escapeHtml(r.situacaoPermanencia)}</td>
+        <td class="nota-com-rubrica">${situacaoPermanenciaComRubricaHtml(r)}</td>
       </tr>`,
     )
     .join('');
@@ -59,6 +70,7 @@ export function buildResultadosTafHtml(
     .nota { font-weight: 700; text-align: center; }
     .repro { color: #b00020; font-weight: 700; }
     .aprov { color: #0d6b2d; font-weight: 700; }
+    ${RUBRICA_PDF_STYLES}
   </style>
 </head>
 <body>

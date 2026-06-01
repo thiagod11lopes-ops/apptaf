@@ -26,17 +26,20 @@ export function limparResultadoModalidadeCadastro(
       next.tempoCorrida = undefined;
       next.notaCorrida = undefined;
       next.dataTafCorrida = undefined;
+      next.rubricaCorridaSvg = undefined;
       break;
     case 'natacao':
       next.tempoNatacao = undefined;
       next.notaNatacao = undefined;
       next.resultadoNatacao = undefined;
       next.dataTafNatacao = undefined;
+      next.rubricaNatacaoSvg = undefined;
       break;
     case 'permanencia':
       next.tempoPermanencia = undefined;
       next.resultadoPermanencia = undefined;
       next.dataTafPermanencia = undefined;
+      next.rubricaPermanenciaSvg = undefined;
       break;
   }
 

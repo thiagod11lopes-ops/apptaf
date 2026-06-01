@@ -37,6 +37,7 @@ import {
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { addSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
@@ -877,7 +878,8 @@ export default function AplicarTAFScreen() {
     if (modalParcialAviso) {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
-    void gravarSessaoAplicacao(atualizados).then(() => {
+    void gravarSessaoAplicacao(atualizados).then(async () => {
+      await persistirRubricasNoCadastro(atualizados);
       navigation.navigate('CadastrarResultados', { resultados: atualizados });
     });
     pendingResultadosNavRef.current = null;
@@ -1137,7 +1139,15 @@ export default function AplicarTAFScreen() {
             ? `Registro parcial: não localizado no cadastro: ${naoEncontrados.slice(0, 3).join(', ')}${naoEncontrados.length > 3 ? '…' : ''}.`
             : null;
         setModalParcialAviso(aviso);
-        setModalTempoRegistradoVisible(true);
+        setRubricasNatacaoSvg(Array.from({ length: resultadosPerm.length }, () => ''));
+        setIndiceRubricaNatacao(0);
+        setErroRubricaNatacao('');
+        setRubricaStrokes([]);
+        setRubricaStrokeAtual([]);
+        const copiaPerm = resultadosPerm.map((r) => ({ ...r }));
+        setListaResultadosRubricaNatacao(copiaPerm);
+        pendingResultadosNavRef.current = copiaPerm;
+        setModalRubricaNatacaoVisible(true);
       } else {
         Alert.alert(
           'Nenhum registro salvo',
@@ -1287,7 +1297,12 @@ export default function AplicarTAFScreen() {
               const totalLista = lista?.length ?? 0;
               if (!participanteAtual) return null;
               const modProva = participanteAtual.prova ?? 'corrida';
-              const tituloModalidade = modProva === 'natacao' ? 'Natação' : 'Corrida';
+              const tituloModalidade =
+                modProva === 'natacao'
+                  ? 'Natação'
+                  : modProva === 'permanencia'
+                    ? 'Permanência'
+                    : 'Corrida';
               return (
                 <View key={`rubrica-participante-${indiceRubricaNatacao}`}>
                   <Text style={styles.modalRubricaSubtituloCadastro}>

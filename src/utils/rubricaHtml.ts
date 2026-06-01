@@ -16,11 +16,11 @@ export function celulaRubricaHtml(svgUri?: string | null): string {
 export const RUBRICA_PDF_STYLES = `
   td.col-rubrica {
     background: transparent !important;
-    padding: 2px 4px !important;
+    padding: 2px 3px !important;
     text-align: center;
     vertical-align: middle;
-    width: ${RUBRICA_PDF_LARGURA + 16}px;
-    max-height: ${RUBRICA_PDF_ALTURA + 6}px;
+    width: ${RUBRICA_PDF_LARGURA + 14}px;
+    max-height: ${RUBRICA_PDF_ALTURA + 5}px;
     line-height: 1.1;
   }
   .rubrica-img {
@@ -46,20 +46,20 @@ export const RUBRICA_PDF_STYLES = `
 
 /** Estilos de tabela compacta para PDFs com rúbrica (altura de linha ~metade). */
 export const PDF_TABELA_COMPACTA_STYLES = `
-  table.resultados-taf { width: 100%; border-collapse: collapse; font-size: 10px; }
+  table.resultados-taf { width: 100%; border-collapse: collapse; font-size: 9px; }
   table.resultados-taf th,
   table.resultados-taf td {
     border: 1px solid #ccc;
-    padding: 3px 5px;
+    padding: 2px 4px;
     text-align: left;
     vertical-align: middle;
-    line-height: 1.2;
+    line-height: 1.15;
   }
   table.resultados-taf th {
     background: #e8eef5;
     font-weight: 700;
-    padding: 4px 5px;
-    font-size: 9px;
+    padding: 3px 4px;
+    font-size: 8px;
   }
   table.resultados-taf th.col-rubrica,
   table.resultados-taf td.col-rubrica {

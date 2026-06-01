@@ -57,8 +57,9 @@ export function rubricaSvgParaPdf(svgUri?: string | null): string | undefined {
     return base;
   }
 
-  svg = svg.replace(/stroke-width="2\.5"/gi, 'stroke-width="3.25"');
-  svg = svg.replace(/stroke-width='2\.5'/gi, "stroke-width='3.25'");
+  svg = svg.replace(/stroke-width="2\.5"/gi, 'stroke-width="3.5"');
+  svg = svg.replace(/stroke-width='2\.5'/gi, "stroke-width='3.5'");
+  svg = svg.replace(/stroke-width="3\.25"/gi, 'stroke-width="3.5"');
 
   return `${prefix}${encodeURIComponent(svg)}`;
 }

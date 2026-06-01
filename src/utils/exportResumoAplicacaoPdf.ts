@@ -3,7 +3,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import { formatMsByModality } from '../taf/tafTimeFormat';
-import { celulaRubricaHtml, RUBRICA_PDF_STYLES } from './rubricaHtml';
+import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
 
 function escapeHtml(s: string): string {
   return String(s)
@@ -84,11 +84,8 @@ export function buildResumoAplicacaoHtml(
     h1 { font-size: 18px; margin: 0 0 8px; }
     .meta { font-size: 12px; color: #6B7280; margin-bottom: 16px; }
     .intro { font-size: 13px; margin-bottom: 20px; line-height: 1.5; color: #374151; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { border: 1px solid #e5e7eb; padding: 10px; text-align: left; vertical-align: top; }
-    th { background: #f3f4f6; font-weight: 800; color: #374151; }
     .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
-    .nota { font-weight: 800; text-align: center; }
+    ${PDF_TABELA_COMPACTA_STYLES}
     ${RUBRICA_PDF_STYLES}
     ${PRINT_LANDSCAPE_CSS}
   </style>
@@ -106,7 +103,7 @@ export function buildResumoAplicacaoHtml(
   ${
     resultados.length === 0
       ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessão.</p>'
-      : `<table>
+      : `<table class="resultados-taf">
     <thead><tr>${theadPdf}</tr></thead>
     <tbody>${rows}</tbody>
   </table>`

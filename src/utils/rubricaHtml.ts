@@ -1,11 +1,14 @@
-import { RUBRICA_NATIVA_ALTURA, RUBRICA_NATIVA_LARGURA } from './rubricaConstants';
-import { normalizarRubricaSvgDataUrl } from './rubricaSvgNormalize';
+import {
+  RUBRICA_PDF_ALTURA,
+  RUBRICA_PDF_LARGURA,
+} from './rubricaConstants';
+import { rubricaSvgParaPdf } from './rubricaSvgNormalize';
 
-/** HTML da coluna Rúbrica para PDF — sem fundo, imagem em resolução nativa. */
+/** HTML da coluna Rúbrica para PDF — compacto, traço reforçado para boa leitura. */
 export function celulaRubricaHtml(svgUri?: string | null): string {
-  const svg = normalizarRubricaSvgDataUrl(svgUri) ?? '';
+  const svg = rubricaSvgParaPdf(svgUri) ?? '';
   if (svg.startsWith('data:image/svg')) {
-    return `<img src="${svg}" alt="Rúbrica" class="rubrica-img" width="${RUBRICA_NATIVA_LARGURA}" height="${RUBRICA_NATIVA_ALTURA}"/>`;
+    return `<img src="${svg}" alt="Rúbrica" class="rubrica-img" width="${RUBRICA_PDF_LARGURA}" height="${RUBRICA_PDF_ALTURA}"/>`;
   }
   return '<span class="rubrica-vazio">—</span>';
 }
@@ -13,23 +16,57 @@ export function celulaRubricaHtml(svgUri?: string | null): string {
 export const RUBRICA_PDF_STYLES = `
   td.col-rubrica {
     background: transparent !important;
-    padding: 4px 6px;
+    padding: 2px 4px !important;
     text-align: center;
     vertical-align: middle;
-    width: ${RUBRICA_NATIVA_LARGURA + 24}px;
+    width: ${RUBRICA_PDF_LARGURA + 16}px;
+    max-height: ${RUBRICA_PDF_ALTURA + 6}px;
+    line-height: 1.1;
   }
   .rubrica-img {
-    width: ${RUBRICA_NATIVA_LARGURA}px;
-    height: ${RUBRICA_NATIVA_ALTURA}px;
+    width: ${RUBRICA_PDF_LARGURA}px;
+    height: ${RUBRICA_PDF_ALTURA}px;
     max-width: 100%;
+    max-height: ${RUBRICA_PDF_ALTURA}px;
     object-fit: contain;
+    object-position: center;
     display: block;
     margin: 0 auto;
     background: none;
     border: none;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
   }
   .rubrica-vazio {
     color: #94a3b8;
-    font-size: 10px;
+    font-size: 9px;
+    line-height: 1;
+  }
+`;
+
+/** Estilos de tabela compacta para PDFs com rúbrica (altura de linha ~metade). */
+export const PDF_TABELA_COMPACTA_STYLES = `
+  table.resultados-taf { width: 100%; border-collapse: collapse; font-size: 10px; }
+  table.resultados-taf th,
+  table.resultados-taf td {
+    border: 1px solid #ccc;
+    padding: 3px 5px;
+    text-align: left;
+    vertical-align: middle;
+    line-height: 1.2;
+  }
+  table.resultados-taf th {
+    background: #e8eef5;
+    font-weight: 700;
+    padding: 4px 5px;
+    font-size: 9px;
+  }
+  table.resultados-taf th.col-rubrica,
+  table.resultados-taf td.col-rubrica {
+    text-align: center;
+  }
+  table.resultados-taf .nota {
+    font-weight: 700;
+    text-align: center;
   }
 `;

@@ -2,7 +2,7 @@ import { Platform, Alert } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoTafLinha } from './resultadoTafCadastro';
-import { celulaRubricaHtml, RUBRICA_PDF_STYLES } from './rubricaHtml';
+import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
 
 const PDF_A4_LANDSCAPE_WIDTH = 842;
 const PDF_A4_LANDSCAPE_HEIGHT = 595;
@@ -57,18 +57,14 @@ export function buildResultadosTafHtml(
     body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 12px; }
     h1 { font-size: 16px; margin: 0 0 4px; }
     .sub { color: #444; margin-bottom: 12px; font-size: 11px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: middle; }
-    th { background: #e8eef5; font-weight: 700; }
-    th.col-rubrica, td.col-rubrica { text-align: center; }
-    .nota { font-weight: 700; text-align: center; }
+    ${PDF_TABELA_COMPACTA_STYLES}
     ${RUBRICA_PDF_STYLES}
   </style>
 </head>
 <body>
   <h1>Resultados TAF — Corrida, Natação e Permanência</h1>
   <p class="sub">${escapeHtml(subtitulo)} · Gerado em ${escapeHtml(dataStr)} · ${linhas.length} registro(s)</p>
-  <table>
+  <table class="resultados-taf">
     <thead>
       <tr>
         <th>NIP</th>

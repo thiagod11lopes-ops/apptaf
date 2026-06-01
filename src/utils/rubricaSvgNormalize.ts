@@ -40,3 +40,25 @@ export function normalizarRubricaSvgDataUrl(svgUri?: string | null): string | un
 
   return `${prefix}${encodeURIComponent(svg)}`;
 }
+
+/** Traços um pouco mais grossos para leitura da rúbrica reduzida no PDF. */
+export function rubricaSvgParaPdf(svgUri?: string | null): string | undefined {
+  const base = normalizarRubricaSvgDataUrl(svgUri);
+  if (!base?.startsWith('data:image/svg')) return base;
+
+  const match = base.match(/^data:image\/svg\+xml(;utf8)?,/i);
+  const prefix = match?.[0] ?? 'data:image/svg+xml;utf8,';
+  const encoded = base.slice(prefix.length);
+
+  let svg: string;
+  try {
+    svg = decodeURIComponent(encoded);
+  } catch {
+    return base;
+  }
+
+  svg = svg.replace(/stroke-width="2\.5"/gi, 'stroke-width="3.25"');
+  svg = svg.replace(/stroke-width='2\.5'/gi, "stroke-width='3.25'");
+
+  return `${prefix}${encodeURIComponent(svg)}`;
+}

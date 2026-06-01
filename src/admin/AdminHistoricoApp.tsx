@@ -6,11 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
 import { Plus, Pencil, Trash2, ExternalLink, RefreshCw } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { ConfirmacaoExcluirSessaoModal } from './ConfirmacaoExcluirSessaoModal';
 import { SessaoHistoricoEditor, type SessaoDraft } from './SessaoHistoricoEditor';
 import {
   addSessaoAplicacao,
@@ -21,6 +21,7 @@ import {
   type SessaoAplicacaoTaf,
 } from '../services/resultadosAplicadosIndexedDb';
 import { ADMIN_HISTORICO_PATH, adminHistoricoEntryUrls } from '../utils/adminHistoricoAccess';
+import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
 
@@ -33,6 +34,9 @@ export function AdminHistoricoApp() {
   const [carregando, setCarregando] = useState(true);
   const [modo, setModo] = useState<Modo>('lista');
   const [sessaoAtual, setSessaoAtual] = useState<SessaoAplicacaoTaf | null>(null);
+  const [sessaoParaExcluir, setSessaoParaExcluir] = useState<SessaoAplicacaoTaf | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+  const [erroExclusao, setErroExclusao] = useState<string | null>(null);
 
   const entryUrls = useMemo(() => adminHistoricoEntryUrls(), []);
 
@@ -61,28 +65,21 @@ export function AdminHistoricoApp() {
     setSessaoAtual(null);
   }, []);
 
-  const confirmarExcluir = useCallback(
-    (sessao: SessaoAplicacaoTaf) => {
-      Alert.alert(
-        'Excluir sessão',
-        `Remover ${tituloTipoProva(sessao.tipoProva)} de ${sessao.dataAplicacao} (${sessao.resultados.length} participante(s))?`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Excluir',
-            style: 'destructive',
-            onPress: () => {
-              void (async () => {
-                await deleteSessaoAplicacao(sessao.id);
-                await carregar();
-              })();
-            },
-          },
-        ],
-      );
-    },
-    [carregar],
-  );
+  const executarExclusao = useCallback(async () => {
+    if (!sessaoParaExcluir) return;
+    setExcluindo(true);
+    setErroExclusao(null);
+    try {
+      await deleteSessaoAplicacao(sessaoParaExcluir.id);
+      setSessaoParaExcluir(null);
+      await carregar();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Não foi possível excluir a sessão.';
+      setErroExclusao(msg);
+    } finally {
+      setExcluindo(false);
+    }
+  }, [sessaoParaExcluir, carregar]);
 
   const salvarDraft = useCallback(
     async (draft: SessaoDraft) => {
@@ -102,6 +99,9 @@ export function AdminHistoricoApp() {
           resultados: draft.resultados,
         });
       }
+      await persistirRubricasNoCadastro(
+        draft.resultados.map((r) => ({ ...r, prova: r.prova ?? draft.tipoProva })),
+      );
       await carregar();
       voltarLista();
     },
@@ -189,6 +189,10 @@ export function AdminHistoricoApp() {
           </Text>
         ) : null}
 
+        {erroExclusao ? (
+          <Text style={[styles.erroBox, { color: theme.loss, borderColor: theme.loss }]}>{erroExclusao}</Text>
+        ) : null}
+
         {sessoes.map((sessao) => {
           const qtd = sessao.resultados.length;
           const aprovados = sessao.resultados.filter(
@@ -227,7 +231,10 @@ export function AdminHistoricoApp() {
                   <Pencil size={18} color={ui.icon} strokeWidth={2.2} />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => confirmarExcluir(sessao)}
+                  onPress={() => {
+                    setErroExclusao(null);
+                    setSessaoParaExcluir(sessao);
+                  }}
                   style={[styles.iconBtn, { borderColor: theme.loss }]}
                   accessibilityLabel="Excluir sessão"
                 >
@@ -238,6 +245,15 @@ export function AdminHistoricoApp() {
           );
         })}
       </ScrollView>
+
+      <ConfirmacaoExcluirSessaoModal
+        sessao={sessaoParaExcluir}
+        loading={excluindo}
+        onClose={() => {
+          if (!excluindo) setSessaoParaExcluir(null);
+        }}
+        onConfirm={() => void executarExclusao()}
+      />
     </View>
   );
 }
@@ -302,6 +318,15 @@ const styles = StyleSheet.create({
   toolBtnPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 14 },
   loader: { marginVertical: 24 },
   empty: { textAlign: 'center', fontSize: 14, marginTop: 12 },
+  erroBox: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 12,
+    padding: 10,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    textAlign: 'center',
+  },
   card: {
     flexDirection: 'row',
     borderWidth: 1,

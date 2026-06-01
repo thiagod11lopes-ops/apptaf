@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { Plus, Trash2 } from 'lucide-react-native';
+import { RubricaCaptureModal } from '../components/RubricaCaptureModal';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
@@ -75,6 +76,10 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
       tempoTextoFromMs(initial?.tipoProva ?? 'corrida', r.tempoMs),
     ),
   );
+  const [rubricaWizard, setRubricaWizard] = useState<{
+    lista: ResultadoCorridaItem[];
+    indice: number;
+  } | null>(null);
 
   const inputStyle = useMemo(
     () => [
@@ -126,14 +131,8 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
     [],
   );
 
-  const salvar = useCallback(async () => {
-    const data = dataAplicacao.trim();
-    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(data)) {
-      Alert.alert('Data inválida', 'Use o formato DD/MM/AAAA.');
-      return;
-    }
-
-    const lista = resultados.map((r, i) => ({
+  const montarListaParaSalvar = useCallback((): ResultadoCorridaItem[] => {
+    return resultados.map((r, i) => ({
       ...r,
       prova: tipoProva,
       tempoMs: msFromTempoTexto(tipoProva, temposTexto[i] ?? ''),
@@ -143,22 +142,97 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
       notaTexto: (r.notaTexto ?? '').trim() || undefined,
       reprovacaoTexto: (r.reprovacaoTexto ?? '').trim() || undefined,
     }));
+  }, [resultados, temposTexto, tipoProva]);
 
-    setSalvando(true);
-    try {
-      await onSave({
-        id: initial?.id,
-        criadoEm: initial?.criadoEm,
-        dataAplicacao: data,
-        tipoProva,
-        resultados: lista,
-      });
-    } finally {
-      setSalvando(false);
+  const concluirSalvar = useCallback(
+    async (lista: ResultadoCorridaItem[]) => {
+      setSalvando(true);
+      try {
+        await onSave({
+          id: initial?.id,
+          criadoEm: initial?.criadoEm,
+          dataAplicacao: dataAplicacao.trim(),
+          tipoProva,
+          resultados: lista,
+        });
+      } finally {
+        setSalvando(false);
+      }
+    },
+    [dataAplicacao, tipoProva, initial, onSave],
+  );
+
+  const proximoIndiceRubrica = useCallback((lista: ResultadoCorridaItem[], desde: number) => {
+    for (let i = desde; i < lista.length; i += 1) {
+      if (!lista[i].rubricaCandidatoSvg?.trim()) return i;
     }
-  }, [dataAplicacao, resultados, temposTexto, tipoProva, initial, onSave]);
+    return lista.length;
+  }, []);
+
+  const iniciarFluxoRubrica = useCallback(
+    (lista: ResultadoCorridaItem[]) => {
+      const primeiro = proximoIndiceRubrica(lista, 0);
+      if (primeiro >= lista.length) {
+        void concluirSalvar(lista);
+        return;
+      }
+      setRubricaWizard({ lista, indice: primeiro });
+    },
+    [concluirSalvar, proximoIndiceRubrica],
+  );
+
+  const salvar = useCallback(() => {
+    const data = dataAplicacao.trim();
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(data)) {
+      Alert.alert('Data inválida', 'Use o formato DD/MM/AAAA.');
+      return;
+    }
+
+    const lista = montarListaParaSalvar();
+    if (lista.length === 0) {
+      void concluirSalvar(lista);
+      return;
+    }
+    iniciarFluxoRubrica(lista);
+  }, [dataAplicacao, montarListaParaSalvar, concluirSalvar, iniciarFluxoRubrica]);
+
+  const avancarRubrica = useCallback(
+    (lista: ResultadoCorridaItem[], indiceAtual: number) => {
+      const prox = proximoIndiceRubrica(lista, indiceAtual + 1);
+      if (prox >= lista.length) {
+        setRubricaWizard(null);
+        void concluirSalvar(lista);
+      } else {
+        setRubricaWizard({ lista, indice: prox });
+      }
+    },
+    [concluirSalvar, proximoIndiceRubrica],
+  );
+
+  const onRubricaConfirm = useCallback(
+    (svg: string) => {
+      if (!rubricaWizard) return;
+      const lista = [...rubricaWizard.lista];
+      const i = rubricaWizard.indice;
+      lista[i] = {
+        ...lista[i],
+        rubricaCandidato: 'Rúbrica capturada',
+        rubricaCandidatoSvg: svg,
+      };
+      avancarRubrica(lista, i);
+    },
+    [rubricaWizard, avancarRubrica],
+  );
+
+  const onRubricaSkip = useCallback(() => {
+    if (!rubricaWizard) return;
+    avancarRubrica(rubricaWizard.lista, rubricaWizard.indice);
+  }, [rubricaWizard, avancarRubrica]);
+
+  const participanteRubrica = rubricaWizard?.lista[rubricaWizard.indice] ?? null;
 
   return (
+    <>
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.scrollContent}
@@ -301,14 +375,32 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
           <Text style={{ color: ui.text, fontWeight: '700' }}>Cancelar</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => void salvar()}
+          onPress={salvar}
           style={[styles.btn, { backgroundColor: theme.primary }]}
-          disabled={salvando}
+          disabled={salvando || !!rubricaWizard}
         >
-          <Text style={{ color: '#fff', fontWeight: '800' }}>{salvando ? 'Salvando…' : 'Salvar'}</Text>
+          <Text style={{ color: '#fff', fontWeight: '800' }}>
+            {salvando ? 'Salvando…' : rubricaWizard ? 'Aguardando rúbrica…' : 'Salvar'}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
+
+    <RubricaCaptureModal
+      visible={!!rubricaWizard && !!participanteRubrica}
+      participante={participanteRubrica}
+      indice={rubricaWizard?.indice ?? 0}
+      total={rubricaWizard?.lista.length ?? 0}
+      tipoProva={tipoProva}
+      ultimo={
+        rubricaWizard != null &&
+        proximoIndiceRubrica(rubricaWizard.lista, rubricaWizard.indice + 1) >= rubricaWizard.lista.length
+      }
+      onConfirm={onRubricaConfirm}
+      onSkip={onRubricaSkip}
+      onCancel={() => setRubricaWizard(null)}
+    />
+    </>
   );
 }
 

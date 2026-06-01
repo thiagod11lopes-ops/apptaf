@@ -109,17 +109,18 @@ export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise
 }
 
 export async function deleteSessaoAplicacao(id: string): Promise<void> {
-  try {
-    const db = await openDb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const req = tx.objectStore(STORE_NAME).delete(id);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  } catch {
-    // silencioso
+  if (!id.trim()) {
+    throw new Error('ID da sessão inválido.');
   }
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.delete(id);
+    req.onerror = () => reject(req.error ?? new Error('Falha ao excluir sessão.'));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('Falha na transação de exclusão.'));
+  });
 }
 
 export function tituloTipoProva(tipo: TipoProvaAplicada): string {

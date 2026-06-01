@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,19 +7,14 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Platform,
-  ActivityIndicator,
-  Alert,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ChevronLeft, FileDown } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { formatMsByModality } from '../taf/tafTimeFormat';
-import {
-  cabecalhoColunaProvaResultados,
-  exportResumoAplicacaoPdf,
-} from '../utils/exportResumoAplicacaoPdf';
+import { cabecalhoColunaProvaResultados } from '../utils/exportResumoAplicacaoPdf';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 
@@ -44,20 +39,6 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
   const grayBg = theme.background;
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = theme.border;
-  const [gerandoPdf, setGerandoPdf] = useState(false);
-
-  const onGerarPdf = useCallback(async () => {
-    if (gerandoPdf) return;
-    setGerandoPdf(true);
-    try {
-      await exportResumoAplicacaoPdf(resultados, textoColunaCadastro);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Não foi possível gerar o PDF.';
-      Alert.alert('Gerar PDF', msg);
-    } finally {
-      setGerandoPdf(false);
-    }
-  }, [gerandoPdf, resultados, textoColunaCadastro]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
@@ -86,30 +67,6 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
               Os tempos compatíveis com o cadastro já foram gravados na coluna{' '}
               <Text style={styles.introStrong}>{textoColunaCadastro}</Text> da planilha de Cadastro. Abaixo, o
               resumo desta aplicação.
-            </Text>
-
-            <TouchableOpacity
-              accessibilityLabel="Gerar PDF do resumo"
-              activeOpacity={0.85}
-              onPress={() => {
-                void onGerarPdf();
-              }}
-              disabled={gerandoPdf}
-              style={[styles.btnGerarPdf, gerandoPdf ? styles.btnGerarPdfDisabled : null]}
-            >
-              {gerandoPdf ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <FileDown size={18} color="#FFFFFF" strokeWidth={2.5} />
-                  <Text style={styles.btnGerarPdfText}>Gerar PDF</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <Text style={styles.dicaPdf}>
-              {Platform.OS === 'web'
-                ? 'No navegador, use “Salvar como PDF” na janela de impressão (folha em paisagem).'
-                : 'Será gerado um PDF para salvar ou compartilhar.'}
             </Text>
 
             {resultados.length === 0 ? (
@@ -167,8 +124,6 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
   const ink = ui.text;
   const sub = ui.textSecondary;
   const muted = ui.textMuted;
-  const btnBg = ui.btnDarkBg;
-
   return StyleSheet.create({
     safe: { flex: 1, position: 'relative' as const },
     scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 10, paddingBottom: 28 },
@@ -217,34 +172,6 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
       marginBottom: 16,
     },
     introStrong: { fontWeight: '900', color: ink },
-    btnGerarPdf: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 10,
-      marginBottom: 8,
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      borderRadius: 14,
-      backgroundColor: btnBg,
-      borderWidth: 1,
-      borderColor: btnBg,
-    },
-    btnGerarPdfDisabled: {
-      opacity: 0.72,
-    },
-    btnGerarPdfText: {
-      color: '#FFFFFF',
-      fontSize: 14,
-      fontWeight: '800',
-    },
-    dicaPdf: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: muted,
-      marginBottom: 16,
-      lineHeight: 16,
-    },
     vazioText: {
       fontSize: 13,
       fontWeight: '700',

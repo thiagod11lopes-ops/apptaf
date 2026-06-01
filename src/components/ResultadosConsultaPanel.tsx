@@ -50,6 +50,7 @@ export function ResultadosConsultaPanel() {
   const [nome, setNome] = useState('');
   const [linhas, setLinhas] = useState<ResultadoTafLinha[]>([]);
   const [buscou, setBuscou] = useState(false);
+  const [mensagemBusca, setMensagemBusca] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [carregandoPdf, setCarregandoPdf] = useState(false);
   const [modalTodosPdf, setModalTodosPdf] = useState(false);
@@ -74,6 +75,7 @@ export function ResultadosConsultaPanel() {
 
   const executarBusca = useCallback(async () => {
     setAviso(null);
+    setMensagemBusca(null);
     const nipTrim = nip.trim();
     const nomeTrim = nome.trim();
     if (!nipTrim && !nomeTrim) {
@@ -84,12 +86,18 @@ export function ResultadosConsultaPanel() {
     }
 
     const lista = todosCadastros.length ? todosCadastros : await carregarBase();
-    const encontrados = filtrarCadastrosPorNipNome(lista, nipTrim, nomeTrim);
-    setBuscou(true);
-    setLinhas(encontrados.map(cadastroParaLinhaResultado));
+    const cadastrados = filtrarCadastrosPorNipNome(lista, nipTrim, nomeTrim, {
+      somenteComResultadoTaf: false,
+    });
+    const comResultado = cadastrados.filter(cadastroComAlgumResultadoTaf);
 
-    if (encontrados.length === 0) {
-      setAviso('Nenhum militar com resultado encontrado para os dados informados.');
+    setBuscou(true);
+    setLinhas(comResultado.map(cadastroParaLinhaResultado));
+
+    if (cadastrados.length === 0) {
+      setMensagemBusca('Dados não Encontrados no Sistema');
+    } else if (comResultado.length === 0) {
+      setMensagemBusca('Militar Cadastrado não realizou TAF');
     }
   }, [nip, nome, todosCadastros, carregarBase]);
 
@@ -158,6 +166,7 @@ export function ResultadosConsultaPanel() {
       setTodosCadastros(novaBase);
       setLinhas((prev) => {
         if (!cadastroComAlgumResultadoTaf(atualizado)) {
+          setMensagemBusca('Militar Cadastrado não realizou TAF');
           return prev.filter((l) => l.id !== atualizado.id);
         }
         const linha = cadastroParaLinhaResultado(atualizado);
@@ -247,6 +256,12 @@ export function ResultadosConsultaPanel() {
 
       {aviso ? (
         <Text style={[ts.caption, styles.aviso, { color: theme.loss }]}>{aviso}</Text>
+      ) : null}
+
+      {buscou && mensagemBusca && linhas.length === 0 ? (
+        <View style={[styles.infoBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
+          <Text style={[ts.body, styles.infoText, { color: theme.text }]}>{mensagemBusca}</Text>
+        </View>
       ) : null}
 
       {linhas.map((r) => {
@@ -433,6 +448,17 @@ const styles = StyleSheet.create({
   },
   btnDownloadText: { fontWeight: '800' },
   aviso: { marginBottom: 12, textAlign: 'center' },
+  infoBox: {
+    padding: 18,
+    borderRadius: PREMIUM.radiusLg,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  infoText: {
+    textAlign: 'center',
+    fontWeight: '700',
+    lineHeight: 22,
+  },
   resultCard: { padding: 16, marginBottom: 12 },
   provaBlock: {
     marginTop: 8,

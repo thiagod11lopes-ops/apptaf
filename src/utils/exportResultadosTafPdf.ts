@@ -6,6 +6,15 @@ import type { ResultadoTafLinha } from './resultadoTafCadastro';
 const PDF_A4_LANDSCAPE_WIDTH = 842;
 const PDF_A4_LANDSCAPE_HEIGHT = 595;
 
+/** Tempo padrão da prova de permanência em relatórios PDF. */
+export const PERMANENCIA_TEMPO_PDF_PADRAO = '10 minutos';
+
+function permanenciaTempoParaPdf(linha: ResultadoTafLinha): string {
+  const temPermanencia =
+    linha.situacaoPermanencia !== '—' || linha.permanenciaTempo !== '—';
+  return temPermanencia ? PERMANENCIA_TEMPO_PDF_PADRAO : '—';
+}
+
 function escapeHtml(s: string): string {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -28,7 +37,7 @@ export function buildResultadosTafHtml(
         <td>${escapeHtml(r.situacaoCorrida)}</td>
         <td class="nota">${escapeHtml(r.notaNatacao)}</td>
         <td>${escapeHtml(r.situacaoNatacao)}</td>
-        <td>${escapeHtml(r.permanenciaTempo)}</td>
+        <td>${escapeHtml(permanenciaTempoParaPdf(r))}</td>
         <td>${escapeHtml(r.situacaoPermanencia)}</td>
       </tr>`,
     )

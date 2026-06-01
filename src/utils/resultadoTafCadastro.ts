@@ -145,17 +145,25 @@ function stripDiacritics(s: string): string {
   }
 }
 
-/** Busca por NIP e/ou nome; retorna vazio se ambos estiverem em branco. */
-export function filtrarCadastrosPorNipNome(
+type FiltroNipNomeOptions = {
+  /** Se true (padrão), retorna apenas cadastros com ao menos um resultado TAF. */
+  somenteComResultadoTaf?: boolean;
+};
+
+function filtrarCadastrosPorNipNomeBase(
   cadastros: CadastroItemPersist[],
   nipRaw: string,
   nomeRaw: string,
+  options?: FiltroNipNomeOptions,
 ): CadastroItemPersist[] {
   const nipQ = nipDigitos(nipRaw);
   const nomeQ = stripDiacritics(nomeRaw.trim()).toLowerCase();
   if (!nipQ && !nomeQ) return [];
 
-  let lista = cadastros.filter(cadastroComAlgumResultadoTaf);
+  let lista =
+    options?.somenteComResultadoTaf === false
+      ? [...cadastros]
+      : cadastros.filter(cadastroComAlgumResultadoTaf);
 
   if (nipQ) {
     lista = lista.filter((c) => {
@@ -174,6 +182,18 @@ export function filtrarCadastrosPorNipNome(
   }
 
   return lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+}
+
+/** Busca por NIP e/ou nome; retorna vazio se ambos estiverem em branco. */
+export function filtrarCadastrosPorNipNome(
+  cadastros: CadastroItemPersist[],
+  nipRaw: string,
+  nomeRaw: string,
+  options?: FiltroNipNomeOptions,
+): CadastroItemPersist[] {
+  return filtrarCadastrosPorNipNomeBase(cadastros, nipRaw, nomeRaw, {
+    somenteComResultadoTaf: options?.somenteComResultadoTaf ?? true,
+  });
 }
 
 export function linhasResultadoFromCadastros(cadastros: CadastroItemPersist[]): ResultadoTafLinha[] {

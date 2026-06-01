@@ -30,10 +30,13 @@ const BOTTOM_BAR_PADDING = 96;
 export default function AppNavigator() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { useSidebarShell } = useDeviceLayout();
+  const { useSidebarShell, isLandscape, hideSidebarForLandscape } = useDeviceLayout();
   const [activeRoute, setActiveRoute] = useState<keyof RootStackParamList>('Home');
-  const topChromePad = useSidebarShell ? Math.max(insets.top, 8) + 8 : Math.max(insets.top, 8) + 52;
-  const bottomPad = useSidebarShell ? 24 : BOTTOM_BAR_PADDING;
+  const tafImersivo =
+    activeRoute === 'AplicarTAF' && (hideSidebarForLandscape || isLandscape);
+  const topChromePad =
+    useSidebarShell && !tafImersivo ? Math.max(insets.top, 8) + 8 : Math.max(insets.top, 8) + (tafImersivo ? 4 : 52);
+  const bottomPad = useSidebarShell && !tafImersivo ? 24 : tafImersivo ? 12 : BOTTOM_BAR_PADDING;
 
   const syncRoute = useCallback(() => {
     setActiveRoute(getCurrentRouteName());
@@ -61,7 +64,10 @@ export default function AppNavigator() {
       onStateChange={syncRoute}
     >
       <View style={[styles.shell, { backgroundColor: 'transparent' }]}>
-        <AppShell activeRoute={activeRoute} fullWidth={activeRoute === 'Cadastro'}>
+        <AppShell
+          activeRoute={activeRoute}
+          fullWidth={activeRoute === 'Cadastro' || activeRoute === 'AplicarTAF'}
+        >
           <Stack.Navigator
             initialRouteName="Home"
             screenOptions={{

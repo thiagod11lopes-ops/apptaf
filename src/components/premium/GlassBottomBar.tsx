@@ -36,10 +36,11 @@ type Props = {
 export function GlassBottomBar({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
   const { theme, fontsLoaded } = useTheme();
-  const { usePhoneFrame, useSidebarShell } = useDeviceLayout();
+  const { usePhoneFrame, useSidebarShell, hideSidebarForLandscape } = useDeviceLayout();
+  const imersivoTaf = activeRoute === 'AplicarTAF' && hideSidebarForLandscape;
   const labelStyle = usePhoneFrame ? styles.tabLabelCompact : styles.tabLabel;
 
-  if (HIDDEN_ROUTES.includes(activeRoute) || useSidebarShell) {
+  if (HIDDEN_ROUTES.includes(activeRoute) || useSidebarShell || imersivoTaf) {
     return null;
   }
 

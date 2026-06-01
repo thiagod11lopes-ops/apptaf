@@ -18,9 +18,10 @@ const HIDE_ON: (keyof RootStackParamList)[] = ['Configuracoes', 'CadastrarResult
 export function SettingsTopButton({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { useSidebarShell } = useDeviceLayout();
+  const { useSidebarShell, hideSidebarForLandscape } = useDeviceLayout();
+  const imersivoTaf = activeRoute === 'AplicarTAF' && hideSidebarForLandscape;
 
-  if (HIDE_ON.includes(activeRoute) || useSidebarShell) {
+  if (HIDE_ON.includes(activeRoute) || useSidebarShell || imersivoTaf) {
     return null;
   }
 

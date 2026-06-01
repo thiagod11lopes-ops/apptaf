@@ -9,19 +9,28 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import { Search, Download, X } from 'lucide-react-native';
+import { Search, Download, X, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from './Card';
 import { LabelNip } from './LabelNip';
-import { getAllCadastros } from '../services/cadastrosIndexedDb';
+import { PressableScale } from './premium/PressableScale';
+import { ConfirmacaoExcluirResultadoModal } from './sismav/ConfirmacaoExcluirResultadoModal';
+import { addCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
 import { formatNipInput } from '../utils/nipFormat';
 import {
   cadastroComAlgumResultadoTaf,
   cadastroParaLinhaResultado,
   filtrarCadastrosPorNipNome,
   linhasResultadoFromCadastros,
+  temAvaliacaoCorrida,
+  temAvaliacaoNatacao,
+  temAvaliacaoPermanencia,
   type ResultadoTafLinha,
 } from '../utils/resultadoTafCadastro';
+import {
+  limparResultadoModalidadeCadastro,
+  type ModalidadeResultadoTaf,
+} from '../utils/limparResultadoModalidade';
 import { exportResultadosTafPdf } from '../utils/exportResultadosTafPdf';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
@@ -45,6 +54,13 @@ export function ResultadosConsultaPanel() {
   const [carregandoPdf, setCarregandoPdf] = useState(false);
   const [modalTodosPdf, setModalTodosPdf] = useState(false);
   const [todosCadastros, setTodosCadastros] = useState<Awaited<ReturnType<typeof getAllCadastros>>>([]);
+  const [excluindo, setExcluindo] = useState(false);
+  const [confirmarExclusao, setConfirmarExclusao] = useState<{
+    cadastroId: string;
+    nome: string;
+    nip: string;
+    modalidade: ModalidadeResultadoTaf;
+  } | null>(null);
 
   const carregarBase = useCallback(async () => {
     const lista = await getAllCadastros();
@@ -125,6 +141,36 @@ export function ResultadosConsultaPanel() {
     }
   }, [todosCadastros, carregarBase]);
 
+  const executarExclusaoModalidade = useCallback(async () => {
+    if (!confirmarExclusao) return;
+    setExcluindo(true);
+    setAviso(null);
+    try {
+      const lista = todosCadastros.length ? todosCadastros : await carregarBase();
+      const cadastro = lista.find((c) => c.id === confirmarExclusao.cadastroId);
+      if (!cadastro) {
+        setAviso('Cadastro não encontrado.');
+        return;
+      }
+      const atualizado = limparResultadoModalidadeCadastro(cadastro, confirmarExclusao.modalidade);
+      await addCadastro(atualizado);
+      const novaBase = lista.map((c) => (c.id === atualizado.id ? atualizado : c));
+      setTodosCadastros(novaBase);
+      setLinhas((prev) => {
+        if (!cadastroComAlgumResultadoTaf(atualizado)) {
+          return prev.filter((l) => l.id !== atualizado.id);
+        }
+        const linha = cadastroParaLinhaResultado(atualizado);
+        return prev.map((l) => (l.id === atualizado.id ? linha : l));
+      });
+      setConfirmarExclusao(null);
+    } catch (e) {
+      setAviso(e instanceof Error ? e.message : 'Não foi possível excluir o resultado.');
+    } finally {
+      setExcluindo(false);
+    }
+  }, [confirmarExclusao, todosCadastros, carregarBase]);
+
   const inputStyle = [
     styles.input,
     {
@@ -203,49 +249,116 @@ export function ResultadosConsultaPanel() {
         <Text style={[ts.caption, styles.aviso, { color: theme.loss }]}>{aviso}</Text>
       ) : null}
 
-      {linhas.map((r) => (
-        <Card key={r.id} elevated style={styles.resultCard}>
-          <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
-          <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{r.nip}</Text>
-          <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
-          <Text style={[ts.h2, { color: ui.text, marginBottom: 12, fontSize: 18 }]}>{r.nome}</Text>
+      {linhas.map((r) => {
+        const cadastro = todosCadastros.find((c) => c.id === r.id);
+        const podeExcluirCorrida = cadastro ? temAvaliacaoCorrida(cadastro) : r.notaCorrida !== '—';
+        const podeExcluirNatacao = cadastro ? temAvaliacaoNatacao(cadastro) : r.notaNatacao !== '—';
+        const podeExcluirPermanencia = cadastro
+          ? temAvaliacaoPermanencia(cadastro)
+          : r.permanenciaTempo !== '—';
 
-          <View style={styles.provaBlock}>
-            <Text style={[ts.caption, styles.provaTitulo, { color: theme.textSecondary }]}>Corrida</Text>
-            <View style={styles.provaRow}>
-              <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
-              <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCorrida}</Text>
-            </View>
-            <Text style={[ts.caption, situacaoStyle(r.situacaoCorrida, theme)]}>
-              {r.situacaoCorrida}
-            </Text>
-          </View>
+        const abrirExclusao = (modalidade: ModalidadeResultadoTaf) => {
+          setConfirmarExclusao({
+            cadastroId: r.id,
+            nome: r.nome,
+            nip: r.nip,
+            modalidade,
+          });
+        };
 
-          <View style={styles.provaBlock}>
-            <Text style={[ts.caption, styles.provaTitulo, { color: theme.textSecondary }]}>Natação</Text>
-            <View style={styles.provaRow}>
-              <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
-              <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaNatacao}</Text>
-            </View>
-            <Text style={[ts.caption, situacaoStyle(r.situacaoNatacao, theme)]}>
-              {r.situacaoNatacao}
-            </Text>
-          </View>
+        return (
+          <Card key={r.id} elevated style={styles.resultCard}>
+            <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
+            <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{r.nip}</Text>
+            <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
+            <Text style={[ts.h2, { color: ui.text, marginBottom: 12, fontSize: 18 }]}>{r.nome}</Text>
 
-          <View style={styles.provaBlock}>
-            <Text style={[ts.caption, styles.provaTitulo, { color: theme.textSecondary }]}>
-              Permanência
-            </Text>
-            <View style={styles.provaRow}>
-              <Text style={[ts.caption, { color: theme.textMuted }]}>Tempo: </Text>
-              <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.permanenciaTempo}</Text>
+            <View style={styles.provaBlock}>
+              <View style={styles.provaHeader}>
+                <Text style={[ts.caption, styles.provaTitulo, { color: theme.textSecondary }]}>
+                  Corrida
+                </Text>
+                {podeExcluirCorrida ? (
+                  <PressableScale
+                    onPress={() => abrirExclusao('corrida')}
+                    style={[styles.trashBtn, { borderColor: theme.border, backgroundColor: theme.lossMuted }]}
+                    accessibilityLabel="Excluir resultado de corrida"
+                  >
+                    <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                  </PressableScale>
+                ) : null}
+              </View>
+              <View style={styles.provaRow}>
+                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCorrida}</Text>
+              </View>
+              <Text style={[ts.caption, situacaoStyle(r.situacaoCorrida, theme)]}>
+                {r.situacaoCorrida}
+              </Text>
             </View>
-            <Text style={[ts.caption, situacaoStyle(r.situacaoPermanencia, theme)]}>
-              {r.situacaoPermanencia}
-            </Text>
-          </View>
-        </Card>
-      ))}
+
+            <View style={styles.provaBlock}>
+              <View style={styles.provaHeader}>
+                <Text style={[ts.caption, styles.provaTitulo, { color: theme.textSecondary }]}>
+                  Natação
+                </Text>
+                {podeExcluirNatacao ? (
+                  <PressableScale
+                    onPress={() => abrirExclusao('natacao')}
+                    style={[styles.trashBtn, { borderColor: theme.border, backgroundColor: theme.lossMuted }]}
+                    accessibilityLabel="Excluir resultado de natação"
+                  >
+                    <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                  </PressableScale>
+                ) : null}
+              </View>
+              <View style={styles.provaRow}>
+                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaNatacao}</Text>
+              </View>
+              <Text style={[ts.caption, situacaoStyle(r.situacaoNatacao, theme)]}>
+                {r.situacaoNatacao}
+              </Text>
+            </View>
+
+            <View style={styles.provaBlock}>
+              <View style={styles.provaHeader}>
+                <Text style={[ts.caption, styles.provaTitulo, { color: theme.textSecondary }]}>
+                  Permanência
+                </Text>
+                {podeExcluirPermanencia ? (
+                  <PressableScale
+                    onPress={() => abrirExclusao('permanencia')}
+                    style={[styles.trashBtn, { borderColor: theme.border, backgroundColor: theme.lossMuted }]}
+                    accessibilityLabel="Excluir resultado de permanência"
+                  >
+                    <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                  </PressableScale>
+                ) : null}
+              </View>
+              <View style={styles.provaRow}>
+                <Text style={[ts.caption, { color: theme.textMuted }]}>Tempo: </Text>
+                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.permanenciaTempo}</Text>
+              </View>
+              <Text style={[ts.caption, situacaoStyle(r.situacaoPermanencia, theme)]}>
+                {r.situacaoPermanencia}
+              </Text>
+            </View>
+          </Card>
+        );
+      })}
+
+      <ConfirmacaoExcluirResultadoModal
+        visible={!!confirmarExclusao}
+        nome={confirmarExclusao?.nome ?? ''}
+        nip={confirmarExclusao?.nip ?? ''}
+        modalidade={confirmarExclusao?.modalidade ?? null}
+        loading={excluindo}
+        onClose={() => {
+          if (!excluindo) setConfirmarExclusao(null);
+        }}
+        onConfirm={() => void executarExclusaoModalidade()}
+      />
 
       <Modal visible={modalTodosPdf} transparent animationType="fade" onRequestClose={() => setModalTodosPdf(false)}>
         <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0.45)' }]}>
@@ -327,7 +440,21 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(128,128,128,0.35)',
   },
-  provaTitulo: { fontWeight: '800', marginBottom: 4, textTransform: 'uppercase' },
+  provaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  provaTitulo: { fontWeight: '800', textTransform: 'uppercase' },
+  trashBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   provaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 2 },
   modalOverlay: {
     flex: 1,

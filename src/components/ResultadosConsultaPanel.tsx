@@ -8,14 +8,14 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  Modal,
 } from 'react-native';
-import { Search, Download, X, Trash2 } from 'lucide-react-native';
+import { Search, Download, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from './Card';
 import { LabelNip } from './LabelNip';
 import { PressableScale } from './premium/PressableScale';
 import { ConfirmacaoExcluirResultadoModal } from './sismav/ConfirmacaoExcluirResultadoModal';
+import { ConfirmacaoGerarResultadosPdfModal } from './sismav/ConfirmacaoGerarResultadosPdfModal';
 import { HistoricoCalendarioTaf } from './sismav/HistoricoCalendarioTaf';
 import { addCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao, type SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
@@ -42,7 +42,12 @@ import {
   limparResultadoModalidadeCadastro,
   type ModalidadeResultadoTaf,
 } from '../utils/limparResultadoModalidade';
-import { exportResultadosTafPdf } from '../utils/exportResultadosTafPdf';
+import {
+  exportResultadosTafPdf,
+  estimarFolhasA4PdfResultadosTaf,
+} from '../utils/exportResultadosTafPdf';
+import { listarResultadosCompletosFromHistorico } from '../utils/resultadoGeralHistorico';
+import type { ConfirmacaoGerarResultadosPdfInfo } from './sismav/ConfirmacaoGerarResultadosPdfModal';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
 
@@ -50,6 +55,43 @@ function situacaoStyle(situacao: string, theme: { gain: string; loss: string; te
   if (situacao === 'Aprovado') return { color: theme.gain, fontWeight: '700' as const };
   if (situacao === 'Reprovado') return { color: theme.loss, fontWeight: '700' as const };
   return { color: theme.textMuted };
+}
+
+function linhaCombinaNipNome(l: ResultadoTafLinha, nipRaw: string, nomeRaw: string): boolean {
+  const nipQ = nipDigitos(nipRaw);
+  const nomeQ = nomeRaw.trim().toLowerCase();
+  if (nipQ) {
+    const d = nipDigitos(l.nip);
+    if (nipQ.length >= 8) {
+      if (d !== nipQ) return false;
+    } else if (!d.startsWith(nipQ)) {
+      return false;
+    }
+  }
+  if (nomeQ.length >= 3) {
+    return (l.nome || '').toLowerCase().includes(nomeQ);
+  }
+  if (nomeQ) {
+    const n = (l.nome || '').toLowerCase();
+    return n === nomeQ || n.startsWith(nomeQ);
+  }
+  return true;
+}
+
+function linhasCompletasHistoricoComRubricas(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: Awaited<ReturnType<typeof getAllCadastros>>,
+  rubricasSessoes: Map<string, RubricasPorNip>,
+): ResultadoTafLinha[] {
+  return listarResultadosCompletosFromHistorico(sessoes, cadastros).map((linha) => {
+    const key = nipDigitos(linha.nip);
+    const cad = cadastros.find((c) => c.id === linha.id);
+    const rub = mesclarRubricas(
+      cad ? rubricasDoCadastro(cad) : {},
+      key ? rubricasSessoes.get(key) : undefined,
+    );
+    return mesclarRubricasNaLinha(linha, rub);
+  });
 }
 
 function linhasComRubricasMescladas(
@@ -78,7 +120,9 @@ export function ResultadosConsultaPanel() {
   const [mensagemBusca, setMensagemBusca] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [carregandoPdf, setCarregandoPdf] = useState(false);
-  const [modalTodosPdf, setModalTodosPdf] = useState(false);
+  const [modalGerarPdf, setModalGerarPdf] = useState<
+    (ConfirmacaoGerarResultadosPdfInfo & { linhas: ResultadoTafLinha[] }) | null
+  >(null);
   const [todosCadastros, setTodosCadastros] = useState<Awaited<ReturnType<typeof getAllCadastros>>>([]);
   const [sessoesHistorico, setSessoesHistorico] = useState<SessaoAplicacaoTaf[]>([]);
   const [rubricasSessoes, setRubricasSessoes] = useState<Map<string, RubricasPorNip>>(new Map());
@@ -172,53 +216,64 @@ export function ResultadosConsultaPanel() {
     }
   }, [nip, nome, todosCadastros, rubricasSessoes, carregarBase]);
 
-  const handleBaixar = useCallback(async () => {
+  const handleGerarResultados = useCallback(async () => {
     setAviso(null);
 
-    if (!nip.trim() && !nome.trim()) {
-      setModalTodosPdf(true);
-      return;
-    }
+    const lista = todosCadastros.length ? todosCadastros : await carregarBase();
+    const sessoes = sessoesHistorico.length ? sessoesHistorico : await getAllSessoesAplicacao();
+    let linhasPdf = linhasCompletasHistoricoComRubricas(sessoes, lista, rubricasSessoes);
 
-    if (!buscou || linhas.length === 0) {
-      setAviso('Busque um militar antes de baixar o PDF filtrado.');
-      return;
-    }
+    let subtitulo =
+      'Integrantes com TAF completo (corrida, natação e permanência) — Histórico';
 
-    setCarregandoPdf(true);
-    try {
-      const subtitulo = `Filtro: ${[nip.trim() && `NIP ${nip.trim()}`, nome.trim() && `Nome ${nome.trim()}`]
-        .filter(Boolean)
-        .join(' · ')}`;
-      await exportResultadosTafPdf(linhas, subtitulo);
-    } catch (e) {
-      setAviso(e instanceof Error ? e.message : 'Falha ao gerar PDF.');
-    } finally {
-      setCarregandoPdf(false);
-    }
-  }, [nip, nome, buscou, linhas]);
-
-  const confirmarPdfTodos = useCallback(async () => {
-    setModalTodosPdf(false);
-    setCarregandoPdf(true);
-    try {
-      const lista = todosCadastros.length ? todosCadastros : await carregarBase();
-      const comResultado = lista.filter(cadastroComAlgumResultadoTaf);
-      const todasLinhas = linhasComRubricasMescladas(comResultado, rubricasSessoes);
-      if (todasLinhas.length === 0) {
-        setAviso('Nenhum integrante com resultado registrado no sistema.');
+    const nipTrim = nip.trim();
+    const nomeTrim = nome.trim();
+    if (nipTrim || nomeTrim) {
+      if (!buscou) {
+        setAviso('Busque um militar antes de gerar o PDF filtrado.');
         return;
       }
-      await exportResultadosTafPdf(
-        todasLinhas,
-        'Todos os integrantes com ao menos um resultado (corrida, natação ou permanência)',
-      );
+      linhasPdf = linhasPdf.filter((l) => linhaCombinaNipNome(l, nipTrim, nomeTrim));
+      if (linhasPdf.length === 0) {
+        setAviso('Este militar não completou as três provas no histórico.');
+        return;
+      }
+      subtitulo = `Filtro: ${[nipTrim && `NIP ${nipTrim}`, nomeTrim && `Nome ${nomeTrim}`]
+        .filter(Boolean)
+        .join(' · ')} · TAF completo`;
+    } else if (linhasPdf.length === 0) {
+      setAviso('Nenhum militar com TAF completo no histórico.');
+      return;
+    }
+
+    setModalGerarPdf({
+      linhas: linhasPdf,
+      subtitulo,
+      qtdMilitares: linhasPdf.length,
+      folhasA4: estimarFolhasA4PdfResultadosTaf(linhasPdf.length),
+    });
+  }, [
+    nip,
+    nome,
+    buscou,
+    todosCadastros,
+    sessoesHistorico,
+    rubricasSessoes,
+    carregarBase,
+  ]);
+
+  const confirmarGerarPdf = useCallback(async () => {
+    if (!modalGerarPdf) return;
+    setCarregandoPdf(true);
+    try {
+      await exportResultadosTafPdf(modalGerarPdf.linhas, modalGerarPdf.subtitulo);
+      setModalGerarPdf(null);
     } catch (e) {
       setAviso(e instanceof Error ? e.message : 'Falha ao gerar PDF.');
     } finally {
       setCarregandoPdf(false);
     }
-  }, [todosCadastros, rubricasSessoes, carregarBase]);
+  }, [modalGerarPdf]);
 
   const executarExclusaoModalidade = useCallback(async () => {
     if (!confirmarExclusao) return;
@@ -313,9 +368,9 @@ export function ResultadosConsultaPanel() {
       </Card>
 
       <TouchableOpacity
-        accessibilityLabel="Baixar Resultados"
+        accessibilityLabel="Gerar Resultados"
         disabled={carregandoPdf}
-        onPress={() => void handleBaixar()}
+        onPress={() => void handleGerarResultados()}
         style={[
           styles.btnDownload,
           { backgroundColor: theme.backgroundSecondary, borderColor: theme.border },
@@ -328,7 +383,7 @@ export function ResultadosConsultaPanel() {
           <>
             <Download size={18} color={theme.text} strokeWidth={2.2} />
             <Text style={[ts.caption, styles.btnDownloadText, { color: theme.text }]}>
-              Baixar Resultados
+              Gerar Resultados
             </Text>
           </>
         )}
@@ -455,40 +510,22 @@ export function ResultadosConsultaPanel() {
         onConfirm={() => void executarExclusaoModalidade()}
       />
 
-      <Modal visible={modalTodosPdf} transparent animationType="fade" onRequestClose={() => setModalTodosPdf(false)}>
-        <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0.45)' }]}>
-          <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[ts.h2, { color: theme.text, flex: 1 }]}>Baixar todos os resultados?</Text>
-              <TouchableOpacity
-                onPress={() => setModalTodosPdf(false)}
-                accessibilityLabel="Fechar"
-                style={[styles.modalClose, { borderColor: theme.border }]}
-              >
-                <X size={18} color={theme.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <Text style={[ts.bodySecondary, { color: theme.textSecondary, lineHeight: 20 }]}>
-              Será gerado um PDF com todos os integrantes que possuem ao menos um resultado em corrida,
-              natação ou permanência.
-            </Text>
-            <View style={styles.modalBtns}>
-              <TouchableOpacity
-                onPress={() => setModalTodosPdf(false)}
-                style={[styles.modalBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
-              >
-                <Text style={[ts.caption, { color: theme.textSecondary }]}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => void confirmarPdfTodos()}
-                style={[styles.modalBtn, { borderColor: theme.primary, backgroundColor: theme.primary }]}
-              >
-                <Text style={[ts.caption, { color: theme.text, fontWeight: '800' }]}>Confirmar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ConfirmacaoGerarResultadosPdfModal
+        info={
+          modalGerarPdf
+            ? {
+                qtdMilitares: modalGerarPdf.qtdMilitares,
+                folhasA4: modalGerarPdf.folhasA4,
+                subtitulo: modalGerarPdf.subtitulo,
+              }
+            : null
+        }
+        loading={carregandoPdf}
+        onClose={() => {
+          if (!carregandoPdf) setModalGerarPdf(null);
+        }}
+        onConfirm={() => void confirmarGerarPdf()}
+      />
     </View>
   );
 }
@@ -550,34 +587,4 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   provaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 2 },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: PREMIUM.radiusLg,
-    borderWidth: 1,
-    padding: 20,
-  },
-  modalHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  modalClose: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalBtns: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
 });

@@ -7,6 +7,25 @@ import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } fro
 const PDF_A4_LANDSCAPE_WIDTH = 842;
 const PDF_A4_LANDSCAPE_HEIGHT = 595;
 
+/** Altura útil estimada por linha (rúbricas) em pontos — A4 paisagem. */
+const PDF_RESULTADOS_ROW_HEIGHT_PT = 85;
+const PDF_RESULTADOS_FIRST_PAGE_OVERHEAD_PT = 130;
+const PDF_RESULTADOS_PAGE_USABLE_PT = 514;
+const PDF_RESULTADOS_ROWS_FIRST_PAGE = Math.floor(
+  (PDF_A4_LANDSCAPE_HEIGHT - PDF_RESULTADOS_FIRST_PAGE_OVERHEAD_PT) / PDF_RESULTADOS_ROW_HEIGHT_PT,
+);
+const PDF_RESULTADOS_ROWS_OTHER_PAGE = Math.floor(
+  PDF_RESULTADOS_PAGE_USABLE_PT / PDF_RESULTADOS_ROW_HEIGHT_PT,
+);
+
+/** Estima quantas folhas A4 paisagem serão necessárias para imprimir a tabela de resultados. */
+export function estimarFolhasA4PdfResultadosTaf(quantidadeLinhas: number): number {
+  if (quantidadeLinhas <= 0) return 0;
+  if (quantidadeLinhas <= PDF_RESULTADOS_ROWS_FIRST_PAGE) return 1;
+  const restantes = quantidadeLinhas - PDF_RESULTADOS_ROWS_FIRST_PAGE;
+  return 1 + Math.ceil(restantes / PDF_RESULTADOS_ROWS_OTHER_PAGE);
+}
+
 /** Tempo padrão da prova de permanência em relatórios PDF. */
 export const PERMANENCIA_TEMPO_PDF_PADRAO = '10 minutos';
 

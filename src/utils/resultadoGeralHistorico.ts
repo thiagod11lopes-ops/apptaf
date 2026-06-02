@@ -218,6 +218,16 @@ export function listarPendenciasParciaisFromHistorico(
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
+/** Militares com as três modalidades registradas no Histórico. */
+export function listarResultadosCompletosFromHistorico(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[] = [],
+): ResultadoGeralItem[] {
+  return listarResultadosGeralFromHistorico(sessoes, cadastros).filter(
+    (l) => l.statusTaf === 'Completo',
+  );
+}
+
 export type ResumoInicioTafHistorico = {
   totalCadastrados: number;
   /** Três modalidades no Histórico. */

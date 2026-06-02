@@ -75,13 +75,13 @@ export default function HomeScreen() {
       <View style={styles.statsGrid}>
         <StatCard label="Cadastrados" value={resumo.totalCadastrados.toLocaleString('pt-BR')} />
         <StatCard
-          label="Realizaram o TAF"
+          label="TAF concluído"
           value={resumo.completos.toLocaleString('pt-BR')}
           variant="positive"
         />
         <StatCard label="Parcial" value={resumo.parcial.toLocaleString('pt-BR')} />
         <StatCard
-          label="Sem teste"
+          label="Pendente"
           value={resumo.semTeste.toLocaleString('pt-BR')}
           variant="negative"
         />

@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AppHeader } from '../components/sismav/AppHeader';
+import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
@@ -37,6 +38,7 @@ export default function HomeScreen() {
       showsVerticalScrollIndicator={false}
     >
       <AppHeader title="TAF" subtitle="Teste de Aptidão Física" />
+      <TopActionIcons activeRoute="Home" large />
 
       <View style={styles.statsGrid}>
         <StatCard

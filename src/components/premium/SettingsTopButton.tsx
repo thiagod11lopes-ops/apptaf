@@ -1,34 +1,23 @@
 import React from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BookOpen, ClipboardList, Settings, User } from 'lucide-react-native';
-import { useTheme } from '../../contexts/ThemeContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { navigateTab } from '../../navigation/navigationRef';
 import type { RootStackParamList } from '../../navigation/types';
-import { PressableScale } from './PressableScale';
+import { TopActionIcons } from './TopActionIcons';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
-import { PREMIUM } from '../../theme/premium';
 
 type Props = {
   activeRoute: keyof RootStackParamList;
 };
 
-const HIDE_ON: (keyof RootStackParamList)[] = ['Configuracoes', 'CadastrarResultados', 'Login'];
-
-const TOP_LINKS: {
-  route: keyof RootStackParamList;
-  label: string;
-  Icon: typeof BookOpen;
-}[] = [
-  { route: 'Normas', label: 'Normas', Icon: BookOpen },
-  { route: 'AplicacaoTAF', label: 'Registrador de TAF', Icon: ClipboardList },
+const HIDE_ON: (keyof RootStackParamList)[] = [
+  'Home',
+  'Configuracoes',
+  'CadastrarResultados',
+  'Login',
 ];
 
 export function SettingsTopButton({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
-  const { isAuthenticated } = useAuth();
   const { useSidebarShell, hideSidebarForLandscape } = useDeviceLayout();
   const imersivoTaf = activeRoute === 'AplicarTAF' && hideSidebarForLandscape;
 
@@ -36,64 +25,12 @@ export function SettingsTopButton({ activeRoute }: Props) {
     return null;
   }
 
-  const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
-  const compacto = activeRoute === 'Home';
-  const iconSize = compacto ? 11 : 22;
-  const btnSize = compacto ? 24 : PREMIUM.minTouch;
-
-  const btnStyle = [
-    styles.btn,
-    {
-      width: btnSize,
-      height: btnSize,
-      backgroundColor: theme.cardBg,
-      borderColor: theme.border,
-    },
-    Platform.OS === 'web'
-      ? ({ boxShadow: '0 4px 16px rgba(15,23,42,0.1)' } as object)
-      : { elevation: 8 },
-  ];
-
   return (
     <View
       style={[styles.wrap, { top: Math.max(insets.top, 8) + 4 }]}
       pointerEvents="box-none"
     >
-      {TOP_LINKS.filter((link) => activeRoute !== link.route).map((link) => {
-        const Icon = link.Icon;
-        return (
-          <PressableScale
-            key={link.route}
-            onPress={() => navigateTab(link.route)}
-            style={btnStyle}
-            accessibilityLabel={link.label}
-          >
-            <Icon size={iconSize} color={tabInk} strokeWidth={compacto ? 2 : 2.2} />
-          </PressableScale>
-        );
-      })}
-      {activeRoute !== 'Login' ? (
-        <PressableScale
-          onPress={() => navigateTab('Login')}
-          style={[
-            btnStyle,
-            isAuthenticated && {
-              borderColor: theme.primary,
-              backgroundColor: theme.accentMuted,
-            },
-          ]}
-          accessibilityLabel={isAuthenticated ? 'Conta do usuário' : 'Entrar'}
-        >
-          <User size={iconSize} color={isAuthenticated ? theme.primary : tabInk} strokeWidth={compacto ? 2 : 2.2} />
-        </PressableScale>
-      ) : null}
-      <PressableScale
-        onPress={() => navigateTab('Configuracoes')}
-        style={btnStyle}
-        accessibilityLabel="Ajustes"
-      >
-        <Settings size={iconSize} color={tabInk} strokeWidth={compacto ? 2 : 2.2} />
-      </PressableScale>
+      <TopActionIcons activeRoute={activeRoute} large />
     </View>
   );
 }
@@ -103,14 +40,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     zIndex: 200,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  btn: {
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
 });

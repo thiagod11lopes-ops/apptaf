@@ -123,12 +123,9 @@ const styles = StyleSheet.create({
     minHeight: 0,
     width: '100%',
     marginTop: 4,
+    marginBottom: 8,
     borderWidth: 1,
     borderRadius: PREMIUM.radiusLg,
-    borderTopLeftRadius: PREMIUM.radiusLg,
-    borderTopRightRadius: PREMIUM.radiusLg,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
     overflow: 'hidden',
   },
   tafImage: {

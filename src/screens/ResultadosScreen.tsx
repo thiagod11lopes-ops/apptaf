@@ -89,13 +89,13 @@ export default function ResultadosScreen() {
       >
         <AppHeader
           title="Resultados"
-          subtitle="Histórico · consulta · resultado geral · pendências"
+          subtitle="Histórico · gerenciar resultados · resultado geral · pendências"
         />
 
         <SubTabs
           options={[
             { id: 'historico', label: 'Histórico' },
-            { id: 'consulta', label: 'Consultar' },
+            { id: 'consulta', label: 'Gerenciar Resultados' },
             { id: 'geral', label: 'Resultado Geral' },
             { id: 'pendencia', label: 'Pendência Parcial' },
           ]}

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -15,7 +16,9 @@ import { Card } from './Card';
 import { LabelNip } from './LabelNip';
 import { PressableScale } from './premium/PressableScale';
 import { ConfirmacaoExcluirResultadoModal } from './sismav/ConfirmacaoExcluirResultadoModal';
+import { HistoricoCalendarioTaf } from './sismav/HistoricoCalendarioTaf';
 import { addCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
+import { getAllSessoesAplicacao, type SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import { ProvaComColunaRubrica } from './ProvaComColunaRubrica';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput, nipDigitos } from '../utils/nipFormat';
@@ -77,6 +80,7 @@ export function ResultadosConsultaPanel() {
   const [carregandoPdf, setCarregandoPdf] = useState(false);
   const [modalTodosPdf, setModalTodosPdf] = useState(false);
   const [todosCadastros, setTodosCadastros] = useState<Awaited<ReturnType<typeof getAllCadastros>>>([]);
+  const [sessoesHistorico, setSessoesHistorico] = useState<SessaoAplicacaoTaf[]>([]);
   const [rubricasSessoes, setRubricasSessoes] = useState<Map<string, RubricasPorNip>>(new Map());
   const [excluindo, setExcluindo] = useState(false);
   const [confirmarExclusao, setConfirmarExclusao] = useState<{
@@ -87,16 +91,22 @@ export function ResultadosConsultaPanel() {
   } | null>(null);
 
   const carregarBase = useCallback(async () => {
-    const lista = await getAllCadastros();
-    const rub = await carregarRubricasDasSessoesPorNip();
+    const [lista, rub, sessoes] = await Promise.all([
+      getAllCadastros(),
+      carregarRubricasDasSessoesPorNip(),
+      getAllSessoesAplicacao(),
+    ]);
     setTodosCadastros(lista);
     setRubricasSessoes(rub);
+    setSessoesHistorico(sessoes);
     return lista;
   }, []);
 
-  useEffect(() => {
-    void carregarBase();
-  }, [carregarBase]);
+  useFocusEffect(
+    useCallback(() => {
+      void carregarBase();
+    }, [carregarBase]),
+  );
 
   const sincronizarCampoPar = useCallback(
     (origem: 'nip' | 'nome', valor: string) => {
@@ -256,8 +266,15 @@ export function ResultadosConsultaPanel() {
   return (
     <View style={styles.wrap}>
       <Text style={[ts.bodySecondary, styles.intro, { color: theme.textSecondary }]}>
-        Busque por NIP ou nome para ver notas e situação em corrida, natação e permanência.
+        Calendário das aplicações registradas no histórico e busca por NIP ou nome para gerenciar
+        resultados individuais.
       </Text>
+
+      <HistoricoCalendarioTaf
+        sessoes={sessoesHistorico}
+        cadastros={todosCadastros}
+        onAviso={setAviso}
+      />
 
       <Card elevated style={styles.formCard}>
         <View style={styles.field}>

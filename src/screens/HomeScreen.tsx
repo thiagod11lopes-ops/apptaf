@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
@@ -10,6 +10,8 @@ import {
   calcularResumoInicioTafFromHistorico,
   type ResumoInicioTafHistorico,
 } from '../utils/resultadoGeralHistorico';
+
+const tafImage = require('../../TAF.png');
 
 const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   totalCadastrados: 0,
@@ -62,6 +64,15 @@ export default function HomeScreen() {
           variant="negative"
         />
       </View>
+
+      <View style={styles.imageWrap}>
+        <Image
+          source={tafImage}
+          style={styles.tafImage}
+          resizeMode="contain"
+          accessibilityLabel="TAF"
+        />
+      </View>
     </ScrollView>
   );
 }
@@ -73,5 +84,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+    marginBottom: 20,
+  },
+  imageWrap: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  tafImage: {
+    width: '100%',
+    maxWidth: 320,
+    height: 220,
   },
 });

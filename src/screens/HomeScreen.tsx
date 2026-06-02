@@ -38,7 +38,7 @@ export default function HomeScreen() {
       showsVerticalScrollIndicator={false}
     >
       <AppHeader title="TAF" subtitle="Teste de Aptidão Física" />
-      <TopActionIcons activeRoute="Home" large />
+      <TopActionIcons activeRoute="Home" inline />
 
       <View style={styles.statsGrid}>
         <StatCard

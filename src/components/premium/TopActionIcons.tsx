@@ -22,17 +22,17 @@ const TOP_LINKS: {
 
 type Props = {
   activeRoute: keyof RootStackParamList;
-  /** 2× — abaixo do subtítulo na Home */
-  large?: boolean;
+  /** Layout da faixa abaixo do subtítulo na Home */
+  inline?: boolean;
 };
 
-export function TopActionIcons({ activeRoute, large = false }: Props) {
+export function TopActionIcons({ activeRoute, inline = false }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated } = useAuth();
   const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
-  const iconSize = large ? ICON_SIZE * 2 : ICON_SIZE;
-  const btnSize = large ? BTN_SIZE * 2 : BTN_SIZE;
-  const strokeWidth = large ? 2.4 : 2.2;
+  const iconSize = ICON_SIZE;
+  const btnSize = BTN_SIZE;
+  const strokeWidth = 2.2;
 
   const btnStyle = [
     styles.btn,
@@ -48,7 +48,7 @@ export function TopActionIcons({ activeRoute, large = false }: Props) {
   ];
 
   return (
-    <View style={[styles.row, large && styles.rowLarge]}>
+    <View style={[styles.row, inline && styles.rowInline]}>
       {TOP_LINKS.filter((link) => activeRoute !== link.route).map((link) => {
         const Icon = link.Icon;
         return (
@@ -101,8 +101,8 @@ const styles = StyleSheet.create({
     gap: 8,
     width: '100%',
   },
-  rowLarge: {
-    gap: 14,
+  rowInline: {
+    gap: 10,
     marginTop: 4,
     marginBottom: 8,
   },

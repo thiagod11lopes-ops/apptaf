@@ -30,7 +30,7 @@ export function SettingsTopButton({ activeRoute }: Props) {
       style={[styles.wrap, { top: Math.max(insets.top, 8) + 4 }]}
       pointerEvents="box-none"
     >
-      <TopActionIcons activeRoute={activeRoute} large />
+      <TopActionIcons activeRoute={activeRoute} />
     </View>
   );
 }

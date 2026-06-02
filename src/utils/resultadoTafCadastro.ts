@@ -114,6 +114,10 @@ export function pendenciaParcialFromCadastro(c: CadastroItemPersist): PendenciaP
   };
 }
 
+/**
+ * Pendências com base no cadastro.
+ * A aba Pendência Parcial usa {@link listarPendenciasParciaisFromHistorico} (somente Histórico).
+ */
 export function listarPendenciasParciais(cadastros: CadastroItemPersist[]): PendenciaParcialItem[] {
   return cadastros
     .filter(cadastroComPendenciaParcialTaf)

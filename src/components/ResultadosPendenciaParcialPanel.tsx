@@ -4,7 +4,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from './Card';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
-import { listarPendenciasParciais, type PendenciaParcialItem } from '../utils/resultadoTafCadastro';
+import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import type { PendenciaParcialItem } from '../utils/resultadoTafCadastro';
+import { listarPendenciasParciaisFromHistorico } from '../utils/resultadoGeralHistorico';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
 
@@ -47,8 +49,10 @@ export function ResultadosPendenciaParcialPanel() {
 
   const carregar = useCallback(() => {
     setCarregando(true);
-    getAllCadastros()
-      .then((cadastros) => setLista(listarPendenciasParciais(cadastros)))
+    Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
+      .then(([cadastros, sessoes]) =>
+        setLista(listarPendenciasParciaisFromHistorico(sessoes, cadastros)),
+      )
       .catch(() => setLista([]))
       .finally(() => setCarregando(false));
   }, []);
@@ -62,8 +66,8 @@ export function ResultadosPendenciaParcialPanel() {
   return (
     <View style={styles.wrap}>
       <Text style={[ts.bodySecondary, styles.intro, { color: theme.textSecondary }]}>
-        Militares com pelo menos uma prova registrada, mas que ainda não concluíram o TAF completo
-        (corrida, natação e permanência).
+        Militares com pelo menos uma sessão no Histórico, mas sem as três modalidades (corrida,
+        natação e permanência). Ao excluir sessões do histórico, as pendências são atualizadas.
       </Text>
 
       {carregando ? (
@@ -76,8 +80,7 @@ export function ResultadosPendenciaParcialPanel() {
             Nenhuma pendência parcial no momento.
           </Text>
           <Text style={[ts.caption, styles.emptyHint, { color: theme.textMuted, textAlign: 'center' }]}>
-            Todos os militares com avaliação já possuem as três modalidades ou ainda não possuem
-            nenhum registro.
+            Não há militares com pendência no histórico, ou ainda não existem sessões registradas.
           </Text>
         </Card>
       ) : null}

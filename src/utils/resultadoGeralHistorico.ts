@@ -5,7 +5,7 @@ import { formatMsByModality } from '../taf/tafTimeFormat';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { formatNipInput, nipDigitos } from './nipFormat';
-import type { ResultadoGeralItem } from './resultadoTafCadastro';
+import type { PendenciaParcialItem, ResultadoGeralItem } from './resultadoTafCadastro';
 
 type ModalidadeHistorico = {
   nota: string;
@@ -122,14 +122,11 @@ function aggParaLinha(agg: AggRow): ResultadoGeralItem {
   };
 }
 
-/**
- * Monta o Resultado Geral exclusivamente a partir das sessões do Histórico.
- * Modalidades ausentes no histórico aparecem como "—" na tabela.
- */
-export function listarResultadosGeralFromHistorico(
+/** Agrega participantes e modalidades a partir das sessões do Histórico (sessão mais recente prevalece). */
+export function agregarHistoricoPorParticipante(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
-): ResultadoGeralItem[] {
+): AggRow[] {
   const map = new Map<string, AggRow>();
   const ordenadas = [...sessoes].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
 
@@ -168,8 +165,55 @@ export function listarResultadosGeralFromHistorico(
     }
   }
 
-  return [...map.values()]
-    .filter((agg) => agg.corrida || agg.natacao || agg.permanencia)
+  return [...map.values()].filter((agg) => agg.corrida || agg.natacao || agg.permanencia);
+}
+
+function aggParaPendenciaParcial(agg: AggRow): PendenciaParcialItem | null {
+  const temCorrida = !!agg.corrida;
+  const temNatacao = !!agg.natacao;
+  const temPermanencia = !!agg.permanencia;
+  const alguma = temCorrida || temNatacao || temPermanencia;
+  const completo = temCorrida && temNatacao && temPermanencia;
+  if (!alguma || completo) return null;
+
+  const faltam: string[] = [];
+  if (!temCorrida) faltam.push('Corrida');
+  if (!temNatacao) faltam.push('Natação');
+  if (!temPermanencia) faltam.push('Permanência');
+
+  return {
+    id: agg.id,
+    nip: agg.nip || '—',
+    nome: agg.nome || '—',
+    temCorrida,
+    temNatacao,
+    temPermanencia,
+    faltam,
+  };
+}
+
+/**
+ * Monta o Resultado Geral exclusivamente a partir das sessões do Histórico.
+ * Modalidades ausentes no histórico aparecem como "—" na tabela.
+ */
+export function listarResultadosGeralFromHistorico(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[] = [],
+): ResultadoGeralItem[] {
+  return agregarHistoricoPorParticipante(sessoes, cadastros)
     .map(aggParaLinha)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/**
+ * Militares com ao menos uma modalidade no Histórico, mas sem as três.
+ */
+export function listarPendenciasParciaisFromHistorico(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[] = [],
+): PendenciaParcialItem[] {
+  return agregarHistoricoPorParticipante(sessoes, cadastros)
+    .map(aggParaPendenciaParcial)
+    .filter((item): item is PendenciaParcialItem => item != null)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }

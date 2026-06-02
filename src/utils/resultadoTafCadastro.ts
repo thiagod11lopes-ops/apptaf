@@ -72,6 +72,7 @@ export type ResumoInicioTaf = {
   realizaramTaf: number;
 };
 
+/** Resumo legado com base no cadastro. A aba Iniciar usa {@link calcularResumoInicioTafFromHistorico}. */
 export function calcularResumoInicioTaf(cadastros: CadastroItemPersist[]): ResumoInicioTaf {
   return {
     totalCadastrados: cadastros.length,

@@ -217,3 +217,49 @@ export function listarPendenciasParciaisFromHistorico(
     .filter((item): item is PendenciaParcialItem => item != null)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
+
+export type ResumoInicioTafHistorico = {
+  totalCadastrados: number;
+  /** Três modalidades no Histórico. */
+  completos: number;
+  /** Ao menos uma modalidade no Histórico, sem as três. */
+  parcial: number;
+  /** Cadastrados sem nenhuma sessão no Histórico. */
+  semTeste: number;
+};
+
+function cadastroNoHistorico(c: CadastroItemPersist, aggs: AggRow[]): boolean {
+  const nipC = nipDigitos(c.nip);
+  return aggs.some((agg) => {
+    if (agg.id === c.id) return true;
+    const nipA = nipDigitos(agg.nip);
+    return nipC.length >= 8 && nipA.length >= 8 && nipC === nipA;
+  });
+}
+
+/** Resumo da aba Iniciar com base no Histórico de aplicações. */
+export function calcularResumoInicioTafFromHistorico(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[],
+): ResumoInicioTafHistorico {
+  const aggs = agregarHistoricoPorParticipante(sessoes, cadastros);
+
+  let completos = 0;
+  let parcial = 0;
+  for (const agg of aggs) {
+    const temCorrida = !!agg.corrida;
+    const temNatacao = !!agg.natacao;
+    const temPerm = !!agg.permanencia;
+    if (temCorrida && temNatacao && temPerm) completos += 1;
+    else if (temCorrida || temNatacao || temPerm) parcial += 1;
+  }
+
+  const semTeste = cadastros.filter((c) => !cadastroNoHistorico(c, aggs)).length;
+
+  return {
+    totalCadastrados: cadastros.length,
+    completos,
+    parcial,
+    semTeste,
+  };
+}

@@ -9,22 +9,33 @@ import { AppHeader } from '../components/sismav/AppHeader';
 import { StatCard } from '../components/sismav/StatCard';
 import { BookOpen, ClipboardList } from 'lucide-react-native';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
-import { calcularResumoInicioTaf, type ResumoInicioTaf } from '../utils/resultadoTafCadastro';
+import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import {
+  calcularResumoInicioTafFromHistorico,
+  type ResumoInicioTafHistorico,
+} from '../utils/resultadoGeralHistorico';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
-const RESUMO_INICIAL: ResumoInicioTaf = { totalCadastrados: 0, realizaramTaf: 0 };
+const RESUMO_INICIAL: ResumoInicioTafHistorico = {
+  totalCadastrados: 0,
+  completos: 0,
+  parcial: 0,
+  semTeste: 0,
+};
 
 export default function HomeScreen() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const navigation = useNavigation<Nav>();
-  const [resumo, setResumo] = useState<ResumoInicioTaf>(RESUMO_INICIAL);
+  const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
 
   useFocusEffect(
     useCallback(() => {
-      getAllCadastros()
-        .then((lista) => setResumo(calcularResumoInicioTaf(lista)))
+      Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
+        .then(([cadastros, sessoes]) =>
+          setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros)),
+        )
         .catch(() => setResumo(RESUMO_INICIAL));
     }, []),
   );
@@ -65,8 +76,14 @@ export default function HomeScreen() {
         <StatCard label="Cadastrados" value={resumo.totalCadastrados.toLocaleString('pt-BR')} />
         <StatCard
           label="Realizaram o TAF"
-          value={resumo.realizaramTaf.toLocaleString('pt-BR')}
+          value={resumo.completos.toLocaleString('pt-BR')}
           variant="positive"
+        />
+        <StatCard label="Parcial" value={resumo.parcial.toLocaleString('pt-BR')} />
+        <StatCard
+          label="Sem teste"
+          value={resumo.semTeste.toLocaleString('pt-BR')}
+          variant="negative"
         />
       </View>
 

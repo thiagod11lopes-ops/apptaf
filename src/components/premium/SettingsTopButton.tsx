@@ -1,8 +1,9 @@
 import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ClipboardList, Settings } from 'lucide-react-native';
+import { BookOpen, ClipboardList, Settings, User } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { navigateTab } from '../../navigation/navigationRef';
 import type { RootStackParamList } from '../../navigation/types';
 import { PressableScale } from './PressableScale';
@@ -13,11 +14,21 @@ type Props = {
   activeRoute: keyof RootStackParamList;
 };
 
-const HIDE_ON: (keyof RootStackParamList)[] = ['Configuracoes', 'CadastrarResultados'];
+const HIDE_ON: (keyof RootStackParamList)[] = ['Configuracoes', 'CadastrarResultados', 'Login'];
+
+const TOP_LINKS: {
+  route: keyof RootStackParamList;
+  label: string;
+  Icon: typeof BookOpen;
+}[] = [
+  { route: 'Normas', label: 'Normas', Icon: BookOpen },
+  { route: 'AplicacaoTAF', label: 'Registrador de TAF', Icon: ClipboardList },
+];
 
 export function SettingsTopButton({ activeRoute }: Props) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { isAuthenticated } = useAuth();
   const { useSidebarShell, hideSidebarForLandscape } = useDeviceLayout();
   const imersivoTaf = activeRoute === 'AplicarTAF' && hideSidebarForLandscape;
 
@@ -29,7 +40,6 @@ export function SettingsTopButton({ activeRoute }: Props) {
   const compacto = activeRoute === 'Home';
   const iconSize = compacto ? 11 : 22;
   const btnSize = compacto ? 24 : PREMIUM.minTouch;
-  const showRegistrador = activeRoute !== 'AplicacaoTAF';
 
   const btnStyle = [
     styles.btn,
@@ -49,13 +59,32 @@ export function SettingsTopButton({ activeRoute }: Props) {
       style={[styles.wrap, { top: Math.max(insets.top, 8) + 4 }]}
       pointerEvents="box-none"
     >
-      {showRegistrador ? (
+      {TOP_LINKS.filter((link) => activeRoute !== link.route).map((link) => {
+        const Icon = link.Icon;
+        return (
+          <PressableScale
+            key={link.route}
+            onPress={() => navigateTab(link.route)}
+            style={btnStyle}
+            accessibilityLabel={link.label}
+          >
+            <Icon size={iconSize} color={tabInk} strokeWidth={compacto ? 2 : 2.2} />
+          </PressableScale>
+        );
+      })}
+      {activeRoute !== 'Login' ? (
         <PressableScale
-          onPress={() => navigateTab('AplicacaoTAF')}
-          style={btnStyle}
-          accessibilityLabel="Registrador de TAF"
+          onPress={() => navigateTab('Login')}
+          style={[
+            btnStyle,
+            isAuthenticated && {
+              borderColor: theme.primary,
+              backgroundColor: theme.accentMuted,
+            },
+          ]}
+          accessibilityLabel={isAuthenticated ? 'Conta do usuário' : 'Entrar'}
         >
-          <ClipboardList size={iconSize} color={tabInk} strokeWidth={compacto ? 2 : 2.2} />
+          <User size={iconSize} color={isAuthenticated ? theme.primary : tabInk} strokeWidth={compacto ? 2 : 2.2} />
         </PressableScale>
       ) : null}
       <PressableScale

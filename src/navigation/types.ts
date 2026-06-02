@@ -20,5 +20,6 @@ export type RootStackParamList = {
   Estatisticas: undefined;
   Resultados: undefined;
   Configuracoes: undefined;
+  Login: undefined;
   CadastrarResultados: { resultados: ResultadoCorridaItem[] };
 };

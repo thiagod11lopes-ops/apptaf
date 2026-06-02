@@ -20,6 +20,7 @@ import AplicacaoTAFScreen from '../screens/AplicacaoTAFScreen';
 import AplicarTAFScreen from '../screens/AplicarTAFScreen';
 import EstatisticasScreen from '../screens/EstatisticasScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
+import LoginScreen from '../screens/LoginScreen';
 import ResultadosScreen from '../screens/ResultadosScreen';
 import CadastrarResultadosScreen from '../screens/CadastrarResultadosScreen';
 
@@ -98,6 +99,13 @@ export default function AppNavigator() {
           <Stack.Screen
             name="Configuracoes"
             component={ConfiguracoesScreen}
+            options={{
+              contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: theme.background },
+            }}
+          />
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
             options={{
               contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: theme.background },
             }}

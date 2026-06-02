@@ -7,6 +7,8 @@ import {
   BarChart3,
   ListChecks,
   Settings,
+  BookOpen,
+  User,
 } from 'lucide-react-native';
 import type { RootStackParamList } from '../../navigation/types';
 import { navigateTab } from '../../navigation/navigationRef';
@@ -63,6 +65,16 @@ export function SidebarNav({ activeRoute }: Props) {
 
       <View style={styles.footerActions}>
         <PressableScale
+          onPress={() => navigateTab('Normas')}
+          style={[styles.settingsBtn, activeRoute === 'Normas' && styles.footerBtnActive]}
+          accessibilityLabel="Normas"
+          accessibilityState={{ selected: activeRoute === 'Normas' }}
+        >
+          <BookOpen size={18} color="#FFFFFF" strokeWidth={2} opacity={activeRoute === 'Normas' ? 1 : 0.85} />
+          <Text style={[styles.tabLabel, activeRoute === 'Normas' && styles.tabLabelActive]}>Normas</Text>
+        </PressableScale>
+
+        <PressableScale
           onPress={() => navigateTab('AplicacaoTAF')}
           style={[styles.settingsBtn, activeRoute === 'AplicacaoTAF' && styles.footerBtnActive]}
           accessibilityLabel="Registrador de TAF"
@@ -72,6 +84,16 @@ export function SidebarNav({ activeRoute }: Props) {
           <Text style={[styles.tabLabel, activeRoute === 'AplicacaoTAF' && styles.tabLabelActive]}>
             Registrador
           </Text>
+        </PressableScale>
+
+        <PressableScale
+          onPress={() => navigateTab('Login')}
+          style={[styles.settingsBtn, activeRoute === 'Login' && styles.footerBtnActive]}
+          accessibilityLabel="Conta"
+          accessibilityState={{ selected: activeRoute === 'Login' }}
+        >
+          <User size={18} color="#FFFFFF" strokeWidth={2} opacity={activeRoute === 'Login' ? 1 : 0.85} />
+          <Text style={[styles.tabLabel, activeRoute === 'Login' && styles.tabLabelActive]}>Conta</Text>
         </PressableScale>
 
         <PressableScale

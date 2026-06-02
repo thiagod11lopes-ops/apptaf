@@ -27,7 +27,7 @@ const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
   { id: 'Estatisticas', label: 'Estatísticas', icon: BarChart3 },
 ];
 
-const HIDDEN_ROUTES: (keyof RootStackParamList)[] = ['CadastrarResultados', 'Configuracoes'];
+const HIDDEN_ROUTES: (keyof RootStackParamList)[] = ['CadastrarResultados', 'Configuracoes', 'Login'];
 
 type Props = {
   activeRoute: keyof RootStackParamList;

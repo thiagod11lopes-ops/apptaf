@@ -29,6 +29,7 @@ import { getUiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { PREMIUM } from '../theme/premium';
 import { Card } from '../components/Card';
+import { AppHeader } from '../components/sismav/AppHeader';
 import { LandscapeOrientationModal } from '../components/sismav/LandscapeOrientationModal';
 import {
   ModalTesteJaAplicado,
@@ -60,7 +61,7 @@ import {
 } from '../taf/natacaoNota';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
-import { Check, ChevronLeft, Pause, Play } from 'lucide-react-native';
+import { Check, Pause, Play } from 'lucide-react-native';
 import {
   aplicarTafTrialReducer,
   initialTrialTableState,
@@ -1498,18 +1499,7 @@ export default function AplicarTAFScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.centerWrap}>
-          <View style={styles.headerRow}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.backBtn}
-              accessibilityLabel="Voltar"
-            >
-              <ChevronLeft size={26} color={theme.text} strokeWidth={2.5} />
-            </TouchableOpacity>
-            <View style={styles.headerTitleWrap}>
-              <Text style={[ts.h2, styles.pageTitle]}>Aplicar TAF</Text>
-            </View>
-          </View>
+          <AppHeader title="Aplicar TAF" onBack={() => navigation.goBack()} />
 
           {!mostrarProvas ? (
             <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
@@ -2059,24 +2049,6 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   safe: { flex: 1, position: 'relative' as const },
   scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 16 },
   centerWrap: { flex: 1, alignItems: 'center' as const },
-  headerRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  backBtn: {
-    width: PREMIUM.minTouch,
-    height: PREMIUM.minTouch,
-    borderRadius: PREMIUM.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitleWrap: { flex: 1 },
-  pageTitle: {
-    textAlign: 'center',
-  },
   formCard: {
     width: '100%',
     maxWidth: 720,

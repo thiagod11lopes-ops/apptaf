@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
-import { ChevronLeft, X } from 'lucide-react-native';
+import { X } from 'lucide-react-native';
 import { Card } from '../components/Card';
+import { AppHeader } from '../components/sismav/AppHeader';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
 const CarregarPlanilhaCadastro = React.lazy(() =>
   import('../components/CarregarPlanilhaCadastro').then((m) => ({
@@ -288,18 +289,7 @@ export default function CadastroScreenModern() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.centerWrap}>
-          <View style={styles.headerRow}>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Home' as never)}
-              style={styles.backBtn}
-              accessibilityLabel="Voltar para Home"
-            >
-              <ChevronLeft size={26} color={theme.text} strokeWidth={2.5} />
-            </TouchableOpacity>
-            <View style={styles.headerTitleWrap}>
-              <Text style={[ts.h2, styles.pageTitle]}>Cadastro</Text>
-            </View>
-          </View>
+          <AppHeader title="Cadastro" onBack={() => navigation.navigate('Home' as never)} />
 
           <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <TouchableOpacity
@@ -725,24 +715,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1, position: 'relative' },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 16 },
   centerWrap: { flex: 1, alignItems: 'center' },
-  headerRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  backBtn: {
-    width: PREMIUM.minTouch,
-    height: PREMIUM.minTouch,
-    borderRadius: PREMIUM.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitleWrap: { flex: 1 },
-  pageTitle: {
-    textAlign: 'center',
-  },
   formCard: {
     width: '100%',
     maxWidth: 720,

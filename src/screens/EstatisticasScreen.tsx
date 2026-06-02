@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
-import { Header } from '../components/Header';
+import { AppHeader } from '../components/sismav/AppHeader';
 import { Card } from '../components/Card';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { calcularEstatisticasTaf } from '../utils/estatisticasTaf';
@@ -60,17 +60,17 @@ export default function EstatisticasScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Header title="Estatísticas" onBack={() => navigation.goBack()} />
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={theme.gain} />
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={[styles.scroll, maxWidth]}
-          showsVerticalScrollIndicator={false}
-        >
-          {!s || s.resumo.totalCadastros === 0 ? (
+      <ScrollView
+        contentContainerStyle={[styles.scroll, maxWidth]}
+        showsVerticalScrollIndicator={false}
+      >
+        <AppHeader title="Estatísticas" onBack={() => navigation.goBack()} />
+
+        {loading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color={theme.gain} />
+          </View>
+        ) : !s || s.resumo.totalCadastros === 0 ? (
             <Card>
               <Text style={{ color: theme.text }}>
                 Nenhum cadastro no sistema. Cadastre participantes e registre resultados de TAF para
@@ -218,8 +218,7 @@ export default function EstatisticasScreen() {
               ) : null}
             </>
           )}
-        </ScrollView>
-      )}
+      </ScrollView>
     </View>
   );
 }
@@ -227,7 +226,7 @@ export default function EstatisticasScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { padding: 16, paddingBottom: 32, gap: 4 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centered: { paddingVertical: 48, alignItems: 'center', justifyContent: 'center' },
   lead: { fontSize: 12, lineHeight: 18, marginBottom: 12, marginTop: 4 },
   kpiGrid: {
     flexDirection: 'row',

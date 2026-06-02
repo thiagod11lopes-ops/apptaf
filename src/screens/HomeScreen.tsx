@@ -13,7 +13,7 @@ import {
 } from '../utils/resultadoGeralHistorico';
 import { PREMIUM } from '../theme/premium';
 
-const tafImage = require('../../TAF.png');
+const tafImage = require('../../TAF1.png');
 
 const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   totalCadastrados: 0,

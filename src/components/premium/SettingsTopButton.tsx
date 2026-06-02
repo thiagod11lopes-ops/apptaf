@@ -1,7 +1,7 @@
 import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Settings } from 'lucide-react-native';
+import { ClipboardList, Settings } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { navigateTab } from '../../navigation/navigationRef';
 import type { RootStackParamList } from '../../navigation/types';
@@ -29,26 +29,38 @@ export function SettingsTopButton({ activeRoute }: Props) {
   const compacto = activeRoute === 'Home';
   const iconSize = compacto ? 11 : 22;
   const btnSize = compacto ? 24 : PREMIUM.minTouch;
+  const showRegistrador = activeRoute !== 'AplicacaoTAF';
+
+  const btnStyle = [
+    styles.btn,
+    {
+      width: btnSize,
+      height: btnSize,
+      backgroundColor: theme.cardBg,
+      borderColor: theme.border,
+    },
+    Platform.OS === 'web'
+      ? ({ boxShadow: '0 4px 16px rgba(15,23,42,0.1)' } as object)
+      : { elevation: 8 },
+  ];
 
   return (
     <View
       style={[styles.wrap, { top: Math.max(insets.top, 8) + 4 }]}
       pointerEvents="box-none"
     >
+      {showRegistrador ? (
+        <PressableScale
+          onPress={() => navigateTab('AplicacaoTAF')}
+          style={btnStyle}
+          accessibilityLabel="Registrador de TAF"
+        >
+          <ClipboardList size={iconSize} color={tabInk} strokeWidth={compacto ? 2 : 2.2} />
+        </PressableScale>
+      ) : null}
       <PressableScale
         onPress={() => navigateTab('Configuracoes')}
-        style={[
-          styles.btn,
-          {
-            width: btnSize,
-            height: btnSize,
-            backgroundColor: theme.cardBg,
-            borderColor: theme.border,
-          },
-          Platform.OS === 'web'
-            ? ({ boxShadow: '0 4px 16px rgba(15,23,42,0.1)' } as object)
-            : { elevation: 8 },
-        ]}
+        style={btnStyle}
         accessibilityLabel="Ajustes"
       >
         <Settings size={iconSize} color={tabInk} strokeWidth={compacto ? 2 : 2.2} />
@@ -62,6 +74,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     zIndex: 200,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   btn: {
     borderRadius: PREMIUM.radiusMd,

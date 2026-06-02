@@ -61,14 +61,28 @@ export function SidebarNav({ activeRoute }: Props) {
         })}
       </View>
 
-      <PressableScale
-        onPress={() => navigateTab('Configuracoes')}
-        style={styles.settingsBtn}
-        accessibilityLabel="Configurações"
-      >
-        <Settings size={18} color="#FFFFFF" strokeWidth={2} opacity={0.85} />
-        <Text style={styles.tabLabel}>Ajustes</Text>
-      </PressableScale>
+      <View style={styles.footerActions}>
+        <PressableScale
+          onPress={() => navigateTab('AplicacaoTAF')}
+          style={[styles.settingsBtn, activeRoute === 'AplicacaoTAF' && styles.footerBtnActive]}
+          accessibilityLabel="Registrador de TAF"
+          accessibilityState={{ selected: activeRoute === 'AplicacaoTAF' }}
+        >
+          <ClipboardList size={18} color="#FFFFFF" strokeWidth={2} opacity={activeRoute === 'AplicacaoTAF' ? 1 : 0.85} />
+          <Text style={[styles.tabLabel, activeRoute === 'AplicacaoTAF' && styles.tabLabelActive]}>
+            Registrador
+          </Text>
+        </PressableScale>
+
+        <PressableScale
+          onPress={() => navigateTab('Configuracoes')}
+          style={styles.settingsBtn}
+          accessibilityLabel="Configurações"
+        >
+          <Settings size={18} color="#FFFFFF" strokeWidth={2} opacity={0.85} />
+          <Text style={styles.tabLabel}>Ajustes</Text>
+        </PressableScale>
+      </View>
     </View>
   );
 }
@@ -142,6 +156,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
+  },
+  footerActions: {
+    gap: 4,
     marginTop: 8,
+  },
+  footerBtnActive: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
   },
 });

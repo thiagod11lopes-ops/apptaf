@@ -13,7 +13,8 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
-import { Check, ChevronLeft, X } from 'lucide-react-native';
+import { Check, X } from 'lucide-react-native';
+import { AppHeader } from '../components/sismav/AppHeader';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
 import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import {
@@ -249,18 +250,7 @@ export default function AplicacaoTAFScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.centerWrap}>
-          <View style={styles.headerRow}>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Home' as never)}
-              style={styles.backBtn}
-              accessibilityLabel="Voltar para Home"
-            >
-              <ChevronLeft size={26} color={ui.icon} strokeWidth={2.5} />
-            </TouchableOpacity>
-            <View style={styles.headerTitleWrap}>
-              <Text style={styles.pageTitle}>Registrador de TAF</Text>
-            </View>
-          </View>
+          <AppHeader title="Registrador de TAF" onBack={() => navigation.navigate('Home' as never)} />
 
           <View style={styles.aplicarBtnWrap}>
             <TouchableOpacity
@@ -541,29 +531,6 @@ function createAplicacaoTafStyles(theme: AppTheme, ui: UiColors) {
   safe: { flex: 1, position: 'relative' },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 10 },
   centerWrap: { flex: 1, alignItems: 'center' },
-  headerRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 14,
-  },
-  backBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitleWrap: { flex: 1 },
-  pageTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: ui.text,
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
   aplicarBtnWrap: {
     width: '100%',
     maxWidth: 720,

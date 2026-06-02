@@ -31,14 +31,22 @@ import { PREMIUM } from '../theme/premium';
 import { Card } from '../components/Card';
 import { LandscapeOrientationModal } from '../components/sismav/LandscapeOrientationModal';
 import {
+  ModalTesteJaAplicado,
+  type ModalTesteJaAplicadoInfo,
+} from '../components/sismav/ModalTesteJaAplicado';
+import {
   PermanenciaTafPanel,
   type ResultadoPermanenciaOpcao,
 } from '../components/PermanenciaTafPanel';
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
-import { addSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import { addSessaoAplicacao, getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
 import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
+import {
+  buscarRegistroModalidadeExistente,
+  removerParticipanteModalidadeDoHistorico,
+} from '../utils/registroModalidadeHistorico';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
@@ -168,6 +176,10 @@ export default function AplicarTAFScreen() {
   const [nParticipantesConfirmado, setNParticipantesConfirmado] = useState(0);
   const [nipsParticipantes, setNipsParticipantes] = useState<string[]>([]);
   const [nipFeedbackLinhas, setNipFeedbackLinhas] = useState<NipFeedbackLinha[]>([]);
+  const [modalTesteExistente, setModalTesteExistente] = useState<
+    (ModalTesteJaAplicadoInfo & { dataNascimento: string; sexo?: 'M' | 'F' }) | null
+  >(null);
+  const nipsRepeticaoAutorizadaRef = useRef<Set<number>>(new Set());
   const [numeroVoltas, setNumeroVoltas] = useState('');
   /** Voltas, chegadas e tempos em um único reducer (atualização atômica por clique). */
   const [trialTable, dispatchTrial] = useReducer(aplicarTafTrialReducer, initialTrialTableState);
@@ -593,13 +605,25 @@ export default function AplicarTAFScreen() {
     async (resultados: ResultadoCorridaItem[]) => {
       const tipo = tipoProvaRef.current ?? tipoProva;
       if (!tipo || resultados.length === 0) return;
+
+      const indicesRepeticao = nipsRepeticaoAutorizadaRef.current;
+      if (indicesRepeticao.size > 0) {
+        for (const i of indicesRepeticao) {
+          const nip = (resultados[i]?.nip ?? nipsParticipantes[i] ?? '').trim();
+          if (nip) {
+            await removerParticipanteModalidadeDoHistorico(nip, tipo);
+          }
+        }
+        nipsRepeticaoAutorizadaRef.current = new Set();
+      }
+
       await addSessaoAplicacao({
         dataAplicacao: dataHojeBr(),
         tipoProva: tipo,
         resultados,
       });
     },
-    [tipoProva],
+    [tipoProva, nipsParticipantes],
   );
 
   const onCadastrarResultados = useCallback(async () => {
@@ -957,6 +981,21 @@ export default function AplicarTAFScreen() {
     setCorridaEtapa('nips');
   }, [numeroParticipantesCorrida]);
 
+  const definirNipOk = useCallback((index: number, c: CadastroItemPersist) => {
+    const nome = (c.nome || '').trim() || 'Sem nome';
+    setNipFeedbackLinhas((prev) => {
+      const next = [...prev];
+      next[index] = {
+        tipo: 'ok',
+        texto: 'Militar Cadastrado no Sistema.',
+        nomeMilitar: nome,
+        dataNascimento: c.dataNascimento || '',
+        sexo: c.sexo,
+      };
+      return next;
+    });
+  }, []);
+
   const atualizarNip = useCallback((index: number, texto: string) => {
     setNipsParticipantes((prev) => {
       const next = [...prev];
@@ -968,6 +1007,11 @@ export default function AplicarTAFScreen() {
       next[index] = null;
       return next;
     });
+    if (nipsRepeticaoAutorizadaRef.current.has(index)) {
+      const rep = new Set(nipsRepeticaoAutorizadaRef.current);
+      rep.delete(index);
+      nipsRepeticaoAutorizadaRef.current = rep;
+    }
   }, []);
 
   const verificarNipNoCadastro = useCallback(async (index: number) => {
@@ -988,33 +1032,69 @@ export default function AplicarTAFScreen() {
     const cadastros = await getAllCadastros();
     const resultado = buscarCadastroPorNomeOuNip(cadastros, nip);
 
-    setNipFeedbackLinhas((prev) => {
-      const next = [...prev];
-      if (resultado.kind === 'found') {
-        const nome = (resultado.cadastro.nome || '').trim() || 'Sem nome';
-        const c = resultado.cadastro;
-        next[index] = {
-          tipo: 'ok',
-          texto: 'Militar Cadastrado no Sistema.',
-          nomeMilitar: nome,
+    if (resultado.kind !== 'found') {
+      setNipFeedbackLinhas((prev) => {
+        const next = [...prev];
+        if (resultado.kind === 'none') {
+          next[index] = {
+            tipo: 'erro',
+            texto: 'Este militar precisa ser cadastrado na página Cadastro.',
+          };
+        } else {
+          next[index] = {
+            tipo: 'erro',
+            texto:
+              'Vários cadastros correspondem à busca. Informe o NIP completo (8 dígitos).',
+          };
+        }
+        return next;
+      });
+      return;
+    }
+
+    const c = resultado.cadastro;
+    const nome = (c.nome || '').trim() || 'Sem nome';
+    const modalidade = tipoProvaRef.current ?? tipoProva;
+
+    if (
+      modalidade &&
+      !nipsRepeticaoAutorizadaRef.current.has(index)
+    ) {
+      const sessoes = await getAllSessoesAplicacao();
+      const existente = buscarRegistroModalidadeExistente(nip, modalidade, sessoes, c);
+      if (existente) {
+        setModalTesteExistente({
+          index,
+          nip,
+          nome,
+          registro: existente,
           dataNascimento: c.dataNascimento || '',
           sexo: c.sexo,
-        };
-      } else if (resultado.kind === 'none') {
-        next[index] = {
-          tipo: 'erro',
-          texto: 'Este militar precisa ser cadastrado na página Cadastro.',
-        };
-      } else {
-        next[index] = {
-          tipo: 'erro',
-          texto:
-            'Vários cadastros correspondem à busca. Informe o NIP completo (8 dígitos).',
-        };
+        });
+        return;
       }
-      return next;
+    }
+
+    definirNipOk(index, c);
+  }, [nipsParticipantes, tipoProva, definirNipOk]);
+
+  const fecharModalTesteExistente = useCallback(() => {
+    setModalTesteExistente(null);
+  }, []);
+
+  const confirmarRepeticaoTeste = useCallback(() => {
+    if (!modalTesteExistente) return;
+    const { index, dataNascimento, sexo, nip, nome } = modalTesteExistente;
+    nipsRepeticaoAutorizadaRef.current.add(index);
+    definirNipOk(index, {
+      id: '',
+      nip,
+      nome,
+      dataNascimento,
+      sexo,
     });
-  }, [nipsParticipantes]);
+    setModalTesteExistente(null);
+  }, [modalTesteExistente, definirNipOk]);
 
   const prepararProva = useCallback(() => {
     if (tipoProva !== 'corrida' && tipoProva !== 'natacao') {
@@ -1179,6 +1259,8 @@ export default function AplicarTAFScreen() {
     setNParticipantesConfirmado(0);
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
+    nipsRepeticaoAutorizadaRef.current = new Set();
+    setModalTesteExistente(null);
     setNumeroVoltas('');
     setResultadoPermanenciaLinhas([]);
     setModalPermanenciaFinalizadaVisible(false);
@@ -1226,6 +1308,12 @@ export default function AplicarTAFScreen() {
         visible={modalOrientacaoPaisagem}
         onContinue={confirmarOrientacaoEIniciarTaf}
         onClose={() => setModalOrientacaoPaisagem(false)}
+      />
+
+      <ModalTesteJaAplicado
+        info={modalTesteExistente}
+        onClose={fecharModalTesteExistente}
+        onConfirmarRepeticao={confirmarRepeticaoTeste}
       />
 
       <Modal

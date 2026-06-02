@@ -73,13 +73,21 @@ export default function HomeScreen() {
       <AppHeader title="TAF" subtitle="Teste de Aptidão Física" />
 
       <View style={styles.statsGrid}>
-        <StatCard label="Cadastrados" value={resumo.totalCadastrados.toLocaleString('pt-BR')} />
+        <StatCard
+          label="Cadastrados"
+          value={resumo.totalCadastrados.toLocaleString('pt-BR')}
+          variant="primary"
+        />
         <StatCard
           label="TAF concluído"
           value={resumo.completos.toLocaleString('pt-BR')}
           variant="positive"
         />
-        <StatCard label="Parcial" value={resumo.parcial.toLocaleString('pt-BR')} />
+        <StatCard
+          label="Parcial"
+          value={resumo.parcial.toLocaleString('pt-BR')}
+          variant="warning"
+        />
         <StatCard
           label="Pendente"
           value={resumo.semTeste.toLocaleString('pt-BR')}

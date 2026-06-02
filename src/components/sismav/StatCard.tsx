@@ -5,14 +5,22 @@ import { useTheme } from '../../contexts/ThemeContext';
 type Props = {
   label: string;
   value: string | number;
-  variant?: 'default' | 'positive' | 'negative';
+  variant?: 'default' | 'positive' | 'negative' | 'primary' | 'warning';
 };
 
 export function StatCard({ label, value, variant = 'default' }: Props) {
   const { theme } = useTheme();
   const t = theme.tokens;
   const valueColor =
-    variant === 'positive' ? theme.success : variant === 'negative' ? theme.error : theme.text;
+    variant === 'positive'
+      ? theme.success
+      : variant === 'negative'
+        ? theme.error
+        : variant === 'primary'
+          ? theme.primary
+          : variant === 'warning'
+            ? t.warning500
+            : theme.text;
 
   return (
     <View

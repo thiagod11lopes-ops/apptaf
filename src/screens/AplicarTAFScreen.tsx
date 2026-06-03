@@ -49,6 +49,7 @@ import {
   removerParticipanteModalidadeDoHistorico,
 } from '../utils/registroModalidadeHistorico';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
+import { cadastroPrecisaCompletarDadosTaf, dataNascimentoCadastroValida } from '../utils/cadastroDadosTaf';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
 import {
@@ -78,6 +79,16 @@ function formatNipInput(value: string) {
   return `${a}.${b}.${c}`;
 }
 
+function formatDateInput(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  const dd = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  const yyyy = digits.slice(4, 8);
+  if (digits.length <= 2) return dd;
+  if (digits.length <= 4) return `${dd}/${mm}`;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 const MAX_PARTICIPANTES = 200;
 
 /** Duração da prova de permanência — ao atingir, exibe modal de finalização. */
@@ -92,6 +103,14 @@ type CronometroCorridaEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
 
 type NipFeedbackLinha =
   | { tipo: 'ok'; texto: string; nomeMilitar: string; dataNascimento: string; sexo?: 'M' | 'F' }
+  | {
+      tipo: 'completar_dados';
+      nomeMilitar: string;
+      cadastro: CadastroItemPersist;
+      dataNascimento: string;
+      sexo: 'M' | 'F';
+      erro?: string;
+    }
   | { tipo: 'erro'; texto: string }
   | null;
 
@@ -997,6 +1016,109 @@ export default function AplicarTAFScreen() {
     });
   }, []);
 
+  const continuarAposCadastroEncontrado = useCallback(
+    async (index: number, c: CadastroItemPersist) => {
+      if (cadastroPrecisaCompletarDadosTaf(c)) {
+        const nome = (c.nome || '').trim() || 'Sem nome';
+        setNipFeedbackLinhas((prev) => {
+          const next = [...prev];
+          next[index] = {
+            tipo: 'completar_dados',
+            nomeMilitar: nome,
+            cadastro: c,
+            dataNascimento: (c.dataNascimento || '').trim(),
+            sexo: c.sexo === 'F' ? 'F' : 'M',
+          };
+          return next;
+        });
+        return;
+      }
+
+      const nome = (c.nome || '').trim() || 'Sem nome';
+      const nipLinha = nipsParticipantes[index] || c.nip;
+      const modalidade = tipoProvaRef.current ?? tipoProva;
+
+      if (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index)) {
+        const sessoes = await getAllSessoesAplicacao();
+        const existente = buscarRegistroModalidadeExistente(nipLinha, modalidade, sessoes, c);
+        if (existente) {
+          setModalTesteExistente({
+            index,
+            nip: nipLinha,
+            nome,
+            registro: existente,
+            dataNascimento: c.dataNascimento || '',
+            sexo: c.sexo,
+          });
+          return;
+        }
+      }
+
+      definirNipOk(index, c);
+    },
+    [nipsParticipantes, tipoProva, definirNipOk],
+  );
+
+  const atualizarDadosNipLinha = useCallback(
+    (index: number, patch: Partial<{ dataNascimento: string; sexo: 'M' | 'F' }>) => {
+      setNipFeedbackLinhas((prev) => {
+        const fb = prev[index];
+        if (fb?.tipo !== 'completar_dados') return prev;
+        const next = [...prev];
+        next[index] = { ...fb, ...patch, erro: undefined };
+        return next;
+      });
+    },
+    [],
+  );
+
+  const confirmarDadosNipLinha = useCallback(
+    async (index: number) => {
+      const fb = nipFeedbackLinhas[index];
+      if (fb?.tipo !== 'completar_dados') return;
+
+      const dataNasc = fb.dataNascimento.trim();
+      if (!dataNascimentoCadastroValida(dataNasc)) {
+        setNipFeedbackLinhas((prev) => {
+          const next = [...prev];
+          const cur = prev[index];
+          if (cur?.tipo !== 'completar_dados') return prev;
+          next[index] = {
+            ...cur,
+            erro: 'Informe a data de nascimento no formato DD/MM/AAAA.',
+          };
+          return next;
+        });
+        return;
+      }
+
+      const atualizado: CadastroItemPersist = {
+        ...fb.cadastro,
+        dataNascimento: dataNasc,
+        sexo: fb.sexo,
+      };
+
+      try {
+        await addCadastro(atualizado);
+      } catch {
+        setNipFeedbackLinhas((prev) => {
+          const next = [...prev];
+          const cur = prev[index];
+          if (cur?.tipo !== 'completar_dados') return prev;
+          next[index] = {
+            ...cur,
+            erro: 'Não foi possível salvar os dados. Tente novamente.',
+          };
+          return next;
+        });
+        return;
+      }
+
+      await continuarAposCadastroEncontrado(index, atualizado);
+    },
+    [nipFeedbackLinhas, continuarAposCadastroEncontrado],
+  );
+
   const atualizarNip = useCallback((index: number, texto: string) => {
     setNipsParticipantes((prev) => {
       const next = [...prev];
@@ -1054,46 +1176,22 @@ export default function AplicarTAFScreen() {
     }
 
     const c = resultado.cadastro;
-    const nome = (c.nome || '').trim() || 'Sem nome';
-    const modalidade = tipoProvaRef.current ?? tipoProva;
-
-    if (
-      modalidade &&
-      !nipsRepeticaoAutorizadaRef.current.has(index)
-    ) {
-      const sessoes = await getAllSessoesAplicacao();
-      const existente = buscarRegistroModalidadeExistente(nip, modalidade, sessoes, c);
-      if (existente) {
-        setModalTesteExistente({
-          index,
-          nip,
-          nome,
-          registro: existente,
-          dataNascimento: c.dataNascimento || '',
-          sexo: c.sexo,
-        });
-        return;
-      }
-    }
-
-    definirNipOk(index, c);
-  }, [nipsParticipantes, tipoProva, definirNipOk]);
+    await continuarAposCadastroEncontrado(index, c);
+  }, [nipsParticipantes, continuarAposCadastroEncontrado]);
 
   const fecharModalTesteExistente = useCallback(() => {
     setModalTesteExistente(null);
   }, []);
 
-  const confirmarRepeticaoTeste = useCallback(() => {
+  const confirmarRepeticaoTeste = useCallback(async () => {
     if (!modalTesteExistente) return;
-    const { index, dataNascimento, sexo, nip, nome } = modalTesteExistente;
+    const { index, nip } = modalTesteExistente;
     nipsRepeticaoAutorizadaRef.current.add(index);
-    definirNipOk(index, {
-      id: '',
-      nip,
-      nome,
-      dataNascimento,
-      sexo,
-    });
+    const cadastros = await getAllCadastros();
+    const busca = buscarCadastroPorNomeOuNip(cadastros, nip);
+    if (busca.kind === 'found') {
+      definirNipOk(index, busca.cadastro);
+    }
     setModalTesteExistente(null);
   }, [modalTesteExistente, definirNipOk]);
 
@@ -1105,6 +1203,15 @@ export default function AplicarTAFScreen() {
       );
       return;
     }
+    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+      if (nipFeedbackLinhas[i]?.tipo !== 'ok') {
+        Alert.alert(
+          'NIPs pendentes',
+          'Confirme o NIP de todos os participantes (OK em cada linha) e preencha data de nascimento e gênero quando solicitado.',
+        );
+        return;
+      }
+    }
     resetCronometroCorrida();
     dispatchTrial({
       type: 'prepararProva',
@@ -1112,14 +1219,14 @@ export default function AplicarTAFScreen() {
       tipoProva: tipoProva === 'natacao' ? 'natacao' : 'corrida',
     });
     setCorridaEtapa('tabela_corrida');
-  }, [resetCronometroCorrida, nParticipantesConfirmado, tipoProva]);
+  }, [resetCronometroCorrida, nParticipantesConfirmado, tipoProva, nipFeedbackLinhas]);
 
   const prepararPermanencia = useCallback(() => {
     for (let i = 0; i < nParticipantesConfirmado; i += 1) {
       if (nipFeedbackLinhas[i]?.tipo !== 'ok') {
         Alert.alert(
           'NIPs pendentes',
-          'Confirme o NIP de todos os participantes (botão OK em cada linha).',
+          'Confirme o NIP de todos os participantes (OK em cada linha) e preencha data de nascimento e gênero quando solicitado.',
         );
         return;
       }
@@ -1609,7 +1716,9 @@ export default function AplicarTAFScreen() {
                 Preencha o NIP de cada um dos {nParticipantesConfirmado} participantes.
               </Text>
 
-            {nipsParticipantes.map((nip, index) => (
+            {nipsParticipantes.map((nip, index) => {
+              const fb = nipFeedbackLinhas[index];
+              return (
               <View key={index} style={styles.nipRow}>
                 <View style={styles.nipLabelRow}>
                   <LabelNip color={ui.label} fontSize={12} fontWeight="800" />
@@ -1638,28 +1747,92 @@ export default function AplicarTAFScreen() {
                   >
                     <Text style={[ts.body, styles.btnText]}>OK</Text>
                   </TouchableOpacity>
-                  {nipFeedbackLinhas[index]?.tipo === 'ok' ? (
+                  {fb?.tipo === 'ok' ? (
                     <View style={styles.nomeCorredorBeside}>
                       <Text style={styles.nomeCorredorBesideText} numberOfLines={4}>
-                        ({nipFeedbackLinhas[index].nomeMilitar}) {labelAtleta} número{' '}
+                        ({fb.nomeMilitar}) {labelAtleta} número{' '}
                         <Text style={styles.numeroCorredor}>{index + 1}</Text>
                       </Text>
                     </View>
                   ) : null}
                 </View>
-                {nipFeedbackLinhas[index] ? (
-                  <Text
-                    style={
-                      nipFeedbackLinhas[index]!.tipo === 'ok'
-                        ? styles.feedbackOk
-                        : styles.feedbackErro
-                    }
+                {fb?.tipo === 'completar_dados' ? (
+                  <View
+                    style={[
+                      styles.dadosNipBox,
+                      { backgroundColor: inputBg, borderColor: inputBorder },
+                    ]}
                   >
-                    {nipFeedbackLinhas[index]!.texto}
+                    <Text style={[ts.bodySecondary, styles.dadosNipLead]}>
+                      {fb.nomeMilitar}: informe data de nascimento e gênero. Os dados serão salvos no
+                      cadastro.
+                    </Text>
+                    <Text style={[ts.label, styles.dadosNipFieldLabel]}>Data de nascimento</Text>
+                    <TextInput
+                      value={fb.dataNascimento}
+                      onChangeText={(t) =>
+                        atualizarDadosNipLinha(index, { dataNascimento: formatDateInput(t) })
+                      }
+                      placeholder="DD/MM/AAAA"
+                      placeholderTextColor={ui.placeholder}
+                      keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                      inputMode="numeric"
+                      maxLength={10}
+                      style={[
+                        styles.input,
+                        { borderColor: inputBorder, backgroundColor: theme.background, color: inputTextColor },
+                      ]}
+                      accessibilityLabel={`Data de nascimento do participante ${index + 1}`}
+                    />
+                    <Text style={[ts.label, styles.dadosNipFieldLabel]}>Gênero</Text>
+                    <View style={[styles.dadosNipSegmented, { borderColor: theme.border }]}>
+                      {(['M', 'F'] as const).map((sx) => {
+                        const active = fb.sexo === sx;
+                        return (
+                          <TouchableOpacity
+                            key={sx}
+                            accessibilityLabel={sx === 'M' ? 'Masculino' : 'Feminino'}
+                            onPress={() => atualizarDadosNipLinha(index, { sexo: sx })}
+                            style={[
+                              styles.dadosNipSegmentBtn,
+                              {
+                                backgroundColor: active ? selectedBgColor : theme.backgroundSecondary,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                ts.caption,
+                                { color: active ? selectedTextColor : theme.textSecondary },
+                                styles.dadosNipSegmentText,
+                              ]}
+                            >
+                              {sx === 'M' ? 'Masculino' : 'Feminino'}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    {fb.erro ? <Text style={styles.feedbackErro}>{fb.erro}</Text> : null}
+                    <TouchableOpacity
+                      accessibilityLabel={`Salvar dados do participante ${index + 1}`}
+                      activeOpacity={0.85}
+                      onPress={() => void confirmarDadosNipLinha(index)}
+                      style={[styles.btnSalvarDadosNip, { backgroundColor: theme.primary }]}
+                    >
+                      <Text style={[ts.body, styles.btnText]}>Salvar e confirmar</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : fb ? (
+                  <Text
+                    style={fb.tipo === 'ok' ? styles.feedbackOk : styles.feedbackErro}
+                  >
+                    {fb.tipo === 'ok' || fb.tipo === 'erro' ? fb.texto : ''}
                   </Text>
                 ) : null}
               </View>
-            ))}
+            );
+            })}
 
             <TouchableOpacity
               accessibilityLabel={`Preparar ${tituloProvaCurta}`}
@@ -2320,6 +2493,41 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     fontSize: 12,
     fontWeight: '700',
     color: theme.isDark ? ui.text : '#B91C1C',
+  },
+  dadosNipBox: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    gap: 8,
+  },
+  dadosNipLead: {
+    lineHeight: 18,
+  },
+  dadosNipFieldLabel: {
+    marginTop: 4,
+    marginBottom: 0,
+  },
+  dadosNipSegmented: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    overflow: 'hidden',
+  },
+  dadosNipSegmentBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dadosNipSegmentText: {
+    fontWeight: '700',
+  },
+  btnSalvarDadosNip: {
+    marginTop: 4,
+    paddingVertical: 12,
+    borderRadius: PREMIUM.radiusMd,
+    alignItems: 'center',
   },
   erroText: {
     marginTop: 8,

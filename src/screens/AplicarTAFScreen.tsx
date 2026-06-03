@@ -1039,8 +1039,17 @@ export default function AplicarTAFScreen() {
       const modalidade = tipoProvaRef.current ?? tipoProva;
 
       if (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index)) {
-        const sessoes = await getAllSessoesAplicacao();
-        const existente = buscarRegistroModalidadeExistente(nipLinha, modalidade, sessoes, c);
+        const [sessoes, cadastros] = await Promise.all([
+          getAllSessoesAplicacao(),
+          getAllCadastros(),
+        ]);
+        const existente = buscarRegistroModalidadeExistente(
+          nipLinha,
+          modalidade,
+          sessoes,
+          c,
+          cadastros,
+        );
         if (existente) {
           setModalTesteExistente({
             index,

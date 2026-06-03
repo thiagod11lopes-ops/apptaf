@@ -9,16 +9,11 @@ import {
 } from '../services/resultadosAplicadosIndexedDb';
 import type { ResultadoCorridaItem } from '../navigation/types';
 import { formatMsByModality } from '../taf/tafTimeFormat';
+import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { nipDigitos } from './nipFormat';
-import {
-  temAvaliacaoCorrida,
-  temAvaliacaoNatacao,
-  temAvaliacaoPermanencia,
-} from './resultadoTafCadastro';
 
 export type RegistroModalidadeExistente = {
-  origem: 'historico' | 'cadastro';
   dataAplicacao: string;
   tempo: string;
   nota: string;
@@ -52,7 +47,6 @@ function registroFromHistorico(
 ): RegistroModalidadeExistente {
   const tipo = sessao.tipoProva;
   return {
-    origem: 'historico',
     dataAplicacao: sessao.dataAplicacao,
     tempo: tempoFromResultado(tipo, r),
     nota: notaFromResultado(r),
@@ -61,56 +55,37 @@ function registroFromHistorico(
   };
 }
 
-function registroFromCadastro(c: CadastroItemPersist, tipo: TipoProvaAplicada): RegistroModalidadeExistente {
-  if (tipo === 'corrida') {
-    const nota = (c.notaCorrida ?? '').trim() || '—';
-    return {
-      origem: 'cadastro',
-      dataAplicacao: (c.dataTafCorrida ?? '').trim() || '—',
-      tempo: (c.tempoCorrida ?? '').trim() || '—',
-      nota,
-      situacao: nota.toUpperCase() === 'REPROVADO' ? 'Reprovado' : nota !== '—' ? 'Aprovado' : '—',
-      modalidadeLabel: tituloTipoProva(tipo),
-    };
-  }
-  if (tipo === 'natacao') {
-    const nota = (c.notaNatacao ?? '').trim() || '—';
-    return {
-      origem: 'cadastro',
-      dataAplicacao: (c.dataTafNatacao ?? '').trim() || '—',
-      tempo: (c.tempoNatacao ?? '').trim() || '—',
-      nota,
-      situacao: nota.toUpperCase() === 'REPROVADO' ? 'Reprovado' : nota !== '—' ? 'Aprovado' : '—',
-      modalidadeLabel: tituloTipoProva(tipo),
-    };
-  }
-  const aprovado = c.resultadoPermanencia === 'aprovado';
-  const reprovado = c.resultadoPermanencia === 'reprovado';
-  return {
-    origem: 'cadastro',
-    dataAplicacao: (c.dataTafPermanencia ?? '').trim() || '—',
-    tempo: (c.tempoPermanencia ?? '').trim() || PERMANENCIA_TEMPO_PDF_PADRAO,
-    nota: aprovado ? 'Aprovado' : reprovado ? 'REPROVADO' : '—',
-    situacao: aprovado ? 'Aprovado' : reprovado ? 'Reprovado' : '—',
-    modalidadeLabel: tituloTipoProva(tipo),
-  };
+function resultadoPertenceAoCadastro(
+  r: ResultadoCorridaItem,
+  cadastro: CadastroItemPersist,
+  cadastros: CadastroItemPersist[],
+): boolean {
+  const alvoNip = nipDigitos(cadastro.nip);
+  const nipResultado = nipDigitos(r.nip);
+  if (alvoNip && nipResultado && alvoNip === nipResultado) return true;
+
+  const busca = buscarCadastroPorNomeOuNip(
+    cadastros,
+    (r.nip ?? '').trim() || (r.nome ?? '').trim(),
+  );
+  return busca.kind === 'found' && busca.cadastro.id === cadastro.id;
 }
 
-function temRegistroCadastro(c: CadastroItemPersist, tipo: TipoProvaAplicada): boolean {
-  if (tipo === 'corrida') return temAvaliacaoCorrida(c);
-  if (tipo === 'natacao') return temAvaliacaoNatacao(c);
-  return temAvaliacaoPermanencia(c);
-}
-
-/** Busca o registro mais recente da modalidade no histórico; fallback no cadastro. */
+/**
+ * Busca registro da modalidade apenas no Histórico (mesma fonte da aba Resultado Geral).
+ * Dados legados só no cadastro (ex.: Registrador de TAF) não disparam "teste já aplicado".
+ */
 export function buscarRegistroModalidadeExistente(
   nip: string,
   tipo: TipoProvaAplicada,
   sessoes: SessaoAplicacaoTaf[],
   cadastro: CadastroItemPersist,
+  cadastros: CadastroItemPersist[] = [],
 ): RegistroModalidadeExistente | null {
-  const alvo = nipDigitos(nip);
-  if (!alvo) return null;
+  const alvoNip = nipDigitos(nip);
+  if (!alvoNip && !cadastro.id) return null;
+
+  const listaCadastros = cadastros.length > 0 ? cadastros : [cadastro];
 
   const doTipo = sessoes
     .filter((s) => s.tipoProva === tipo)
@@ -118,14 +93,12 @@ export function buscarRegistroModalidadeExistente(
 
   for (const sessao of doTipo) {
     for (const r of sessao.resultados) {
-      if (nipDigitos(r.nip) === alvo) {
+      const matchNip = alvoNip && nipDigitos(r.nip) === alvoNip;
+      const matchCadastro = resultadoPertenceAoCadastro(r, cadastro, listaCadastros);
+      if (matchNip || matchCadastro) {
         return registroFromHistorico(sessao, r);
       }
     }
-  }
-
-  if (temRegistroCadastro(cadastro, tipo)) {
-    return registroFromCadastro(cadastro, tipo);
   }
 
   return null;

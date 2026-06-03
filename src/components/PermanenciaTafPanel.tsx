@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Check, Pause, Play } from 'lucide-react-native';
+import { PREMIUM } from '../theme/premium';
 
 export type ResultadoPermanenciaOpcao = 'aprovado' | 'reprovado' | null;
 
@@ -95,6 +96,7 @@ export function PermanenciaTafPanel({
   inputTextColor,
 }: PermanenciaTafPanelProps) {
   const { theme } = useTheme();
+  const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const todosMarcados =
     participantes.length > 0 &&
@@ -220,12 +222,18 @@ export function PermanenciaTafPanel({
           activeOpacity={0.85}
           onPress={onAplicarResultado}
           disabled={salvando}
-          style={[styles.btnAplicar, salvando ? styles.btnDisabled : null]}
+          style={[
+            styles.btnAplicar,
+            { backgroundColor: theme.primary },
+            salvando ? styles.btnDisabled : null,
+          ]}
         >
           {salvando ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={theme.tokens.textOnPrimary} />
           ) : (
-            <Text style={styles.btnAplicarText}>Aplicar Resultado</Text>
+            <Text style={[ts.body, styles.btnAplicarText, { color: theme.tokens.textOnPrimary }]}>
+              Aplicar Resultado
+            </Text>
           )}
         </TouchableOpacity>
       ) : null}
@@ -362,16 +370,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   btnAplicar: {
-    backgroundColor: '#15803D',
-    borderRadius: 12,
-    paddingVertical: 14,
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: PREMIUM.radiusMd,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 4,
   },
   btnAplicarText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 15,
+    fontWeight: '700',
   },
   btnDisabled: { opacity: 0.6 },
 });

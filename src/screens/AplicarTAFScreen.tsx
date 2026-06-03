@@ -2203,16 +2203,18 @@ export default function AplicarTAFScreen() {
                   }}
                   disabled={salvandoResultadosCorrida}
                   style={[
-                    styles.toggleBtn,
-                    styles.toggleBtnActive,
+                    styles.btnOkNip,
                     styles.btnAplicarResultadoCadastro,
+                    { backgroundColor: theme.primary },
                     salvandoResultadosCorrida ? styles.btnIniciarDisabled : null,
                   ]}
                 >
                   {salvandoResultadosCorrida ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <ActivityIndicator color={theme.tokens.textOnPrimary} />
                   ) : (
-                    <Text style={[styles.toggleBtnText, styles.toggleBtnTextActive]}>Aplicar Resultado</Text>
+                    <Text style={[ts.body, styles.btnText, { color: theme.tokens.textOnPrimary }]}>
+                      Aplicar Resultado
+                    </Text>
                   )}
                 </TouchableOpacity>
               ) : null}
@@ -2452,8 +2454,8 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' as const } : {}),
   },
   btnAplicarResultadoCadastro: {
+    width: '100%',
     marginTop: 14,
-    paddingVertical: 14,
   },
   nipRow: {
     marginBottom: 14,

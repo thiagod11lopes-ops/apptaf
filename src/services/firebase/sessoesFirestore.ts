@@ -22,17 +22,6 @@ function sessoesCollection(uid: string) {
   return collection(db, userSessoesPath(uid));
 }
 
-function scheduleSessaoRubricMigration(uid: string, sessao: SessaoAplicacaoTaf) {
-  const rubricas = extractSessaoRubricas(sessao);
-  if (rubricas.length === 0) return;
-  void (async () => {
-    await setSessaoRubricasFirestore(uid, sessao.id, { resultados: rubricas });
-    const db = getFirestoreDb();
-    if (!db) return;
-    await setDoc(doc(db, userSessoesPath(uid), sessao.id), sanitizeForFirestore(toSessaoLight(sessao)));
-  })().catch(() => undefined);
-}
-
 /** Uma consulta — sessões sem SVG nos resultados. */
 export async function getAllSessoesFirestoreLight(uid: string): Promise<SessaoAplicacaoTaf[]> {
   const snap = await getDocs(sessoesCollection(uid));
@@ -40,12 +29,7 @@ export async function getAllSessoesFirestoreLight(uid: string): Promise<SessaoAp
 
   for (const docSnap of snap.docs) {
     const raw = docSnap.data() as SessaoAplicacaoTaf;
-    const sessao = { ...raw, id: docSnap.id };
-    list.push(toSessaoLight(sessao));
-
-    if (extractSessaoRubricas(sessao).length > 0) {
-      scheduleSessaoRubricMigration(uid, sessao);
-    }
+    list.push(toSessaoLight({ ...raw, id: docSnap.id }));
   }
 
   list.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));

@@ -12,7 +12,7 @@ export type SessaoAplicacaoTaf = {
 
 import { toSessaoLight } from '../utils/sessaoLight';
 import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHistorico';
-import { waitForAuthUid } from './firebase/authUid';
+import { waitForAuthUid, waitForAuthenticatedUid } from './firebase/authUid';
 import {
   addSessaoFirestore,
   deleteSessaoFirestore,
@@ -92,7 +92,7 @@ async function resolveCloudSessoes(uid: string): Promise<SessaoAplicacaoTaf[]> {
   if (mem) return mem;
 
   const disk = await readCloudDataCache(uid);
-  if (disk) {
+  if (disk && disk.cadastros.length > 0) {
     setMemoryCloudCache(disk);
     return disk.sessoes;
   }
@@ -112,7 +112,7 @@ async function patchCloudCacheSessoes(uid: string, sessoes: SessaoAplicacaoTaf[]
 }
 
 export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
-  const uid = await waitForAuthUid();
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     return resolveCloudSessoes(uid);
   }

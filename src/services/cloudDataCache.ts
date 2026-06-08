@@ -59,17 +59,13 @@ async function readFromIdb(uid: string): Promise<CloudDataCacheEntry | null> {
 }
 
 async function writeToIdb(entry: CloudDataCacheEntry): Promise<void> {
-  try {
-    const db = await openIdb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      const req = tx.objectStore(IDB_STORE).put(entry);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  } catch {
-    // fallback silencioso
-  }
+  const db = await openIdb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const req = tx.objectStore(IDB_STORE).put(entry);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
 }
 
 async function readFromAsyncStorage(uid: string): Promise<CloudDataCacheEntry | null> {
@@ -83,11 +79,7 @@ async function readFromAsyncStorage(uid: string): Promise<CloudDataCacheEntry | 
 }
 
 async function writeToAsyncStorage(entry: CloudDataCacheEntry): Promise<void> {
-  try {
-    await AsyncStorage.setItem(cacheKey(entry.uid), JSON.stringify(entry));
-  } catch {
-    // silencioso
-  }
+  await AsyncStorage.setItem(cacheKey(entry.uid), JSON.stringify(entry));
 }
 
 export function getMemoryCloudCache(uid: string): CloudDataCacheEntry | null {
@@ -107,14 +99,26 @@ export function isCloudCacheFresh(entry: CloudDataCacheEntry): boolean {
   return Date.now() - entry.syncedAt < CLOUD_CACHE_TTL_MS;
 }
 
+/** Cache só é exibido instantaneamente se tiver cadastros (evita cache vazio no Safari). */
+export function isCloudCacheInstant(entry: CloudDataCacheEntry): boolean {
+  return isCloudCacheFresh(entry) && entry.cadastros.length > 0;
+}
+
 export async function readCloudDataCache(uid: string): Promise<CloudDataCacheEntry | null> {
   const mem = getMemoryCloudCache(uid);
   if (mem) return mem;
 
-  const fromIdb = Platform.OS === 'web' ? await readFromIdb(uid) : null;
-  if (fromIdb) {
-    memory = fromIdb;
-    return fromIdb;
+  if (Platform.OS === 'web') {
+    const fromIdb = await readFromIdb(uid);
+    if (fromIdb) {
+      if (fromIdb.cadastros.length === 0) {
+        void clearCloudDataCache(uid);
+        return null;
+      }
+      memory = fromIdb;
+      return fromIdb;
+    }
+    return null;
   }
 
   const fromAsync = await readFromAsyncStorage(uid);
@@ -127,11 +131,21 @@ export async function readCloudDataCache(uid: string): Promise<CloudDataCacheEnt
 }
 
 export async function writeCloudDataCache(entry: CloudDataCacheEntry): Promise<void> {
-  memory = entry;
-  if (Platform.OS === 'web') {
-    await writeToIdb(entry);
+  if (entry.cadastros.length === 0 && entry.sessoes.length === 0) {
+    return;
   }
-  await writeToAsyncStorage(entry);
+
+  memory = entry;
+
+  try {
+    if (Platform.OS === 'web') {
+      await writeToIdb(entry);
+    } else {
+      await writeToAsyncStorage(entry);
+    }
+  } catch {
+    // Mantém em memória nesta sessão mesmo se persistência falhar (Safari).
+  }
 }
 
 export async function clearCloudDataCache(uid: string): Promise<void> {

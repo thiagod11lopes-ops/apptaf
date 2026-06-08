@@ -79,7 +79,7 @@ export default function HomeScreen() {
       setResumo(RESUMO_INICIAL);
       setCloudLoad(LOAD_IDLE);
     }
-  }, [authReady, isAuthenticated]);
+  }, [authReady, isAuthenticated, user?.uid]);
 
   useAuthDataReload(recarregarResumo);
 

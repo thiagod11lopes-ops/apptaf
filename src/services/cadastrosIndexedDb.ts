@@ -33,7 +33,7 @@ export type CadastroItemPersist = {
 
 import { toCadastroLight } from '../utils/cadastroLight';
 import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHistorico';
-import { waitForAuthUid } from './firebase/authUid';
+import { waitForAuthUid, waitForAuthenticatedUid } from './firebase/authUid';
 import {
   addCadastroFirestore,
   addCadastrosEmLoteFirestore,
@@ -107,10 +107,10 @@ export async function clearLocalCadastros(): Promise<void> {
 
 async function resolveCloudCadastros(uid: string): Promise<CadastroItemPersist[]> {
   const mem = getCachedCadastros(uid);
-  if (mem) return mem;
+  if (mem && mem.length > 0) return mem;
 
   const disk = await readCloudDataCache(uid);
-  if (disk) {
+  if (disk && disk.cadastros.length > 0) {
     setMemoryCloudCache(disk);
     return disk.cadastros;
   }
@@ -130,7 +130,7 @@ async function patchCloudCacheCadastros(uid: string, cadastros: CadastroItemPers
 }
 
 export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
-  const uid = await waitForAuthUid();
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     return resolveCloudCadastros(uid);
   }

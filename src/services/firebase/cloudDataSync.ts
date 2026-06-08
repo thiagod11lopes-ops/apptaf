@@ -3,13 +3,13 @@ import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
 import {
   readCloudDataCache,
   writeCloudDataCache,
-  isCloudCacheFresh,
+  isCloudCacheInstant,
   getMemoryCloudCache,
   setMemoryCloudCache,
   type CloudDataCacheEntry,
 } from '../cloudDataCache';
 import { calcularResumoInicioTafFromHistorico } from '../../utils/resultadoGeralHistorico';
-import { waitForAuthUid } from './authUid';
+import { waitForAuthenticatedUid } from './authUid';
 import { getAllCadastrosFirestoreLight } from './cadastrosFirestore';
 import { getAllSessoesFirestoreLight } from './sessoesFirestore';
 
@@ -58,13 +58,15 @@ export async function loadHomeCloudData(
   onProgress: (state: CloudDataLoadState) => void,
   options?: { forceRefresh?: boolean },
 ): Promise<CloudDataCacheEntry | null> {
-  const uid = await waitForAuthUid();
+  const uid = await waitForAuthenticatedUid();
   if (!uid) return null;
 
-  const cached = getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid));
-  const useCache = cached && !options?.forceRefresh && isCloudCacheFresh(cached);
+  const cached =
+    !options?.forceRefresh
+      ? getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid))
+      : null;
 
-  if (useCache && cached) {
+  if (cached && isCloudCacheInstant(cached)) {
     setMemoryCloudCache(cached);
     onProgress({
       percent: 100,
@@ -76,63 +78,47 @@ export async function loadHomeCloudData(
     return cached;
   }
 
-  if (cached && !options?.forceRefresh) {
+  if (cached && cached.cadastros.length > 0) {
     onProgress({
       percent: 100,
-      loading: false,
+      loading: true,
       loadedCadastros: cached.cadastros.length,
       loadedSessoes: cached.sessoes.length,
       fromCache: true,
     });
-    void (async () => {
-      onProgress({
-        percent: 5,
-        loading: true,
-        loadedCadastros: 0,
-        loadedSessoes: 0,
-        fromCache: false,
-      });
-      try {
-        const entry = await syncCloudDataCache(uid);
-        onProgress({
-          percent: 100,
-          loading: false,
-          loadedCadastros: entry.cadastros.length,
-          loadedSessoes: entry.sessoes.length,
-          fromCache: false,
-        });
-      } catch {
-        onProgress({
-          percent: 100,
-          loading: false,
-          loadedCadastros: cached.cadastros.length,
-          loadedSessoes: cached.sessoes.length,
-          fromCache: true,
-        });
-      }
-    })();
-    return cached;
+  } else {
+    onProgress({
+      percent: 8,
+      loading: true,
+      loadedCadastros: 0,
+      loadedSessoes: 0,
+      fromCache: false,
+    });
   }
 
-  onProgress({
-    percent: 8,
-    loading: true,
-    loadedCadastros: 0,
-    loadedSessoes: 0,
-    fromCache: false,
-  });
-
-  const entry = await syncCloudDataCache(uid);
-
-  onProgress({
-    percent: 100,
-    loading: false,
-    loadedCadastros: entry.cadastros.length,
-    loadedSessoes: entry.sessoes.length,
-    fromCache: false,
-  });
-
-  return entry;
+  try {
+    const entry = await syncCloudDataCache(uid);
+    onProgress({
+      percent: 100,
+      loading: false,
+      loadedCadastros: entry.cadastros.length,
+      loadedSessoes: entry.sessoes.length,
+      fromCache: false,
+    });
+    return entry;
+  } catch (error) {
+    if (cached && cached.cadastros.length > 0) {
+      onProgress({
+        percent: 100,
+        loading: false,
+        loadedCadastros: cached.cadastros.length,
+        loadedSessoes: cached.sessoes.length,
+        fromCache: true,
+      });
+      return cached;
+    }
+    throw error;
+  }
 }
 
 export function getCachedCadastros(uid: string): CadastroItemPersist[] | null {

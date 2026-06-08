@@ -27,22 +27,6 @@ function cadastrosCollection(uid: string) {
   return collection(db, userCadastrosPath(uid));
 }
 
-function scheduleRubricMigration(
-  uid: string,
-  raw: CadastroItemPersist,
-  rubricas: ReturnType<typeof extractCadastroRubricas>,
-) {
-  void (async () => {
-    await setCadastroRubricasFirestore(uid, raw.id, rubricas);
-    const db = getFirestoreDb();
-    if (!db) return;
-    await setDoc(
-      doc(db, userCadastrosPath(uid), raw.id),
-      sanitizeForFirestore(toCadastroLight(raw)),
-    );
-  })().catch(() => undefined);
-}
-
 /** Uma consulta — cadastros sem SVG (carga leve). */
 export async function getAllCadastrosFirestoreLight(uid: string): Promise<CadastroItemPersist[]> {
   const snap = await getDocs(cadastrosCollection(uid));
@@ -50,13 +34,7 @@ export async function getAllCadastrosFirestoreLight(uid: string): Promise<Cadast
 
   for (const docSnap of snap.docs) {
     const raw = docSnap.data() as CadastroItemPersist;
-    const rubricas = extractCadastroRubricas(raw);
-    const light = toCadastroLight({ ...raw, id: docSnap.id });
-    items.push(light);
-
-    if (hasCadastroRubricas(rubricas)) {
-      scheduleRubricMigration(uid, { ...raw, id: docSnap.id }, rubricas);
-    }
+    items.push(toCadastroLight({ ...raw, id: docSnap.id }));
   }
 
   return dedupeCadastrosPorNip(items);

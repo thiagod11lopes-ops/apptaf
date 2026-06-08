@@ -9,6 +9,7 @@ import {
 import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
 import { getFirestoreDb } from '../../config/firebase';
 import { userSessoesPath } from './firestorePaths';
+import { sanitizeForFirestore } from './sanitizeFirestoreData';
 
 function sessoesCollection(uid: string) {
   const db = getFirestoreDb();
@@ -26,7 +27,7 @@ export async function getAllSessoesFirestore(uid: string): Promise<SessaoAplicac
 export async function addSessaoFirestore(uid: string, sessao: SessaoAplicacaoTaf): Promise<void> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
-  await setDoc(doc(db, userSessoesPath(uid), sessao.id), sessao);
+  await setDoc(doc(db, userSessoesPath(uid), sessao.id), sanitizeForFirestore(sessao));
 }
 
 export async function updateSessaoFirestore(uid: string, sessao: SessaoAplicacaoTaf): Promise<void> {

@@ -9,6 +9,7 @@ import {
 import type { CadastroItemPersist } from '../cadastrosIndexedDb';
 import { getFirestoreDb } from '../../config/firebase';
 import { userCadastrosPath } from './firestorePaths';
+import { sanitizeForFirestore } from './sanitizeFirestoreData';
 
 function cadastrosCollection(uid: string) {
   const db = getFirestoreDb();
@@ -24,7 +25,7 @@ export async function getAllCadastrosFirestore(uid: string): Promise<CadastroIte
 export async function addCadastroFirestore(uid: string, item: CadastroItemPersist): Promise<void> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
-  await setDoc(doc(db, userCadastrosPath(uid), item.id), item);
+  await setDoc(doc(db, userCadastrosPath(uid), item.id), sanitizeForFirestore(item));
 }
 
 const FIRESTORE_BATCH_LIMIT = 500;
@@ -41,7 +42,7 @@ export async function addCadastrosEmLoteFirestore(
     const chunk = items.slice(i, i + FIRESTORE_BATCH_LIMIT);
     const batch = writeBatch(db);
     for (const item of chunk) {
-      batch.set(doc(db, userCadastrosPath(uid), item.id), item);
+      batch.set(doc(db, userCadastrosPath(uid), item.id), sanitizeForFirestore(item));
     }
     await batch.commit();
   }

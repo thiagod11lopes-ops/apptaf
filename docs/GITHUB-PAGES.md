@@ -18,20 +18,12 @@ https://thiagod11lopes-ops.github.io/apptaf/
 
 ## Login Google no site publicado
 
-Adicione em **Settings → Secrets and variables → Actions** os mesmos valores do `.env`:
+O build usa `src/config/firebase.public.ts` quando não há variáveis no CI. Para outro projeto Firebase, altere esse arquivo ou defina secrets em **Settings → Secrets and variables → Actions** (`EXPO_PUBLIC_*`).
 
-- `EXPO_PUBLIC_FIREBASE_API_KEY`
-- `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`
-- `EXPO_PUBLIC_FIREBASE_PROJECT_ID`
-- `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`
-- `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
-- `EXPO_PUBLIC_FIREBASE_APP_ID`
-- `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
-
-Depois rode o workflow de deploy novamente (push em `main` ou **Actions → Run workflow**).
-
-## Firebase — domínio autorizado
-
-Em **Authentication → Settings → Authorized domains**, inclua:
+**Obrigatório no Firebase Console** — **Authentication → Settings → Authorized domains**:
 
 - `thiagod11lopes-ops.github.io`
+
+Sem esse domínio, o popup do Google falha mesmo com a config correta.
+
+Depois de qualquer alteração, rode o deploy de novo (push em `main` ou **Actions → Run workflow**).

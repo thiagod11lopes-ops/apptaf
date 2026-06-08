@@ -1,6 +1,7 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { FIREBASE_PUBLIC_DEFAULTS } from './firebase.public';
 
 export type FirebasePublicConfig = {
   apiKey: string;
@@ -12,12 +13,20 @@ export type FirebasePublicConfig = {
 };
 
 function readConfig(): FirebasePublicConfig | null {
-  const apiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.trim();
-  const authDomain = process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim();
-  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID?.trim();
-  const storageBucket = process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim();
-  const messagingSenderId = process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim();
-  const appId = process.env.EXPO_PUBLIC_FIREBASE_APP_ID?.trim();
+  const apiKey =
+    process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.trim() || FIREBASE_PUBLIC_DEFAULTS.apiKey;
+  const authDomain =
+    process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim() || FIREBASE_PUBLIC_DEFAULTS.authDomain;
+  const projectId =
+    process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID?.trim() || FIREBASE_PUBLIC_DEFAULTS.projectId;
+  const storageBucket =
+    process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() ||
+    FIREBASE_PUBLIC_DEFAULTS.storageBucket;
+  const messagingSenderId =
+    process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim() ||
+    FIREBASE_PUBLIC_DEFAULTS.messagingSenderId;
+  const appId =
+    process.env.EXPO_PUBLIC_FIREBASE_APP_ID?.trim() || FIREBASE_PUBLIC_DEFAULTS.appId;
 
   if (!apiKey || !authDomain || !projectId || !appId) {
     return null;

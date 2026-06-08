@@ -9,6 +9,7 @@ import {
   type User,
 } from 'firebase/auth';
 import { getFirebaseAuth, isFirebaseConfigured } from '../../config/firebase';
+import { FIREBASE_PUBLIC_DEFAULTS } from '../../config/firebase.public';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -66,8 +67,15 @@ export async function signOutFirebase(): Promise<void> {
   await signOut(auth);
 }
 
+export function getGoogleWebClientId(): string {
+  return (
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim() ||
+    FIREBASE_PUBLIC_DEFAULTS.googleWebClientId
+  );
+}
+
 export function useGoogleAuthRequest() {
-  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim() ?? '';
+  const webClientId = getGoogleWebClientId();
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
   const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim();
 
@@ -79,7 +87,7 @@ export function useGoogleAuthRequest() {
 }
 
 export function canUseGoogleSignIn(): boolean {
-  return isFirebaseConfigured() && !!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
+  return isFirebaseConfigured() && !!getGoogleWebClientId();
 }
 
 export function isNativeGoogleSignIn(): boolean {

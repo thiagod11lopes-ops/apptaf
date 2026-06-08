@@ -10,6 +10,7 @@ import type { CadastroItemPersist } from '../cadastrosIndexedDb';
 import { getFirestoreDb } from '../../config/firebase';
 import { userCadastrosPath } from './firestorePaths';
 import { sanitizeForFirestore } from './sanitizeFirestoreData';
+import { dedupeCadastrosPorNip } from '../../utils/dedupeCadastrosPorNip';
 
 function cadastrosCollection(uid: string) {
   const db = getFirestoreDb();
@@ -19,7 +20,8 @@ function cadastrosCollection(uid: string) {
 
 export async function getAllCadastrosFirestore(uid: string): Promise<CadastroItemPersist[]> {
   const snap = await getDocs(cadastrosCollection(uid));
-  return snap.docs.map((d) => d.data() as CadastroItemPersist);
+  const items = snap.docs.map((d) => d.data() as CadastroItemPersist);
+  return dedupeCadastrosPorNip(items);
 }
 
 export async function addCadastroFirestore(uid: string, item: CadastroItemPersist): Promise<void> {

@@ -28,12 +28,9 @@ export default function LoginScreen() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const navigation = useNavigation();
-  const { user, isAuthenticated, firebaseEnabled, syncStatus, syncLocalDataToCloud, logout } =
-    useAuth();
+  const { user, isAuthenticated, firebaseEnabled, logout } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [syncLoading, setSyncLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   const handleLogout = useCallback(async () => {
     setLoading(true);
@@ -49,33 +46,6 @@ export default function LoginScreen() {
     setErro(null);
     navigation.goBack();
   }, [navigation]);
-
-  const handleSync = useCallback(async () => {
-    setSyncLoading(true);
-    setSyncMsg(null);
-    try {
-      const result = await syncLocalDataToCloud();
-      if (!result) {
-        setSyncMsg('Entre na conta antes de sincronizar.');
-        return;
-      }
-      if (result.cadastrosEnviados === 0 && result.sessoesEnviadas === 0) {
-        setSyncMsg(
-          result.cadastrosLocais > 0
-            ? `Nada novo para enviar. ${result.cadastrosNaNuvem.toLocaleString('pt-BR')} cadastros já estão na nuvem.`
-            : 'Nenhum dado local neste aparelho. Abra o app no computador onde importou a planilha, entre com a mesma conta Google e sincronize.',
-        );
-        return;
-      }
-      setSyncMsg(
-        `Sincronizado: ${result.cadastrosEnviados.toLocaleString('pt-BR')} cadastros e ${result.sessoesEnviadas.toLocaleString('pt-BR')} sessões enviados para a nuvem.`,
-      );
-    } catch (e) {
-      setSyncMsg(e instanceof Error ? e.message : 'Falha ao sincronizar.');
-    } finally {
-      setSyncLoading(false);
-    }
-  }, [syncLocalDataToCloud]);
 
   return (
     <KeyboardAvoidingView
@@ -105,50 +75,21 @@ export default function LoginScreen() {
                   <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>{user.email}</Text>
                 ) : null}
                 <Text style={[ts.caption, { color: theme.gain, marginTop: 4 }]}>
-                  Conectado · dados na nuvem (Firebase)
+                  Conectado · dados salvos direto na nuvem
                 </Text>
               </View>
             ) : (
               <View style={styles.avatarText}>
                 <Text style={ts.h2}>Entrar</Text>
                 <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
-                  Use sua conta Google para sincronizar cadastros e resultados
+                  Use sua conta Google para acessar os dados na nuvem
                 </Text>
               </View>
             )}
           </View>
 
           {isAuthenticated ? (
-            <>
-              {syncStatus.running ? (
-                <Text style={[ts.caption, styles.syncInfo, { color: theme.textMuted }]}>
-                  Sincronizando dados locais com a nuvem…
-                </Text>
-              ) : null}
-              {syncStatus.result &&
-              (syncStatus.result.cadastrosEnviados > 0 || syncStatus.result.sessoesEnviadas > 0) ? (
-                <Text style={[ts.caption, styles.syncInfo, { color: theme.gain }]}>
-                  {syncStatus.result.cadastrosEnviados.toLocaleString('pt-BR')} cadastros enviados
-                  para a nuvem neste aparelho.
-                </Text>
-              ) : null}
-              {syncStatus.error ? (
-                <Text style={[ts.caption, styles.syncInfo, { color: theme.loss }]}>
-                  {syncStatus.error}
-                </Text>
-              ) : null}
-              <Button
-                title="Sincronizar dados deste aparelho"
-                variant="secondary"
-                onPress={handleSync}
-                loading={syncLoading}
-                style={styles.syncBtn}
-              />
-              <Button title="Sair da conta" variant="outline" onPress={handleLogout} loading={loading} />
-              {syncMsg ? (
-                <Text style={[ts.caption, styles.syncInfo, { color: theme.textMuted }]}>{syncMsg}</Text>
-              ) : null}
-            </>
+            <Button title="Sair da conta" variant="outline" onPress={handleLogout} loading={loading} />
           ) : (
             <>
               <GoogleSignInButton onSuccess={onLoginSuccess} onError={setErro} />
@@ -161,7 +102,7 @@ export default function LoginScreen() {
 
         <Text style={[ts.caption, styles.footer]}>
           {firebaseEnabled
-            ? 'Cadastros importados sem login ficam só neste aparelho. Após entrar com Google no computador onde importou a planilha, os dados sobem para a nuvem e aparecem no celular.'
+            ? 'Com login ativo, cadastros e resultados são lidos e gravados apenas no Firebase (nuvem), em todos os aparelhos.'
             : 'Adicione as chaves do Firebase em .env para habilitar login Google e banco na nuvem.'}
         </Text>
       </ScrollView>
@@ -193,7 +134,5 @@ const styles = StyleSheet.create({
   },
   avatarText: { flex: 1 },
   erro: { marginTop: 10, textAlign: 'center' },
-  syncBtn: { marginBottom: 10 },
-  syncInfo: { marginBottom: 10, lineHeight: 18 },
   footer: { textAlign: 'center', marginTop: 16, lineHeight: 20, paddingHorizontal: 8 },
 });

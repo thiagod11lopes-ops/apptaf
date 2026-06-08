@@ -10,12 +10,14 @@ import { PREMIUM } from '../../theme/premium';
 type Props = {
   title: string;
   subtitle?: string;
+  /** Usuário logado (parte do e-mail antes do @), exibido abaixo do título em verde. */
+  cloudUser?: string;
   right?: React.ReactNode;
   darkHero?: boolean;
   onBack?: () => void;
 };
 
-export function AppHeader({ title, subtitle, right, darkHero, onBack }: Props) {
+export function AppHeader({ title, subtitle, cloudUser, right, darkHero, onBack }: Props) {
   const { theme, isDark } = useTheme();
   const t = theme.tokens;
 
@@ -39,6 +41,9 @@ export function AppHeader({ title, subtitle, right, darkHero, onBack }: Props) {
           )}
           <View style={styles.heroText}>
             <Text style={[styles.heroTitle, { fontFamily: FONT_BRAND }]}>{title}</Text>
+            {cloudUser ? (
+              <Text style={[styles.cloudUserHero, { fontFamily: FONT_BRAND_SUB }]}>{cloudUser}</Text>
+            ) : null}
             <View style={[styles.rule, styles.ruleCentered, { backgroundColor: 'rgba(255,255,255,0.45)' }]} />
             {subtitle ? (
               <Text style={[styles.heroSub, { fontFamily: FONT_BRAND_SUB }]}>{subtitle}</Text>
@@ -65,6 +70,9 @@ export function AppHeader({ title, subtitle, right, darkHero, onBack }: Props) {
         <Text style={[theme.textStyles.brandTitle, styles.titleCenter, isDark && styles.titleOnDark]}>
           {title}
         </Text>
+        {cloudUser ? (
+          <Text style={[styles.cloudUser, { color: theme.gain }]}>{cloudUser}</Text>
+        ) : null}
         <LinearGradient
           colors={[t.primary600, t.primary300]}
           start={{ x: 0, y: 0 }}
@@ -111,6 +119,21 @@ const styles = StyleSheet.create({
   titleCenter: { textAlign: 'center', width: '100%' },
   subtitleCenter: { textAlign: 'center', width: '100%' },
   titleOnDark: { color: '#f1f5f9' },
+  cloudUser: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
+    width: '100%',
+  },
+  cloudUserHero: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#34D399',
+    marginTop: 4,
+    textAlign: 'center',
+    width: '100%',
+  },
   rule: {
     width: 28,
     height: 2,

@@ -62,7 +62,19 @@ async function getAllSessoesAplicacaoLocal(): Promise<SessaoAplicacaoTaf[]> {
   }
 }
 
-export { getAllSessoesAplicacaoLocal };
+export async function clearLocalSessoesAplicacao(): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const req = tx.objectStore(STORE_NAME).clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // Sem IndexedDB.
+  }
+}
 
 export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
   const uid = getCurrentFirebaseUid();

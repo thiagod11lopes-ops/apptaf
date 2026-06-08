@@ -80,7 +80,19 @@ async function getAllCadastrosLocal(): Promise<CadastroItemPersist[]> {
   }
 }
 
-export { getAllCadastrosLocal };
+export async function clearLocalCadastros(): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const req = tx.objectStore(STORE_NAME).clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // Sem IndexedDB (ex.: alguns ambientes nativos).
+  }
+}
 
 export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
   const uid = getCurrentFirebaseUid();

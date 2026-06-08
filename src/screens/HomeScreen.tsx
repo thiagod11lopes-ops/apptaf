@@ -1,7 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, Image, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { emailCloudLabel } from '../utils/emailCloudLabel';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
@@ -24,7 +26,13 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
 
 export default function HomeScreen() {
   const { theme } = useTheme();
+  const { user, isAuthenticated } = useAuth();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
+
+  const cloudUser = useMemo(() => {
+    if (!isAuthenticated) return undefined;
+    return emailCloudLabel(user?.email ?? null) ?? undefined;
+  }, [isAuthenticated, user?.email]);
 
   useFocusEffect(
     useCallback(() => {
@@ -54,7 +62,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.page}>
       <View style={styles.topSection}>
-        <AppHeader title="TAF" subtitle="Teste de Aptidão Física" />
+        <AppHeader title="TAF" cloudUser={cloudUser} subtitle="Teste de Aptidão Física" />
         <TopActionIcons activeRoute="Home" inline />
 
         <View style={styles.statsGrid}>

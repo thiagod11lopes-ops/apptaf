@@ -17,54 +17,24 @@ import {
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
-import {
-  migrateLocalDataToCloud,
-  type LocalCloudMigrationResult,
-} from '../services/firebase/migrateLocalToCloud';
-
-type SyncStatus = {
-  running: boolean;
-  result: LocalCloudMigrationResult | null;
-  error: string | null;
-};
+import { clearLocalCadastros } from '../services/cadastrosIndexedDb';
+import { clearLocalSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 
 type AuthContextType = {
   user: AppAuthUser | null;
   isAuthenticated: boolean;
   authReady: boolean;
   firebaseEnabled: boolean;
-  syncStatus: SyncStatus;
   signInWithGoogle: (idToken?: string) => Promise<void>;
-  syncLocalDataToCloud: () => Promise<LocalCloudMigrationResult | null>;
   logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const INITIAL_SYNC: SyncStatus = { running: false, result: null, error: null };
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppAuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(INITIAL_SYNC);
   const firebaseEnabled = isFirebaseConfigured();
-
-  const syncLocalDataToCloud = useCallback(async () => {
-    const auth = getFirebaseAuth();
-    const uid = auth?.currentUser?.uid;
-    if (!uid) return null;
-
-    setSyncStatus((s) => ({ ...s, running: true, error: null }));
-    try {
-      const result = await migrateLocalDataToCloud(uid);
-      setSyncStatus({ running: false, result, error: null });
-      return result;
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Não foi possível enviar os dados locais para a nuvem.';
-      setSyncStatus({ running: false, result: null, error: message });
-      throw e;
-    }
-  }, []);
 
   useEffect(() => {
     const auth = getFirebaseAuth();
@@ -77,15 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(fbUser ? mapFirebaseUser(fbUser) : null);
       setAuthReady(true);
       if (fbUser) {
-        migrateLocalDataToCloud(fbUser.uid)
-          .then((result) => setSyncStatus({ running: false, result, error: null }))
-          .catch((e) => {
-            const message =
-              e instanceof Error ? e.message : 'Não foi possível enviar os dados locais para a nuvem.';
-            setSyncStatus({ running: false, result: null, error: message });
-          });
-      } else {
-        setSyncStatus(INITIAL_SYNC);
+        void Promise.all([clearLocalCadastros(), clearLocalSessoesAplicacao()]);
       }
     });
     return unsub;
@@ -118,12 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: user != null,
       authReady,
       firebaseEnabled,
-      syncStatus,
       signInWithGoogle,
-      syncLocalDataToCloud,
       logout,
     }),
-    [user, authReady, firebaseEnabled, syncStatus, signInWithGoogle, syncLocalDataToCloud, logout],
+    [user, authReady, firebaseEnabled, signInWithGoogle, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

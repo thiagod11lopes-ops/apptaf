@@ -70,4 +70,7 @@ fs.writeFileSync(
   JSON.stringify(manifest, null, 2),
 );
 
+// Evita Jekyll no GitHub Pages (senão o README vira a página inicial)
+fs.writeFileSync(path.join(distDir, '.nojekyll'), '');
+
 console.log('patch-web-dist: OK', prefix);

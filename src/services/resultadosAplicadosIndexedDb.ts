@@ -10,6 +10,15 @@ export type SessaoAplicacaoTaf = {
   resultados: ResultadoCorridaItem[];
 };
 
+import { getCurrentFirebaseUid } from './firebase/googleAuth';
+import {
+  addSessaoFirestore,
+  deleteSessaoFirestore,
+  getAllSessoesFirestore,
+  getSessaoByIdFirestore,
+  updateSessaoFirestore,
+} from './firebase/sessoesFirestore';
+
 const DB_NAME = 'taf_aplicacoes_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'sessoes';
@@ -36,6 +45,14 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      return await getAllSessoesFirestore(uid);
+    } catch {
+      return [];
+    }
+  }
   try {
     const db = await openDb();
     return await new Promise((resolve, reject) => {
@@ -65,6 +82,16 @@ export async function addSessaoAplicacao(
     resultados: input.resultados,
   };
 
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      await addSessaoFirestore(uid, sessao);
+    } catch {
+      // Mantém fluxo da aplicação.
+    }
+    return id;
+  }
+
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -81,6 +108,14 @@ export async function addSessaoAplicacao(
 }
 
 export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicacaoTaf | null> {
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      return await getSessaoByIdFirestore(uid, id);
+    } catch {
+      return null;
+    }
+  }
   try {
     const db = await openDb();
     return await new Promise((resolve, reject) => {
@@ -95,6 +130,15 @@ export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicaca
 }
 
 export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise<void> {
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      await updateSessaoFirestore(uid, sessao);
+    } catch {
+      // silencioso
+    }
+    return;
+  }
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -111,6 +155,11 @@ export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise
 export async function deleteSessaoAplicacao(id: string): Promise<void> {
   if (!id.trim()) {
     throw new Error('ID da sessão inválido.');
+  }
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    await deleteSessaoFirestore(uid, id);
+    return;
   }
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {

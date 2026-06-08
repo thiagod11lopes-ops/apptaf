@@ -7,48 +7,65 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
+import { Platform } from 'react-native';
+import { onAuthStateChanged } from 'firebase/auth';
+import { isFirebaseConfigured, getFirebaseAuth } from '../config/firebase';
 import {
-  clearAuthSession,
-  loadAuthSession,
-  saveAuthSession,
-  type AuthSession,
-} from '../services/authSession';
+  mapFirebaseUser,
+  signInWithGoogleCredential,
+  signInWithGoogleWeb,
+  signOutFirebase,
+  type AppAuthUser,
+} from '../services/firebase/googleAuth';
 
 type AuthContextType = {
-  user: AuthSession | null;
+  user: AppAuthUser | null;
   isAuthenticated: boolean;
   authReady: boolean;
-  login: (usuario: string, senha: string) => Promise<void>;
+  firebaseEnabled: boolean;
+  signInWithGoogle: (idToken?: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthSession | null>(null);
+  const [user, setUser] = useState<AppAuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const firebaseEnabled = isFirebaseConfigured();
 
   useEffect(() => {
-    loadAuthSession()
-      .then(setUser)
-      .finally(() => setAuthReady(true));
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      setAuthReady(true);
+      return;
+    }
+
+    const unsub = onAuthStateChanged(auth, (fbUser) => {
+      setUser(fbUser ? mapFirebaseUser(fbUser) : null);
+      setAuthReady(true);
+    });
+    return unsub;
   }, []);
 
-  const login = useCallback(async (usuario: string, senha: string) => {
-    const nome = usuario.trim();
-    if (!nome) {
-      throw new Error('Informe o usuário.');
+  const signInWithGoogle = useCallback(async (idToken?: string) => {
+    if (!firebaseEnabled) {
+      throw new Error(
+        'Configure o Firebase no arquivo .env (veja .env.example) antes de entrar com Google.',
+      );
     }
-    if (!senha.trim()) {
-      throw new Error('Informe a senha.');
+    if (idToken) {
+      await signInWithGoogleCredential(idToken);
+      return;
     }
-    const session = { usuario: nome };
-    await saveAuthSession(session);
-    setUser(session);
-  }, []);
+    if (Platform.OS !== 'web') {
+      throw new Error('No dispositivo móvel, use o botão Entrar com Google.');
+    }
+    await signInWithGoogleWeb();
+  }, [firebaseEnabled]);
 
   const logout = useCallback(async () => {
-    await clearAuthSession();
+    await signOutFirebase();
     setUser(null);
   }, []);
 
@@ -57,10 +74,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated: user != null,
       authReady,
-      login,
+      firebaseEnabled,
+      signInWithGoogle,
       logout,
     }),
-    [user, authReady, login, logout],
+    [user, authReady, firebaseEnabled, signInWithGoogle, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -73,3 +91,5 @@ export function useAuth() {
   }
   return ctx;
 }
+
+export type { AppAuthUser };

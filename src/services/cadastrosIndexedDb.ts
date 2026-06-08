@@ -31,6 +31,14 @@ export type CadastroItemPersist = {
   rubricaPermanenciaSvg?: string;
 };
 
+import { getCurrentFirebaseUid } from './firebase/googleAuth';
+import {
+  addCadastroFirestore,
+  addCadastrosEmLoteFirestore,
+  deleteCadastroFirestore,
+  getAllCadastrosFirestore,
+} from './firebase/cadastrosFirestore';
+
 const DB_NAME = 'taf_cadastros_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'cadastros';
@@ -57,6 +65,14 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      return await getAllCadastrosFirestore(uid);
+    } catch {
+      return [];
+    }
+  }
   try {
     const db = await openDb();
     return await new Promise((resolve, reject) => {
@@ -74,6 +90,15 @@ export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
 }
 
 export async function addCadastro(item: CadastroItemPersist): Promise<void> {
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      await addCadastroFirestore(uid, item);
+    } catch {
+      // Mantém fluxo da UI.
+    }
+    return;
+  }
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -91,6 +116,15 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
 
 export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<void> {
   if (items.length === 0) return;
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      await addCadastrosEmLoteFirestore(uid, items);
+    } catch {
+      // Mantém fluxo da UI.
+    }
+    return;
+  }
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -108,6 +142,15 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
 }
 
 export async function deleteCadastro(id: string): Promise<void> {
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      await deleteCadastroFirestore(uid, id);
+    } catch {
+      // Mantém UX.
+    }
+    return;
+  }
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {

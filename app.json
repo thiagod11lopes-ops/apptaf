@@ -2,6 +2,7 @@
   "expo": {
     "name": "TAF",
     "slug": "taf-app",
+    "scheme": "taf-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -28,7 +29,8 @@
     },
     "plugins": [
       "expo-sharing",
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ]
   }
 }

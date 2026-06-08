@@ -2,11 +2,11 @@ import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   ScrollView,
   StyleSheet,
   Platform,
   KeyboardAvoidingView,
+  Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { User } from 'lucide-react-native';
@@ -15,51 +15,37 @@ import { useAuth } from '../contexts/AuthContext';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
 import { PREMIUM } from '../theme/premium';
+
+function userLabel(name: string | null, email: string | null): string {
+  if (name?.trim()) return name.trim();
+  if (email?.trim()) return email.trim();
+  return 'Usuário';
+}
 
 export default function LoginScreen() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const navigation = useNavigation();
-  const { user, isAuthenticated, login, logout } = useAuth();
-  const [usuario, setUsuario] = useState('');
-  const [senha, setSenha] = useState('');
+  const { user, isAuthenticated, firebaseEnabled, logout } = useAuth();
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-
-  const handleLogin = useCallback(async () => {
-    setErro(null);
-    setLoading(true);
-    try {
-      await login(usuario, senha);
-      setSenha('');
-      navigation.goBack();
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Não foi possível entrar.');
-    } finally {
-      setLoading(false);
-    }
-  }, [login, navigation, senha, usuario]);
 
   const handleLogout = useCallback(async () => {
     setLoading(true);
     try {
       await logout();
-      setUsuario('');
-      setSenha('');
+      setErro(null);
     } finally {
       setLoading(false);
     }
   }, [logout]);
 
-  const inputStyle = [
-    styles.input,
-    {
-      backgroundColor: theme.tokens.inputBg,
-      borderColor: theme.border,
-      color: theme.text,
-    },
-  ];
+  const onLoginSuccess = useCallback(() => {
+    setErro(null);
+    navigation.goBack();
+  }, [navigation]);
 
   return (
     <KeyboardAvoidingView
@@ -75,21 +61,28 @@ export default function LoginScreen() {
 
         <Card elevated>
           <View style={styles.avatarRow}>
-            <View style={[styles.avatarCircle, { backgroundColor: theme.accentMuted, borderColor: theme.border }]}>
-              <User size={28} color={theme.primary} strokeWidth={2.2} />
-            </View>
+            {isAuthenticated && user?.photoURL ? (
+              <Image source={{ uri: user.photoURL }} style={styles.avatarPhoto} accessibilityLabel="Foto do usuário" />
+            ) : (
+              <View style={[styles.avatarCircle, { backgroundColor: theme.accentMuted, borderColor: theme.border }]}>
+                <User size={28} color={theme.primary} strokeWidth={2.2} />
+              </View>
+            )}
             {isAuthenticated && user ? (
               <View style={styles.avatarText}>
-                <Text style={ts.h2}>{user.usuario}</Text>
-                <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
-                  Sessão ativa neste dispositivo
+                <Text style={ts.h2}>{userLabel(user.displayName, user.email)}</Text>
+                {user.email ? (
+                  <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>{user.email}</Text>
+                ) : null}
+                <Text style={[ts.caption, { color: theme.gain, marginTop: 4 }]}>
+                  Conectado · dados na nuvem (Firebase)
                 </Text>
               </View>
             ) : (
               <View style={styles.avatarText}>
                 <Text style={ts.h2}>Entrar</Text>
                 <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
-                  Identifique-se para continuar
+                  Use sua conta Google para sincronizar cadastros e resultados
                 </Text>
               </View>
             )}
@@ -99,41 +92,18 @@ export default function LoginScreen() {
             <Button title="Sair da conta" variant="outline" onPress={handleLogout} loading={loading} />
           ) : (
             <>
-              <Text style={[ts.label, styles.fieldLabel]}>Usuário</Text>
-              <TextInput
-                value={usuario}
-                onChangeText={setUsuario}
-                placeholder="Nome de usuário"
-                placeholderTextColor={theme.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={inputStyle}
-                accessibilityLabel="Usuário"
-              />
-
-              <Text style={[ts.label, styles.fieldLabel]}>Senha</Text>
-              <TextInput
-                value={senha}
-                onChangeText={setSenha}
-                placeholder="Senha"
-                placeholderTextColor={theme.textMuted}
-                secureTextEntry
-                style={inputStyle}
-                accessibilityLabel="Senha"
-                onSubmitEditing={handleLogin}
-              />
-
+              <GoogleSignInButton onSuccess={onLoginSuccess} onError={setErro} />
               {erro ? (
                 <Text style={[ts.caption, styles.erro, { color: theme.loss }]}>{erro}</Text>
               ) : null}
-
-              <Button title="Entrar" onPress={handleLogin} loading={loading} style={styles.submitBtn} />
             </>
           )}
         </Card>
 
         <Text style={[ts.caption, styles.footer]}>
-          Credenciais armazenadas apenas neste aparelho até você sair da conta.
+          {firebaseEnabled
+            ? 'Com login ativo, cadastros e histórico de TAF são salvos no Firestore (Firebase) vinculados à sua conta.'
+            : 'Adicione as chaves do Firebase em .env para habilitar login Google e banco na nuvem.'}
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -157,17 +127,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { flex: 1 },
-  fieldLabel: { marginBottom: 6, marginTop: 4 },
-  input: {
-    borderWidth: 1,
+  avatarPhoto: {
+    width: 56,
+    height: 56,
     borderRadius: PREMIUM.radiusMd,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    marginBottom: 12,
   },
-  erro: { marginBottom: 8 },
-  submitBtn: { marginTop: 8 },
+  avatarText: { flex: 1 },
+  erro: { marginTop: 10, textAlign: 'center' },
   footer: { textAlign: 'center', marginTop: 16, lineHeight: 20, paddingHorizontal: 8 },
 });

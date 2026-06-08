@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import type { AuthSessionResult } from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import {
   GoogleAuthProvider,
@@ -52,12 +53,37 @@ function assertAuthConfigured() {
   return auth;
 }
 
-/** Safari e navegadores móveis bloqueiam popup — usam redirect (evita about:blank). */
-export function shouldUseGoogleRedirectOnWeb(): boolean {
+/** Safari e navegadores móveis: Firebase redirect falha (ITP) — usam OAuth Expo. */
+export function shouldUseExpoGoogleAuthOnWeb(): boolean {
   if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent;
   if (/iPhone|iPad|iPod|Android/i.test(ua)) return true;
   return /Safari/i.test(ua) && !/Chrome|Chromium|Edg|OPR|CriOS|FxiOS/i.test(ua);
+}
+
+/** @deprecated use shouldUseExpoGoogleAuthOnWeb */
+export function shouldUseGoogleRedirectOnWeb(): boolean {
+  return shouldUseExpoGoogleAuthOnWeb();
+}
+
+/** URI de retorno do OAuth Google na web (GitHub Pages em /apptaf). */
+export function getGoogleOAuthRedirectUri(): string | undefined {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
+  const basePath = (process.env.EXPO_BASE_URL || '').replace(/\/$/, '');
+  return `${window.location.origin}${basePath}`;
+}
+
+/** Página voltou do Google com token na URL (Safari / mobile web). */
+export function hasPendingGoogleOAuthReturn(): boolean {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  const hash = window.location.hash;
+  const search = window.location.search;
+  return (
+    hash.includes('id_token=') ||
+    hash.includes('access_token=') ||
+    search.includes('code=') ||
+    search.includes('state=')
+  );
 }
 
 function googleProvider(): GoogleAuthProvider {
@@ -78,14 +104,10 @@ function isPopupBlockedError(error: unknown): boolean {
   );
 }
 
+/** Login web no desktop (Chrome/Firefox) via popup Firebase. */
 export async function signInWithGoogleWeb(): Promise<GoogleWebSignInResult> {
   const auth = assertAuthConfigured();
   const provider = googleProvider();
-
-  if (shouldUseGoogleRedirectOnWeb()) {
-    await signInWithRedirect(auth, provider);
-    return { mode: 'redirect' };
-  }
 
   try {
     const result = await signInWithPopup(auth, provider);
@@ -97,7 +119,7 @@ export async function signInWithGoogleWeb(): Promise<GoogleWebSignInResult> {
   }
 }
 
-/** Chamar ao carregar a página web após retorno do Google (redirect). */
+/** Fallback: retorno do redirect Firebase (popup bloqueado no desktop). */
 export async function completeGoogleRedirectSignIn(): Promise<AppAuthUser | null> {
   if (Platform.OS !== 'web') return null;
   const auth = getFirebaseAuth();
@@ -107,9 +129,18 @@ export async function completeGoogleRedirectSignIn(): Promise<AppAuthUser | null
     const result = await getRedirectResult(auth);
     if (!result?.user) return null;
     return mapFirebaseUser(result.user);
-  } catch {
+  } catch (error) {
+    console.warn('[auth] getRedirectResult falhou:', error);
     return null;
   }
+}
+
+export function extractGoogleIdTokenFromAuthResponse(response: AuthSessionResult | null): string | null {
+  if (!response || response.type !== 'success') return null;
+  const fromAuth = response.authentication?.idToken;
+  if (fromAuth) return fromAuth;
+  const fromParams = response.params?.id_token;
+  return typeof fromParams === 'string' && fromParams.length > 0 ? fromParams : null;
 }
 
 export async function signInWithGoogleCredential(idToken: string): Promise<AppAuthUser> {
@@ -136,11 +167,14 @@ export function useGoogleAuthRequest() {
   const webClientId = getGoogleWebClientId();
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
   const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim();
+  const redirectUri = getGoogleOAuthRedirectUri();
 
-  return Google.useAuthRequest({
+  return Google.useIdTokenAuthRequest({
     webClientId,
     iosClientId: iosClientId || webClientId,
     androidClientId: androidClientId || webClientId,
+    selectAccount: true,
+    redirectUri,
   });
 }
 

@@ -5,7 +5,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../Button';
 import {
   canUseGoogleSignIn,
+  extractGoogleIdTokenFromAuthResponse,
+  hasPendingGoogleOAuthReturn,
   isNativeGoogleSignIn,
+  shouldUseExpoGoogleAuthOnWeb,
   useGoogleAuthRequest,
 } from '../../services/firebase/googleAuth';
 import { PREMIUM } from '../../theme/premium';
@@ -18,11 +21,15 @@ type Props = {
 export function GoogleSignInButton({ onSuccess, onError }: Props) {
   const { theme } = useTheme();
   const { signInWithGoogle } = useAuth();
-  const [loading, setLoading] = useState(false);
   const native = isNativeGoogleSignIn();
+  const mobileSafariWeb = Platform.OS === 'web' && shouldUseExpoGoogleAuthOnWeb();
+  const useExpoOAuth = native || mobileSafariWeb;
+  const [loading, setLoading] = useState(
+    () => Platform.OS === 'web' && hasPendingGoogleOAuthReturn(),
+  );
   const [request, response, promptAsync] = useGoogleAuthRequest();
 
-  const handleWebSignIn = useCallback(async () => {
+  const handleWebPopupSignIn = useCallback(async () => {
     setLoading(true);
     let redirected = false;
     try {
@@ -37,12 +44,28 @@ export function GoogleSignInButton({ onSuccess, onError }: Props) {
   }, [onError, onSuccess, signInWithGoogle]);
 
   useEffect(() => {
-    if (!native || response?.type !== 'success') return;
-    const idToken = response.authentication?.idToken;
-    if (!idToken) {
-      onError?.('Resposta do Google sem token de autenticação.');
+    if (!useExpoOAuth || !response) return;
+
+    if (response.type === 'error') {
+      const msg =
+        response.error?.message ||
+        response.params?.error_description ||
+        response.params?.error ||
+        'Erro ao autenticar com Google.';
+      onError?.(typeof msg === 'string' ? msg : 'Erro ao autenticar com Google.');
+      setLoading(false);
       return;
     }
+
+    if (response.type !== 'success') return;
+
+    const idToken = extractGoogleIdTokenFromAuthResponse(response);
+    if (!idToken) {
+      onError?.('Resposta do Google sem token de autenticação.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     signInWithGoogle(idToken)
       .then(() => onSuccess?.())
@@ -50,13 +73,32 @@ export function GoogleSignInButton({ onSuccess, onError }: Props) {
         onError?.(e instanceof Error ? e.message : 'Não foi possível entrar com Google.'),
       )
       .finally(() => setLoading(false));
-  }, [native, onError, onSuccess, response, signInWithGoogle]);
+  }, [useExpoOAuth, onError, onSuccess, response, signInWithGoogle]);
 
   const handlePress = useCallback(async () => {
-    if (Platform.OS === 'web') {
-      await handleWebSignIn();
+    if (mobileSafariWeb) {
+      if (!request) {
+        onError?.('Aguarde o carregamento do login Google.');
+        return;
+      }
+      setLoading(true);
+      try {
+        const result = await promptAsync();
+        if (result.type === 'dismiss' || result.type === 'cancel') {
+          setLoading(false);
+        }
+      } catch (e) {
+        onError?.(e instanceof Error ? e.message : 'Não foi possível abrir o Google.');
+        setLoading(false);
+      }
       return;
     }
+
+    if (Platform.OS === 'web') {
+      await handleWebPopupSignIn();
+      return;
+    }
+
     if (!request) {
       onError?.('Aguarde o carregamento do login Google ou verifique o .env.');
       return;
@@ -69,7 +111,7 @@ export function GoogleSignInButton({ onSuccess, onError }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [handleWebSignIn, onError, promptAsync, request]);
+  }, [handleWebPopupSignIn, mobileSafariWeb, onError, promptAsync, request]);
 
   if (!canUseGoogleSignIn()) {
     return (

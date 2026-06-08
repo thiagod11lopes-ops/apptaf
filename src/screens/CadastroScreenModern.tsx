@@ -13,6 +13,7 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
+import { useAuth } from '../contexts/AuthContext';
 import { X } from 'lucide-react-native';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
@@ -88,6 +89,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 export default function CadastroScreenModern() {
   const { theme, fontsLoaded } = useTheme();
+  const { isAuthorizedMember } = useAuth();
   const navigation = useNavigation();
   const ts = theme.textStyles;
   const regularFont = fontFamily('regular', fontsLoaded);
@@ -602,7 +604,7 @@ export default function CadastroScreenModern() {
             </TouchableOpacity>
           </View>
 
-          {mostrarTabela ? (
+          {mostrarTabela && !isAuthorizedMember ? (
             <Suspense
               fallback={
                 <View style={{ width: '100%', maxWidth: 720, paddingVertical: 12, alignItems: 'center' }}>

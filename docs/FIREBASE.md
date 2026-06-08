@@ -52,7 +52,14 @@ users/{uid}/sessoes/{sessaoId}
 
 Após entrar com Google, cadastros e sessões passam a usar a nuvem automaticamente.
 
-## 6. Domínios autorizados (web)
+## 6. E-mails autorizados (equipe)
+
+O chefe (conta dona dos dados) gerencia em **Configurações → E-mails autorizados** no app.
+
+- Membros entram com o **próprio Google** e acessam `users/{uidDoChefe}/...`.
+- Publique as regras em `docs/firestore.rules` (inclui `member_lookup` e `emails_autorizados`).
+
+## 7. Domínios autorizados (web)
 
 Em Firebase → Authentication → Settings → **Authorized domains**, inclua:
 

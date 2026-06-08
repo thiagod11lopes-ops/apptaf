@@ -3,6 +3,7 @@ export const FIRESTORE_COLLECTIONS = {
   sessoes: 'sessoes',
   cadastroRubricas: 'cadastro_rubricas',
   sessaoRubricas: 'sessao_rubricas',
+  emailsAutorizados: 'emails_autorizados',
 } as const;
 
 /** Dados do usuário autenticado: users/{uid}/cadastros, users/{uid}/sessoes */
@@ -24,4 +25,8 @@ export function userCadastroRubricasPath(uid: string): string {
 
 export function userSessaoRubricasPath(uid: string): string {
   return `${userRootPath(uid)}/${FIRESTORE_COLLECTIONS.sessaoRubricas}`;
+}
+
+export function userAuthorizedEmailsPath(uid: string): string {
+  return `${userRootPath(uid)}/${FIRESTORE_COLLECTIONS.emailsAutorizados}`;
 }

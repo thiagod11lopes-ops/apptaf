@@ -5,10 +5,13 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
+import { AuthorizedEmailsBlock } from '../components/AuthorizedEmailsBlock';
+import { useAuth } from '../contexts/AuthContext';
 import { PREMIUM } from '../theme/premium';
 
 export default function ConfiguracoesScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
+  const { isBoss, isAuthenticated, firebaseEnabled } = useAuth();
   const navigation = useNavigation();
   const ts = theme.textStyles;
 
@@ -32,6 +35,13 @@ export default function ConfiguracoesScreen() {
             />
           </View>
         </Card>
+
+        {isAuthenticated && firebaseEnabled && isBoss ? (
+          <Card elevated>
+            <Text style={ts.h2}>E-mails autorizados</Text>
+            <AuthorizedEmailsBlock />
+          </Card>
+        ) : null}
 
         <Card elevated>
           <Text style={ts.h2}>Backup e restauração</Text>

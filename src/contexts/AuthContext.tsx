@@ -18,7 +18,8 @@ import {
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
-import { setAuthUidState } from '../services/firebase/authUid';
+import { resolveMemberAccess } from '../services/firebase/authorizedEmailsFirestore';
+import { getCachedDataOwnerUid, setAuthUidState } from '../services/firebase/authUid';
 import { clearMemoryCloudCache, clearCloudDataCache } from '../services/cloudDataCache';
 
 type AuthContextType = {
@@ -26,6 +27,10 @@ type AuthContextType = {
   isAuthenticated: boolean;
   authReady: boolean;
   firebaseEnabled: boolean;
+  /** Chefe da conta — pode gerenciar e-mails autorizados e carregar planilha. */
+  isBoss: boolean;
+  /** Entrou com e-mail autorizado pelo chefe — usa banco do chefe. */
+  isAuthorizedMember: boolean;
   signInWithGoogle: (idToken?: string) => Promise<boolean>;
   logout: () => Promise<void>;
 };
@@ -35,13 +40,14 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppAuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [isAuthorizedMember, setIsAuthorizedMember] = useState(false);
   const firebaseEnabled = isFirebaseConfigured();
 
   useEffect(() => {
     const auth = getFirebaseAuth();
     if (!auth) {
       setAuthReady(true);
-      setAuthUidState(null, true);
+      setAuthUidState(null, null, true);
       return;
     }
 
@@ -53,10 +59,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       unsub = onAuthStateChanged(auth, (fbUser) => {
-        const uid = fbUser?.uid ?? null;
-        setUser(fbUser ? mapFirebaseUser(fbUser) : null);
-        setAuthReady(true);
-        setAuthUidState(uid, true);
+        void (async () => {
+          if (!fbUser) {
+            setUser(null);
+            setIsAuthorizedMember(false);
+            setAuthUidState(null, null, true);
+            setAuthReady(true);
+            return;
+          }
+
+          const mapped = mapFirebaseUser(fbUser);
+          const access = await resolveMemberAccess(mapped.uid, mapped.email);
+          setUser(mapped);
+          setIsAuthorizedMember(access.isAuthorizedMember);
+          setAuthUidState(mapped.uid, access.dataOwnerUid, true);
+          setAuthReady(true);
+        })();
       });
     })();
 
@@ -81,15 +99,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [firebaseEnabled]);
 
   const logout = useCallback(async () => {
-    const uid = user?.uid;
+    const dataUid = getCachedDataOwnerUid();
     await signOutFirebase();
     setUser(null);
-    setAuthUidState(null, true);
+    setIsAuthorizedMember(false);
+    setAuthUidState(null, null, true);
     clearMemoryCloudCache();
-    if (uid) {
-      await clearCloudDataCache(uid);
+    if (dataUid) {
+      await clearCloudDataCache(dataUid);
     }
-  }, [user?.uid]);
+  }, []);
+
+  const isBoss = user != null && !isAuthorizedMember;
 
   const value = useMemo(
     () => ({
@@ -97,10 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: user != null,
       authReady,
       firebaseEnabled,
+      isBoss,
+      isAuthorizedMember,
       signInWithGoogle,
       logout,
     }),
-    [user, authReady, firebaseEnabled, signInWithGoogle, logout],
+    [user, authReady, firebaseEnabled, isBoss, isAuthorizedMember, signInWithGoogle, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

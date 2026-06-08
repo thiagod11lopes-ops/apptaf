@@ -4,12 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 
 /** Recarrega dados quando a tela ganha foco ou quando o login muda. */
 export function useAuthDataReload(reload: () => void | Promise<void>) {
-  const { user, authReady } = useAuth();
+  const { user, authReady, isAuthorizedMember } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
       if (!authReady) return;
       void reload();
-    }, [authReady, reload, user?.uid]),
+    }, [authReady, reload, user?.uid, isAuthorizedMember]),
   );
 }

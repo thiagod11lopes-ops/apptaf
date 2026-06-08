@@ -1,8 +1,52 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
+
+    function normalizedEmail() {
+      return request.auth != null && request.auth.token.email != null
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    function isActiveMemberOf(bossUid) {
+      let emailKey = normalizedEmail();
+      return emailKey != ''
+        && exists(/databases/$(database)/documents/member_lookup/$(emailKey))
+        && get(/databases/$(database)/documents/member_lookup/$(emailKey)).data.bossUid == bossUid
+        && get(/databases/$(database)/documents/member_lookup/$(emailKey)).data.ativo == true;
+    }
+
+    function canAccessUserData(userId) {
+      return request.auth != null && (
+        request.auth.uid == userId || isActiveMemberOf(userId)
+      );
+    }
+
+    match /member_lookup/{emailKey} {
+      allow read: if request.auth != null && normalizedEmail() == emailKey;
+      allow create, update: if request.auth != null
+        && request.resource.data.bossUid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.bossUid == request.auth.uid;
+    }
+
+    match /users/{userId}/emails_autorizados/{emailDoc} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/cadastros/{docId} {
+      allow read, write: if canAccessUserData(userId);
+    }
+
+    match /users/{userId}/sessoes/{docId} {
+      allow read, write: if canAccessUserData(userId);
+    }
+
+    match /users/{userId}/cadastro_rubricas/{docId} {
+      allow read, write: if canAccessUserData(userId);
+    }
+
+    match /users/{userId}/sessao_rubricas/{docId} {
+      allow read, write: if canAccessUserData(userId);
     }
   }
 }

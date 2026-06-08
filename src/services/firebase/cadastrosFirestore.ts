@@ -2,9 +2,15 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
   getDocs,
+  limit,
+  orderBy,
+  query,
   setDoc,
+  startAfter,
   writeBatch,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import type { CadastroItemPersist } from '../cadastrosIndexedDb';
 import { getFirestoreDb } from '../../config/firebase';
@@ -18,10 +24,47 @@ function cadastrosCollection(uid: string) {
   return collection(db, userCadastrosPath(uid));
 }
 
-export async function getAllCadastrosFirestore(uid: string): Promise<CadastroItemPersist[]> {
-  const snap = await getDocs(cadastrosCollection(uid));
-  const items = snap.docs.map((d) => d.data() as CadastroItemPersist);
+const CADASTROS_PAGE_SIZE = 250;
+
+export type CadastrosLoadProgress = {
+  loaded: number;
+  isLastBatch: boolean;
+};
+
+export async function getAllCadastrosFirestoreWithProgress(
+  uid: string,
+  onProgress?: (progress: CadastrosLoadProgress) => void,
+): Promise<CadastroItemPersist[]> {
+  const items: CadastroItemPersist[] = [];
+  let lastDoc: QueryDocumentSnapshot | undefined;
+
+  onProgress?.({ loaded: 0, isLastBatch: false });
+
+  while (true) {
+    const base = cadastrosCollection(uid);
+    const q = lastDoc
+      ? query(base, orderBy(documentId()), startAfter(lastDoc), limit(CADASTROS_PAGE_SIZE))
+      : query(base, orderBy(documentId()), limit(CADASTROS_PAGE_SIZE));
+
+    const snap = await getDocs(q);
+    if (snap.empty) break;
+
+    for (const docSnap of snap.docs) {
+      items.push(docSnap.data() as CadastroItemPersist);
+    }
+
+    lastDoc = snap.docs[snap.docs.length - 1];
+    const isLastBatch = snap.docs.length < CADASTROS_PAGE_SIZE;
+    onProgress?.({ loaded: items.length, isLastBatch });
+
+    if (isLastBatch) break;
+  }
+
   return dedupeCadastrosPorNip(items);
+}
+
+export async function getAllCadastrosFirestore(uid: string): Promise<CadastroItemPersist[]> {
+  return getAllCadastrosFirestoreWithProgress(uid);
 }
 
 export async function addCadastroFirestore(uid: string, item: CadastroItemPersist): Promise<void> {

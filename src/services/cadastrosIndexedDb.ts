@@ -31,7 +31,7 @@ export type CadastroItemPersist = {
   rubricaPermanenciaSvg?: string;
 };
 
-import { getCurrentFirebaseUid } from './firebase/googleAuth';
+import { waitForAuthUid } from './firebase/authUid';
 import {
   addCadastroFirestore,
   addCadastrosEmLoteFirestore,
@@ -95,19 +95,15 @@ export async function clearLocalCadastros(): Promise<void> {
 }
 
 export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
-  const uid = getCurrentFirebaseUid();
+  const uid = await waitForAuthUid();
   if (uid) {
-    try {
-      return await getAllCadastrosFirestore(uid);
-    } catch {
-      return [];
-    }
+    return getAllCadastrosFirestore(uid);
   }
   return getAllCadastrosLocal();
 }
 
 export async function addCadastro(item: CadastroItemPersist): Promise<void> {
-  const uid = getCurrentFirebaseUid();
+  const uid = await waitForAuthUid();
   if (uid) {
     try {
       await addCadastroFirestore(uid, item);
@@ -133,7 +129,7 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
 
 export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<void> {
   if (items.length === 0) return;
-  const uid = getCurrentFirebaseUid();
+  const uid = await waitForAuthUid();
   if (uid) {
     try {
       await addCadastrosEmLoteFirestore(uid, items);
@@ -159,7 +155,7 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
 }
 
 export async function deleteCadastro(id: string): Promise<void> {
-  const uid = getCurrentFirebaseUid();
+  const uid = await waitForAuthUid();
   if (uid) {
     try {
       await deleteCadastroFirestore(uid, id);

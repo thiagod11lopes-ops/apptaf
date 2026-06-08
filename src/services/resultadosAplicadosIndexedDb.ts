@@ -10,7 +10,7 @@ export type SessaoAplicacaoTaf = {
   resultados: ResultadoCorridaItem[];
 };
 
-import { getCurrentFirebaseUid } from './firebase/googleAuth';
+import { waitForAuthUid } from './firebase/authUid';
 import {
   addSessaoFirestore,
   deleteSessaoFirestore,
@@ -77,13 +77,9 @@ export async function clearLocalSessoesAplicacao(): Promise<void> {
 }
 
 export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
-  const uid = getCurrentFirebaseUid();
+  const uid = await waitForAuthUid();
   if (uid) {
-    try {
-      return await getAllSessoesFirestore(uid);
-    } catch {
-      return [];
-    }
+    return getAllSessoesFirestore(uid);
   }
   return getAllSessoesAplicacaoLocal();
 }
@@ -100,7 +96,7 @@ export async function addSessaoAplicacao(
     resultados: input.resultados,
   };
 
-  const uid = getCurrentFirebaseUid();
+  const uid = await waitForAuthUid();
   if (uid) {
     try {
       await addSessaoFirestore(uid, sessao);
@@ -126,7 +122,7 @@ export async function addSessaoAplicacao(
 }
 
 export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicacaoTaf | null> {
-  const uid = getCurrentFirebaseUid();
+  const uid = await waitForAuthUid();
   if (uid) {
     try {
       return await getSessaoByIdFirestore(uid, id);
@@ -148,7 +144,7 @@ export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicaca
 }
 
 export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise<void> {
-  const uid = getCurrentFirebaseUid();
+  const uid = await waitForAuthUid();
   if (uid) {
     try {
       await updateSessaoFirestore(uid, sessao);
@@ -174,7 +170,7 @@ export async function deleteSessaoAplicacao(id: string): Promise<void> {
   if (!id.trim()) {
     throw new Error('ID da sessão inválido.');
   }
-  const uid = getCurrentFirebaseUid();
+  const uid = await waitForAuthUid();
   if (uid) {
     await deleteSessaoFirestore(uid, id);
     return;

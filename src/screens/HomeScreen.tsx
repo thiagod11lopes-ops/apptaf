@@ -1,14 +1,15 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, Image, Platform } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { emailCloudLabel } from '../utils/emailCloudLabel';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import { loadCloudDataWithProgress } from '../services/firebase/loadCloudDataWithProgress';
 import {
   calcularResumoInicioTafFromHistorico,
   type ResumoInicioTafHistorico,
@@ -24,25 +25,64 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   semTeste: 0,
 };
 
+const LOAD_IDLE = {
+  percent: 0,
+  loading: false,
+  loadedCadastros: 0,
+  loadedSessoes: 0,
+};
+
 export default function HomeScreen() {
   const { theme } = useTheme();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, authReady } = useAuth();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
+  const [cloudLoad, setCloudLoad] = useState(LOAD_IDLE);
 
-  const cloudUser = useMemo(() => {
+  const cloudLabel = useMemo(() => {
     if (!isAuthenticated) return undefined;
     return emailCloudLabel(user?.email ?? null) ?? undefined;
   }, [isAuthenticated, user?.email]);
 
-  useFocusEffect(
-    useCallback(() => {
-      Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
-        .then(([cadastros, sessoes]) =>
-          setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros)),
-        )
-        .catch(() => setResumo(RESUMO_INICIAL));
-    }, []),
-  );
+  const recarregarResumo = useCallback(async () => {
+    if (!authReady) return;
+
+    if (!isAuthenticated) {
+      setCloudLoad(LOAD_IDLE);
+      try {
+        const [cadastros, sessoes] = await Promise.all([
+          getAllCadastros(),
+          getAllSessoesAplicacao(),
+        ]);
+        setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros));
+      } catch {
+        setResumo(RESUMO_INICIAL);
+      }
+      return;
+    }
+
+    setCloudLoad({ ...LOAD_IDLE, loading: true, percent: 0 });
+
+    try {
+      const { cadastros, sessoes } = await loadCloudDataWithProgress((state) => {
+        setCloudLoad(state);
+      });
+      setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros));
+    } catch {
+      setResumo(RESUMO_INICIAL);
+      setCloudLoad(LOAD_IDLE);
+    }
+  }, [authReady, isAuthenticated]);
+
+  useAuthDataReload(recarregarResumo);
+
+  const cloudLoadProps = useMemo(() => {
+    if (!cloudLabel) return undefined;
+    return {
+      label: cloudLabel,
+      percent: cloudLoad.percent,
+      loading: cloudLoad.loading,
+    };
+  }, [cloudLabel, cloudLoad.loading, cloudLoad.percent]);
 
   const frameShadow =
     Platform.OS === 'web'
@@ -62,7 +102,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.page}>
       <View style={styles.topSection}>
-        <AppHeader title="TAF" cloudUser={cloudUser} subtitle="Teste de Aptidão Física" />
+        <AppHeader title="TAF" cloudLoad={cloudLoadProps} subtitle="Teste de Aptidão Física" />
         <TopActionIcons activeRoute="Home" inline />
 
         <View style={styles.statsGrid}>

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { X } from 'lucide-react-native';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
@@ -261,9 +262,7 @@ export default function CadastroScreenModern() {
       .catch(() => undefined);
   }, []);
 
-  useEffect(() => {
-    recarregarCadastros();
-  }, [recarregarCadastros]);
+  useAuthDataReload(recarregarCadastros);
 
   useEffect(() => {
     if (!modalCadastroSucesso) return;

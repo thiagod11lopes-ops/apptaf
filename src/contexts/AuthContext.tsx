@@ -19,6 +19,7 @@ import {
 } from '../services/firebase/googleAuth';
 import { clearLocalCadastros } from '../services/cadastrosIndexedDb';
 import { clearLocalSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import { setAuthUidState } from '../services/firebase/authUid';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -40,12 +41,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = getFirebaseAuth();
     if (!auth) {
       setAuthReady(true);
+      setAuthUidState(null, true);
       return;
     }
 
     const unsub = onAuthStateChanged(auth, (fbUser) => {
+      const uid = fbUser?.uid ?? null;
       setUser(fbUser ? mapFirebaseUser(fbUser) : null);
       setAuthReady(true);
+      setAuthUidState(uid, true);
       if (fbUser) {
         void Promise.all([clearLocalCadastros(), clearLocalSessoesAplicacao()]);
       }
@@ -72,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await signOutFirebase();
     setUser(null);
+    setAuthUidState(null, true);
   }, []);
 
   const value = useMemo(

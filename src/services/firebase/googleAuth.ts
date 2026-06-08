@@ -53,11 +53,21 @@ function assertAuthConfigured() {
   return auth;
 }
 
-/** Safari e navegadores móveis: Firebase redirect falha (ITP) — usam OAuth Expo. */
+/**
+ * OAuth Expo só onde o popup Firebase falha (Safari / WebKit no iPhone).
+ * Chrome no Android usa popup Firebase — seleciona o e-mail e loga na hora.
+ */
 export function shouldUseExpoGoogleAuthOnWeb(): boolean {
   if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent;
-  if (/iPhone|iPad|iPod|Android/i.test(ua)) return true;
+
+  // iPhone/iPad: todos os navegadores usam WebKit (Safari, Chrome, etc.)
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+
+  // Android Chrome/Firefox/Edge: popup Firebase funciona bem
+  if (/Android/i.test(ua)) return false;
+
+  // Safari no Mac
   return /Safari/i.test(ua) && !/Chrome|Chromium|Edg|OPR|CriOS|FxiOS/i.test(ua);
 }
 

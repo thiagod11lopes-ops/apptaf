@@ -64,15 +64,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
-  const uid = getCurrentFirebaseUid();
-  if (uid) {
-    try {
-      return await getAllCadastrosFirestore(uid);
-    } catch {
-      return [];
-    }
-  }
+async function getAllCadastrosLocal(): Promise<CadastroItemPersist[]> {
   try {
     const db = await openDb();
     return await new Promise((resolve, reject) => {
@@ -83,10 +75,23 @@ export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
       req.onsuccess = () => resolve((req.result as CadastroItemPersist[]) || []);
       req.onerror = () => reject(req.error);
     });
-  } catch (err) {
-    // Falha silenciosa: mantém UX sem travar o cadastro.
+  } catch {
     return [];
   }
+}
+
+export { getAllCadastrosLocal };
+
+export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      return await getAllCadastrosFirestore(uid);
+    } catch {
+      return [];
+    }
+  }
+  return getAllCadastrosLocal();
 }
 
 export async function addCadastro(item: CadastroItemPersist): Promise<void> {

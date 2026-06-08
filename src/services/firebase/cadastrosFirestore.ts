@@ -27,6 +27,8 @@ export async function addCadastroFirestore(uid: string, item: CadastroItemPersis
   await setDoc(doc(db, userCadastrosPath(uid), item.id), item);
 }
 
+const FIRESTORE_BATCH_LIMIT = 500;
+
 export async function addCadastrosEmLoteFirestore(
   uid: string,
   items: CadastroItemPersist[],
@@ -34,11 +36,15 @@ export async function addCadastrosEmLoteFirestore(
   if (items.length === 0) return;
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
-  const batch = writeBatch(db);
-  for (const item of items) {
-    batch.set(doc(db, userCadastrosPath(uid), item.id), item);
+
+  for (let i = 0; i < items.length; i += FIRESTORE_BATCH_LIMIT) {
+    const chunk = items.slice(i, i + FIRESTORE_BATCH_LIMIT);
+    const batch = writeBatch(db);
+    for (const item of chunk) {
+      batch.set(doc(db, userCadastrosPath(uid), item.id), item);
+    }
+    await batch.commit();
   }
-  await batch.commit();
 }
 
 export async function deleteCadastroFirestore(uid: string, id: string): Promise<void> {

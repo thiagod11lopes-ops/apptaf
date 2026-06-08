@@ -44,15 +44,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
-  const uid = getCurrentFirebaseUid();
-  if (uid) {
-    try {
-      return await getAllSessoesFirestore(uid);
-    } catch {
-      return [];
-    }
-  }
+async function getAllSessoesAplicacaoLocal(): Promise<SessaoAplicacaoTaf[]> {
   try {
     const db = await openDb();
     return await new Promise((resolve, reject) => {
@@ -68,6 +60,20 @@ export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
   } catch {
     return [];
   }
+}
+
+export { getAllSessoesAplicacaoLocal };
+
+export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
+  const uid = getCurrentFirebaseUid();
+  if (uid) {
+    try {
+      return await getAllSessoesFirestore(uid);
+    } catch {
+      return [];
+    }
+  }
+  return getAllSessoesAplicacaoLocal();
 }
 
 export async function addSessaoAplicacao(

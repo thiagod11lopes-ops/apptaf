@@ -5,6 +5,8 @@ import {
   GoogleAuthProvider,
   signInWithCredential,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   type User,
 } from 'firebase/auth';
@@ -19,6 +21,10 @@ export type AppAuthUser = {
   displayName: string | null;
   photoURL: string | null;
 };
+
+export type GoogleWebSignInResult =
+  | { mode: 'popup'; user: AppAuthUser }
+  | { mode: 'redirect' };
 
 export function mapFirebaseUser(user: User): AppAuthUser {
   return {
@@ -46,12 +52,64 @@ function assertAuthConfigured() {
   return auth;
 }
 
-export async function signInWithGoogleWeb(): Promise<AppAuthUser> {
-  const auth = assertAuthConfigured();
+/** Safari e navegadores móveis bloqueiam popup — usam redirect (evita about:blank). */
+export function shouldUseGoogleRedirectOnWeb(): boolean {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod|Android/i.test(ua)) return true;
+  return /Safari/i.test(ua) && !/Chrome|Chromium|Edg|OPR|CriOS|FxiOS/i.test(ua);
+}
+
+function googleProvider(): GoogleAuthProvider {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  const result = await signInWithPopup(auth, provider);
-  return mapFirebaseUser(result.user);
+  return provider;
+}
+
+function isPopupBlockedError(error: unknown): boolean {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code: string }).code)
+      : '';
+  return (
+    code === 'auth/popup-blocked' ||
+    code === 'auth/popup-closed-by-user' ||
+    code === 'auth/cancelled-popup-request'
+  );
+}
+
+export async function signInWithGoogleWeb(): Promise<GoogleWebSignInResult> {
+  const auth = assertAuthConfigured();
+  const provider = googleProvider();
+
+  if (shouldUseGoogleRedirectOnWeb()) {
+    await signInWithRedirect(auth, provider);
+    return { mode: 'redirect' };
+  }
+
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return { mode: 'popup', user: mapFirebaseUser(result.user) };
+  } catch (error) {
+    if (!isPopupBlockedError(error)) throw error;
+    await signInWithRedirect(auth, provider);
+    return { mode: 'redirect' };
+  }
+}
+
+/** Chamar ao carregar a página web após retorno do Google (redirect). */
+export async function completeGoogleRedirectSignIn(): Promise<AppAuthUser | null> {
+  if (Platform.OS !== 'web') return null;
+  const auth = getFirebaseAuth();
+  if (!auth) return null;
+
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result?.user) return null;
+    return mapFirebaseUser(result.user);
+  } catch {
+    return null;
+  }
 }
 
 export async function signInWithGoogleCredential(idToken: string): Promise<AppAuthUser> {

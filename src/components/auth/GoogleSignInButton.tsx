@@ -24,13 +24,15 @@ export function GoogleSignInButton({ onSuccess, onError }: Props) {
 
   const handleWebSignIn = useCallback(async () => {
     setLoading(true);
+    let redirected = false;
     try {
-      await signInWithGoogle();
+      redirected = await signInWithGoogle();
+      if (redirected) return;
       onSuccess?.();
     } catch (e) {
       onError?.(e instanceof Error ? e.message : 'Não foi possível entrar com Google.');
     } finally {
-      setLoading(false);
+      if (!redirected) setLoading(false);
     }
   }, [onError, onSuccess, signInWithGoogle]);
 

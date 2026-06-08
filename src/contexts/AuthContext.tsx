@@ -14,6 +14,7 @@ import {
   mapFirebaseUser,
   signInWithGoogleCredential,
   signInWithGoogleWeb,
+  completeGoogleRedirectSignIn,
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
@@ -25,7 +26,7 @@ type AuthContextType = {
   isAuthenticated: boolean;
   authReady: boolean;
   firebaseEnabled: boolean;
-  signInWithGoogle: (idToken?: string) => Promise<void>;
+  signInWithGoogle: (idToken?: string) => Promise<boolean>;
   logout: () => Promise<void>;
 };
 
@@ -44,16 +45,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsub = onAuthStateChanged(auth, (fbUser) => {
-      const uid = fbUser?.uid ?? null;
-      setUser(fbUser ? mapFirebaseUser(fbUser) : null);
-      setAuthReady(true);
-      setAuthUidState(uid, true);
-    });
-    return unsub;
+    let unsub = () => {};
+
+    void (async () => {
+      if (Platform.OS === 'web') {
+        await completeGoogleRedirectSignIn();
+      }
+
+      unsub = onAuthStateChanged(auth, (fbUser) => {
+        const uid = fbUser?.uid ?? null;
+        setUser(fbUser ? mapFirebaseUser(fbUser) : null);
+        setAuthReady(true);
+        setAuthUidState(uid, true);
+      });
+    })();
+
+    return () => unsub();
   }, []);
 
-  const signInWithGoogle = useCallback(async (idToken?: string) => {
+  const signInWithGoogle = useCallback(async (idToken?: string): Promise<boolean> => {
     if (!firebaseEnabled) {
       throw new Error(
         'Configure o Firebase no arquivo .env (veja .env.example) antes de entrar com Google.',
@@ -61,12 +71,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (idToken) {
       await signInWithGoogleCredential(idToken);
-      return;
+      return false;
     }
     if (Platform.OS !== 'web') {
       throw new Error('No dispositivo móvel, use o botão Entrar com Google.');
     }
-    await signInWithGoogleWeb();
+    const result = await signInWithGoogleWeb();
+    return result.mode === 'redirect';
   }, [firebaseEnabled]);
 
   const logout = useCallback(async () => {

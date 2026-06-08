@@ -1,14 +1,18 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Text, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../Button';
 import {
   canUseGoogleSignIn,
+  clearOAuthParamsFromWindow,
   extractGoogleIdTokenFromAuthResponse,
   hasPendingGoogleOAuthReturn,
   isNativeGoogleSignIn,
+  parseGoogleIdTokenFromWindow,
+  parseGoogleOAuthErrorFromWindow,
   shouldUseExpoGoogleAuthOnWeb,
+  startGoogleOAuthFullPageRedirect,
   useGoogleAuthRequest,
 } from '../../services/firebase/googleAuth';
 import { PREMIUM } from '../../theme/premium';
@@ -24,10 +28,54 @@ export function GoogleSignInButton({ onSuccess, onError }: Props) {
   const native = isNativeGoogleSignIn();
   const mobileSafariWeb = Platform.OS === 'web' && shouldUseExpoGoogleAuthOnWeb();
   const useExpoOAuth = native || mobileSafariWeb;
+  const handledReturnRef = useRef(false);
   const [loading, setLoading] = useState(
     () => Platform.OS === 'web' && hasPendingGoogleOAuthReturn(),
   );
   const [request, response, promptAsync] = useGoogleAuthRequest();
+
+  const finishWithIdToken = useCallback(
+    (idToken: string) => {
+      setLoading(true);
+      return signInWithGoogle(idToken)
+        .then(() => {
+          clearOAuthParamsFromWindow();
+          onSuccess?.();
+        })
+        .catch((e) =>
+          onError?.(e instanceof Error ? e.message : 'Não foi possível entrar com Google.'),
+        )
+        .finally(() => setLoading(false));
+    },
+    [onError, onSuccess, signInWithGoogle],
+  );
+
+  useEffect(() => {
+    if (!mobileSafariWeb || handledReturnRef.current) return;
+
+    const oauthError = parseGoogleOAuthErrorFromWindow();
+    if (oauthError) {
+      handledReturnRef.current = true;
+      clearOAuthParamsFromWindow();
+      onError?.(oauthError);
+      setLoading(false);
+      return;
+    }
+
+    const idToken = parseGoogleIdTokenFromWindow();
+    if (!idToken) {
+      if (hasPendingGoogleOAuthReturn()) {
+        handledReturnRef.current = true;
+        clearOAuthParamsFromWindow();
+        onError?.('Não foi possível concluir o login. Tente novamente.');
+        setLoading(false);
+      }
+      return;
+    }
+
+    handledReturnRef.current = true;
+    void finishWithIdToken(idToken);
+  }, [finishWithIdToken, mobileSafariWeb, onError]);
 
   const handleWebPopupSignIn = useCallback(async () => {
     setLoading(true);
@@ -44,7 +92,7 @@ export function GoogleSignInButton({ onSuccess, onError }: Props) {
   }, [onError, onSuccess, signInWithGoogle]);
 
   useEffect(() => {
-    if (!useExpoOAuth || !response) return;
+    if (!useExpoOAuth || mobileSafariWeb || !response) return;
 
     if (response.type === 'error') {
       const msg =
@@ -66,27 +114,18 @@ export function GoogleSignInButton({ onSuccess, onError }: Props) {
       return;
     }
 
-    setLoading(true);
-    signInWithGoogle(idToken)
-      .then(() => onSuccess?.())
-      .catch((e) =>
-        onError?.(e instanceof Error ? e.message : 'Não foi possível entrar com Google.'),
-      )
-      .finally(() => setLoading(false));
-  }, [useExpoOAuth, onError, onSuccess, response, signInWithGoogle]);
+    void finishWithIdToken(idToken);
+  }, [finishWithIdToken, mobileSafariWeb, onError, response, useExpoOAuth]);
 
   const handlePress = useCallback(async () => {
     if (mobileSafariWeb) {
-      if (!request) {
+      if (!request?.url) {
         onError?.('Aguarde o carregamento do login Google.');
         return;
       }
       setLoading(true);
       try {
-        const result = await promptAsync();
-        if (result.type === 'dismiss' || result.type === 'cancel') {
-          setLoading(false);
-        }
+        startGoogleOAuthFullPageRedirect(request.url);
       } catch (e) {
         onError?.(e instanceof Error ? e.message : 'Não foi possível abrir o Google.');
         setLoading(false);

@@ -83,17 +83,60 @@ export function getGoogleOAuthRedirectUri(): string | undefined {
   return `${window.location.origin}${basePath}`;
 }
 
-/** Página voltou do Google com token na URL (Safari / mobile web). */
+function readOAuthReturnParams(): URLSearchParams | null {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  const hash = window.location.hash.replace(/^#/, '');
+  const source = hash.includes('=') ? hash : window.location.search.replace(/^\?/, '');
+  if (!source) return null;
+  return new URLSearchParams(source);
+}
+
+/** Página voltou do Google com token ou erro na URL (Safari / iOS web). */
 export function hasPendingGoogleOAuthReturn(): boolean {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
-  const hash = window.location.hash;
-  const search = window.location.search;
+  const params = readOAuthReturnParams();
+  if (!params) return false;
   return (
-    hash.includes('id_token=') ||
-    hash.includes('access_token=') ||
-    search.includes('code=') ||
-    search.includes('state=')
+    params.has('id_token') ||
+    params.has('access_token') ||
+    params.has('code') ||
+    params.has('state') ||
+    params.has('error')
   );
+}
+
+/** Lê id_token após redirect de página inteira (Safari). */
+export function parseGoogleIdTokenFromWindow(): string | null {
+  const params = readOAuthReturnParams();
+  const token = params?.get('id_token');
+  return token && token.length > 0 ? token : null;
+}
+
+export function parseGoogleOAuthErrorFromWindow(): string | null {
+  const params = readOAuthReturnParams();
+  if (!params?.has('error')) return null;
+  return (
+    params.get('error_description') ||
+    params.get('error') ||
+    'Erro ao autenticar com Google.'
+  );
+}
+
+/** Remove #id_token=... da barra de endereço após login. */
+export function clearOAuthParamsFromWindow(): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (!url.hash && !url.search) return;
+  url.hash = '';
+  url.search = '';
+  window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
+}
+
+/** Safari iOS: redirect na mesma aba (popup do expo-web-browser trava). */
+export function startGoogleOAuthFullPageRedirect(authUrl: string): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    throw new Error('Redirect OAuth só está disponível na web.');
+  }
+  window.location.assign(authUrl);
 }
 
 function googleProvider(): GoogleAuthProvider {

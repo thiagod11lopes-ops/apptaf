@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, Switch, StyleSheet } from 'react-native';
+import { View, Text, Switch, StyleSheet, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
+import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
 import { PREMIUM } from '../theme/premium';
 
 export default function ConfiguracoesScreen() {
@@ -14,7 +15,7 @@ export default function ConfiguracoesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Header title="Configurações" onBack={() => navigation.goBack()} />
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Card elevated>
           <View style={styles.row}>
             <View style={styles.rowText}>
@@ -31,17 +32,26 @@ export default function ConfiguracoesScreen() {
             />
           </View>
         </Card>
+
+        <Card elevated>
+          <Text style={ts.h2}>Backup e restauração</Text>
+          <Text style={[ts.caption, styles.sectionHint, { color: theme.textSecondary }]}>
+            Faça backup completo do sistema ou restaure a partir de um arquivo CSV exportado anteriormente.
+          </Text>
+          <BackupTafCsvBlock />
+        </Card>
+
         <Text style={[ts.caption, styles.footer]}>
           Design SISMAV · tema claro/escuro com persistência local.
         </Text>
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, gap: 14 },
+  content: { padding: 20, gap: 14, paddingBottom: 32 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -50,5 +60,6 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1, paddingRight: 12 },
   gap: { marginTop: 6 },
+  sectionHint: { marginTop: 6, marginBottom: 14, lineHeight: 18 },
   footer: { textAlign: 'center', paddingHorizontal: 8, lineHeight: 20 },
 });

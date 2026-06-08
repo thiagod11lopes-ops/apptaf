@@ -10,6 +10,11 @@ import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
 import { getFirestoreDb } from '../../config/firebase';
 import { userSessoesPath } from './firestorePaths';
 import { sanitizeForFirestore } from './sanitizeFirestoreData';
+import { extractSessaoRubricas, toSessaoLight } from '../../utils/sessaoLight';
+import {
+  deleteSessaoRubricasFirestore,
+  setSessaoRubricasFirestore,
+} from './sessaoRubricasFirestore';
 
 function sessoesCollection(uid: string) {
   const db = getFirestoreDb();
@@ -17,27 +22,69 @@ function sessoesCollection(uid: string) {
   return collection(db, userSessoesPath(uid));
 }
 
-export async function getAllSessoesFirestore(uid: string): Promise<SessaoAplicacaoTaf[]> {
+function scheduleSessaoRubricMigration(uid: string, sessao: SessaoAplicacaoTaf) {
+  const rubricas = extractSessaoRubricas(sessao);
+  if (rubricas.length === 0) return;
+  void (async () => {
+    await setSessaoRubricasFirestore(uid, sessao.id, { resultados: rubricas });
+    const db = getFirestoreDb();
+    if (!db) return;
+    await setDoc(doc(db, userSessoesPath(uid), sessao.id), sanitizeForFirestore(toSessaoLight(sessao)));
+  })().catch(() => undefined);
+}
+
+/** Uma consulta — sessões sem SVG nos resultados. */
+export async function getAllSessoesFirestoreLight(uid: string): Promise<SessaoAplicacaoTaf[]> {
   const snap = await getDocs(sessoesCollection(uid));
-  const list = snap.docs.map((d) => d.data() as SessaoAplicacaoTaf);
+  const list: SessaoAplicacaoTaf[] = [];
+
+  for (const docSnap of snap.docs) {
+    const raw = docSnap.data() as SessaoAplicacaoTaf;
+    const sessao = { ...raw, id: docSnap.id };
+    list.push(toSessaoLight(sessao));
+
+    if (extractSessaoRubricas(sessao).length > 0) {
+      scheduleSessaoRubricMigration(uid, sessao);
+    }
+  }
+
   list.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
   return list;
 }
 
-export async function addSessaoFirestore(uid: string, sessao: SessaoAplicacaoTaf): Promise<void> {
+export async function getAllSessoesFirestore(uid: string): Promise<SessaoAplicacaoTaf[]> {
+  return getAllSessoesFirestoreLight(uid);
+}
+
+async function persistSessao(uid: string, sessao: SessaoAplicacaoTaf): Promise<void> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
-  await setDoc(doc(db, userSessoesPath(uid), sessao.id), sanitizeForFirestore(sessao));
+
+  const rubricas = extractSessaoRubricas(sessao);
+  const light = toSessaoLight(sessao);
+
+  await setDoc(doc(db, userSessoesPath(uid), sessao.id), sanitizeForFirestore(light));
+
+  if (rubricas.length > 0) {
+    await setSessaoRubricasFirestore(uid, sessao.id, { resultados: rubricas });
+  } else {
+    await deleteSessaoRubricasFirestore(uid, sessao.id);
+  }
+}
+
+export async function addSessaoFirestore(uid: string, sessao: SessaoAplicacaoTaf): Promise<void> {
+  await persistSessao(uid, sessao);
 }
 
 export async function updateSessaoFirestore(uid: string, sessao: SessaoAplicacaoTaf): Promise<void> {
-  await addSessaoFirestore(uid, sessao);
+  await persistSessao(uid, sessao);
 }
 
 export async function deleteSessaoFirestore(uid: string, id: string): Promise<void> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
   await deleteDoc(doc(db, userSessoesPath(uid), id));
+  await deleteSessaoRubricasFirestore(uid, id);
 }
 
 export async function getSessaoByIdFirestore(
@@ -47,5 +94,5 @@ export async function getSessaoByIdFirestore(
   const db = getFirestoreDb();
   if (!db) return null;
   const snap = await getDoc(doc(db, userSessoesPath(uid), id));
-  return snap.exists() ? (snap.data() as SessaoAplicacaoTaf) : null;
+  return snap.exists() ? toSessaoLight(snap.data() as SessaoAplicacaoTaf) : null;
 }

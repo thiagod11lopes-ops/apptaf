@@ -2,21 +2,24 @@ import {
   collection,
   deleteDoc,
   doc,
-  documentId,
   getDocs,
-  limit,
-  orderBy,
-  query,
   setDoc,
-  startAfter,
   writeBatch,
-  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import type { CadastroItemPersist } from '../cadastrosIndexedDb';
 import { getFirestoreDb } from '../../config/firebase';
 import { userCadastrosPath } from './firestorePaths';
 import { sanitizeForFirestore } from './sanitizeFirestoreData';
 import { dedupeCadastrosPorNip } from '../../utils/dedupeCadastrosPorNip';
+import {
+  extractCadastroRubricas,
+  hasCadastroRubricas,
+  toCadastroLight,
+} from '../../utils/cadastroLight';
+import {
+  deleteCadastroRubricasFirestore,
+  setCadastroRubricasFirestore,
+} from './cadastroRubricasFirestore';
 
 function cadastrosCollection(uid: string) {
   const db = getFirestoreDb();
@@ -24,53 +27,63 @@ function cadastrosCollection(uid: string) {
   return collection(db, userCadastrosPath(uid));
 }
 
-const CADASTROS_PAGE_SIZE = 250;
-
-export type CadastrosLoadProgress = {
-  loaded: number;
-  isLastBatch: boolean;
-};
-
-export async function getAllCadastrosFirestoreWithProgress(
+function scheduleRubricMigration(
   uid: string,
-  onProgress?: (progress: CadastrosLoadProgress) => void,
-): Promise<CadastroItemPersist[]> {
+  raw: CadastroItemPersist,
+  rubricas: ReturnType<typeof extractCadastroRubricas>,
+) {
+  void (async () => {
+    await setCadastroRubricasFirestore(uid, raw.id, rubricas);
+    const db = getFirestoreDb();
+    if (!db) return;
+    await setDoc(
+      doc(db, userCadastrosPath(uid), raw.id),
+      sanitizeForFirestore(toCadastroLight(raw)),
+    );
+  })().catch(() => undefined);
+}
+
+/** Uma consulta — cadastros sem SVG (carga leve). */
+export async function getAllCadastrosFirestoreLight(uid: string): Promise<CadastroItemPersist[]> {
+  const snap = await getDocs(cadastrosCollection(uid));
   const items: CadastroItemPersist[] = [];
-  let lastDoc: QueryDocumentSnapshot | undefined;
 
-  onProgress?.({ loaded: 0, isLastBatch: false });
+  for (const docSnap of snap.docs) {
+    const raw = docSnap.data() as CadastroItemPersist;
+    const rubricas = extractCadastroRubricas(raw);
+    const light = toCadastroLight({ ...raw, id: docSnap.id });
+    items.push(light);
 
-  while (true) {
-    const base = cadastrosCollection(uid);
-    const q = lastDoc
-      ? query(base, orderBy(documentId()), startAfter(lastDoc), limit(CADASTROS_PAGE_SIZE))
-      : query(base, orderBy(documentId()), limit(CADASTROS_PAGE_SIZE));
-
-    const snap = await getDocs(q);
-    if (snap.empty) break;
-
-    for (const docSnap of snap.docs) {
-      items.push(docSnap.data() as CadastroItemPersist);
+    if (hasCadastroRubricas(rubricas)) {
+      scheduleRubricMigration(uid, { ...raw, id: docSnap.id }, rubricas);
     }
-
-    lastDoc = snap.docs[snap.docs.length - 1];
-    const isLastBatch = snap.docs.length < CADASTROS_PAGE_SIZE;
-    onProgress?.({ loaded: items.length, isLastBatch });
-
-    if (isLastBatch) break;
   }
 
   return dedupeCadastrosPorNip(items);
 }
 
 export async function getAllCadastrosFirestore(uid: string): Promise<CadastroItemPersist[]> {
-  return getAllCadastrosFirestoreWithProgress(uid);
+  return getAllCadastrosFirestoreLight(uid);
+}
+
+async function persistCadastro(uid: string, item: CadastroItemPersist): Promise<void> {
+  const db = getFirestoreDb();
+  if (!db) throw new Error('Firestore indisponível.');
+
+  const rubricas = extractCadastroRubricas(item);
+  const light = toCadastroLight(item);
+
+  await setDoc(doc(db, userCadastrosPath(uid), item.id), sanitizeForFirestore(light));
+
+  if (hasCadastroRubricas(rubricas)) {
+    await setCadastroRubricasFirestore(uid, item.id, rubricas);
+  } else {
+    await deleteCadastroRubricasFirestore(uid, item.id);
+  }
 }
 
 export async function addCadastroFirestore(uid: string, item: CadastroItemPersist): Promise<void> {
-  const db = getFirestoreDb();
-  if (!db) throw new Error('Firestore indisponível.');
-  await setDoc(doc(db, userCadastrosPath(uid), item.id), sanitizeForFirestore(item));
+  await persistCadastro(uid, item);
 }
 
 const FIRESTORE_BATCH_LIMIT = 500;
@@ -87,9 +100,17 @@ export async function addCadastrosEmLoteFirestore(
     const chunk = items.slice(i, i + FIRESTORE_BATCH_LIMIT);
     const batch = writeBatch(db);
     for (const item of chunk) {
-      batch.set(doc(db, userCadastrosPath(uid), item.id), sanitizeForFirestore(item));
+      const light = toCadastroLight(item);
+      batch.set(doc(db, userCadastrosPath(uid), item.id), sanitizeForFirestore(light));
     }
     await batch.commit();
+
+    for (const item of chunk) {
+      const rubricas = extractCadastroRubricas(item);
+      if (hasCadastroRubricas(rubricas)) {
+        await setCadastroRubricasFirestore(uid, item.id, rubricas);
+      }
+    }
   }
 }
 
@@ -97,4 +118,5 @@ export async function deleteCadastroFirestore(uid: string, id: string): Promise<
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
   await deleteDoc(doc(db, userCadastrosPath(uid), id));
+  await deleteCadastroRubricasFirestore(uid, id);
 }

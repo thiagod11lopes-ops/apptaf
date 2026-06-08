@@ -31,13 +31,24 @@ export type CadastroItemPersist = {
   rubricaPermanenciaSvg?: string;
 };
 
+import { toCadastroLight } from '../utils/cadastroLight';
+import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHistorico';
 import { waitForAuthUid } from './firebase/authUid';
 import {
   addCadastroFirestore,
   addCadastrosEmLoteFirestore,
   deleteCadastroFirestore,
-  getAllCadastrosFirestore,
 } from './firebase/cadastrosFirestore';
+import {
+  getCachedCadastros,
+  syncCloudDataCache,
+} from './firebase/cloudDataSync';
+import {
+  readCloudDataCache,
+  setMemoryCloudCache,
+  writeCloudDataCache,
+  getMemoryCloudCache,
+} from './cloudDataCache';
 
 const DB_NAME = 'taf_cadastros_db';
 const DB_VERSION = 1;
@@ -90,14 +101,38 @@ export async function clearLocalCadastros(): Promise<void> {
       req.onerror = () => reject(req.error);
     });
   } catch {
-    // Sem IndexedDB (ex.: alguns ambientes nativos).
+    // Sem IndexedDB.
   }
+}
+
+async function resolveCloudCadastros(uid: string): Promise<CadastroItemPersist[]> {
+  const mem = getCachedCadastros(uid);
+  if (mem) return mem;
+
+  const disk = await readCloudDataCache(uid);
+  if (disk) {
+    setMemoryCloudCache(disk);
+    return disk.cadastros;
+  }
+
+  const entry = await syncCloudDataCache(uid);
+  return entry.cadastros;
+}
+
+async function patchCloudCacheCadastros(uid: string, cadastros: CadastroItemPersist[]): Promise<void> {
+  const entry = getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid));
+  if (!entry) return;
+  entry.cadastros = cadastros;
+  entry.resumo = calcularResumoInicioTafFromHistorico(entry.sessoes, cadastros);
+  entry.syncedAt = Date.now();
+  setMemoryCloudCache(entry);
+  await writeCloudDataCache(entry);
 }
 
 export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
   const uid = await waitForAuthUid();
   if (uid) {
-    return getAllCadastrosFirestore(uid);
+    return resolveCloudCadastros(uid);
   }
   return getAllCadastrosLocal();
 }
@@ -107,6 +142,12 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
   if (uid) {
     try {
       await addCadastroFirestore(uid, item);
+      const lista = await resolveCloudCadastros(uid);
+      const light = toCadastroLight(item);
+      const idx = lista.findIndex((c) => c.id === light.id);
+      if (idx >= 0) lista[idx] = light;
+      else lista.push(light);
+      await patchCloudCacheCadastros(uid, lista);
     } catch {
       // Mantém fluxo da UI.
     }
@@ -122,7 +163,7 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-  } catch (err) {
+  } catch {
     // Sem impedir a funcionalidade da UI.
   }
 }
@@ -133,6 +174,7 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
   if (uid) {
     try {
       await addCadastrosEmLoteFirestore(uid, items);
+      await syncCloudDataCache(uid);
     } catch {
       // Mantém fluxo da UI.
     }
@@ -149,7 +191,7 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-  } catch (err) {
+  } catch {
     // Sem impedir a funcionalidade da UI.
   }
 }
@@ -159,6 +201,8 @@ export async function deleteCadastro(id: string): Promise<void> {
   if (uid) {
     try {
       await deleteCadastroFirestore(uid, id);
+      const lista = (await resolveCloudCadastros(uid)).filter((c) => c.id !== id);
+      await patchCloudCacheCadastros(uid, lista);
     } catch {
       // Mantém UX.
     }
@@ -174,8 +218,7 @@ export async function deleteCadastro(id: string): Promise<void> {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-  } catch (err) {
+  } catch {
     // Sem impedir a UX.
   }
 }
-

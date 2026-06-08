@@ -17,9 +17,8 @@ import {
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
-import { clearLocalCadastros } from '../services/cadastrosIndexedDb';
-import { clearLocalSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { setAuthUidState } from '../services/firebase/authUid';
+import { clearMemoryCloudCache, clearCloudDataCache } from '../services/cloudDataCache';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -50,9 +49,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(fbUser ? mapFirebaseUser(fbUser) : null);
       setAuthReady(true);
       setAuthUidState(uid, true);
-      if (fbUser) {
-        void Promise.all([clearLocalCadastros(), clearLocalSessoesAplicacao()]);
-      }
     });
     return unsub;
   }, []);
@@ -74,10 +70,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [firebaseEnabled]);
 
   const logout = useCallback(async () => {
+    const uid = user?.uid;
     await signOutFirebase();
     setUser(null);
     setAuthUidState(null, true);
-  }, []);
+    clearMemoryCloudCache();
+    if (uid) {
+      await clearCloudDataCache(uid);
+    }
+  }, [user?.uid]);
 
   const value = useMemo(
     () => ({

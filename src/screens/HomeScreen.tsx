@@ -9,7 +9,7 @@ import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
-import { loadCloudDataWithProgress } from '../services/firebase/loadCloudDataWithProgress';
+import { loadHomeCloudData } from '../services/firebase/cloudDataSync';
 import {
   calcularResumoInicioTafFromHistorico,
   type ResumoInicioTafHistorico,
@@ -30,6 +30,7 @@ const LOAD_IDLE = {
   loading: false,
   loadedCadastros: 0,
   loadedSessoes: 0,
+  fromCache: false,
 };
 
 export default function HomeScreen() {
@@ -60,13 +61,20 @@ export default function HomeScreen() {
       return;
     }
 
-    setCloudLoad({ ...LOAD_IDLE, loading: true, percent: 0 });
-
     try {
-      const { cadastros, sessoes } = await loadCloudDataWithProgress((state) => {
-        setCloudLoad(state);
+      const entry = await loadHomeCloudData((state) => {
+        setCloudLoad({
+          percent: state.percent,
+          loading: state.loading,
+          loadedCadastros: state.loadedCadastros,
+          loadedSessoes: state.loadedSessoes,
+          fromCache: state.fromCache,
+        });
       });
-      setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros));
+
+      if (entry) {
+        setResumo(entry.resumo);
+      }
     } catch {
       setResumo(RESUMO_INICIAL);
       setCloudLoad(LOAD_IDLE);

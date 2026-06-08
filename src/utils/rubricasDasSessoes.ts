@@ -1,5 +1,7 @@
-import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { nipDigitos } from './nipFormat';
+import { waitForAuthUid } from '../services/firebase/authUid';
+import { getAllSessaoRubricasFirestore } from '../services/firebase/sessaoRubricasFirestore';
+import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 
 export type RubricasPorNip = {
   corrida?: string;
@@ -7,11 +9,30 @@ export type RubricasPorNip = {
   permanencia?: string;
 };
 
-/** Última rúbrica capturada por NIP e modalidade (sessões de aplicação). */
+/** Rúbricas das sessões — coleção leve `sessao_rubricas` (sem baixar sessões inteiras). */
 export async function carregarRubricasDasSessoesPorNip(): Promise<Map<string, RubricasPorNip>> {
   const map = new Map<string, RubricasPorNip>();
-  const sessoes = await getAllSessoesAplicacao();
+  const uid = await waitForAuthUid();
 
+  if (uid) {
+    const docs = await getAllSessaoRubricasFirestore(uid);
+    for (const doc of docs) {
+      for (const r of doc.resultados) {
+        const svg = r.rubricaCandidatoSvg?.trim();
+        if (!svg) continue;
+        const key = nipDigitos(r.nip);
+        if (!key) continue;
+        const atual = map.get(key) ?? {};
+        if (r.prova === 'natacao') atual.natacao = svg;
+        else if (r.prova === 'permanencia') atual.permanencia = svg;
+        else atual.corrida = svg;
+        map.set(key, atual);
+      }
+    }
+    return map;
+  }
+
+  const sessoes = await getAllSessoesAplicacao();
   for (const sessao of sessoes) {
     for (const r of sessao.resultados) {
       const svg = r.rubricaCandidatoSvg?.trim();

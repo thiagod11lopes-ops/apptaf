@@ -35,9 +35,9 @@ import {
 import {
   carregarRubricasDasSessoesPorNip,
   mesclarRubricas,
-  rubricasDoCadastro,
   type RubricasPorNip,
 } from '../utils/rubricasDasSessoes';
+import { carregarRubricasCadastrosPorIds } from '../utils/carregarRubricasCadastro';
 import {
   limparResultadoModalidadeCadastro,
   type ModalidadeResultadoTaf,
@@ -82,12 +82,12 @@ function linhasCompletasHistoricoComRubricas(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: Awaited<ReturnType<typeof getAllCadastros>>,
   rubricasSessoes: Map<string, RubricasPorNip>,
+  rubricasCadastros: Map<string, RubricasPorNip>,
 ): ResultadoTafLinha[] {
   return listarResultadosCompletosFromHistorico(sessoes, cadastros).map((linha) => {
     const key = nipDigitos(linha.nip);
-    const cad = cadastros.find((c) => c.id === linha.id);
     const rub = mesclarRubricas(
-      cad ? rubricasDoCadastro(cad) : {},
+      rubricasCadastros.get(linha.id) ?? {},
       key ? rubricasSessoes.get(key) : undefined,
     );
     return mesclarRubricasNaLinha(linha, rub);
@@ -97,13 +97,17 @@ function linhasCompletasHistoricoComRubricas(
 function linhasComRubricasMescladas(
   cadastros: Awaited<ReturnType<typeof getAllCadastros>>,
   rubricasSessoes: Map<string, RubricasPorNip>,
+  rubricasCadastros: Map<string, RubricasPorNip>,
 ): ResultadoTafLinha[] {
   return cadastros
     .filter(cadastroComAlgumResultadoTaf)
     .map((c) => {
       const linha = cadastroParaLinhaResultado(c);
       const key = nipDigitos(c.nip);
-      const rub = mesclarRubricas(rubricasDoCadastro(c), key ? rubricasSessoes.get(key) : undefined);
+      const rub = mesclarRubricas(
+        rubricasCadastros.get(c.id) ?? {},
+        key ? rubricasSessoes.get(key) : undefined,
+      );
       return mesclarRubricasNaLinha(linha, rub);
     });
 }
@@ -135,13 +139,11 @@ export function ResultadosConsultaPanel() {
   } | null>(null);
 
   const carregarBase = useCallback(async () => {
-    const [lista, rub, sessoes] = await Promise.all([
+    const [lista, sessoes] = await Promise.all([
       getAllCadastros(),
-      carregarRubricasDasSessoesPorNip(),
       getAllSessoesAplicacao(),
     ]);
     setTodosCadastros(lista);
-    setRubricasSessoes(rub);
     setSessoesHistorico(sessoes);
     return lista;
   }, []);
@@ -206,22 +208,33 @@ export function ResultadosConsultaPanel() {
     });
     const comResultado = cadastrados.filter(cadastroComAlgumResultadoTaf);
 
+    const [rubSessoes, rubCadastros] = await Promise.all([
+      carregarRubricasDasSessoesPorNip(),
+      carregarRubricasCadastrosPorIds(comResultado.map((c) => c.id)),
+    ]);
+    setRubricasSessoes(rubSessoes);
+
     setBuscou(true);
-    setLinhas(linhasComRubricasMescladas(comResultado, rubricasSessoes));
+    setLinhas(linhasComRubricasMescladas(comResultado, rubSessoes, rubCadastros));
 
     if (cadastrados.length === 0) {
       setMensagemBusca('Dados não Encontrados no Sistema');
     } else if (comResultado.length === 0) {
       setMensagemBusca('Militar Cadastrado não realizou TAF');
     }
-  }, [nip, nome, todosCadastros, rubricasSessoes, carregarBase]);
+  }, [nip, nome, todosCadastros, carregarBase]);
 
   const handleGerarResultados = useCallback(async () => {
     setAviso(null);
 
     const lista = todosCadastros.length ? todosCadastros : await carregarBase();
     const sessoes = sessoesHistorico.length ? sessoesHistorico : await getAllSessoesAplicacao();
-    let linhasPdf = linhasCompletasHistoricoComRubricas(sessoes, lista, rubricasSessoes);
+    const baseLinhas = listarResultadosCompletosFromHistorico(sessoes, lista);
+    const [rubSessoes, rubCadastros] = await Promise.all([
+      rubricasSessoes.size > 0 ? Promise.resolve(rubricasSessoes) : carregarRubricasDasSessoesPorNip(),
+      carregarRubricasCadastrosPorIds(baseLinhas.map((l) => l.id)),
+    ]);
+    let linhasPdf = linhasCompletasHistoricoComRubricas(sessoes, lista, rubSessoes, rubCadastros);
 
     let subtitulo =
       'Integrantes com TAF completo (corrida, natação e permanência) — Histórico';
@@ -260,6 +273,7 @@ export function ResultadosConsultaPanel() {
     sessoesHistorico,
     rubricasSessoes,
     carregarBase,
+    getAllSessoesAplicacao,
   ]);
 
   const confirmarGerarPdf = useCallback(async () => {

@@ -10,14 +10,25 @@ export type SessaoAplicacaoTaf = {
   resultados: ResultadoCorridaItem[];
 };
 
+import { toSessaoLight } from '../utils/sessaoLight';
+import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHistorico';
 import { waitForAuthUid } from './firebase/authUid';
 import {
   addSessaoFirestore,
   deleteSessaoFirestore,
-  getAllSessoesFirestore,
   getSessaoByIdFirestore,
   updateSessaoFirestore,
 } from './firebase/sessoesFirestore';
+import {
+  getCachedSessoes,
+  syncCloudDataCache,
+} from './firebase/cloudDataSync';
+import {
+  readCloudDataCache,
+  setMemoryCloudCache,
+  writeCloudDataCache,
+  getMemoryCloudCache,
+} from './cloudDataCache';
 
 const DB_NAME = 'taf_aplicacoes_db';
 const DB_VERSION = 1;
@@ -76,10 +87,34 @@ export async function clearLocalSessoesAplicacao(): Promise<void> {
   }
 }
 
+async function resolveCloudSessoes(uid: string): Promise<SessaoAplicacaoTaf[]> {
+  const mem = getCachedSessoes(uid);
+  if (mem) return mem;
+
+  const disk = await readCloudDataCache(uid);
+  if (disk) {
+    setMemoryCloudCache(disk);
+    return disk.sessoes;
+  }
+
+  const entry = await syncCloudDataCache(uid);
+  return entry.sessoes;
+}
+
+async function patchCloudCacheSessoes(uid: string, sessoes: SessaoAplicacaoTaf[]): Promise<void> {
+  const entry = getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid));
+  if (!entry) return;
+  entry.sessoes = sessoes;
+  entry.resumo = calcularResumoInicioTafFromHistorico(sessoes, entry.cadastros);
+  entry.syncedAt = Date.now();
+  setMemoryCloudCache(entry);
+  await writeCloudDataCache(entry);
+}
+
 export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
   const uid = await waitForAuthUid();
   if (uid) {
-    return getAllSessoesFirestore(uid);
+    return resolveCloudSessoes(uid);
   }
   return getAllSessoesAplicacaoLocal();
 }
@@ -100,6 +135,12 @@ export async function addSessaoAplicacao(
   if (uid) {
     try {
       await addSessaoFirestore(uid, sessao);
+      const lista = await resolveCloudSessoes(uid);
+      const light = toSessaoLight(sessao);
+      const idx = lista.findIndex((s) => s.id === light.id);
+      if (idx >= 0) lista[idx] = light;
+      else lista.unshift(light);
+      await patchCloudCacheSessoes(uid, lista);
     } catch {
       // Mantém fluxo da aplicação.
     }
@@ -148,6 +189,11 @@ export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise
   if (uid) {
     try {
       await updateSessaoFirestore(uid, sessao);
+      const lista = await resolveCloudSessoes(uid);
+      const light = toSessaoLight(sessao);
+      const idx = lista.findIndex((s) => s.id === light.id);
+      if (idx >= 0) lista[idx] = light;
+      await patchCloudCacheSessoes(uid, lista);
     } catch {
       // silencioso
     }
@@ -162,7 +208,7 @@ export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise
       req.onerror = () => reject(req.error);
     });
   } catch {
-    // silencioso — mesmo padrão de add
+    // silencioso
   }
 }
 
@@ -173,6 +219,8 @@ export async function deleteSessaoAplicacao(id: string): Promise<void> {
   const uid = await waitForAuthUid();
   if (uid) {
     await deleteSessaoFirestore(uid, id);
+    const lista = (await resolveCloudSessoes(uid)).filter((s) => s.id !== id);
+    await patchCloudCacheSessoes(uid, lista);
     return;
   }
   const db = await openDb();

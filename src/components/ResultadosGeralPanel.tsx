@@ -12,10 +12,13 @@ import { Search, Users } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from './Card';
 import { ResultadosGeralTable } from './ResultadosGeralTable';
-import { getAllCadastros } from '../services/cadastrosIndexedDb';
+import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
 import { listarResultadosGeralFromHistorico } from '../utils/resultadoGeralHistorico';
+import { EditarResultadoTafModal } from './sismav/EditarResultadoTafModal';
+import { ConfirmacaoExcluirResultadoGeralModal } from './sismav/ConfirmacaoExcluirResultadoGeralModal';
+import { excluirTodosResultadosTafMilitar } from '../utils/atualizarResultadoTaf';
 import { nipDigitos } from '../utils/nipFormat';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
@@ -48,18 +51,65 @@ export function ResultadosGeralPanel() {
   const ui = useMemo(() => getUiColors(theme), [theme]);
 
   const [lista, setLista] = useState<ResultadoGeralItem[]>([]);
+  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroBusca, setFiltroBusca] = useState('');
+  const [cadastroEmEdicao, setCadastroEmEdicao] = useState<CadastroItemPersist | null>(null);
+  const [militarParaExcluir, setMilitarParaExcluir] = useState<ResultadoGeralItem | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const carregar = useCallback(() => {
     setCarregando(true);
     Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
-      .then(([cadastros, sessoes]) =>
-        setLista(listarResultadosGeralFromHistorico(sessoes, cadastros)),
-      )
-      .catch(() => setLista([]))
+      .then(([cadastrosLista, sessoes]) => {
+        setCadastros(cadastrosLista);
+        setLista(listarResultadosGeralFromHistorico(sessoes, cadastrosLista));
+      })
+      .catch(() => {
+        setCadastros([]);
+        setLista([]);
+      })
       .finally(() => setCarregando(false));
   }, []);
+
+  const recarregarLista = useCallback(async () => {
+    const [cadastrosLista, sessoes] = await Promise.all([
+      getAllCadastros(),
+      getAllSessoesAplicacao(),
+    ]);
+    setCadastros(cadastrosLista);
+    setLista(listarResultadosGeralFromHistorico(sessoes, cadastrosLista));
+  }, []);
+
+  const abrirEdicao = useCallback(
+    (item: ResultadoGeralItem) => {
+      const cadastro = cadastros.find((c) => c.id === item.id);
+      if (cadastro) setCadastroEmEdicao(cadastro);
+    },
+    [cadastros],
+  );
+
+  const aoSalvarEdicao = useCallback(
+    async (_atualizado: CadastroItemPersist) => {
+      await recarregarLista();
+    },
+    [recarregarLista],
+  );
+
+  const executarExclusao = useCallback(async () => {
+    if (!militarParaExcluir || excluindo) return;
+    const cadastro = cadastros.find((c) => c.id === militarParaExcluir.id);
+    if (!cadastro) return;
+
+    setExcluindo(true);
+    try {
+      await excluirTodosResultadosTafMilitar(cadastro);
+      setMilitarParaExcluir(null);
+      await recarregarLista();
+    } finally {
+      setExcluindo(false);
+    }
+  }, [militarParaExcluir, excluindo, cadastros, recarregarLista]);
 
   useFocusEffect(
     useCallback(() => {
@@ -137,7 +187,7 @@ export function ResultadosGeralPanel() {
             ? `${linhasVisiveis.length} de ${lista.length} militar${lista.length !== 1 ? 'es' : ''}`
             : `${lista.length} militar${lista.length !== 1 ? 'es' : ''} no histórico`}
           {' · '}
-          Toque no cabeçalho para ordenar
+          Toque no cabeçalho para ordenar · use os ícones para editar ou excluir
         </Text>
       </View>
 
@@ -166,8 +216,32 @@ export function ResultadosGeralPanel() {
       ) : null}
 
       {!carregando && linhasVisiveis.length > 0 ? (
-        <ResultadosGeralTable data={linhasVisiveis} buscaLower={buscaLower} />
+        <ResultadosGeralTable
+          data={linhasVisiveis}
+          buscaLower={buscaLower}
+          onEditar={abrirEdicao}
+          onExcluir={setMilitarParaExcluir}
+        />
       ) : null}
+
+      <EditarResultadoTafModal
+        visible={!!cadastroEmEdicao}
+        cadastro={cadastroEmEdicao}
+        onClose={() => setCadastroEmEdicao(null)}
+        onSalvo={(atualizado) => {
+          setCadastroEmEdicao(null);
+          void aoSalvarEdicao(atualizado);
+        }}
+      />
+
+      <ConfirmacaoExcluirResultadoGeralModal
+        militar={militarParaExcluir}
+        loading={excluindo}
+        onClose={() => {
+          if (!excluindo) setMilitarParaExcluir(null);
+        }}
+        onConfirm={() => void executarExclusao()}
+      />
     </View>
   );
 }

@@ -12,6 +12,7 @@ import {
   notaNatacaoParaPersistencia,
   textoNotaNatacaoFromCadastro,
 } from '../taf/natacaoNota';
+import { limparResultadoModalidadeCadastro } from './limparResultadoModalidade';
 import { removerParticipanteModalidadeDoHistorico } from './registroModalidadeHistorico';
 import { persistirSessoesRegistradorFromCadastro } from './sessoesUnificadasResultados';
 import { dataHojeBr } from './tafRegistro';
@@ -111,6 +112,29 @@ export async function salvarResultadosTafEditados(
     await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo);
   }
   await persistirSessoesRegistradorFromCadastro(atualizado, addSessaoAplicacao);
+
+  return atualizado;
+}
+
+function limparTodosResultadosTafCadastro(c: CadastroItemPersist): CadastroItemPersist {
+  let next = c;
+  for (const modalidade of ['corrida', 'natacao', 'permanencia'] as const) {
+    next = limparResultadoModalidadeCadastro(next, modalidade);
+  }
+  return { ...next, resultadoNatacao: undefined };
+}
+
+/** Remove todos os resultados TAF do militar (cadastro + histórico). */
+export async function excluirTodosResultadosTafMilitar(
+  cadastro: CadastroItemPersist,
+): Promise<CadastroItemPersist> {
+  const atualizado = limparTodosResultadosTafCadastro(cadastro);
+  await addCadastro(atualizado);
+
+  const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia'];
+  for (const tipo of tipos) {
+    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo);
+  }
 
   return atualizado;
 }

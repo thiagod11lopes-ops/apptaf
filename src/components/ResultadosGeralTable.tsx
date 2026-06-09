@@ -17,7 +17,8 @@ import {
   type Header,
   type SortingState,
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, Trash2 } from 'lucide-react-native';
+import { PressableScale } from './premium/PressableScale';
 import { useTheme } from '../contexts/ThemeContext';
 import { SearchHighlightText } from './SearchHighlightText';
 import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
@@ -31,6 +32,7 @@ const COL = {
   nota: 62,
   situacao: 84,
   permanencia: 104,
+  acoes: 76,
 } as const;
 
 const columnHelper = createColumnHelper<ResultadoGeralItem>();
@@ -73,9 +75,11 @@ function StatusBadge({ status }: { status: 'Completo' | 'Parcial' }) {
 type Props = {
   data: ResultadoGeralItem[];
   buscaLower: string;
+  onEditar?: (item: ResultadoGeralItem) => void;
+  onExcluir?: (item: ResultadoGeralItem) => void;
 };
 
-export function ResultadosGeralTable({ data, buscaLower }: Props) {
+export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: Props) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -209,8 +213,32 @@ export function ResultadosGeralTable({ data, buscaLower }: Props) {
           }),
         ],
       }),
+      columnHelper.display({
+        id: 'acoes',
+        header: 'Ações',
+        size: COL.acoes,
+        meta: { align: 'center' as const },
+        cell: (info) => (
+          <View style={styles.acoesRow}>
+            <PressableScale
+              onPress={() => onEditar?.(info.row.original)}
+              style={[styles.acaoBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
+              accessibilityLabel={`Editar resultados de ${info.row.original.nome}`}
+            >
+              <Pencil size={15} color={theme.primary} strokeWidth={2.2} />
+            </PressableScale>
+            <PressableScale
+              onPress={() => onExcluir?.(info.row.original)}
+              style={[styles.acaoBtn, styles.acaoBtnDanger, { borderColor: theme.loss }]}
+              accessibilityLabel={`Excluir resultados de ${info.row.original.nome}`}
+            >
+              <Trash2 size={15} color={theme.loss} strokeWidth={2.2} />
+            </PressableScale>
+          </View>
+        ),
+      }),
     ],
-    [buscaLower, cellBase, theme],
+    [buscaLower, cellBase, theme, onEditar, onExcluir],
   );
 
   const table = useReactTable({
@@ -470,5 +498,22 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.2,
+  },
+  acoesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  acaoBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acaoBtnDanger: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
   },
 });

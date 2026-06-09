@@ -121,10 +121,15 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      const req = store.put(item);
-
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      const getReq = store.get(item.id);
+      getReq.onsuccess = () => {
+        const existing = getReq.result as CadastroItemPersist | undefined;
+        const merged = existing ? { ...existing, ...item } : item;
+        const putReq = store.put(merged);
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
     });
   } catch {
     // Sem impedir a funcionalidade da UI.

@@ -40,6 +40,12 @@ export function limparResultadoModalidadeCadastro(
       next.resultadoPermanencia = undefined;
       next.dataTafPermanencia = undefined;
       next.rubricaPermanenciaSvg = undefined;
+      if (
+        next.resultadoNatacao === 'aprovado' ||
+        next.resultadoNatacao === 'reprovado'
+      ) {
+        next.resultadoNatacao = undefined;
+      }
       break;
   }
 

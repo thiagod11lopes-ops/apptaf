@@ -28,6 +28,7 @@ import {
   textoNotaNatacaoFromCadastro,
 } from '../taf/natacaoNota';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
+import { formatNipInput } from '../utils/nipFormat';
 import { dataHojeBr } from '../utils/tafRegistro';
 import {
   formatMinutosSegundosInput,
@@ -82,6 +83,15 @@ export default function AplicacaoTAFScreen() {
 
   const fecharModalBusca = useCallback(() => {
     setModalBuscaAberto(false);
+  }, []);
+
+  const onChangeNomeOuNip = useCallback((texto: string) => {
+    const temLetras = /[a-zA-ZÀ-ÿ]/.test(texto);
+    if (!temLetras && texto.replace(/\D/g, '').length > 0) {
+      setNomeOuNip(formatNipInput(texto));
+      return;
+    }
+    setNomeOuNip(texto);
   }, []);
 
   const fecharModalTempos = useCallback(() => {
@@ -162,38 +172,33 @@ export default function AplicacaoTAFScreen() {
 
     const hoje = dataHojeBr();
     const atualizado: CadastroItemPersist = {
-      id: c.id,
-      nip: c.nip,
-      nome: c.nome,
-      dataNascimento: c.dataNascimento,
-      sexo: c.sexo,
-      categoria: c.categoria,
-      oficial: c.oficial,
-      praca: c.praca,
-      tempoCorrida: tc || undefined,
-      tempoNatacao: tn || undefined,
-      dataTafCorrida: tc ? hoje : c.dataTafCorrida,
-      dataTafNatacao: tn ? hoje : c.dataTafNatacao,
-      notaCorrida: tc
-        ? notaCorridaParaPersistencia(
-            textoNotaCorridaFromCadastro({
-              tempoCorrida: tc,
-              dataNascimento: c.dataNascimento,
-              sexo: c.sexo,
-            }),
-          )
-        : undefined,
-      notaNatacao: tn
-        ? notaNatacaoParaPersistencia(
-            textoNotaNatacaoFromCadastro({
-              tempoNatacao: tn,
-              dataNascimento: c.dataNascimento,
-              sexo: c.sexo,
-            }),
-          )
-        : undefined,
-      resultadoPermanencia: c.resultadoPermanencia ?? c.resultadoNatacao,
-      dataTafPermanencia: c.dataTafPermanencia,
+      ...c,
+      ...(tc
+        ? {
+            tempoCorrida: tc,
+            dataTafCorrida: hoje,
+            notaCorrida: notaCorridaParaPersistencia(
+              textoNotaCorridaFromCadastro({
+                tempoCorrida: tc,
+                dataNascimento: c.dataNascimento,
+                sexo: c.sexo,
+              }),
+            ),
+          }
+        : {}),
+      ...(tn
+        ? {
+            tempoNatacao: tn,
+            dataTafNatacao: hoje,
+            notaNatacao: notaNatacaoParaPersistencia(
+              textoNotaNatacaoFromCadastro({
+                tempoNatacao: tn,
+                dataNascimento: c.dataNascimento,
+                sexo: c.sexo,
+              }),
+            ),
+          }
+        : {}),
     };
 
     await addCadastro(atualizado);
@@ -226,20 +231,11 @@ export default function AplicacaoTAFScreen() {
 
     const hoje = dataHojeBr();
     const atualizado: CadastroItemPersist = {
-      id: base.id,
-      nip: base.nip,
-      nome: base.nome,
-      dataNascimento: base.dataNascimento,
-      sexo: base.sexo,
-      categoria: base.categoria,
-      oficial: base.oficial,
-      praca: base.praca,
-      tempoCorrida: base.tempoCorrida,
-      tempoNatacao: base.tempoNatacao,
-      notaCorrida: base.notaCorrida,
-      notaNatacao: base.notaNatacao,
+      ...base,
       resultadoPermanencia: resultadoNatacaoOpcao,
       dataTafPermanencia: hoje,
+      tempoPermanencia: base.tempoPermanencia ?? '10:00',
+      resultadoNatacao: undefined,
     };
 
     await addCadastro(atualizado);
@@ -305,16 +301,22 @@ export default function AplicacaoTAFScreen() {
 
             <TextInput
               value={nomeOuNip}
-              onChangeText={setNomeOuNip}
-              placeholder="Nome ou NIP"
+              onChangeText={onChangeNomeOuNip}
+              placeholder="Nome ou NIP (00.0000.00)"
               placeholderTextColor={ui.placeholder}
               style={[styles.modalInput, { borderColor: inputBorder, color: ui.text }]}
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
-              autoCapitalize="none"
+              autoCapitalize="words"
               textContentType="none"
-              keyboardType="default"
+              keyboardType={
+                nomeOuNip.length > 0 && !/[a-zA-ZÀ-ÿ]/.test(nomeOuNip)
+                  ? Platform.OS === 'web'
+                    ? 'default'
+                    : 'number-pad'
+                  : 'default'
+              }
             />
 
             <View style={styles.modalBtns}>

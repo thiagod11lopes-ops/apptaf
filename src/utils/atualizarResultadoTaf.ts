@@ -75,6 +75,7 @@ export function aplicarEdicaoNoCadastro(
       : undefined,
     resultadoPermanencia: input.permanencia ?? undefined,
     dataTafPermanencia: input.permanencia ? hoje : undefined,
+    tempoPermanencia: input.permanencia ? (base.tempoPermanencia ?? '10:00') : undefined,
     resultadoNatacao: undefined,
   };
 
@@ -109,7 +110,7 @@ export async function salvarResultadosTafEditados(
 
   const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia'];
   for (const tipo of tipos) {
-    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo);
+    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado);
   }
   await persistirSessoesRegistradorFromCadastro(atualizado, addSessaoAplicacao);
 
@@ -133,7 +134,7 @@ export async function excluirTodosResultadosTafMilitar(
 
   const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia'];
   for (const tipo of tipos) {
-    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo);
+    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado);
   }
 
   return atualizado;

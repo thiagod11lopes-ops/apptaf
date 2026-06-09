@@ -49,6 +49,7 @@ function situacaoFromResultado(r: ResultadoCorridaItem): string {
   if (rep) return rep;
   const nota = (r.notaTexto ?? r.noraTexto ?? '').trim();
   if (nota.toUpperCase() === 'REPROVADO') return 'Reprovado';
+  if (nota.toLowerCase() === 'aprovado') return 'Aprovado';
   if (nota) return 'Aprovado';
   return '—';
 }
@@ -166,7 +167,43 @@ export function agregarHistoricoPorParticipante(
     }
   }
 
+  enriquecerPermanenciaFromCadastros(map, cadastros);
+
   return [...map.values()].filter((agg) => agg.corrida || agg.natacao || agg.permanencia);
+}
+
+function enriquecerPermanenciaFromCadastros(
+  map: Map<string, AggRow>,
+  cadastros: CadastroItemPersist[],
+): void {
+  for (const c of cadastros) {
+    const r = c.resultadoPermanencia ?? c.resultadoNatacao;
+    if (r !== 'aprovado' && r !== 'reprovado') continue;
+
+    let agg = map.get(c.id);
+    if (!agg) {
+      const nipC = nipDigitos(c.nip);
+      if (nipC.length >= 8) {
+        for (const row of map.values()) {
+          if (nipDigitos(row.nip) === nipC) {
+            agg = row;
+            break;
+          }
+        }
+      }
+    }
+    if (!agg) continue;
+
+    const sitAtual = agg.permanencia?.situacao;
+    if (sitAtual && sitAtual !== '—') continue;
+
+    agg.permanencia = {
+      nota: '—',
+      situacao: r === 'reprovado' ? 'Reprovado' : 'Aprovado',
+      tempo: (c.tempoPermanencia ?? '').trim() || PERMANENCIA_TEMPO_PDF_PADRAO,
+      rubricaSvg: c.rubricaPermanenciaSvg ?? agg.permanencia?.rubricaSvg,
+    };
+  }
 }
 
 function aggParaPendenciaParcial(agg: AggRow): PendenciaParcialItem | null {

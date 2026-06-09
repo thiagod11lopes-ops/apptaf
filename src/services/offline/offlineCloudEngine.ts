@@ -228,8 +228,9 @@ export async function upsertCadastroOffline(uid: string, item: CadastroItemPersi
   const entry = await loadEntry(uid);
   const lista = [...entry.cadastros];
   const idx = lista.findIndex((c) => c.id === stamped.id);
-  if (idx >= 0) lista[idx] = stamped;
-  else lista.push(stamped);
+  const merged = idx >= 0 ? { ...lista[idx], ...stamped } : stamped;
+  if (idx >= 0) lista[idx] = merged;
+  else lista.push(merged);
 
   const next = buildEntry(uid, lista, entry.sessoes, {
     pendingOps: entry.pendingOps,

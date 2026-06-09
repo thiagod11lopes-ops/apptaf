@@ -4,7 +4,7 @@ import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultad
 import { tempoStringParaMsProva } from './calcularIdade';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { nipDigitos } from './nipFormat';
-import { dataBrParaIso } from './tafRegistro';
+import { dataBrParaIso, dataHojeBr } from './tafRegistro';
 import {
   temAvaliacaoCorrida,
   temAvaliacaoNatacao,
@@ -90,7 +90,7 @@ function resultadoPermanenciaFromCadastro(
     nip: c.nip ?? '',
     tempoMs: ms,
     prova: 'permanencia',
-    notaTexto: reprovado ? 'REPROVADO' : undefined,
+    notaTexto: reprovado ? 'REPROVADO' : 'Aprovado',
     reprovacaoTexto: reprovado ? 'Reprovado' : undefined,
     rubricaCandidatoSvg: c.rubricaPermanenciaSvg,
   };
@@ -107,6 +107,14 @@ function dataModalidadeCadastro(c: CadastroItemPersist, tipo: TipoProvaAplicada)
     default:
       return null;
   }
+}
+
+/** Data da aplicação para sessão; usa hoje se o cadastro tem resultado mas perdeu a data. */
+function dataModalidadeParaSessao(c: CadastroItemPersist, tipo: TipoProvaAplicada): string | null {
+  const data = dataModalidadeCadastro(c, tipo);
+  if (data && dataBrParaIso(data)) return data;
+  if (cadastroTemModalidade(c, tipo)) return dataHojeBr();
+  return null;
 }
 
 function cadastroTemModalidade(c: CadastroItemPersist, tipo: TipoProvaAplicada): boolean {
@@ -144,8 +152,8 @@ export function gerarSessoesVirtuaisFromCadastros(
       if (!cadastroTemModalidade(c, tipo)) continue;
       if (participanteJaNaSessaoReal(c.id, tipo, sessoesReais, cadastros)) continue;
 
-      const data = dataModalidadeCadastro(c, tipo);
-      if (!data || !dataBrParaIso(data)) continue;
+      const data = dataModalidadeParaSessao(c, tipo);
+      if (!data) continue;
 
       const chave = `${tipo}:${data}`;
       let grupo = grupos.get(chave);
@@ -193,7 +201,7 @@ export async function persistirSessoesRegistradorFromCadastro(
   const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia'];
   for (const tipo of tipos) {
     if (!cadastroTemModalidade(c, tipo)) continue;
-    const data = dataModalidadeCadastro(c, tipo);
+    const data = dataModalidadeParaSessao(c, tipo);
     if (!data) continue;
     const resultado = resultadoFromCadastro(c, tipo, 1);
     if (!resultado) continue;

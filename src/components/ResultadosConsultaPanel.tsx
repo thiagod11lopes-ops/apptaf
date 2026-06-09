@@ -44,6 +44,7 @@ import {
   limparResultadoModalidadeCadastro,
   type ModalidadeResultadoTaf,
 } from '../utils/limparResultadoModalidade';
+import { removerParticipanteModalidadeDoHistorico } from '../utils/registroModalidadeHistorico';
 import {
   exportResultadosTafPdf,
   estimarFolhasA4PdfResultadosTaf,
@@ -306,8 +307,15 @@ export function ResultadosConsultaPanel() {
       }
       const atualizado = limparResultadoModalidadeCadastro(cadastro, confirmarExclusao.modalidade);
       await addCadastro(atualizado);
+      await removerParticipanteModalidadeDoHistorico(
+        atualizado.nip,
+        confirmarExclusao.modalidade,
+        atualizado,
+      );
+      const sessoes = await getAllSessoesAplicacao();
       const novaBase = lista.map((c) => (c.id === atualizado.id ? atualizado : c));
       setTodosCadastros(novaBase);
+      setSessoesHistorico(unificarSessoesComCadastroRegistrador(sessoes, novaBase));
       setLinhas((prev) => {
         if (!cadastroComAlgumResultadoTaf(atualizado)) {
           setMensagemBusca('Militar Cadastrado não realizou TAF');

@@ -33,6 +33,7 @@ import {
   unificarSessoesComCadastroRegistrador,
 } from '../utils/sessoesUnificadasResultados';
 import { PREMIUM } from '../theme/premium';
+import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Resultados'>;
@@ -222,10 +223,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   tabScroll: {
+    ...tableFullWidthStyle,
     marginBottom: 20,
-    maxWidth: 720,
-    alignSelf: 'center',
-    width: '100%',
   },
   tabStack: {
     flexDirection: 'row',
@@ -257,11 +256,7 @@ const styles = StyleSheet.create({
   itemPress: {
     marginBottom: 12,
   },
-  sessaoCard: {
-    width: '100%',
-    maxWidth: 720,
-    alignSelf: 'center',
-  },
+  sessaoCard: tableFullWidthStyle,
   sessaoRow: {
     flexDirection: 'row',
     alignItems: 'center',

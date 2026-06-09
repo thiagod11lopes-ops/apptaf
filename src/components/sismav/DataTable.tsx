@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
+import { tableFullWidthStyle } from '../../theme/tableLayout';
 
 export type DataTableColumn<T> = {
   key: string;
@@ -41,8 +42,8 @@ export function DataTable<T>({
         Platform.OS === 'web' ? ({ boxShadow: t.shadowSm } as object) : undefined,
       ]}
     >
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <View>
+      <ScrollView horizontal showsHorizontalScrollIndicator style={styles.scroll}>
+        <View style={styles.tableInner}>
           <View style={[styles.headRow, { backgroundColor: theme.backgroundSecondary }]}>
             {columns.map((col) => (
               <View key={col.key} style={[styles.cell, col.width ? { width: col.width as number } : styles.cellFlex]}>
@@ -70,9 +71,18 @@ export function DataTable<T>({
 
 const styles = StyleSheet.create({
   wrapper: {
+    ...tableFullWidthStyle,
     borderWidth: 1,
     borderRadius: 12,
     overflow: 'hidden',
+  },
+  scroll: {
+    width: '100%',
+    maxWidth: '100%',
+  },
+  tableInner: {
+    width: '100%',
+    minWidth: '100%',
   },
   headRow: {
     flexDirection: 'row',

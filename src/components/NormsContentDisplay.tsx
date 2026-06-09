@@ -12,11 +12,14 @@ import {
 
   Platform,
 
+  useWindowDimensions,
+
 } from 'react-native';
 
 import { useTheme } from '../contexts/ThemeContext';
 
 import { PREMIUM } from '../theme/premium';
+import { tableAvailableWidth } from '../theme/tableLayout';
 
 import { fontFamily } from '../theme/typography';
 
@@ -48,11 +51,17 @@ function NormasModernTable({ table }: { table: NormasTable }) {
 
   const { theme, fontsLoaded } = useTheme();
 
+  const { width: screenWidth } = useWindowDimensions();
+
   const mono = theme.monoFont;
 
   const colCount = table.columns.length;
 
   const colMin = colCount <= 4 ? 88 : 72;
+
+  const minContentWidth = 108 + Math.max(colCount - 1, 0) * colMin;
+
+  const tableWidth = Math.max(tableAvailableWidth(screenWidth), minContentWidth);
 
 
 
@@ -76,7 +85,10 @@ function NormasModernTable({ table }: { table: NormasTable }) {
 
         styles.dataCell,
 
-        { minWidth: colIndex === 0 ? 108 : colMin },
+        {
+          flex: 1,
+          minWidth: colIndex === 0 ? 108 : colMin,
+        },
 
         colIndex > 0 && styles.dataCellDivider,
 
@@ -180,9 +192,15 @@ function NormasModernTable({ table }: { table: NormasTable }) {
 
     >
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator
+        bounces={false}
+        style={styles.tableScroll}
+        contentContainerStyle={{ minWidth: tableWidth }}
+      >
 
-        <View style={{ minWidth: '100%' }}>
+        <View style={{ width: tableWidth }}>
 
           <View style={[styles.headerRow, { backgroundColor: headerBg }]}>
 
@@ -380,11 +398,25 @@ const styles = StyleSheet.create({
 
   tableShell: {
 
+    width: '100%',
+
+    maxWidth: '100%',
+
+    alignSelf: 'stretch',
+
     borderRadius: PREMIUM.radiusXl,
 
     borderWidth: 1,
 
     overflow: 'hidden',
+
+  },
+
+  tableScroll: {
+
+    width: '100%',
+
+    maxWidth: '100%',
 
   },
 

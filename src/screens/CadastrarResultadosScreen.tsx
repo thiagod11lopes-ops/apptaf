@@ -17,6 +17,7 @@ import { formatMsByModality } from '../taf/tafTimeFormat';
 import { cabecalhoColunaProvaResultados } from '../utils/exportResumoAplicacaoPdf';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
+import { tableFullWidthStyle } from '../theme/tableLayout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CadastrarResultados'>;
 
@@ -127,7 +128,7 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
   return StyleSheet.create({
     safe: { flex: 1, position: 'relative' as const },
     scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 10, paddingBottom: 28 },
-    centerWrap: { flex: 1, alignItems: 'center' as const },
+    centerWrap: { flex: 1, alignItems: 'stretch' as const },
     headerRow: {
       width: '100%',
       flexDirection: 'row',
@@ -152,8 +153,7 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
       textShadowRadius: 2,
     },
     formCard: {
-      width: '100%',
-      maxWidth: 720,
+      ...tableFullWidthStyle,
       marginTop: 8,
       padding: 18,
       borderRadius: 20,

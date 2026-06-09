@@ -13,6 +13,7 @@ import { formatTempoNatacaoParaExibicao } from '../taf/tafTimeFormat';
 import { TafPlanilhaFiltrosBar } from './TafPlanilhaFiltrosBar';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
+import { tableFullWidthStyle } from '../theme/tableLayout';
 import {
   type FiltroModalidadeTaf,
   temRegistroModalidade,
@@ -627,8 +628,7 @@ export function CadastroPlanilhaBlock({
 
 const styles = StyleSheet.create({
   tableCard: {
-    width: '100%',
-    maxWidth: 720,
+    ...tableFullWidthStyle,
     padding: 14,
     borderRadius: 20,
   },

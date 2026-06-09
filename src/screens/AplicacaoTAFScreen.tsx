@@ -539,10 +539,11 @@ function createAplicacaoTafStyles(theme: AppTheme, ui: UiColors) {
   return StyleSheet.create({
   safe: { flex: 1, position: 'relative' },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 10 },
-  centerWrap: { flex: 1, alignItems: 'center' },
+  centerWrap: { flex: 1, alignItems: 'stretch' },
   aplicarBtnWrap: {
     width: '100%',
-    maxWidth: 720,
+    maxWidth: '100%',
+    alignSelf: 'stretch',
     marginBottom: 0,
   },
   aplicarBtn: {

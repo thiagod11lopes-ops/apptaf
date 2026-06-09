@@ -11,6 +11,7 @@ import { Upload } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ResultadoImportacaoPlanilha } from '../utils/importCadastrosPlanilhaPdf';
 import { PREMIUM } from '../theme/premium';
+import { tableFullWidthStyle } from '../theme/tableLayout';
 
 type Props = {
   onImportComplete: () => void;
@@ -165,8 +166,7 @@ export function CarregarPlanilhaCadastro({ onImportComplete }: Props) {
 
 const styles = StyleSheet.create({
   wrap: {
-    width: '100%',
-    maxWidth: 720,
+    ...tableFullWidthStyle,
     marginBottom: 16,
   },
   btn: {

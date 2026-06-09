@@ -52,6 +52,7 @@ import {
 import { listarResultadosCompletosFromHistorico } from '../utils/resultadoGeralHistorico';
 import type { ConfirmacaoGerarResultadosPdfInfo } from './sismav/ConfirmacaoGerarResultadosPdfModal';
 import { PREMIUM } from '../theme/premium';
+import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 
 function situacaoStyle(situacao: string, theme: { gain: string; loss: string; textMuted: string }) {
@@ -614,7 +615,7 @@ export function ResultadosConsultaPanel() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: '100%', maxWidth: 720, alignSelf: 'center' },
+  wrap: tableFullWidthStyle,
   intro: { marginBottom: 14, lineHeight: 20 },
   formCard: { padding: 16, marginBottom: 14 },
   field: { marginBottom: 14 },

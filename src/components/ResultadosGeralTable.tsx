@@ -6,6 +6,7 @@ import {
   ScrollView,
   Platform,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -24,6 +25,7 @@ import { SearchHighlightText } from './SearchHighlightText';
 import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
+import { escalarLargurasColunas, tableAvailableWidth } from '../theme/tableLayout';
 
 const COL = {
   nip: 112,
@@ -83,6 +85,11 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const [sorting, setSorting] = useState<SortingState>([]);
+  const { width: screenWidth } = useWindowDimensions();
+  const { larguras: colSizes } = useMemo(
+    () => escalarLargurasColunas(COL, tableAvailableWidth(screenWidth)),
+    [screenWidth],
+  );
 
   const cellBase = useMemo(
     () => [styles.cell, { color: ui.text }],
@@ -93,7 +100,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
     () => [
       columnHelper.accessor('nip', {
         header: 'NIP',
-        size: COL.nip,
+        size: colSizes.nip,
         enableSorting: true,
         meta: { align: 'left' as const },
         cell: (info) => (
@@ -107,7 +114,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
       }),
       columnHelper.accessor('nome', {
         header: 'Nome',
-        size: COL.nome,
+        size: colSizes.nome,
         enableSorting: true,
         meta: { align: 'left' as const },
         cell: (info) => (
@@ -121,7 +128,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
       }),
       columnHelper.accessor('statusTaf', {
         header: 'Status',
-        size: COL.status,
+        size: colSizes.status,
         enableSorting: true,
         meta: { align: 'center' as const },
         cell: (info) => <StatusBadge status={info.getValue()} />,
@@ -133,7 +140,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
         columns: [
           columnHelper.accessor('notaCorrida', {
             header: 'Nota',
-            size: COL.nota,
+            size: colSizes.nota,
             enableSorting: true,
             meta: { align: 'center' as const, groupStart: true },
             cell: (info) => (
@@ -142,7 +149,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
           }),
           columnHelper.accessor('situacaoCorrida', {
             header: 'Situação',
-            size: COL.situacao,
+            size: colSizes.situacao,
             enableSorting: true,
             meta: { align: 'center' as const },
             cell: (info) => (
@@ -162,7 +169,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
         columns: [
           columnHelper.accessor('notaNatacao', {
             header: 'Nota',
-            size: COL.nota,
+            size: colSizes.nota,
             enableSorting: true,
             meta: { align: 'center' as const, groupStart: true },
             cell: (info) => (
@@ -171,7 +178,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
           }),
           columnHelper.accessor('situacaoNatacao', {
             header: 'Situação',
-            size: COL.situacao,
+            size: colSizes.situacao,
             enableSorting: true,
             meta: { align: 'center' as const },
             cell: (info) => (
@@ -191,7 +198,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
         columns: [
           columnHelper.accessor('permanenciaTempo', {
             header: 'Permanência',
-            size: COL.permanencia,
+            size: colSizes.permanencia,
             enableSorting: true,
             meta: { align: 'center' as const, groupStart: true },
             cell: (info) => (
@@ -200,7 +207,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
           }),
           columnHelper.accessor('situacaoPermanencia', {
             header: 'Situação',
-            size: COL.situacao,
+            size: colSizes.situacao,
             enableSorting: true,
             meta: { align: 'center' as const },
             cell: (info) => (
@@ -216,7 +223,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
       columnHelper.display({
         id: 'acoes',
         header: 'Ações',
-        size: COL.acoes,
+        size: colSizes.acoes,
         meta: { align: 'center' as const },
         cell: (info) => (
           <View style={styles.acoesRow}>
@@ -238,7 +245,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
         ),
       }),
     ],
-    [buscaLower, cellBase, theme, onEditar, onExcluir],
+    [buscaLower, cellBase, theme, onEditar, onExcluir, colSizes],
   );
 
   const table = useReactTable({
@@ -250,7 +257,10 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
     getSortedRowModel: getSortedRowModel(),
   });
 
-  const tableWidth = table.getAllLeafColumns().reduce((sum, col) => sum + col.getSize(), 0);
+  const tableWidth = Math.max(
+    tableAvailableWidth(screenWidth),
+    table.getAllLeafColumns().reduce((sum, col) => sum + col.getSize(), 0),
+  );
   const headerGroups = table.getHeaderGroups();
   const isSubHeaderRow = (depth: number) => depth === headerGroups.length - 1;
 
@@ -391,7 +401,7 @@ const styles = StyleSheet.create({
   tableShell: {
     width: '100%',
     maxWidth: '100%',
-    alignSelf: 'flex-start',
+    alignSelf: 'stretch',
     overflow: 'hidden',
     borderRadius: PREMIUM.radiusLg,
     borderWidth: 1,

@@ -607,7 +607,7 @@ export default function CadastroScreenModern() {
           {mostrarTabela && !isAuthorizedMember ? (
             <Suspense
               fallback={
-                <View style={{ width: '100%', maxWidth: 720, paddingVertical: 12, alignItems: 'center' }}>
+                <View style={{ width: '100%', paddingVertical: 12, alignItems: 'center' }}>
                   <ActivityIndicator color={theme.primary} />
                 </View>
               }
@@ -715,7 +715,7 @@ export default function CadastroScreenModern() {
 const styles = StyleSheet.create({
   safe: { flex: 1, position: 'relative' },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 16 },
-  centerWrap: { flex: 1, alignItems: 'center' },
+  centerWrap: { flex: 1, alignItems: 'stretch' },
   formCard: {
     width: '100%',
     maxWidth: 720,
@@ -743,7 +743,8 @@ const styles = StyleSheet.create({
   },
   tableToggleStack: {
     width: '100%',
-    maxWidth: 720,
+    maxWidth: '100%',
+    alignSelf: 'stretch',
     alignItems: 'stretch',
     padding: 8,
     borderRadius: PREMIUM.radiusLg,

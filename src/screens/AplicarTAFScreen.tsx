@@ -20,6 +20,7 @@ import {
   Modal,
   SafeAreaView,
   GestureResponderEvent,
+  useWindowDimensions,
 } from 'react-native';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
@@ -28,6 +29,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { PREMIUM } from '../theme/premium';
+import { tableAvailableWidth } from '../theme/tableLayout';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { LandscapeOrientationModal } from '../components/sismav/LandscapeOrientationModal';
@@ -553,6 +555,12 @@ export default function AplicarTAFScreen() {
     mostrarColunaNotaCorrida,
     mostrarColunaNotaNatacao,
   ]);
+
+  const { width: screenWidth } = useWindowDimensions();
+  const larguraTabela = useMemo(
+    () => Math.max(tableAvailableWidth(screenWidth), larguraMinTabela),
+    [screenWidth, larguraMinTabela],
+  );
 
   /** Todos com tempo registrado (corrida: última volta; natação: chegada). */
   const todosIntegrantesComTempoRegistrado = useMemo(() => {
@@ -2273,6 +2281,7 @@ export default function AplicarTAFScreen() {
                   {
                     borderColor: inputBorder,
                     backgroundColor: inputBg,
+                    width: larguraTabela,
                     minWidth: larguraMinTabela,
                   },
                 ]}
@@ -2562,10 +2571,11 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   return StyleSheet.create({
   safe: { flex: 1, position: 'relative' as const },
   scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 16 },
-  centerWrap: { flex: 1, alignItems: 'center' as const },
+  centerWrap: { flex: 1, alignItems: 'stretch' as const },
   formCard: {
     width: '100%',
-    maxWidth: 720,
+    maxWidth: '100%',
+    alignSelf: 'stretch',
     marginBottom: 20,
   },
   section: { marginBottom: 20, width: '100%' },
@@ -2583,7 +2593,8 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   },
   toggleStack: {
     width: '100%',
-    maxWidth: 720,
+    maxWidth: '100%',
+    alignSelf: 'stretch',
     alignItems: 'stretch',
     padding: 8,
     borderRadius: PREMIUM.radiusLg,
@@ -2919,6 +2930,7 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     marginBottom: 16,
   },
   tabelaScrollHorizontal: {
+    width: '100%',
     marginBottom: 4,
   },
   cronometroBloco: {
@@ -2974,11 +2986,8 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     paddingRight: 6,
   },
   tabelaColNome: {
-    width: 200,
-    maxWidth: 200,
-    minWidth: 120,
-    flexGrow: 0,
-    flexShrink: 0,
+    flex: 1,
+    minWidth: 100,
     paddingRight: 4,
   },
   tabelaColMarcarChegada: {

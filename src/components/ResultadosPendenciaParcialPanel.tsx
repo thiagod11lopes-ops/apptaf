@@ -8,6 +8,7 @@ import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb
 import type { PendenciaParcialItem } from '../utils/resultadoTafCadastro';
 import { listarPendenciasParciaisFromHistorico } from '../utils/resultadoGeralHistorico';
 import { PREMIUM } from '../theme/premium';
+import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 
 function ChipModalidade({
@@ -116,7 +117,7 @@ export function ResultadosPendenciaParcialPanel() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: '100%', maxWidth: 720, alignSelf: 'center' },
+  wrap: tableFullWidthStyle,
   intro: { marginBottom: 14, lineHeight: 20 },
   loader: { marginVertical: 24 },
   emptyCard: { padding: 20 },

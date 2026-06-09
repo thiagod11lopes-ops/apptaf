@@ -615,7 +615,7 @@ export function SessaoHistoricoEditor({ initial, onSave, onCancel }: Props) {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 40, maxWidth: 720, width: '100%', alignSelf: 'center' },
+  scrollContent: { padding: 20, paddingBottom: 40, width: '100%', maxWidth: '100%', alignSelf: 'stretch' },
   title: { fontSize: 20, fontWeight: '800', marginBottom: 16 },
   label: { fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase' },
   fieldLabel: { fontSize: 11, fontWeight: '600', marginTop: 8, marginBottom: 4 },

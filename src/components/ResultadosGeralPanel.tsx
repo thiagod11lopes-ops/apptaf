@@ -21,6 +21,7 @@ import { ConfirmacaoExcluirResultadoGeralModal } from './sismav/ConfirmacaoExclu
 import { excluirTodosResultadosTafMilitar } from '../utils/atualizarResultadoTaf';
 import { nipDigitos } from '../utils/nipFormat';
 import { PREMIUM } from '../theme/premium';
+import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 
 const MIN_BUSCA = 3;
@@ -247,7 +248,7 @@ export function ResultadosGeralPanel() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: '100%', maxWidth: 960, alignSelf: 'center' },
+  wrap: tableFullWidthStyle,
   intro: { marginBottom: 14, lineHeight: 20 },
   searchShell: {
     flexDirection: 'row',

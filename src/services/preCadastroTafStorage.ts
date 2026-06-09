@@ -1,0 +1,51 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { waitForAuthenticatedUid } from './firebase/authUid';
+
+export const MAX_PRE_CADASTRO_PARTICIPANTES = 15;
+
+export type PreCadastroParticipante = {
+  nip: string;
+  nomeMilitar: string;
+  dataNascimento: string;
+  sexo?: 'M' | 'F';
+};
+
+export type PreCadastroTaf = {
+  id: string;
+  criadoEm: number;
+  tipoProva: 'corrida' | 'natacao' | 'permanencia';
+  participantes: PreCadastroParticipante[];
+};
+
+const KEY_PREFIX = 'taf_pre_cadastros:';
+
+async function storageKey(): Promise<string> {
+  const uid = await waitForAuthenticatedUid();
+  return `${KEY_PREFIX}${uid ?? 'local'}`;
+}
+
+export async function getAllPreCadastrosTaf(): Promise<PreCadastroTaf[]> {
+  const key = await storageKey();
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as PreCadastroTaf[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function addPreCadastroTaf(item: PreCadastroTaf): Promise<void> {
+  const list = await getAllPreCadastrosTaf();
+  list.unshift(item);
+  const key = await storageKey();
+  await AsyncStorage.setItem(key, JSON.stringify(list));
+}
+
+export async function removePreCadastroTaf(id: string): Promise<void> {
+  const list = await getAllPreCadastrosTaf();
+  const filtered = list.filter((x) => x.id !== id);
+  const key = await storageKey();
+  await AsyncStorage.setItem(key, JSON.stringify(filtered));
+}

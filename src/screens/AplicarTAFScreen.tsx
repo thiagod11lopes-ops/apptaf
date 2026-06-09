@@ -67,6 +67,13 @@ import {
   aplicarTafTrialReducer,
   initialTrialTableState,
 } from './aplicarTafTrialReducer';
+import {
+  addPreCadastroTaf,
+  getAllPreCadastrosTaf,
+  MAX_PRE_CADASTRO_PARTICIPANTES,
+  removePreCadastroTaf,
+  type PreCadastroTaf,
+} from '../services/preCadastroTafStorage';
 
 /** Máscara NIP: 00.0000.00 (igual ao cadastro) */
 function formatNipInput(value: string) {
@@ -116,6 +123,22 @@ type NipFeedbackLinha =
 
 const MAX_VOLTAS_COLUNAS = 99;
 const RUBRICA_CANVAS_HEIGHT = 180;
+
+function labelTipoProvaPreCadastro(tipo: PreCadastroTaf['tipoProva']): string {
+  if (tipo === 'natacao') return 'Natação';
+  if (tipo === 'permanencia') return 'Permanência';
+  return 'Corrida';
+}
+
+function formatarDataPreCadastro(ms: number): string {
+  const d = new Date(ms);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
 
 type RubricaPoint = { x: number; y: number };
 type RubricaStroke = RubricaPoint[];
@@ -178,6 +201,9 @@ export default function AplicarTAFScreen() {
   const inputBorder = ui.inputBorder;
   const inputTextColor = ui.text;
   const [modalOrientacaoPaisagem, setModalOrientacaoPaisagem] = useState(false);
+  const [mostrarListaPreCadastro, setMostrarListaPreCadastro] = useState(false);
+  const [modoPreCadastro, setModoPreCadastro] = useState(false);
+  const [listaPreCadastros, setListaPreCadastros] = useState<PreCadastroTaf[]>([]);
   const [mostrarProvas, setMostrarProvas] = useState(false);
   const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
   const tipoProvaRef = useRef<TipoProvaTAF | null>(null);
@@ -986,12 +1012,17 @@ export default function AplicarTAFScreen() {
 
   const confirmarParticipantes = useCallback(() => {
     const n = parseInt(numeroParticipantesCorrida, 10);
+    const limite = modoPreCadastro ? MAX_PRE_CADASTRO_PARTICIPANTES : MAX_PARTICIPANTES;
     if (!Number.isFinite(n) || n < 1) {
       setErroParticipantes('Informe um número válido (mínimo 1).');
       return;
     }
-    if (n > MAX_PARTICIPANTES) {
-      setErroParticipantes(`Máximo de ${MAX_PARTICIPANTES} participantes.`);
+    if (n > limite) {
+      setErroParticipantes(
+        modoPreCadastro
+          ? `Máximo de ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes no pré-cadastro.`
+          : `Máximo de ${MAX_PARTICIPANTES} participantes.`,
+      );
       return;
     }
     setErroParticipantes('');
@@ -999,7 +1030,7 @@ export default function AplicarTAFScreen() {
     setNipsParticipantes(Array.from({ length: n }, () => ''));
     setNipFeedbackLinhas(Array.from({ length: n }, () => null));
     setCorridaEtapa('nips');
-  }, [numeroParticipantesCorrida]);
+  }, [numeroParticipantesCorrida, modoPreCadastro]);
 
   const definirNipOk = useCallback((index: number, c: CadastroItemPersist) => {
     const nome = (c.nome || '').trim() || 'Sem nome';
@@ -1365,7 +1396,164 @@ export default function AplicarTAFScreen() {
     setCorridaEtapa('nips');
   }, [resetCronometroCorrida]);
 
+  const recarregarListaPreCadastros = useCallback(async () => {
+    const lista = await getAllPreCadastrosTaf();
+    setListaPreCadastros(lista);
+  }, []);
+
+  const abrirListaPreCadastro = useCallback(() => {
+    void recarregarListaPreCadastros().then(() => {
+      setMostrarListaPreCadastro(true);
+      setModoPreCadastro(false);
+      setMostrarProvas(false);
+    });
+  }, [recarregarListaPreCadastros]);
+
+  const voltarInicioAplicarTaf = useCallback(() => {
+    setMostrarListaPreCadastro(false);
+    setModoPreCadastro(false);
+    setMostrarProvas(false);
+    setCorridaEtapa('menu');
+  }, []);
+
+  const iniciarNovoPreCadastro = useCallback(() => {
+    tipoProvaRef.current = null;
+    resetCronometroCorrida();
+    setModoPreCadastro(true);
+    setMostrarListaPreCadastro(false);
+    setMostrarProvas(true);
+    setTipoProva(null);
+    setCorridaEtapa('menu');
+    setNumeroParticipantesCorrida('');
+    setErroParticipantes('');
+    setNParticipantesConfirmado(0);
+    setNipsParticipantes([]);
+    setNipFeedbackLinhas([]);
+    nipsRepeticaoAutorizadaRef.current = new Set();
+    setModalTesteExistente(null);
+    setNumeroVoltas('');
+    setResultadoPermanenciaLinhas([]);
+    setModalPermanenciaFinalizadaVisible(false);
+    setErroPermanencia('');
+    dispatchTrial({ type: 'resetAll' });
+  }, [resetCronometroCorrida]);
+
+  const salvarPreCadastro = useCallback(async () => {
+    if (!tipoProva) {
+      Alert.alert('Atividade não definida', 'Volte ao menu e escolha Corrida, Natação ou Permanência.');
+      return;
+    }
+    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+      if (nipFeedbackLinhas[i]?.tipo !== 'ok') {
+        Alert.alert(
+          'NIPs pendentes',
+          'Confirme o NIP de todos os participantes (OK em cada linha) e preencha data de nascimento e gênero quando solicitado.',
+        );
+        return;
+      }
+    }
+    const participantes = nipFeedbackLinhas.map((fb, index) => {
+      const ok = fb as Extract<NipFeedbackLinha, { tipo: 'ok' }>;
+      return {
+        nip: nipsParticipantes[index] || '',
+        nomeMilitar: ok.nomeMilitar,
+        dataNascimento: ok.dataNascimento,
+        sexo: ok.sexo,
+      };
+    });
+    const item: PreCadastroTaf = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      criadoEm: Date.now(),
+      tipoProva,
+      participantes,
+    };
+    try {
+      await addPreCadastroTaf(item);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível salvar o pré-cadastro. Tente novamente.');
+      return;
+    }
+    setModoPreCadastro(false);
+    setMostrarProvas(false);
+    setCorridaEtapa('menu');
+    setTipoProva(null);
+    tipoProvaRef.current = null;
+    await recarregarListaPreCadastros();
+    setMostrarListaPreCadastro(true);
+    Alert.alert('Pré-cadastro salvo', 'Os participantes foram salvos. Use "Iniciar Prova" quando for aplicar o TAF.');
+  }, [
+    tipoProva,
+    nParticipantesConfirmado,
+    nipFeedbackLinhas,
+    nipsParticipantes,
+    recarregarListaPreCadastros,
+  ]);
+
+  const iniciarProvaFromPreCadastro = useCallback(
+    (pre: PreCadastroTaf) => {
+      const tipo = pre.tipoProva;
+      const n = pre.participantes.length;
+      if (n < 1) return;
+
+      tipoProvaRef.current = tipo;
+      setTipoProva(tipo);
+      setModoPreCadastro(false);
+      setMostrarListaPreCadastro(false);
+      setMostrarProvas(true);
+      setNumeroParticipantesCorrida(String(n));
+      setNParticipantesConfirmado(n);
+      setNipsParticipantes(pre.participantes.map((p) => p.nip));
+      setNipFeedbackLinhas(
+        pre.participantes.map((p) => ({
+          tipo: 'ok' as const,
+          texto: 'Militar Cadastrado no Sistema.',
+          nomeMilitar: p.nomeMilitar,
+          dataNascimento: p.dataNascimento,
+          sexo: p.sexo,
+        })),
+      );
+      nipsRepeticaoAutorizadaRef.current = new Set();
+      setModalTesteExistente(null);
+      setNumeroVoltas('');
+      resetCronometroCorrida();
+
+      if (tipo === 'corrida' || tipo === 'natacao') {
+        dispatchTrial({
+          type: 'prepararProva',
+          nParticipantes: n,
+          tipoProva: tipo === 'natacao' ? 'natacao' : 'corrida',
+        });
+        setCorridaEtapa('tabela_corrida');
+      } else {
+        permanenciaLimiteAtingidoRef.current = false;
+        setModalPermanenciaFinalizadaVisible(false);
+        setErroPermanencia('');
+        setResultadoPermanenciaLinhas(Array.from({ length: n }, () => null));
+        setCorridaEtapa('tabela_permanencia');
+      }
+    },
+    [resetCronometroCorrida],
+  );
+
+  const excluirPreCadastro = useCallback(
+    (id: string) => {
+      Alert.alert('Excluir pré-cadastro', 'Deseja remover este pré-cadastro?', [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => {
+            void removePreCadastroTaf(id).then(() => recarregarListaPreCadastros());
+          },
+        },
+      ]);
+    },
+    [recarregarListaPreCadastros],
+  );
+
   const iniciarTaf = useCallback(() => {
+    setModoPreCadastro(false);
+    setMostrarListaPreCadastro(false);
     tipoProvaRef.current = null;
     resetCronometroCorrida();
     setMostrarProvas(true);
@@ -1617,7 +1805,7 @@ export default function AplicarTAFScreen() {
         <View style={styles.centerWrap}>
           <AppHeader title="Aplicar TAF" onBack={() => navigation.goBack()} />
 
-          {!mostrarProvas ? (
+          {!mostrarProvas && !mostrarListaPreCadastro ? (
             <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
               <TouchableOpacity
                 accessibilityLabel="Iniciar TAF"
@@ -1631,13 +1819,124 @@ export default function AplicarTAFScreen() {
                   Iniciar TAF
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityLabel="Pré Cadastro"
+                onPress={abrirListaPreCadastro}
+                style={[
+                  styles.toggleBtn,
+                  {
+                    backgroundColor: theme.backgroundSecondary,
+                    borderColor: theme.borderSubtle,
+                  },
+                ]}
+              >
+                <Text style={[ts.caption, { color: theme.text }, styles.toggleBtnText]}>
+                  Pré Cadastro
+                </Text>
+              </TouchableOpacity>
             </View>
+          ) : null}
+
+          {mostrarListaPreCadastro ? (
+            <Card elevated style={styles.formCard}>
+              <View style={styles.section}>
+                <TouchableOpacity
+                  accessibilityLabel="Voltar ao início"
+                  activeOpacity={0.85}
+                  onPress={voltarInicioAplicarTaf}
+                  style={styles.btnVoltarCadastro}
+                >
+                  <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
+                </TouchableOpacity>
+
+                <Text style={[ts.label, styles.labelText]}>Pré Cadastros</Text>
+                <Text style={[ts.bodySecondary, styles.formSubtitle]}>
+                  Cadastre até {MAX_PRE_CADASTRO_PARTICIPANTES} militares por atividade. Ao aplicar o TAF, use
+                  &quot;Iniciar Prova&quot; para ir direto ao cronômetro com os dados já preenchidos.
+                </Text>
+
+                {listaPreCadastros.length === 0 ? (
+                  <Text style={[ts.bodySecondary, styles.preCadastroVazio]}>
+                    Nenhum pré-cadastro salvo ainda.
+                  </Text>
+                ) : (
+                  listaPreCadastros.map((pre) => (
+                    <View
+                      key={pre.id}
+                      style={[
+                        styles.preCadastroCard,
+                        { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
+                      ]}
+                    >
+                      <Text style={[ts.label, styles.preCadastroTitulo]}>
+                        {labelTipoProvaPreCadastro(pre.tipoProva)}
+                      </Text>
+                      <Text style={[ts.bodySecondary, styles.preCadastroMeta]}>
+                        {pre.participantes.length} participante
+                        {pre.participantes.length !== 1 ? 's' : ''} · {formatarDataPreCadastro(pre.criadoEm)}
+                      </Text>
+                      <Text style={[ts.caption, styles.preCadastroNomes]} numberOfLines={3}>
+                        {pre.participantes.map((p) => p.nomeMilitar).join(', ')}
+                      </Text>
+                      <View style={styles.preCadastroAcoes}>
+                        <TouchableOpacity
+                          accessibilityLabel={`Iniciar prova de ${labelTipoProvaPreCadastro(pre.tipoProva)}`}
+                          activeOpacity={0.85}
+                          onPress={() => iniciarProvaFromPreCadastro(pre)}
+                          style={[styles.btnOkNip, styles.preCadastroBtnIniciar, { backgroundColor: theme.primary }]}
+                        >
+                          <Text style={[ts.body, styles.btnText]}>Iniciar Prova</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          accessibilityLabel="Excluir pré-cadastro"
+                          activeOpacity={0.85}
+                          onPress={() => excluirPreCadastro(pre.id)}
+                          style={[styles.preCadastroBtnExcluir, { borderColor: theme.border }]}
+                        >
+                          <Text style={[ts.caption, { color: theme.textSecondary }]}>Excluir</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+                )}
+
+                <TouchableOpacity
+                  accessibilityLabel="Novo pré-cadastro"
+                  activeOpacity={0.85}
+                  onPress={iniciarNovoPreCadastro}
+                  style={[styles.btn, { backgroundColor: theme.primary }]}
+                >
+                  <Text style={[ts.body, styles.btnText]}>+ Novo Pré Cadastro</Text>
+                </TouchableOpacity>
+              </View>
+            </Card>
           ) : null}
 
         {mostrarProvas && corridaEtapa === 'menu' ? (
           <Card elevated style={styles.formCard}>
             <View style={styles.section}>
-              <Text style={[ts.label, styles.labelText]}>Selecione a prova</Text>
+              {modoPreCadastro ? (
+                <TouchableOpacity
+                  accessibilityLabel="Voltar para lista de pré-cadastros"
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    setModoPreCadastro(false);
+                    setMostrarProvas(false);
+                    void recarregarListaPreCadastros().then(() => setMostrarListaPreCadastro(true));
+                  }}
+                  style={styles.btnVoltarCadastro}
+                >
+                  <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
+                </TouchableOpacity>
+              ) : null}
+              <Text style={[ts.label, styles.labelText]}>
+                {modoPreCadastro ? 'Pré-cadastro — selecione a atividade' : 'Selecione a prova'}
+              </Text>
+              {modoPreCadastro ? (
+                <Text style={[ts.bodySecondary, styles.formSubtitle]}>
+                  Máximo de {MAX_PRE_CADASTRO_PARTICIPANTES} participantes por atividade.
+                </Text>
+              ) : null}
               <View style={styles.btnRow}>
                 <TouchableOpacity
                   accessibilityLabel="Corrida"
@@ -1678,6 +1977,11 @@ export default function AplicarTAFScreen() {
               </TouchableOpacity>
 
               <Text style={[ts.label, styles.labelText]}>Número de Participantes</Text>
+              {modoPreCadastro ? (
+                <Text style={[ts.bodySecondary, styles.formSubtitle]}>
+                  Informe de 1 a {MAX_PRE_CADASTRO_PARTICIPANTES} participantes.
+                </Text>
+              ) : null}
               <TextInput
                 value={numeroParticipantesCorrida}
                 onChangeText={onChangeParticipantes}
@@ -1844,12 +2148,20 @@ export default function AplicarTAFScreen() {
             })}
 
             <TouchableOpacity
-              accessibilityLabel={`Preparar ${tituloProvaCurta}`}
+              accessibilityLabel={modoPreCadastro ? 'Salvar pré-cadastro' : `Preparar ${tituloProvaCurta}`}
               activeOpacity={0.85}
-              onPress={tipoProva === 'permanencia' ? prepararPermanencia : prepararProva}
+              onPress={
+                modoPreCadastro
+                  ? () => void salvarPreCadastro()
+                  : tipoProva === 'permanencia'
+                    ? prepararPermanencia
+                    : prepararProva
+              }
               style={[styles.btn, { backgroundColor: theme.primary }]}
             >
-              <Text style={[ts.body, styles.btnText]}>Preparar {tituloProvaCurta}</Text>
+              <Text style={[ts.body, styles.btnText]}>
+                {modoPreCadastro ? 'Salvar Pré Cadastro' : `Preparar ${tituloProvaCurta}`}
+              </Text>
             </TouchableOpacity>
             </View>
           </Card>
@@ -2259,6 +2571,7 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     borderRadius: PREMIUM.radiusLg,
     borderWidth: 1,
     marginBottom: 20,
+    gap: 8,
   },
   toggleBtn: {
     width: '100%',
@@ -2270,6 +2583,43 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   },
   toggleBtnText: {
     fontWeight: '700',
+  },
+  preCadastroVazio: {
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  preCadastroCard: {
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    padding: 14,
+    marginBottom: 12,
+    gap: 4,
+  },
+  preCadastroTitulo: {
+    marginBottom: 2,
+  },
+  preCadastroMeta: {
+    marginBottom: 4,
+  },
+  preCadastroNomes: {
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  preCadastroAcoes: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  preCadastroBtnIniciar: {
+    flexGrow: 1,
+    minWidth: 140,
+  },
+  preCadastroBtnExcluir: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
   },
   btnRow: { marginTop: 8, gap: 10 },
   btn: {

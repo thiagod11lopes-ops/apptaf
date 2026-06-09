@@ -8,27 +8,18 @@ export type SessaoAplicacaoTaf = {
   dataAplicacao: string;
   tipoProva: TipoProvaAplicada;
   resultados: ResultadoCorridaItem[];
+  /** Unix ms — usado na sincronização offline (mais recente prevalece). */
+  updatedAt?: number;
 };
 
-import { toSessaoLight } from '../utils/sessaoLight';
-import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHistorico';
 import { waitForAuthUid, waitForAuthenticatedUid } from './firebase/authUid';
 import {
-  addSessaoFirestore,
-  deleteSessaoFirestore,
-  getSessaoByIdFirestore,
-  updateSessaoFirestore,
-} from './firebase/sessoesFirestore';
-import {
-  getCachedSessoes,
-  syncCloudDataCache,
-} from './firebase/cloudDataSync';
-import {
-  readCloudDataCache,
-  setMemoryCloudCache,
-  writeCloudDataCache,
-  getMemoryCloudCache,
-} from './cloudDataCache';
+  readOfflineCloudEntry,
+  upsertSessaoOffline,
+  deleteSessaoOffline,
+} from './offline/offlineCloudEngine';
+import { getSessaoByIdFirestore } from './firebase/sessoesFirestore';
+import { isOnline } from './offline/networkStatus';
 
 const DB_NAME = 'taf_aplicacoes_db';
 const DB_VERSION = 1;
@@ -88,27 +79,8 @@ export async function clearLocalSessoesAplicacao(): Promise<void> {
 }
 
 async function resolveCloudSessoes(uid: string): Promise<SessaoAplicacaoTaf[]> {
-  const mem = getCachedSessoes(uid);
-  if (mem) return mem;
-
-  const disk = await readCloudDataCache(uid);
-  if (disk && disk.cadastros.length > 0) {
-    setMemoryCloudCache(disk);
-    return disk.sessoes;
-  }
-
-  const entry = await syncCloudDataCache(uid);
+  const entry = await readOfflineCloudEntry(uid);
   return entry.sessoes;
-}
-
-async function patchCloudCacheSessoes(uid: string, sessoes: SessaoAplicacaoTaf[]): Promise<void> {
-  const entry = getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid));
-  if (!entry) return;
-  entry.sessoes = sessoes;
-  entry.resumo = calcularResumoInicioTafFromHistorico(sessoes, entry.cadastros);
-  entry.syncedAt = Date.now();
-  setMemoryCloudCache(entry);
-  await writeCloudDataCache(entry);
 }
 
 export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
@@ -133,17 +105,7 @@ export async function addSessaoAplicacao(
 
   const uid = await waitForAuthUid();
   if (uid) {
-    try {
-      await addSessaoFirestore(uid, sessao);
-      const lista = await resolveCloudSessoes(uid);
-      const light = toSessaoLight(sessao);
-      const idx = lista.findIndex((s) => s.id === light.id);
-      if (idx >= 0) lista[idx] = light;
-      else lista.unshift(light);
-      await patchCloudCacheSessoes(uid, lista);
-    } catch {
-      // Mantém fluxo da aplicação.
-    }
+    await upsertSessaoOffline(uid, sessao);
     return id;
   }
 
@@ -165,11 +127,17 @@ export async function addSessaoAplicacao(
 export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicacaoTaf | null> {
   const uid = await waitForAuthUid();
   if (uid) {
-    try {
-      return await getSessaoByIdFirestore(uid, id);
-    } catch {
-      return null;
+    const entry = await readOfflineCloudEntry(uid);
+    const local = entry.sessoes.find((s) => s.id === id);
+    if (local) return local;
+    if (isOnline()) {
+      try {
+        return await getSessaoByIdFirestore(uid, id);
+      } catch {
+        return null;
+      }
     }
+    return null;
   }
   try {
     const db = await openDb();
@@ -187,16 +155,7 @@ export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicaca
 export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise<void> {
   const uid = await waitForAuthUid();
   if (uid) {
-    try {
-      await updateSessaoFirestore(uid, sessao);
-      const lista = await resolveCloudSessoes(uid);
-      const light = toSessaoLight(sessao);
-      const idx = lista.findIndex((s) => s.id === light.id);
-      if (idx >= 0) lista[idx] = light;
-      await patchCloudCacheSessoes(uid, lista);
-    } catch {
-      // silencioso
-    }
+    await upsertSessaoOffline(uid, sessao);
     return;
   }
   try {
@@ -218,9 +177,7 @@ export async function deleteSessaoAplicacao(id: string): Promise<void> {
   }
   const uid = await waitForAuthUid();
   if (uid) {
-    await deleteSessaoFirestore(uid, id);
-    const lista = (await resolveCloudSessoes(uid)).filter((s) => s.id !== id);
-    await patchCloudCacheSessoes(uid, lista);
+    await deleteSessaoOffline(uid, id);
     return;
   }
   const db = await openDb();

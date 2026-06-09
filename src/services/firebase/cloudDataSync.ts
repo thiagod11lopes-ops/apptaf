@@ -10,8 +10,11 @@ import {
 } from '../cloudDataCache';
 import { calcularResumoInicioTafFromHistorico } from '../../utils/resultadoGeralHistorico';
 import { waitForAuthenticatedUid } from './authUid';
-import { getAllCadastrosFirestoreLight } from './cadastrosFirestore';
-import { getAllSessoesFirestoreLight } from './sessoesFirestore';
+import { isOnline } from '../offline/networkStatus';
+import {
+  readOfflineCloudEntry,
+  syncOfflineCloudData,
+} from '../offline/offlineCloudEngine';
 
 export type CloudDataLoadState = {
   percent: number;
@@ -19,18 +22,9 @@ export type CloudDataLoadState = {
   loadedCadastros: number;
   loadedSessoes: number;
   fromCache: boolean;
+  offline?: boolean;
+  pendingSync?: number;
 };
-
-async function fetchLightFromCloud(uid: string): Promise<{
-  cadastros: CadastroItemPersist[];
-  sessoes: SessaoAplicacaoTaf[];
-}> {
-  const [cadastros, sessoes] = await Promise.all([
-    getAllCadastrosFirestoreLight(uid),
-    getAllSessoesFirestoreLight(uid),
-  ]);
-  return { cadastros, sessoes };
-}
 
 function buildCacheEntry(
   uid: string,
@@ -43,15 +37,13 @@ function buildCacheEntry(
     sessoes,
     resumo: calcularResumoInicioTafFromHistorico(sessoes, cadastros),
     syncedAt: Date.now(),
+    pendingOps: [],
+    tombstones: { cadastros: {}, sessoes: {} },
   };
 }
 
 export async function syncCloudDataCache(uid: string): Promise<CloudDataCacheEntry> {
-  const { cadastros, sessoes } = await fetchLightFromCloud(uid);
-  const entry = buildCacheEntry(uid, cadastros, sessoes);
-  setMemoryCloudCache(entry);
-  await writeCloudDataCache(entry);
-  return entry;
+  return syncOfflineCloudData(uid);
 }
 
 export async function loadHomeCloudData(
@@ -61,60 +53,91 @@ export async function loadHomeCloudData(
   const uid = await waitForAuthenticatedUid();
   if (!uid) return null;
 
+  const online = isOnline();
+
   const cached =
     !options?.forceRefresh
       ? getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid))
       : null;
 
-  if (cached && isCloudCacheInstant(cached)) {
-    setMemoryCloudCache(cached);
+  const showCached = (entry: CloudDataCacheEntry, syncing: boolean) => {
     onProgress({
       percent: 100,
-      loading: false,
-      loadedCadastros: cached.cadastros.length,
-      loadedSessoes: cached.sessoes.length,
+      loading: syncing,
+      loadedCadastros: entry.cadastros.length,
+      loadedSessoes: entry.sessoes.length,
       fromCache: true,
+      offline: !online,
+      pendingSync: entry.pendingOps?.length ?? 0,
     });
+  };
+
+  if (cached && (isCloudCacheInstant(cached) || !online)) {
+    setMemoryCloudCache(cached);
+    showCached(cached, online);
+    if (online) {
+      try {
+        const entry = await syncOfflineCloudData(uid);
+        onProgress({
+          percent: 100,
+          loading: false,
+          loadedCadastros: entry.cadastros.length,
+          loadedSessoes: entry.sessoes.length,
+          fromCache: false,
+          offline: false,
+          pendingSync: entry.pendingOps?.length ?? 0,
+        });
+        return entry;
+      } catch {
+        showCached(cached, false);
+        return cached;
+      }
+    }
     return cached;
   }
 
   if (cached && cached.cadastros.length > 0) {
-    onProgress({
-      percent: 100,
-      loading: true,
-      loadedCadastros: cached.cadastros.length,
-      loadedSessoes: cached.sessoes.length,
-      fromCache: true,
-    });
+    showCached(cached, online);
   } else {
     onProgress({
-      percent: 8,
-      loading: true,
+      percent: online ? 8 : 100,
+      loading: online,
       loadedCadastros: 0,
       loadedSessoes: 0,
       fromCache: false,
+      offline: !online,
     });
   }
 
+  if (!online) {
+    const entry = await readOfflineCloudEntry(uid);
+    onProgress({
+      percent: 100,
+      loading: false,
+      loadedCadastros: entry.cadastros.length,
+      loadedSessoes: entry.sessoes.length,
+      fromCache: true,
+      offline: true,
+      pendingSync: entry.pendingOps?.length ?? 0,
+    });
+    return entry;
+  }
+
   try {
-    const entry = await syncCloudDataCache(uid);
+    const entry = await syncOfflineCloudData(uid);
     onProgress({
       percent: 100,
       loading: false,
       loadedCadastros: entry.cadastros.length,
       loadedSessoes: entry.sessoes.length,
       fromCache: false,
+      offline: false,
+      pendingSync: entry.pendingOps?.length ?? 0,
     });
     return entry;
   } catch (error) {
-    if (cached && cached.cadastros.length > 0) {
-      onProgress({
-        percent: 100,
-        loading: false,
-        loadedCadastros: cached.cadastros.length,
-        loadedSessoes: cached.sessoes.length,
-        fromCache: true,
-      });
+    if (cached) {
+      showCached(cached, false);
       return cached;
     }
     throw error;
@@ -130,3 +153,5 @@ export function getCachedSessoes(uid: string): SessaoAplicacaoTaf[] | null {
   const mem = getMemoryCloudCache(uid);
   return mem?.sessoes ?? null;
 }
+
+export { buildCacheEntry };

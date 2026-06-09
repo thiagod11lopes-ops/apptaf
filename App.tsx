@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { AuthProvider } from './src/contexts/AuthContext';
+import { useOfflineSync } from './src/hooks/useOfflineSync';
 import { PhoneFrameShell } from './src/components/premium/PhoneFrameShell';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -16,6 +17,7 @@ import { PREMIUM } from './src/theme/premium';
 
 function AppRoot() {
   const { isDark, theme, themeMode } = useTheme();
+  useOfflineSync();
   const adminHistorico = Platform.OS === 'web' && isAdminHistoricoAccess();
 
   useEffect(() => {

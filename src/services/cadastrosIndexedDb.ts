@@ -29,26 +29,18 @@ export type CadastroItemPersist = {
   rubricaCorridaSvg?: string;
   rubricaNatacaoSvg?: string;
   rubricaPermanenciaSvg?: string;
+  /** Unix ms — usado na sincronização offline (mais recente prevalece). */
+  updatedAt?: number;
 };
 
 import { toCadastroLight } from '../utils/cadastroLight';
-import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHistorico';
 import { waitForAuthUid, waitForAuthenticatedUid } from './firebase/authUid';
 import {
-  addCadastroFirestore,
-  addCadastrosEmLoteFirestore,
-  deleteCadastroFirestore,
-} from './firebase/cadastrosFirestore';
-import {
-  getCachedCadastros,
-  syncCloudDataCache,
-} from './firebase/cloudDataSync';
-import {
-  readCloudDataCache,
-  setMemoryCloudCache,
-  writeCloudDataCache,
-  getMemoryCloudCache,
-} from './cloudDataCache';
+  readOfflineCloudEntry,
+  upsertCadastroOffline,
+  upsertCadastrosLoteOffline,
+  deleteCadastroOffline,
+} from './offline/offlineCloudEngine';
 
 const DB_NAME = 'taf_cadastros_db';
 const DB_VERSION = 1;
@@ -106,27 +98,8 @@ export async function clearLocalCadastros(): Promise<void> {
 }
 
 async function resolveCloudCadastros(uid: string): Promise<CadastroItemPersist[]> {
-  const mem = getCachedCadastros(uid);
-  if (mem && mem.length > 0) return mem;
-
-  const disk = await readCloudDataCache(uid);
-  if (disk && disk.cadastros.length > 0) {
-    setMemoryCloudCache(disk);
-    return disk.cadastros;
-  }
-
-  const entry = await syncCloudDataCache(uid);
+  const entry = await readOfflineCloudEntry(uid);
   return entry.cadastros;
-}
-
-async function patchCloudCacheCadastros(uid: string, cadastros: CadastroItemPersist[]): Promise<void> {
-  const entry = getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid));
-  if (!entry) return;
-  entry.cadastros = cadastros;
-  entry.resumo = calcularResumoInicioTafFromHistorico(entry.sessoes, cadastros);
-  entry.syncedAt = Date.now();
-  setMemoryCloudCache(entry);
-  await writeCloudDataCache(entry);
 }
 
 export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
@@ -140,17 +113,7 @@ export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
 export async function addCadastro(item: CadastroItemPersist): Promise<void> {
   const uid = await waitForAuthUid();
   if (uid) {
-    try {
-      await addCadastroFirestore(uid, item);
-      const lista = await resolveCloudCadastros(uid);
-      const light = toCadastroLight(item);
-      const idx = lista.findIndex((c) => c.id === light.id);
-      if (idx >= 0) lista[idx] = light;
-      else lista.push(light);
-      await patchCloudCacheCadastros(uid, lista);
-    } catch {
-      // Mantém fluxo da UI.
-    }
+    await upsertCadastroOffline(uid, item);
     return;
   }
   try {
@@ -172,12 +135,7 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
   if (items.length === 0) return;
   const uid = await waitForAuthUid();
   if (uid) {
-    try {
-      await addCadastrosEmLoteFirestore(uid, items);
-      await syncCloudDataCache(uid);
-    } catch {
-      // Mantém fluxo da UI.
-    }
+    await upsertCadastrosLoteOffline(uid, items);
     return;
   }
   try {
@@ -199,13 +157,7 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
 export async function deleteCadastro(id: string): Promise<void> {
   const uid = await waitForAuthUid();
   if (uid) {
-    try {
-      await deleteCadastroFirestore(uid, id);
-      const lista = (await resolveCloudCadastros(uid)).filter((c) => c.id !== id);
-      await patchCloudCacheCadastros(uid, lista);
-    } catch {
-      // Mantém UX.
-    }
+    await deleteCadastroOffline(uid, id);
     return;
   }
   try {

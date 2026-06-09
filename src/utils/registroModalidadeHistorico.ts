@@ -12,6 +12,7 @@ import { formatMsByModality } from '../taf/tafTimeFormat';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { nipDigitos } from './nipFormat';
+import { getSessaoSortTime } from '../services/offline/recordTimestamps';
 
 export type RegistroModalidadeExistente = {
   dataAplicacao: string;
@@ -87,21 +88,23 @@ export function buscarRegistroModalidadeExistente(
 
   const listaCadastros = cadastros.length > 0 ? cadastros : [cadastro];
 
-  const doTipo = sessoes
-    .filter((s) => s.tipoProva === tipo)
-    .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+  let melhor: { sessao: SessaoAplicacaoTaf; resultado: ResultadoCorridaItem; sortTime: number } | null =
+    null;
 
-  for (const sessao of doTipo) {
+  for (const sessao of sessoes) {
+    if (sessao.tipoProva !== tipo) continue;
+    const sortTime = getSessaoSortTime(sessao);
     for (const r of sessao.resultados) {
       const matchNip = alvoNip && nipDigitos(r.nip) === alvoNip;
       const matchCadastro = resultadoPertenceAoCadastro(r, cadastro, listaCadastros);
-      if (matchNip || matchCadastro) {
-        return registroFromHistorico(sessao, r);
+      if (!matchNip && !matchCadastro) continue;
+      if (!melhor || sortTime >= melhor.sortTime) {
+        melhor = { sessao, resultado: r, sortTime };
       }
     }
   }
 
-  return null;
+  return melhor ? registroFromHistorico(melhor.sessao, melhor.resultado) : null;
 }
 
 /** Remove o participante de todas as sessões da modalidade no histórico. */

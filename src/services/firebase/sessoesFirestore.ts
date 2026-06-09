@@ -11,6 +11,7 @@ import { getFirestoreDb } from '../../config/firebase';
 import { userSessoesPath } from './firestorePaths';
 import { sanitizeForFirestore } from './sanitizeFirestoreData';
 import { extractSessaoRubricas, toSessaoLight } from '../../utils/sessaoLight';
+import { stampSessao } from '../offline/recordTimestamps';
 import {
   deleteSessaoRubricasFirestore,
   setSessaoRubricasFirestore,
@@ -44,10 +45,14 @@ async function persistSessao(uid: string, sessao: SessaoAplicacaoTaf): Promise<v
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
 
-  const rubricas = extractSessaoRubricas(sessao);
-  const light = toSessaoLight(sessao);
+  const stamped = stampSessao(sessao, sessao.updatedAt);
+  const rubricas = extractSessaoRubricas(stamped);
+  const light = toSessaoLight(stamped);
 
-  await setDoc(doc(db, userSessoesPath(uid), sessao.id), sanitizeForFirestore(light));
+  await setDoc(
+    doc(db, userSessoesPath(uid), stamped.id),
+    sanitizeForFirestore({ ...light, updatedAt: stamped.updatedAt }),
+  );
 
   if (rubricas.length > 0) {
     await setSessaoRubricasFirestore(uid, sessao.id, { resultados: rubricas });

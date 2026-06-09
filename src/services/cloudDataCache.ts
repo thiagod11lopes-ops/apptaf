@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CadastroItemPersist } from './cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from './resultadosAplicadosIndexedDb';
 import type { ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
+import type { PendingOp, Tombstones } from './offline/pendingOps';
+import { emptyTombstones } from './offline/pendingOps';
 
 export type CloudDataCacheEntry = {
   uid: string;
@@ -10,6 +12,8 @@ export type CloudDataCacheEntry = {
   sessoes: SessaoAplicacaoTaf[];
   resumo: ResumoInicioTafHistorico;
   syncedAt: number;
+  pendingOps?: PendingOp[];
+  tombstones?: Tombstones;
 };
 
 const ASYNC_KEY_PREFIX = 'taf_cloud_cache:';
@@ -99,9 +103,19 @@ export function isCloudCacheFresh(entry: CloudDataCacheEntry): boolean {
   return Date.now() - entry.syncedAt < CLOUD_CACHE_TTL_MS;
 }
 
-/** Cache só é exibido instantaneamente se tiver cadastros (evita cache vazio no Safari). */
+/** Cache exibido sem esperar rede se tiver dados locais ou sync recente. */
 export function isCloudCacheInstant(entry: CloudDataCacheEntry): boolean {
-  return isCloudCacheFresh(entry) && entry.cadastros.length > 0;
+  const hasData = entry.cadastros.length > 0 || entry.sessoes.length > 0;
+  const hasPending = (entry.pendingOps?.length ?? 0) > 0;
+  return hasData && (isCloudCacheFresh(entry) || hasPending);
+}
+
+export function normalizeCloudCacheEntry(entry: CloudDataCacheEntry): CloudDataCacheEntry {
+  return {
+    ...entry,
+    pendingOps: entry.pendingOps ?? [],
+    tombstones: entry.tombstones ?? emptyTombstones(),
+  };
 }
 
 export async function readCloudDataCache(uid: string): Promise<CloudDataCacheEntry | null> {
@@ -111,20 +125,18 @@ export async function readCloudDataCache(uid: string): Promise<CloudDataCacheEnt
   if (Platform.OS === 'web') {
     const fromIdb = await readFromIdb(uid);
     if (fromIdb) {
-      if (fromIdb.cadastros.length === 0) {
-        void clearCloudDataCache(uid);
-        return null;
-      }
-      memory = fromIdb;
-      return fromIdb;
+      const normalized = normalizeCloudCacheEntry(fromIdb);
+      memory = normalized;
+      return normalized;
     }
     return null;
   }
 
   const fromAsync = await readFromAsyncStorage(uid);
   if (fromAsync) {
-    memory = fromAsync;
-    return fromAsync;
+    const normalized = normalizeCloudCacheEntry(fromAsync);
+    memory = normalized;
+    return normalized;
   }
 
   return null;

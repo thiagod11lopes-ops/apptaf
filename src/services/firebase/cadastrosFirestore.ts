@@ -11,6 +11,7 @@ import { getFirestoreDb } from '../../config/firebase';
 import { userCadastrosPath } from './firestorePaths';
 import { sanitizeForFirestore } from './sanitizeFirestoreData';
 import { dedupeCadastrosPorNip } from '../../utils/dedupeCadastrosPorNip';
+import { stampCadastro } from '../offline/recordTimestamps';
 import {
   extractCadastroRubricas,
   hasCadastroRubricas,
@@ -48,10 +49,14 @@ async function persistCadastro(uid: string, item: CadastroItemPersist): Promise<
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
 
-  const rubricas = extractCadastroRubricas(item);
-  const light = toCadastroLight(item);
+  const stamped = stampCadastro(item, item.updatedAt);
+  const rubricas = extractCadastroRubricas(stamped);
+  const light = toCadastroLight(stamped);
 
-  await setDoc(doc(db, userCadastrosPath(uid), item.id), sanitizeForFirestore(light));
+  await setDoc(
+    doc(db, userCadastrosPath(uid), stamped.id),
+    sanitizeForFirestore({ ...light, updatedAt: stamped.updatedAt }),
+  );
 
   if (hasCadastroRubricas(rubricas)) {
     await setCadastroRubricasFirestore(uid, item.id, rubricas);
@@ -78,8 +83,9 @@ export async function addCadastrosEmLoteFirestore(
     const chunk = items.slice(i, i + FIRESTORE_BATCH_LIMIT);
     const batch = writeBatch(db);
     for (const item of chunk) {
-      const light = toCadastroLight(item);
-      batch.set(doc(db, userCadastrosPath(uid), item.id), sanitizeForFirestore(light));
+      const stamped = stampCadastro(item, item.updatedAt);
+      const light = { ...toCadastroLight(stamped), updatedAt: stamped.updatedAt };
+      batch.set(doc(db, userCadastrosPath(uid), stamped.id), sanitizeForFirestore(light));
     }
     await batch.commit();
 

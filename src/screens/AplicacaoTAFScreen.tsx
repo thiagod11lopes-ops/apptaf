@@ -17,6 +17,8 @@ import { Check, X } from 'lucide-react-native';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
 import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import { addSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import { persistirSessoesRegistradorFromCadastro } from '../utils/sessoesUnificadasResultados';
 import {
   notaCorridaParaPersistencia,
   textoNotaCorridaFromCadastro,
@@ -190,10 +192,12 @@ export default function AplicacaoTAFScreen() {
             }),
           )
         : undefined,
-      resultadoNatacao: c.resultadoNatacao,
+      resultadoPermanencia: c.resultadoPermanencia ?? c.resultadoNatacao,
+      dataTafPermanencia: c.dataTafPermanencia,
     };
 
     await addCadastro(atualizado);
+    await persistirSessoesRegistradorFromCadastro(atualizado, addSessaoAplicacao);
     const lista = await getAllCadastros();
     setCadastros(lista);
 
@@ -204,7 +208,7 @@ export default function AplicacaoTAFScreen() {
     setErroTempos('');
 
     setCadastroAposTempos(atualizado);
-    setResultadoNatacaoOpcao(atualizado.resultadoNatacao ?? null);
+    setResultadoNatacaoOpcao(atualizado.resultadoPermanencia ?? null);
     setErroNatacao('');
     setModalNatacaoAberto(true);
   }, [cadastroSelecionado, tempoCorrida, tempoNatacao]);
@@ -220,6 +224,7 @@ export default function AplicacaoTAFScreen() {
 
     setErroNatacao('');
 
+    const hoje = dataHojeBr();
     const atualizado: CadastroItemPersist = {
       id: base.id,
       nip: base.nip,
@@ -233,10 +238,12 @@ export default function AplicacaoTAFScreen() {
       tempoNatacao: base.tempoNatacao,
       notaCorrida: base.notaCorrida,
       notaNatacao: base.notaNatacao,
-      resultadoNatacao: resultadoNatacaoOpcao,
+      resultadoPermanencia: resultadoNatacaoOpcao,
+      dataTafPermanencia: hoje,
     };
 
     await addCadastro(atualizado);
+    await persistirSessoesRegistradorFromCadastro(atualizado, addSessaoAplicacao);
     const lista = await getAllCadastros();
     setCadastros(lista);
     fecharModalNatacao();

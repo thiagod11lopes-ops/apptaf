@@ -34,8 +34,12 @@ function situacaoDeNota(nota: string | undefined, temRegistro: boolean): string 
   return 'Aprovado';
 }
 
+function resultadoPermanenciaCadastro(c: CadastroItemPersist): 'aprovado' | 'reprovado' | undefined {
+  return c.resultadoPermanencia ?? c.resultadoNatacao;
+}
+
 function situacaoPermanencia(c: CadastroItemPersist): string {
-  const r = c.resultadoPermanencia;
+  const r = resultadoPermanenciaCadastro(c);
   if (r === 'aprovado') return 'Aprovado';
   if (r === 'reprovado') return 'Reprovado';
   const t = tempos(c).permanencia;
@@ -59,7 +63,7 @@ export function temAvaliacaoNatacao(c: CadastroItemPersist): boolean {
 
 export function temAvaliacaoPermanencia(c: CadastroItemPersist): boolean {
   const t = tempos(c);
-  return !!(c.resultadoPermanencia || t.permanencia);
+  return !!(resultadoPermanenciaCadastro(c) || t.permanencia);
 }
 
 /** Militar com avaliação nas três modalidades (corrida, natação e permanência). */
@@ -148,7 +152,7 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
   const t = tempos(c);
   const temCorrida = !!(t.corrida || (c.notaCorrida || '').trim());
   const temNatacao = !!(t.natacao || (c.notaNatacao || '').trim());
-  const temPerm = !!(c.resultadoPermanencia || t.permanencia);
+  const temPerm = !!(resultadoPermanenciaCadastro(c) || t.permanencia);
 
   return {
     id: c.id,

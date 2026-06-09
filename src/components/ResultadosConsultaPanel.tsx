@@ -9,16 +9,18 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { Search, Download, Trash2 } from 'lucide-react-native';
+import { Search, Download, Trash2, Pencil } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from './Card';
 import { LabelNip } from './LabelNip';
 import { PressableScale } from './premium/PressableScale';
 import { ConfirmacaoExcluirResultadoModal } from './sismav/ConfirmacaoExcluirResultadoModal';
 import { ConfirmacaoGerarResultadosPdfModal } from './sismav/ConfirmacaoGerarResultadosPdfModal';
+import { EditarResultadoTafModal } from './sismav/EditarResultadoTafModal';
 import { HistoricoCalendarioTaf } from './sismav/HistoricoCalendarioTaf';
-import { addCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
+import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao, type SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
+import { unificarSessoesComCadastroRegistrador } from '../utils/sessoesUnificadasResultados';
 import { ProvaComColunaRubrica } from './ProvaComColunaRubrica';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput, nipDigitos } from '../utils/nipFormat';
@@ -137,6 +139,7 @@ export function ResultadosConsultaPanel() {
     nip: string;
     modalidade: ModalidadeResultadoTaf;
   } | null>(null);
+  const [cadastroEmEdicao, setCadastroEmEdicao] = useState<CadastroItemPersist | null>(null);
 
   const carregarBase = useCallback(async () => {
     const [lista, sessoes] = await Promise.all([
@@ -144,7 +147,7 @@ export function ResultadosConsultaPanel() {
       getAllSessoesAplicacao(),
     ]);
     setTodosCadastros(lista);
-    setSessoesHistorico(sessoes);
+    setSessoesHistorico(unificarSessoesComCadastroRegistrador(sessoes, lista));
     return lista;
   }, []);
 
@@ -228,7 +231,8 @@ export function ResultadosConsultaPanel() {
     setAviso(null);
 
     const lista = todosCadastros.length ? todosCadastros : await carregarBase();
-    const sessoes = sessoesHistorico.length ? sessoesHistorico : await getAllSessoesAplicacao();
+    const sessoesRaw = sessoesHistorico.length ? sessoesHistorico : await getAllSessoesAplicacao();
+    const sessoes = unificarSessoesComCadastroRegistrador(sessoesRaw, lista);
     const baseLinhas = listarResultadosCompletosFromHistorico(sessoes, lista);
     const [rubSessoes, rubCadastros] = await Promise.all([
       rubricasSessoes.size > 0 ? Promise.resolve(rubricasSessoes) : carregarRubricasDasSessoesPorNip(),
@@ -237,7 +241,7 @@ export function ResultadosConsultaPanel() {
     let linhasPdf = linhasCompletasHistoricoComRubricas(sessoes, lista, rubSessoes, rubCadastros);
 
     let subtitulo =
-      'Integrantes com TAF completo (corrida, natação e permanência) — Histórico';
+      'Integrantes com TAF completo (corrida, natação e permanência) — Aplicar TAF e Registrador';
 
     const nipTrim = nip.trim();
     const nomeTrim = nome.trim();
@@ -310,7 +314,12 @@ export function ResultadosConsultaPanel() {
           return prev.filter((l) => l.id !== atualizado.id);
         }
         const key = nipDigitos(atualizado.nip);
-        const rub = mesclarRubricas(rubricasDoCadastro(atualizado), key ? rubricasSessoes.get(key) : undefined);
+        const rubCadastro: RubricasPorNip = {
+          corrida: atualizado.rubricaCorridaSvg,
+          natacao: atualizado.rubricaNatacaoSvg,
+          permanencia: atualizado.rubricaPermanenciaSvg,
+        };
+        const rub = mesclarRubricas(rubCadastro, key ? rubricasSessoes.get(key) : undefined);
         const linha = mesclarRubricasNaLinha(cadastroParaLinhaResultado(atualizado), rub);
         return prev.map((l) => (l.id === atualizado.id ? linha : l));
       });
@@ -321,6 +330,38 @@ export function ResultadosConsultaPanel() {
       setExcluindo(false);
     }
   }, [confirmarExclusao, todosCadastros, rubricasSessoes, carregarBase]);
+
+  const aoSalvarEdicao = useCallback(
+    async (atualizado: CadastroItemPersist) => {
+      setAviso(null);
+      const novaBase = todosCadastros.map((c) => (c.id === atualizado.id ? atualizado : c));
+      setTodosCadastros(novaBase);
+
+      const sessoes = await getAllSessoesAplicacao();
+      setSessoesHistorico(unificarSessoesComCadastroRegistrador(sessoes, novaBase));
+
+      const key = nipDigitos(atualizado.nip);
+      const [rubSessoes, rubCadastros] = await Promise.all([
+        carregarRubricasDasSessoesPorNip(),
+        carregarRubricasCadastrosPorIds([atualizado.id]),
+      ]);
+      setRubricasSessoes(rubSessoes);
+
+      if (cadastroComAlgumResultadoTaf(atualizado)) {
+        const rub = mesclarRubricas(
+          rubCadastros.get(atualizado.id) ?? {},
+          key ? rubSessoes.get(key) : undefined,
+        );
+        const linha = mesclarRubricasNaLinha(cadastroParaLinhaResultado(atualizado), rub);
+        setLinhas((prev) => prev.map((l) => (l.id === atualizado.id ? linha : l)));
+        setMensagemBusca(null);
+      } else {
+        setLinhas((prev) => prev.filter((l) => l.id !== atualizado.id));
+        setMensagemBusca('Militar Cadastrado não realizou TAF');
+      }
+    },
+    [todosCadastros],
+  );
 
   const inputStyle = [
     styles.input,
@@ -432,10 +473,23 @@ export function ResultadosConsultaPanel() {
 
         return (
           <Card key={r.id} elevated style={styles.resultCard}>
-            <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
-            <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{r.nip}</Text>
-            <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
-            <Text style={[ts.h2, { color: ui.text, marginBottom: 12, fontSize: 18 }]}>{r.nome}</Text>
+            <View style={styles.resultCardHeader}>
+              <View style={styles.resultCardTitulo}>
+                <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
+                <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{r.nip}</Text>
+                <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
+                <Text style={[ts.h2, { color: ui.text, fontSize: 18 }]}>{r.nome}</Text>
+              </View>
+              {cadastro ? (
+                <PressableScale
+                  onPress={() => setCadastroEmEdicao(cadastro)}
+                  style={[styles.editBtn, { borderColor: theme.border }]}
+                  accessibilityLabel={`Editar resultados de ${r.nome}`}
+                >
+                  <Pencil size={18} color={theme.primary} strokeWidth={2.2} />
+                </PressableScale>
+              ) : null}
+            </View>
 
             <ProvaComColunaRubrica
               titulo="Corrida"
@@ -511,6 +565,13 @@ export function ResultadosConsultaPanel() {
           </Card>
         );
       })}
+
+      <EditarResultadoTafModal
+        visible={!!cadastroEmEdicao}
+        cadastro={cadastroEmEdicao}
+        onClose={() => setCadastroEmEdicao(null)}
+        onSalvo={(atualizado) => void aoSalvarEdicao(atualizado)}
+      />
 
       <ConfirmacaoExcluirResultadoModal
         visible={!!confirmarExclusao}
@@ -591,6 +652,27 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   resultCard: { padding: 16, marginBottom: 12 },
+  resultCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  resultCardTitulo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  editBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    flexShrink: 0,
+  },
   trashBtn: {
     width: 36,
     height: 36,

@@ -48,7 +48,11 @@ export function temRegistroModalidade(
     case 'natacao':
       return !!(t.natacao || (c.notaNatacao || '').trim());
     case 'permanencia':
-      return !!(c.resultadoPermanencia || (c.tempoPermanencia || '').trim());
+      return !!(
+        c.resultadoPermanencia ||
+        c.resultadoNatacao ||
+        (c.tempoPermanencia || '').trim()
+      );
     case 'Todos':
     default:
       return (
@@ -57,6 +61,7 @@ export function temRegistroModalidade(
         !!(c.notaCorrida || '').trim() ||
         !!(c.notaNatacao || '').trim() ||
         !!c.resultadoPermanencia ||
+        !!c.resultadoNatacao ||
         !!(c.tempoPermanencia || '').trim()
       );
   }

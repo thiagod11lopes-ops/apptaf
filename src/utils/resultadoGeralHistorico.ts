@@ -6,6 +6,7 @@ import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { formatNipInput, nipDigitos } from './nipFormat';
 import type { PendenciaParcialItem, ResultadoGeralItem } from './resultadoTafCadastro';
+import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 
 type ModalidadeHistorico = {
   nota: string;
@@ -193,14 +194,15 @@ function aggParaPendenciaParcial(agg: AggRow): PendenciaParcialItem | null {
 }
 
 /**
- * Monta o Resultado Geral exclusivamente a partir das sessões do Histórico.
- * Modalidades ausentes no histórico aparecem como "—" na tabela.
+ * Monta o Resultado Geral a partir do Histórico (Aplicar TAF + Registrador de TAF).
+ * Modalidades ausentes aparecem como "—" na tabela.
  */
 export function listarResultadosGeralFromHistorico(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
 ): ResultadoGeralItem[] {
-  return agregarHistoricoPorParticipante(sessoes, cadastros)
+  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  return agregarHistoricoPorParticipante(unificadas, cadastros)
     .map(aggParaLinha)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
@@ -212,7 +214,8 @@ export function listarPendenciasParciaisFromHistorico(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
 ): PendenciaParcialItem[] {
-  return agregarHistoricoPorParticipante(sessoes, cadastros)
+  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  return agregarHistoricoPorParticipante(unificadas, cadastros)
     .map(aggParaPendenciaParcial)
     .filter((item): item is PendenciaParcialItem => item != null)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -252,7 +255,8 @@ export function calcularResumoInicioTafFromHistorico(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[],
 ): ResumoInicioTafHistorico {
-  const aggs = agregarHistoricoPorParticipante(sessoes, cadastros);
+  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  const aggs = agregarHistoricoPorParticipante(unificadas, cadastros);
 
   let completos = 0;
   let parcial = 0;

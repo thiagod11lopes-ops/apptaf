@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { waitForAuthenticatedUid } from './firebase/authUid';
+import { getCachedDataOwnerUid, waitForAuthenticatedUid } from './firebase/authUid';
 
 export const MAX_PRE_CADASTRO_PARTICIPANTES = 15;
 
@@ -20,7 +20,7 @@ export type PreCadastroTaf = {
 const KEY_PREFIX = 'taf_pre_cadastros:';
 
 async function storageKey(): Promise<string> {
-  const uid = await waitForAuthenticatedUid();
+  const uid = getCachedDataOwnerUid() ?? (await waitForAuthenticatedUid());
   return `${KEY_PREFIX}${uid ?? 'local'}`;
 }
 
@@ -43,9 +43,11 @@ export async function addPreCadastroTaf(item: PreCadastroTaf): Promise<void> {
   await AsyncStorage.setItem(key, JSON.stringify(list));
 }
 
-export async function removePreCadastroTaf(id: string): Promise<void> {
+export async function removePreCadastroTaf(id: string): Promise<boolean> {
+  const key = await storageKey();
   const list = await getAllPreCadastrosTaf();
   const filtered = list.filter((x) => x.id !== id);
-  const key = await storageKey();
+  if (filtered.length === list.length) return false;
   await AsyncStorage.setItem(key, JSON.stringify(filtered));
+  return true;
 }

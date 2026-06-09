@@ -66,8 +66,8 @@ export function ResultadosPendenciaParcialPanel() {
   return (
     <View style={styles.wrap}>
       <Text style={[ts.bodySecondary, styles.intro, { color: theme.textSecondary }]}>
-        Militares com pelo menos uma sessão no Histórico, mas sem as três modalidades (corrida,
-        natação e permanência). Ao excluir sessões do histórico, as pendências são atualizadas.
+        Militares com pelo menos uma prova registrada (Aplicar TAF ou Registrador de TAF), mas sem
+        as três modalidades (corrida, natação e permanência).
       </Text>
 
       {carregando ? (

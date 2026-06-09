@@ -20,12 +20,18 @@ import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
 import { ResultadosPendenciaParcialPanel } from '../components/ResultadosPendenciaParcialPanel';
 import { ResultadosGeralPanel } from '../components/ResultadosGeralPanel';
 import type { RootStackParamList } from '../navigation/types';
+import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import {
   deleteSessaoAplicacao,
   getAllSessoesAplicacao,
   tituloTipoProva,
   type SessaoAplicacaoTaf,
 } from '../services/resultadosAplicadosIndexedDb';
+import {
+  isSessaoApenasVirtualCadastro,
+  isSessaoVirtualRegistrador,
+  unificarSessoesComCadastroRegistrador,
+} from '../utils/sessoesUnificadasResultados';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
 
@@ -46,8 +52,10 @@ export default function ResultadosScreen() {
 
   const carregar = useCallback(() => {
     setCarregando(true);
-    getAllSessoesAplicacao()
-      .then(setSessoes)
+    Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
+      .then(([cadastros, sessoes]) =>
+        setSessoes(unificarSessoesComCadastroRegistrador(sessoes, cadastros)),
+      )
       .finally(() => setCarregando(false));
   }, []);
 
@@ -123,7 +131,7 @@ export default function ResultadosScreen() {
                   Nenhuma aplicação registrada ainda.
                 </Text>
                 <Text style={[ts.caption, styles.emptyHint, { color: theme.textMuted, textAlign: 'center' }]}>
-                  Use a aba Aplicar para registrar provas; os resultados aparecerão aqui.
+                  Use Aplicar TAF ou o Registrador de TAF; os resultados aparecerão aqui.
                 </Text>
               </Card>
             ) : null}
@@ -131,6 +139,7 @@ export default function ResultadosScreen() {
             {sessoes.map((sessao) => {
               const titulo = tituloTipoProva(sessao.tipoProva);
               const qtd = sessao.resultados.length;
+              const virtualRegistrador = isSessaoVirtualRegistrador(sessao);
               const aprovados = sessao.resultados.filter(
                 (r) => r.notaTexto !== 'REPROVADO' && r.reprovacaoTexto == null,
               ).length;
@@ -153,21 +162,24 @@ export default function ResultadosScreen() {
                             {sessao.tipoProva === 'permanencia'
                               ? ` · ${aprovados} aprovado${aprovados !== 1 ? 's' : ''}`
                               : null}
+                            {virtualRegistrador ? ' · Registrador de TAF' : null}
                           </Text>
                         </View>
                         <ChevronRight size={22} color={ui.icon} strokeWidth={2.5} />
                       </PressableScale>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setErroExclusao(null);
-                          setSessaoParaExcluir(sessao);
-                        }}
-                        style={[styles.trashBtn, { borderColor: theme.loss }]}
-                        accessibilityLabel="Excluir sessão do histórico"
-                        accessibilityRole="button"
-                      >
-                        <Trash2 size={20} color={theme.loss} strokeWidth={2.2} />
-                      </TouchableOpacity>
+                      {!isSessaoApenasVirtualCadastro(sessao) ? (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setErroExclusao(null);
+                            setSessaoParaExcluir(sessao);
+                          }}
+                          style={[styles.trashBtn, { borderColor: theme.loss }]}
+                          accessibilityLabel="Excluir sessão do histórico"
+                          accessibilityRole="button"
+                        >
+                          <Trash2 size={20} color={theme.loss} strokeWidth={2.2} />
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
                   </Card>
                 </View>

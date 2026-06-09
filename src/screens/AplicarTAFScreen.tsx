@@ -35,6 +35,7 @@ import {
   ModalTesteJaAplicado,
   type ModalTesteJaAplicadoInfo,
 } from '../components/sismav/ModalTesteJaAplicado';
+import { ConfirmacaoExcluirPreCadastroModal } from '../components/sismav/ConfirmacaoExcluirPreCadastroModal';
 import {
   PermanenciaTafPanel,
   type ResultadoPermanenciaOpcao,
@@ -204,6 +205,8 @@ export default function AplicarTAFScreen() {
   const [mostrarListaPreCadastro, setMostrarListaPreCadastro] = useState(false);
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
   const [listaPreCadastros, setListaPreCadastros] = useState<PreCadastroTaf[]>([]);
+  const [preCadastroParaExcluir, setPreCadastroParaExcluir] = useState<PreCadastroTaf | null>(null);
+  const [excluindoPreCadastro, setExcluindoPreCadastro] = useState(false);
   const [mostrarProvas, setMostrarProvas] = useState(false);
   const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
   const tipoProvaRef = useRef<TipoProvaTAF | null>(null);
@@ -1535,21 +1538,27 @@ export default function AplicarTAFScreen() {
     [resetCronometroCorrida],
   );
 
-  const excluirPreCadastro = useCallback(
-    (id: string) => {
-      Alert.alert('Excluir pré-cadastro', 'Deseja remover este pré-cadastro?', [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: () => {
-            void removePreCadastroTaf(id).then(() => recarregarListaPreCadastros());
-          },
-        },
-      ]);
-    },
-    [recarregarListaPreCadastros],
-  );
+  const excluirPreCadastro = useCallback((pre: PreCadastroTaf) => {
+    setPreCadastroParaExcluir(pre);
+  }, []);
+
+  const executarExclusaoPreCadastro = useCallback(async () => {
+    if (!preCadastroParaExcluir || excluindoPreCadastro) return;
+    setExcluindoPreCadastro(true);
+    try {
+      const removido = await removePreCadastroTaf(preCadastroParaExcluir.id);
+      if (!removido) {
+        Alert.alert('Erro', 'Não foi possível encontrar este pré-cadastro para excluir.');
+        return;
+      }
+      setPreCadastroParaExcluir(null);
+      await recarregarListaPreCadastros();
+    } catch {
+      Alert.alert('Erro', 'Não foi possível excluir o pré-cadastro. Tente novamente.');
+    } finally {
+      setExcluindoPreCadastro(false);
+    }
+  }, [preCadastroParaExcluir, excluindoPreCadastro, recarregarListaPreCadastros]);
 
   const iniciarTaf = useCallback(() => {
     setModoPreCadastro(false);
@@ -1619,6 +1628,15 @@ export default function AplicarTAFScreen() {
         info={modalTesteExistente}
         onClose={fecharModalTesteExistente}
         onConfirmarRepeticao={confirmarRepeticaoTeste}
+      />
+
+      <ConfirmacaoExcluirPreCadastroModal
+        preCadastro={preCadastroParaExcluir}
+        loading={excluindoPreCadastro}
+        onClose={() => {
+          if (!excluindoPreCadastro) setPreCadastroParaExcluir(null);
+        }}
+        onConfirm={() => void executarExclusaoPreCadastro()}
       />
 
       <Modal
@@ -1890,7 +1908,7 @@ export default function AplicarTAFScreen() {
                         <TouchableOpacity
                           accessibilityLabel="Excluir pré-cadastro"
                           activeOpacity={0.85}
-                          onPress={() => excluirPreCadastro(pre.id)}
+                          onPress={() => excluirPreCadastro(pre)}
                           style={[styles.preCadastroBtnExcluir, { borderColor: theme.border }]}
                         >
                           <Text style={[ts.caption, { color: theme.textSecondary }]}>Excluir</Text>

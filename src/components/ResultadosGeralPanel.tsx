@@ -94,8 +94,8 @@ export function ResultadosGeralPanel() {
   return (
     <View style={styles.wrap}>
       <Text style={[ts.bodySecondary, styles.intro, { color: theme.textSecondary }]}>
-        Visão consolidada a partir do Histórico de aplicações. Só aparecem modalidades registradas em
-        sessões salvas; ao excluir uma sessão, os dados somem desta tabela.
+        Visão consolidada das provas registradas no Aplicar TAF e no Registrador de TAF. Modalidades
+        ausentes aparecem como &quot;—&quot;.
       </Text>
 
       <View

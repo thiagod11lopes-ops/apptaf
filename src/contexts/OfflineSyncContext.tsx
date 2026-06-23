@@ -168,18 +168,16 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Faixa global de status offline / pendências de sincronização. */
+/** Faixa global de status — visível apenas sem login Google (modo offline). */
 export function OfflineSyncBanner() {
   const { isAuthenticated } = useAuth();
-  const { online, pendingCount, openSyncPrompt } = useOfflineSyncState();
 
-  if (!isAuthenticated) return null;
+  if (isAuthenticated) return null;
 
   return (
     <OfflineStatusBanner
-      offline={!online}
-      pendingCount={pendingCount}
-      onPressSync={pendingCount > 0 ? openSyncPrompt : undefined}
+      offline
+      pendingCount={0}
     />
   );
 }

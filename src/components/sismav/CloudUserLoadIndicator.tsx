@@ -20,13 +20,14 @@ export function CloudUserLoadIndicator({ label, percent, loading }: Props) {
       <Text
         style={[
           styles.label,
+          isOfflineLabel && styles.labelOffline,
           {
             color: loading
               ? theme.textMuted
               : isOfflineLabel
                 ? theme.loss
                 : theme.gain,
-            fontWeight: isOfflineLabel ? '800' : '600',
+            fontWeight: isOfflineLabel ? '900' : '600',
           },
         ]}
       >
@@ -62,6 +63,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     width: '100%',
+  },
+  labelOffline: {
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   track: {
     width: '72%',

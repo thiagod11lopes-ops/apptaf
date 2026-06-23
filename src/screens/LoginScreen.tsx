@@ -81,6 +81,9 @@ export default function LoginScreen() {
             ) : (
               <View style={styles.avatarText}>
                 <Text style={ts.h2}>Entrar</Text>
+                <Text style={[ts.caption, { color: theme.loss, marginTop: 4, fontWeight: '800' }]}>
+                  Offline
+                </Text>
                 <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
                   Use sua conta Google para acessar os dados na nuvem
                 </Text>

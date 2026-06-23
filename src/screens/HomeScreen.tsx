@@ -4,7 +4,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useNetworkOnline } from '../services/offline/networkStatus';
-import { emailCloudLabel } from '../utils/emailCloudLabel';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
@@ -40,12 +39,6 @@ export default function HomeScreen() {
   const online = useNetworkOnline();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const [cloudLoad, setCloudLoad] = useState(LOAD_IDLE);
-
-  const cloudLabel = useMemo(() => {
-    if (!isAuthenticated) return undefined;
-    if (!online) return 'Offline';
-    return emailCloudLabel(user?.email ?? null) ?? undefined;
-  }, [isAuthenticated, user?.email, online]);
 
   const recarregarResumo = useCallback(async () => {
     if (!authReady) return;
@@ -87,13 +80,12 @@ export default function HomeScreen() {
   useAuthDataReload(recarregarResumo);
 
   const cloudLoadProps = useMemo(() => {
-    if (!cloudLabel) return undefined;
+    if (!isAuthenticated) return undefined;
     return {
-      label: cloudLabel,
       percent: cloudLoad.percent,
       loading: online ? cloudLoad.loading : false,
     };
-  }, [cloudLabel, cloudLoad.loading, cloudLoad.percent, online]);
+  }, [isAuthenticated, cloudLoad.loading, cloudLoad.percent, online]);
 
   const frameShadow =
     Platform.OS === 'web'

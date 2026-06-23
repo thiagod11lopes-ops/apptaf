@@ -7,9 +7,11 @@ import { PressableScale } from '../premium/PressableScale';
 import { FONT_BRAND, FONT_BRAND_SUB } from '../../theme/typography';
 import { PREMIUM } from '../../theme/premium';
 import { CloudUserLoadIndicator } from './CloudUserLoadIndicator';
+import { useAccountCloudLabel } from '../../hooks/useAccountCloudLabel';
 
 export type CloudUserLoadProps = {
-  label: string;
+  /** @deprecated Preferir rótulo automático via useAccountCloudLabel no AppHeader. */
+  label?: string;
   percent: number;
   loading: boolean;
 };
@@ -27,6 +29,10 @@ type Props = {
 export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack }: Props) {
   const { theme, isDark } = useTheme();
   const t = theme.tokens;
+  const accountLabel = useAccountCloudLabel();
+  const statusLabel = accountLabel;
+  const statusLoading = cloudLoad?.loading ?? false;
+  const statusPercent = cloudLoad?.percent ?? 100;
 
   if (darkHero) {
     return (
@@ -48,11 +54,11 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
           )}
           <View style={styles.heroText}>
             <Text style={[styles.heroTitle, { fontFamily: FONT_BRAND }]}>{title}</Text>
-            {cloudLoad ? (
+            {statusLabel ? (
               <CloudUserLoadIndicator
-                label={cloudLoad.label}
-                percent={cloudLoad.percent}
-                loading={cloudLoad.loading}
+                label={statusLabel}
+                percent={statusPercent}
+                loading={statusLoading && statusLabel !== 'Offline'}
               />
             ) : null}
             <View style={[styles.rule, styles.ruleCentered, { backgroundColor: 'rgba(255,255,255,0.45)' }]} />
@@ -81,11 +87,11 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
         <Text style={[theme.textStyles.brandTitle, styles.titleCenter, isDark && styles.titleOnDark]}>
           {title}
         </Text>
-        {cloudLoad ? (
+        {statusLabel ? (
           <CloudUserLoadIndicator
-            label={cloudLoad.label}
-            percent={cloudLoad.percent}
-            loading={cloudLoad.loading}
+            label={statusLabel}
+            percent={statusPercent}
+            loading={statusLoading && statusLabel !== 'Offline'}
           />
         ) : null}
         <LinearGradient

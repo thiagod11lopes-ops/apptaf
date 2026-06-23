@@ -13,7 +13,7 @@ import {
 import type { RootStackParamList } from '../../navigation/types';
 import { navigateTab } from '../../navigation/navigationRef';
 import { PressableScale } from '../premium/PressableScale';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useAccountCloudLabel } from '../../hooks/useAccountCloudLabel';
 import { FONT_BRAND, FONT_BRAND_SUB } from '../../theme/typography';
 
 const appLogo = require('../../../assets/icon.png');
@@ -33,7 +33,7 @@ type Props = {
 };
 
 export function SidebarNav({ activeRoute }: Props) {
-  const { theme } = useTheme();
+  const accountLabel = useAccountCloudLabel();
 
   return (
     <View style={styles.wrap}>
@@ -41,6 +41,17 @@ export function SidebarNav({ activeRoute }: Props) {
         <Image source={appLogo} style={styles.logo} resizeMode="contain" accessibilityLabel="TAF" />
         <Text style={[styles.brandTitle, { fontFamily: FONT_BRAND }]}>TAF</Text>
         <Text style={[styles.brandSub, { fontFamily: FONT_BRAND_SUB }]}>Sistema TAF</Text>
+        <Text
+          style={[
+            styles.accountLabel,
+            {
+              color: accountLabel === 'Offline' ? '#FCA5A5' : 'rgba(255,255,255,0.72)',
+              fontWeight: accountLabel === 'Offline' ? '800' : '600',
+            },
+          ]}
+        >
+          {accountLabel}
+        </Text>
       </View>
 
       <View style={styles.tabsList} accessibilityRole="tablist">
@@ -139,6 +150,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.6,
     marginTop: 4,
+  },
+  accountLabel: {
+    fontSize: 12,
+    marginTop: 10,
   },
   tabsList: {
     flex: 1,

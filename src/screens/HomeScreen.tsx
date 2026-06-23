@@ -3,7 +3,7 @@ import { View, StyleSheet, Image, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
-import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
+import { useNetworkOnline } from '../services/offline/networkStatus';
 import { emailCloudLabel } from '../utils/emailCloudLabel';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
@@ -37,7 +37,7 @@ const LOAD_IDLE = {
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { user, isAuthenticated, authReady } = useAuth();
-  const { online } = useOfflineSyncState();
+  const online = useNetworkOnline();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const [cloudLoad, setCloudLoad] = useState(LOAD_IDLE);
 

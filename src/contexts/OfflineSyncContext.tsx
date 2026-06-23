@@ -82,6 +82,20 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, [authReady, isAuthenticated, refreshPending]);
 
   useEffect(() => {
+    return subscribeOnlineStatus((nextOnline) => {
+      setOnline(nextOnline);
+      if (nextOnline && wasOfflineRef.current) {
+        wasOfflineRef.current = false;
+        modalDismissedRef.current = false;
+        void tryPromptAfterReconnect();
+      }
+      if (!nextOnline) {
+        wasOfflineRef.current = true;
+      }
+    });
+  }, [tryPromptAfterReconnect]);
+
+  useEffect(() => {
     if (!authReady || !isAuthenticated) return;
 
     void refreshPending().then(() => {
@@ -95,18 +109,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         })
       : () => undefined;
 
-    const unsubOnline = subscribeOnlineStatus((nextOnline) => {
-      setOnline(nextOnline);
-      if (nextOnline && wasOfflineRef.current) {
-        wasOfflineRef.current = false;
-        modalDismissedRef.current = false;
-        void tryPromptAfterReconnect();
-      }
-      if (!nextOnline) {
-        wasOfflineRef.current = true;
-      }
-    });
-
     const onAppState = (state: AppStateStatus) => {
       if (state === 'active' && isOnline()) {
         void tryPromptAfterReconnect();
@@ -116,7 +118,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
     return () => {
       unsubData();
-      unsubOnline();
       sub.remove();
     };
   }, [authReady, isAuthenticated, refreshPending, tryPromptAfterReconnect]);

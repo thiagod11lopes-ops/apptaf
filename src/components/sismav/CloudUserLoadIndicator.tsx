@@ -26,13 +26,14 @@ export function CloudUserLoadIndicator({ label, percent, loading }: Props) {
               : isOfflineLabel
                 ? theme.loss
                 : theme.gain,
+            fontWeight: isOfflineLabel ? '800' : '600',
           },
         ]}
       >
         {label}
         {loading ? ` · ${Math.round(smooth)}%` : null}
       </Text>
-      {showBar ? (
+      {showBar && !isOfflineLabel ? (
         <View style={[styles.track, { backgroundColor: theme.border }]}>
           <View
             style={[

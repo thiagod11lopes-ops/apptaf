@@ -3,6 +3,7 @@ import { View, StyleSheet, Image, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
+import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { emailCloudLabel } from '../utils/emailCloudLabel';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
@@ -36,13 +37,15 @@ const LOAD_IDLE = {
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { user, isAuthenticated, authReady } = useAuth();
+  const { online } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const [cloudLoad, setCloudLoad] = useState(LOAD_IDLE);
 
   const cloudLabel = useMemo(() => {
     if (!isAuthenticated) return undefined;
+    if (!online) return 'Offline';
     return emailCloudLabel(user?.email ?? null) ?? undefined;
-  }, [isAuthenticated, user?.email]);
+  }, [isAuthenticated, user?.email, online]);
 
   const recarregarResumo = useCallback(async () => {
     if (!authReady) return;
@@ -88,9 +91,9 @@ export default function HomeScreen() {
     return {
       label: cloudLabel,
       percent: cloudLoad.percent,
-      loading: cloudLoad.loading,
+      loading: online ? cloudLoad.loading : false,
     };
-  }, [cloudLabel, cloudLoad.loading, cloudLoad.percent]);
+  }, [cloudLabel, cloudLoad.loading, cloudLoad.percent, online]);
 
   const frameShadow =
     Platform.OS === 'web'

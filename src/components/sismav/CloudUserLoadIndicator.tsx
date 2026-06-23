@@ -13,13 +13,20 @@ export function CloudUserLoadIndicator({ label, percent, loading }: Props) {
   const { theme } = useTheme();
   const smooth = useSmoothPercent(percent, loading);
   const showBar = loading || smooth < 100;
+  const isOfflineLabel = label.trim().toLowerCase() === 'offline';
 
   return (
     <View style={styles.wrap}>
       <Text
         style={[
           styles.label,
-          { color: loading ? theme.textMuted : theme.gain },
+          {
+            color: loading
+              ? theme.textMuted
+              : isOfflineLabel
+                ? theme.loss
+                : theme.gain,
+          },
         ]}
       >
         {label}

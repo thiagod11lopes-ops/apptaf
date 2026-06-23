@@ -204,12 +204,28 @@ function enqueueSync(uid: string): void {
   );
 }
 
-export async function readOfflineCloudEntry(uid: string): Promise<CloudDataCacheEntry> {
+export async function readOfflineCloudEntry(
+  uid: string,
+  options?: { autoSync?: boolean },
+): Promise<CloudDataCacheEntry> {
   const entry = await loadEntry(uid);
-  if (isOnline()) {
+  const pendingCount = entry.pendingOps?.length ?? 0;
+  const mayAutoSync =
+    options?.autoSync !== false && isOnline() && pendingCount === 0;
+  if (mayAutoSync) {
     enqueueSync(uid);
   }
   return entry;
+}
+
+export async function hasPendingLocalChanges(uid: string): Promise<boolean> {
+  const entry = await loadEntry(uid);
+  return (entry.pendingOps?.length ?? 0) > 0;
+}
+
+/** Envia alterações locais (fila pendente) para a nuvem e reconcilia com o servidor. */
+export async function pushDeviceUpdatesToCloud(uid: string): Promise<CloudDataCacheEntry> {
+  return syncOfflineCloudData(uid);
 }
 
 async function appendPending(uid: string, op: PendingOp): Promise<CloudDataCacheEntry> {
@@ -240,7 +256,8 @@ export async function upsertCadastroOffline(uid: string, item: CadastroItemPersi
 
   const op: PendingOp = { kind: 'upsertCadastro', at: stamped.updatedAt!, item: stamped };
 
-  if (isOnline()) {
+  const hasPending = (entry.pendingOps?.length ?? 0) > 0;
+  if (isOnline() && !hasPending) {
     try {
       await executeOpOnCloud(uid, op);
       await syncOfflineCloudData(uid);
@@ -271,7 +288,7 @@ export async function upsertCadastrosLoteOffline(
   });
   await saveEntry(next);
 
-  if (isOnline()) {
+  if (isOnline() && (entry.pendingOps?.length ?? 0) === 0) {
     try {
       await addCadastrosEmLoteFirestore(uid, stamped);
       await syncOfflineCloudData(uid);
@@ -298,7 +315,8 @@ export async function deleteCadastroOffline(uid: string, id: string): Promise<vo
 
   const op: PendingOp = { kind: 'deleteCadastro', at, id };
 
-  if (isOnline()) {
+  const hasPending = (entry.pendingOps?.length ?? 0) > 0;
+  if (isOnline() && !hasPending) {
     try {
       await executeOpOnCloud(uid, op);
       await syncOfflineCloudData(uid);
@@ -327,7 +345,8 @@ export async function upsertSessaoOffline(uid: string, sessao: SessaoAplicacaoTa
 
   const op: PendingOp = { kind: 'upsertSessao', at: stamped.updatedAt!, sessao: stamped };
 
-  if (isOnline()) {
+  const hasPending = (entry.pendingOps?.length ?? 0) > 0;
+  if (isOnline() && !hasPending) {
     try {
       await executeOpOnCloud(uid, op);
       await syncOfflineCloudData(uid);
@@ -352,7 +371,8 @@ export async function deleteSessaoOffline(uid: string, id: string): Promise<void
 
   const op: PendingOp = { kind: 'deleteSessao', at, id };
 
-  if (isOnline()) {
+  const hasPending = (entry.pendingOps?.length ?? 0) > 0;
+  if (isOnline() && !hasPending) {
     try {
       await executeOpOnCloud(uid, op);
       await syncOfflineCloudData(uid);

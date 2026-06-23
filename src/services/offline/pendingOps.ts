@@ -45,3 +45,32 @@ export function applyPendingToTombstones(tombstones: Tombstones, op: PendingOp):
   }
   return next;
 }
+
+export type PendingSyncSummary = {
+  total: number;
+  cadastros: number;
+  sessoes: number;
+  exclusoes: number;
+};
+
+/** Resumo legível das alterações locais aguardando envio à nuvem. */
+export function summarizePendingOps(ops: PendingOp[] | undefined): PendingSyncSummary {
+  const compact = compactPendingOps(ops ?? []);
+  let cadastros = 0;
+  let sessoes = 0;
+  let exclusoes = 0;
+
+  for (const op of compact) {
+    if (op.kind === 'upsertCadastro') cadastros += 1;
+    else if (op.kind === 'deleteCadastro') exclusoes += 1;
+    else if (op.kind === 'upsertSessao') sessoes += 1;
+    else if (op.kind === 'deleteSessao') exclusoes += 1;
+  }
+
+  return {
+    total: compact.length,
+    cadastros,
+    sessoes,
+    exclusoes,
+  };
+}

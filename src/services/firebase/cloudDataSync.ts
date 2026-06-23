@@ -75,7 +75,8 @@ export async function loadHomeCloudData(
   if (cached && (isCloudCacheInstant(cached) || !online)) {
     setMemoryCloudCache(cached);
     showCached(cached, online);
-    if (online) {
+    const pendingCount = cached.pendingOps?.length ?? 0;
+    if (online && pendingCount === 0) {
       try {
         const entry = await syncOfflineCloudData(uid);
         onProgress({
@@ -110,7 +111,7 @@ export async function loadHomeCloudData(
   }
 
   if (!online) {
-    const entry = await readOfflineCloudEntry(uid);
+    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
     onProgress({
       percent: 100,
       loading: false,
@@ -119,6 +120,22 @@ export async function loadHomeCloudData(
       fromCache: true,
       offline: true,
       pendingSync: entry.pendingOps?.length ?? 0,
+    });
+    return entry;
+  }
+
+  const cachedBeforeSync = getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid));
+  const pendingBeforeSync = cachedBeforeSync?.pendingOps?.length ?? 0;
+  if (pendingBeforeSync > 0) {
+    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
+    onProgress({
+      percent: 100,
+      loading: false,
+      loadedCadastros: entry.cadastros.length,
+      loadedSessoes: entry.sessoes.length,
+      fromCache: true,
+      offline: false,
+      pendingSync: pendingBeforeSync,
     });
     return entry;
   }

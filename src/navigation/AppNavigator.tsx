@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { GlassBottomBar } from '../components/premium/GlassBottomBar';
 import { SettingsTopButton } from '../components/premium/SettingsTopButton';
 import { AppShell } from '../components/sismav/AppShell';
+import { OfflineSyncBanner } from '../contexts/OfflineSyncContext';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { navigationRef, getCurrentRouteName } from './navigationRef';
 import type { RootStackParamList } from './types';
@@ -72,6 +73,9 @@ export default function AppNavigator() {
           activeRoute={activeRoute}
           fullWidth={activeRoute === 'Cadastro' || activeRoute === 'AplicarTAF'}
         >
+          <View style={styles.syncSlot}>
+            <OfflineSyncBanner />
+          </View>
           <Stack.Navigator
             initialRouteName="Home"
             screenOptions={{
@@ -128,5 +132,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     overflow: Platform.OS === 'web' ? 'hidden' : 'visible',
+  },
+  syncSlot: {
+    width: '100%',
+    paddingHorizontal: 4,
+    marginBottom: 4,
+    zIndex: 2,
   },
 });

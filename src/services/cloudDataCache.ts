@@ -143,7 +143,11 @@ export async function readCloudDataCache(uid: string): Promise<CloudDataCacheEnt
 }
 
 export async function writeCloudDataCache(entry: CloudDataCacheEntry): Promise<void> {
-  if (entry.cadastros.length === 0 && entry.sessoes.length === 0) {
+  if (
+    entry.cadastros.length === 0 &&
+    entry.sessoes.length === 0 &&
+    (entry.pendingOps?.length ?? 0) === 0
+  ) {
     return;
   }
 

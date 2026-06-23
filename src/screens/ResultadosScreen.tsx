@@ -106,7 +106,7 @@ export default function ResultadosScreen() {
             { id: 'historico', label: 'Histórico' },
             { id: 'consulta', label: 'Gerenciar Resultados' },
             { id: 'geral', label: 'Resultado Geral' },
-            { id: 'pendencia', label: 'Pendência Parcial' },
+            { id: 'pendencia', label: 'Pendência' },
           ]}
           value={aba}
           onChange={setAba}

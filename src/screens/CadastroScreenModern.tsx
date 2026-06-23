@@ -625,6 +625,11 @@ export default function CadastroScreenModern() {
               showActions
               onEdit={handleEditar}
               onRequestDelete={(c) => setExcluirId(c.id)}
+              onCadastroCorrigido={(atualizado) =>
+                setCadastros((prev) =>
+                  prev.map((c) => (c.id === atualizado.id ? { ...c, ...atualizado } : c)),
+                )
+              }
             />
           ) : null}
         </View>

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform } from 'react-native';
-import { Pencil, Trash2, Search } from 'lucide-react-native';
+import { Pencil, Trash2, Search, ListFilter } from 'lucide-react-native';
+import { CorrigirNipCadastroModal } from './CorrigirNipCadastroModal';
+import { contarCadastrosComErroNip } from '../utils/nipFormat';
 import { Card } from './Card';
 import { LabelNip } from './LabelNip';
 import { LabelSO } from './LabelSO';
@@ -63,6 +65,8 @@ export type CadastroPlanilhaBlockProps = {
   showActions?: boolean;
   onEdit?: (item: CadastroItemPersist) => void;
   onRequestDelete?: (item: CadastroItemPersist) => void;
+  /** Chamado após corrigir NIP no modal de erros. */
+  onCadastroCorrigido?: (item: CadastroItemPersist) => void;
 };
 
 export function CadastroPlanilhaBlock({
@@ -74,6 +78,7 @@ export function CadastroPlanilhaBlock({
   showActions = false,
   onEdit,
   onRequestDelete,
+  onCadastroCorrigido,
 }: CadastroPlanilhaBlockProps) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -83,6 +88,9 @@ export function CadastroPlanilhaBlock({
   const [filtroBusca, setFiltroBusca] = useState<string>('');
   const [filtroModalidade, setFiltroModalidade] = useState<FiltroModalidadeTaf>('Todos');
   const [filtroData, setFiltroData] = useState<string>('');
+  const [modalErrosNipAberto, setModalErrosNipAberto] = useState(false);
+
+  const errosNipCount = useMemo(() => contarCadastrosComErroNip(cadastros), [cadastros]);
 
   const postoGradOptions = useMemo(() => {
     const oficiais = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG'];
@@ -324,23 +332,49 @@ export function CadastroPlanilhaBlock({
               onFiltroDataChange={setFiltroData}
             />
           ) : (
-            <View style={[styles.searchWrap, { borderColor: theme.border, backgroundColor: ui.inputBg }]}>
-              <Search size={18} color={ui.searchIcon} strokeWidth={2.5} />
-              <TextInput
-                value={filtroBusca}
-                onChangeText={setFiltroBusca}
-                placeholder="Digite para filtrar..."
-                placeholderTextColor={ui.placeholder}
+            <View style={styles.searchRow}>
+              <View style={[styles.searchWrap, { borderColor: theme.border, backgroundColor: ui.inputBg }]}>
+                <Search size={18} color={ui.searchIcon} strokeWidth={2.5} />
+                <TextInput
+                  value={filtroBusca}
+                  onChangeText={setFiltroBusca}
+                  placeholder="Digite para filtrar..."
+                  placeholderTextColor={ui.placeholder}
+                  style={[
+                    styles.searchInput,
+                    { borderColor: theme.border, color: ui.text, backgroundColor: ui.inputBg },
+                  ]}
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  textContentType="none"
+                  accessibilityLabel="Localizar na planilha de cadastro"
+                />
+              </View>
+              <TouchableOpacity
+                accessibilityLabel="Filtrar cadastros com erro de NIP"
+                accessibilityHint={`${errosNipCount} cadastro(s) com erro de NIP`}
+                onPress={() => setModalErrosNipAberto(true)}
                 style={[
-                  styles.searchInput,
-                  { borderColor: theme.border, color: ui.text, backgroundColor: ui.inputBg },
+                  styles.filterBtn,
+                  {
+                    borderColor: errosNipCount > 0 ? theme.loss : theme.border,
+                    backgroundColor: errosNipCount > 0 ? 'rgba(220,38,38,0.08)' : ui.inputBg,
+                  },
                 ]}
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-                autoCapitalize="none"
-                textContentType="none"
-              />
+              >
+                <ListFilter
+                  size={20}
+                  color={errosNipCount > 0 ? theme.loss : ui.searchIcon}
+                  strokeWidth={2.5}
+                />
+                {errosNipCount > 0 ? (
+                  <View style={[styles.filterBadge, { backgroundColor: theme.loss }]}>
+                    <Text style={styles.filterBadgeText}>{errosNipCount}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
             </View>
           )}
 
@@ -622,6 +656,15 @@ export function CadastroPlanilhaBlock({
           )}
         </View>
       )}
+
+      {!isAplicacaoTaf ? (
+        <CorrigirNipCadastroModal
+          visible={modalErrosNipAberto}
+          cadastros={cadastros}
+          onClose={() => setModalErrosNipAberto(false)}
+          onCorrigido={(atualizado) => onCadastroCorrigido?.(atualizado)}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -687,8 +730,14 @@ const styles = StyleSheet.create({
   },
   segmentBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
 
-  searchWrap: {
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     marginBottom: 12,
+  },
+  searchWrap: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -698,6 +747,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     backgroundColor: 'rgba(255,255,255,0.70)',
+  },
+  filterBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
   },
   searchInput: {
     flex: 1,

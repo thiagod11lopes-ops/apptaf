@@ -6,6 +6,7 @@ import { userCadastrosPath, userSessoesPath } from '../../services/firebase/fire
 import { toCadastroLight } from '../../utils/cadastroLight';
 import { toSessaoLight } from '../../utils/sessaoLight';
 import { dedupeCadastrosPorNip } from '../../utils/dedupeCadastrosPorNip';
+import { getRecordUpdatedAt } from '../../services/offline/recordTimestamps';
 import { applyRemoteCadastro, applyRemoteSessao } from '../db/localDb';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { syncLogger } from './SyncLogger';
@@ -20,10 +21,15 @@ import { systemState } from './SystemState';
 let activeUid: string | null = null;
 let unsubCadastros: (() => void) | null = null;
 let unsubSessoes: (() => void) | null = null;
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let debounceCadTimer: ReturnType<typeof setTimeout> | null = null;
+let debounceSessTimer: ReturnType<typeof setTimeout> | null = null;
 let onApplied: (() => void) | null = null;
-let applying = false;
-let pendingApply = false;
+
+let applyingCadastros = false;
+let applyingSessoes = false;
+let pendingCadastros: CadastroItemPersist[] | null = null;
+let pendingSessoes: SessaoAplicacaoTaf[] | null = null;
+let applyDepth = 0;
 
 function parseCadastros(snap: QuerySnapshot): CadastroItemPersist[] {
   const items: CadastroItemPersist[] = [];
@@ -44,76 +50,118 @@ function parseSessoes(snap: QuerySnapshot): SessaoAplicacaoTaf[] {
   return list;
 }
 
-async function applySnapshot(
-  uid: string,
-  cadastros: CadastroItemPersist[],
-  sessoes: SessaoAplicacaoTaf[],
-): Promise<void> {
-  if (activeUid !== uid) return;
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+function isOnline(): boolean {
+  return typeof navigator === 'undefined' || navigator.onLine !== false;
+}
 
-  applying = true;
-  beginRealtimeApply();
+function beginApplyScope(): void {
+  if (applyDepth === 0) beginRealtimeApply();
+  applyDepth += 1;
+}
+
+function endApplyScope(): void {
+  applyDepth = Math.max(0, applyDepth - 1);
+  if (applyDepth === 0) endRealtimeApply();
+}
+
+function buildRemoteCadastro(cad: CadastroItemPersist, uid: string) {
+  const updatedAt = getRecordUpdatedAt(cad);
+  return {
+    ...cad,
+    ownerUid: uid,
+    version: Math.max(1, Math.floor(updatedAt / 1000)),
+    syncStatus: 'synced' as const,
+    deleted: false,
+    deviceId: 'remote',
+    userId: getCachedLoginUid(),
+    createdAt: updatedAt || Date.now(),
+    updatedAt: updatedAt || Date.now(),
+    lastModifiedBy: 'remote',
+  };
+}
+
+function buildRemoteSessao(sess: SessaoAplicacaoTaf, uid: string) {
+  const updatedAt = getRecordUpdatedAt(sess);
+  return {
+    ...sess,
+    ownerUid: uid,
+    version: Math.max(1, Math.floor(updatedAt / 1000)),
+    syncStatus: 'synced' as const,
+    deleted: false,
+    deviceId: 'remote',
+    userId: getCachedLoginUid(),
+    createdAt: Date.parse(sess.criadoEm) || updatedAt || Date.now(),
+    updatedAt: updatedAt || Date.parse(sess.criadoEm) || Date.now(),
+    lastModifiedBy: 'remote',
+  };
+}
+
+async function applyCadastrosSnapshot(uid: string, cadastros: CadastroItemPersist[]): Promise<void> {
+  if (activeUid !== uid || !isOnline()) return;
+  if (applyingCadastros) {
+    pendingCadastros = cadastros;
+    return;
+  }
+
+  applyingCadastros = true;
+  beginApplyScope();
   try {
     for (const cad of cadastros) {
-      await applyRemoteCadastro(
-        {
-          ...cad,
-          ownerUid: uid,
-          version: cad.updatedAt ? 1 : 1,
-          syncStatus: 'synced',
-          deleted: false,
-          deviceId: 'remote',
-          userId: getCachedLoginUid(),
-          createdAt: cad.updatedAt ?? Date.now(),
-          lastModifiedBy: 'remote',
-        },
-        uid,
-      );
-    }
-    for (const sess of sessoes) {
-      await applyRemoteSessao(
-        {
-          ...sess,
-          ownerUid: uid,
-          version: 1,
-          syncStatus: 'synced',
-          deleted: false,
-          deviceId: 'remote',
-          userId: getCachedLoginUid(),
-          createdAt: Date.parse(sess.criadoEm) || Date.now(),
-          lastModifiedBy: 'remote',
-        },
-        uid,
-      );
+      await applyRemoteCadastro(buildRemoteCadastro(cad, uid), uid);
     }
     setCloudSyncResult(true);
     onApplied?.();
-    await syncLogger.info('realtime', `Snapshot aplicado (${cadastros.length} cad, ${sessoes.length} sess)`);
+    await syncLogger.info('realtime', `Cadastros aplicados (${cadastros.length})`);
   } finally {
-    applying = false;
-    endRealtimeApply();
-    if (pendingApply) {
-      pendingApply = false;
-      scheduleApply(uid);
+    applyingCadastros = false;
+    endApplyScope();
+    if (pendingCadastros) {
+      const next = pendingCadastros;
+      pendingCadastros = null;
+      void applyCadastrosSnapshot(uid, next);
     }
   }
 }
 
-let latestCadastros: CadastroItemPersist[] = [];
-let latestSessoes: SessaoAplicacaoTaf[] = [];
-let cadReady = false;
-let sessReady = false;
-
-function scheduleApply(uid: string): void {
-  if (!cadReady || !sessReady || applying) {
-    pendingApply = true;
+async function applySessoesSnapshot(uid: string, sessoes: SessaoAplicacaoTaf[]): Promise<void> {
+  if (activeUid !== uid || !isOnline()) return;
+  if (applyingSessoes) {
+    pendingSessoes = sessoes;
     return;
   }
-  if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    void applySnapshot(uid, latestCadastros, latestSessoes);
-  }, 250);
+
+  applyingSessoes = true;
+  beginApplyScope();
+  try {
+    for (const sess of sessoes) {
+      await applyRemoteSessao(buildRemoteSessao(sess, uid), uid);
+    }
+    setCloudSyncResult(true);
+    onApplied?.();
+    await syncLogger.info('realtime', `Sessões aplicadas (${sessoes.length})`);
+  } finally {
+    applyingSessoes = false;
+    endApplyScope();
+    if (pendingSessoes) {
+      const next = pendingSessoes;
+      pendingSessoes = null;
+      void applySessoesSnapshot(uid, next);
+    }
+  }
+}
+
+function scheduleCadastrosApply(uid: string, cadastros: CadastroItemPersist[]): void {
+  if (debounceCadTimer) clearTimeout(debounceCadTimer);
+  debounceCadTimer = setTimeout(() => {
+    void applyCadastrosSnapshot(uid, cadastros);
+  }, 200);
+}
+
+function scheduleSessoesApply(uid: string, sessoes: SessaoAplicacaoTaf[]): void {
+  if (debounceSessTimer) clearTimeout(debounceSessTimer);
+  debounceSessTimer = setTimeout(() => {
+    void applySessoesSnapshot(uid, sessoes);
+  }, 200);
 }
 
 export function startRealtimeSync(uid: string, onUpdate: () => void): void {
@@ -124,17 +172,13 @@ export function startRealtimeSync(uid: string, onUpdate: () => void): void {
 
   activeUid = uid;
   onApplied = onUpdate;
-  cadReady = false;
-  sessReady = false;
   setRealtimeListening(true);
 
   unsubCadastros = onSnapshot(
     collection(db, userCadastrosPath(uid)),
     (snap) => {
       if (activeUid !== uid) return;
-      latestCadastros = parseCadastros(snap);
-      cadReady = true;
-      scheduleApply(uid);
+      scheduleCadastrosApply(uid, parseCadastros(snap));
     },
     () => setRealtimeListening(false),
   );
@@ -143,9 +187,7 @@ export function startRealtimeSync(uid: string, onUpdate: () => void): void {
     collection(db, userSessoesPath(uid)),
     (snap) => {
       if (activeUid !== uid) return;
-      latestSessoes = parseSessoes(snap);
-      sessReady = true;
-      scheduleApply(uid);
+      scheduleSessoesApply(uid, parseSessoes(snap));
     },
     () => setRealtimeListening(false),
   );
@@ -153,11 +195,16 @@ export function startRealtimeSync(uid: string, onUpdate: () => void): void {
 
 export function stopRealtimeSync(): void {
   activeUid = null;
-  cadReady = false;
-  sessReady = false;
   onApplied = null;
-  if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = null;
+  pendingCadastros = null;
+  pendingSessoes = null;
+  applyingCadastros = false;
+  applyingSessoes = false;
+  applyDepth = 0;
+  if (debounceCadTimer) clearTimeout(debounceCadTimer);
+  if (debounceSessTimer) clearTimeout(debounceSessTimer);
+  debounceCadTimer = null;
+  debounceSessTimer = null;
   unsubCadastros?.();
   unsubSessoes?.();
   unsubCadastros = null;

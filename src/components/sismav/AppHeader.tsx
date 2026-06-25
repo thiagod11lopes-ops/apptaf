@@ -30,12 +30,13 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
   const { theme, isDark } = useTheme();
   const t = theme.tokens;
   const {
-    label: statusLabel,
+    accountLabel,
+    statusSuffix,
     loading: statusLoading,
     percent: statusPercent,
     uploading,
     syncing,
-    syncedWithCloud,
+    receivingFromCloudOnly,
     statusHint,
   } = useCloudSyncHeaderStatus(cloudLoad);
 
@@ -59,14 +60,15 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
           )}
           <View style={styles.heroText}>
             <Text style={[styles.heroTitle, { fontFamily: FONT_BRAND }]}>{title}</Text>
-            {statusLabel ? (
+            {accountLabel ? (
               <CloudUserLoadIndicator
-                label={statusLabel}
+                accountName={accountLabel}
+                statusSuffix={statusSuffix}
                 percent={statusPercent}
-                loading={statusLoading && statusLabel !== 'Offline'}
+                loading={statusLoading && accountLabel !== 'Offline'}
                 uploading={uploading}
                 syncing={syncing}
-                syncedWithCloud={syncedWithCloud}
+                receivingFromCloudOnly={receivingFromCloudOnly}
                 statusHint={statusHint}
               />
             ) : null}
@@ -96,14 +98,15 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
         <Text style={[theme.textStyles.brandTitle, styles.titleCenter, isDark && styles.titleOnDark]}>
           {title}
         </Text>
-        {statusLabel ? (
+        {accountLabel ? (
           <CloudUserLoadIndicator
-            label={statusLabel}
+            accountName={accountLabel}
+            statusSuffix={statusSuffix}
             percent={statusPercent}
-            loading={statusLoading && statusLabel !== 'Offline'}
+            loading={statusLoading && accountLabel !== 'Offline'}
             uploading={uploading}
             syncing={syncing}
-            syncedWithCloud={syncedWithCloud}
+            receivingFromCloudOnly={receivingFromCloudOnly}
             statusHint={statusHint}
           />
         ) : null}

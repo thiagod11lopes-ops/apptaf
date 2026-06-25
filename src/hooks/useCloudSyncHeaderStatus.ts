@@ -38,13 +38,18 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     pendingCount === 0 &&
     activity.cloudReady;
 
-  const label = useMemo(() => {
-    if (!isOnlineAccount) return accountLabel;
-    if (syncingCloud) return `${accountLabel} · sincronizando com a nuvem`;
-    if (uploadingCloud) return `${accountLabel} · enviando para a nuvem`;
-    if (pendingCount > 0 && online) return `${accountLabel} · ${pendingCount} na fila`;
-    return accountLabel;
-  }, [accountLabel, isOnlineAccount, online, pendingCount, syncingCloud, uploadingCloud]);
+  const statusSuffix = useMemo(() => {
+    if (!isOnlineAccount) return null;
+    if (syncingCloud) return 'sincronizando com a nuvem';
+    if (uploadingCloud) return 'enviando para a nuvem';
+    if (pendingCount > 0 && online) return `${pendingCount} na fila`;
+    return null;
+  }, [isOnlineAccount, online, pendingCount, syncingCloud, uploadingCloud]);
+
+  const label = statusSuffix ? `${accountLabel} · ${statusSuffix}` : accountLabel;
+
+  /** Exibindo somente dados confirmados da nuvem (nuvem verde). */
+  const receivingFromCloudOnly = syncedWithCloud;
 
   const statusHint = useMemo(() => {
     if (!isOnlineAccount) return null;
@@ -75,12 +80,15 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
         : 100;
 
   return {
+    accountLabel,
     label,
+    statusSuffix,
     loading,
     percent,
     uploading: uploadingCloud,
     syncing: syncingCloud,
     syncedWithCloud,
+    receivingFromCloudOnly,
     statusHint,
     isOnlineAccount,
   };

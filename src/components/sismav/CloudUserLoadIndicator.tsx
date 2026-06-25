@@ -1,72 +1,83 @@
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { Cloud, CloudUpload } from 'lucide-react-native';
+import { Cloud } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSmoothPercent } from '../../hooks/useSmoothPercent';
 
 type Props = {
-  label: string;
+  /** Nome ou e-mail da conta (sem sufixo de sync). */
+  accountName: string;
+  /** Texto opcional após o nome (ex.: "sincronizando com a nuvem"). */
+  statusSuffix?: string | null;
   percent: number;
   loading: boolean;
   /** Envio ativo para Firebase (tempo real). */
   uploading?: boolean;
   /** Download/reconciliação com Firebase. */
   syncing?: boolean;
-  /** Última leitura confirmada com a nuvem. */
-  syncedWithCloud?: boolean;
+  /** Dados exibidos vêm somente da nuvem (nuvem verde). */
+  receivingFromCloudOnly?: boolean;
   statusHint?: string | null;
 };
 
 export function CloudUserLoadIndicator({
-  label,
+  accountName,
+  statusSuffix = null,
   percent,
   loading,
   uploading = false,
   syncing = false,
-  syncedWithCloud = false,
+  receivingFromCloudOnly = false,
   statusHint = null,
 }: Props) {
   const { theme } = useTheme();
   const smooth = useSmoothPercent(percent, loading);
   const showBar = loading || smooth < 100;
-  const isOfflineLabel = label.trim().toLowerCase() === 'offline';
+  const isOfflineLabel = accountName.trim().toLowerCase() === 'offline';
   const showUploadPulse = uploading && !isOfflineLabel;
   const showSyncPulse = syncing && !isOfflineLabel;
   const hint = statusHint?.trim() || null;
+  const cloudColor = receivingFromCloudOnly ? theme.gain : theme.loss;
+  const cloudA11y = receivingFromCloudOnly
+    ? 'Recebendo dados somente da nuvem'
+    : 'Não está recebendo dados da nuvem';
+
+  const suffix = statusSuffix?.trim() || null;
 
   return (
     <View style={styles.wrap}>
       <View style={styles.labelRow}>
-        {showUploadPulse ? (
-          <CloudUpload size={14} color={theme.primary} strokeWidth={2.4} />
-        ) : showSyncPulse ? (
-          <ActivityIndicator size="small" color={theme.primary} />
-        ) : syncedWithCloud && !isOfflineLabel ? (
-          <Cloud size={14} color={theme.gain} strokeWidth={2.4} />
-        ) : loading && !isOfflineLabel ? (
-          <ActivityIndicator size="small" color={theme.gain} />
+        <Cloud
+          size={16}
+          color={cloudColor}
+          strokeWidth={2.4}
+          accessibilityLabel={cloudA11y}
+        />
+        {showSyncPulse || (showUploadPulse && loading) ? (
+          <ActivityIndicator size="small" color={theme.primary} style={styles.inlineSpinner} />
         ) : null}
         <Text
           style={[
             styles.label,
             isOfflineLabel && styles.labelOffline,
             (showUploadPulse || showSyncPulse) && styles.labelUploading,
-            syncedWithCloud && !loading && styles.labelSynced,
+            receivingFromCloudOnly && !loading && styles.labelSynced,
             {
               color: showUploadPulse || showSyncPulse
                 ? theme.primary
-                : syncedWithCloud && !loading
+                : receivingFromCloudOnly && !loading
                   ? theme.gain
                   : loading
                     ? theme.textMuted
                     : isOfflineLabel
                       ? theme.loss
-                      : theme.gain,
+                      : theme.text,
               fontWeight: isOfflineLabel || showUploadPulse || showSyncPulse ? '800' : '600',
             },
           ]}
         >
-          {label}
+          {accountName}
+          {suffix ? ` · ${suffix}` : ''}
           {loadingInitialPercent(showSyncPulse, showUploadPulse, loading, isOfflineLabel, smooth)}
         </Text>
       </View>
@@ -78,7 +89,7 @@ export function CloudUserLoadIndicator({
               {
                 width: `${Math.max(0, Math.min(100, showUploadPulse ? 72 : showSyncPulse ? 48 : smooth))}%`,
                 backgroundColor:
-                  showUploadPulse || showSyncPulse ? theme.primary : theme.gain,
+                  showUploadPulse || showSyncPulse ? theme.primary : receivingFromCloudOnly ? theme.gain : theme.loss,
               },
             ]}
           />
@@ -89,8 +100,8 @@ export function CloudUserLoadIndicator({
           style={[
             styles.hint,
             {
-              color: syncedWithCloud && !loading ? theme.gain : theme.textMuted,
-              fontWeight: syncedWithCloud && !loading ? '700' : '600',
+              color: receivingFromCloudOnly && !loading ? theme.gain : theme.textMuted,
+              fontWeight: receivingFromCloudOnly && !loading ? '700' : '600',
             },
           ]}
         >
@@ -126,6 +137,9 @@ const styles = StyleSheet.create({
     gap: 6,
     width: '100%',
     paddingHorizontal: 8,
+  },
+  inlineSpinner: {
+    marginLeft: -2,
   },
   label: {
     fontSize: 13,

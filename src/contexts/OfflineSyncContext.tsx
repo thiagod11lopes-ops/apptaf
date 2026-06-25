@@ -11,30 +11,17 @@ import React, {
 import { AppState, type AppStateStatus } from 'react-native';
 import { useAuth } from './AuthContext';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
-import { canAttemptCloudSync, subscribeOnlineStatus } from '../services/offline/networkStatus';
-import {
-  pushDeviceUpdatesToCloud,
-  readOfflineCloudEntry,
-  subscribeOfflineData,
-} from '../services/offline/offlineCloudEngine';
-import {
-  startCloudFirestoreRealtime,
-  stopCloudFirestoreRealtime,
-} from '../services/offline/cloudFirestoreRealtime';
-import {
-  getCloudActivityState,
-  subscribeCloudActivity,
-} from '../services/offline/cloudSyncActivity';
-import { isCloudCacheFresh } from '../services/cloudDataCache';
-import {
-  summarizePendingOps,
-  type PendingSyncSummary,
-} from '../services/offline/pendingOps';
+import { connectivityMonitor, getConnectivityState } from '../offline-first/sync/ConnectivityMonitor';
+import { syncEngine } from '../offline-first/sync/SyncEngine';
+import { dataStore } from '../offline-first/store/DataStore';
+import type { PendingSyncSummary } from '../services/offline/pendingOps';
 import { ConfirmacaoSincronizarNuvemModal } from '../components/sismav/ConfirmacaoSincronizarNuvemModal';
 import { OfflineStatusBanner } from '../components/sismav/OfflineStatusBanner';
+import type { ConnectivityState } from '../offline-first/types';
 
 type OfflineSyncContextType = {
   online: boolean;
+  connectivity: ConnectivityState;
   pendingCount: number;
   pendingSummary: PendingSyncSummary;
   syncing: boolean;
@@ -45,8 +32,8 @@ type OfflineSyncContextType = {
 const OfflineSyncContext = createContext<OfflineSyncContextType | null>(null);
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, authReady, user, isAuthorizedMember } = useAuth();
-  const [online, setOnline] = useState(() => canAttemptCloudSync());
+  const { isAuthenticated, authReady } = useAuth();
+  const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingSummary, setPendingSummary] = useState<PendingSyncSummary>({
     total: 0,
@@ -56,10 +43,9 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   });
   const [modalVisible, setModalVisible] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [cloudUploading, setCloudUploading] = useState(false);
-  const wasOfflineRef = useRef(!canAttemptCloudSync());
-  const modalDismissedRef = useRef(false);
   const autoSyncInFlightRef = useRef(false);
+
+  const online = connectivity === 'ONLINE' || connectivity === 'DEGRADED' || connectivity === 'SYNCING';
 
   const refreshPending = useCallback(async () => {
     const uid = getCachedDataOwnerUid();
@@ -68,41 +54,29 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       setPendingSummary({ total: 0, cadastros: 0, sessoes: 0, exclusoes: 0 });
       return;
     }
-    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
-    const summary = summarizePendingOps(entry.pendingOps);
-    setPendingCount(summary.total);
-    setPendingSummary(summary);
+    const count = await dataStore.pendingCount(uid);
+    setPendingCount(count);
+    setPendingSummary({
+      total: count,
+      cadastros: count,
+      sessoes: 0,
+      exclusoes: 0,
+    });
   }, [isAuthenticated]);
 
   const openSyncPrompt = useCallback(() => {
     if (pendingCount <= 0) return;
-    modalDismissedRef.current = false;
     setModalVisible(true);
   }, [pendingCount]);
 
   const autoSyncWithCloud = useCallback(async () => {
-    if (!authReady || !isAuthenticated || !canAttemptCloudSync() || autoSyncInFlightRef.current) return;
-    const uid = getCachedDataOwnerUid();
-    if (!uid) return;
-
+    if (!authReady || !isAuthenticated || !connectivityMonitor.canSync() || autoSyncInFlightRef.current) {
+      return;
+    }
     autoSyncInFlightRef.current = true;
     setSyncing(true);
     try {
-      const activity = getCloudActivityState();
-      const cached = await readOfflineCloudEntry(uid, { autoSync: false });
-      const pending = cached.pendingOps?.length ?? 0;
-
-      if (
-        activity.realtimeListening &&
-        activity.cloudReady &&
-        pending === 0 &&
-        isCloudCacheFresh(cached)
-      ) {
-        await refreshPending();
-        return;
-      }
-
-      await pushDeviceUpdatesToCloud(uid);
+      await syncEngine.scheduleProcess(true);
       await refreshPending();
     } finally {
       setSyncing(false);
@@ -110,82 +84,37 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     }
   }, [authReady, isAuthenticated, refreshPending]);
 
-  const tryPromptAfterReconnect = useCallback(async () => {
-    if (!authReady || !isAuthenticated || !canAttemptCloudSync()) return;
-    await autoSyncWithCloud();
-  }, [authReady, isAuthenticated, autoSyncWithCloud]);
+  useEffect(() => {
+    connectivityMonitor.start();
+    return connectivityMonitor.subscribe(setConnectivity);
+  }, []);
 
   useEffect(() => {
-    return subscribeOnlineStatus(() => {
-      const syncAllowed = canAttemptCloudSync();
-      setOnline(syncAllowed);
-      if (syncAllowed && wasOfflineRef.current) {
-        wasOfflineRef.current = false;
-        modalDismissedRef.current = false;
-        void tryPromptAfterReconnect();
-      }
-      if (!syncAllowed) {
-        wasOfflineRef.current = true;
-      }
-    });
-  }, [tryPromptAfterReconnect]);
+    if (!authReady || !isAuthenticated) return;
+    void refreshPending();
+    return dataStore.subscribe(() => void refreshPending());
+  }, [authReady, isAuthenticated, refreshPending]);
 
   useEffect(() => {
-    if (!authReady || !isAuthenticated || !online) {
-      stopCloudFirestoreRealtime();
-      return;
-    }
+    if (!authReady || !isAuthenticated || !online) return;
+    void autoSyncWithCloud();
+  }, [authReady, isAuthenticated, online, connectivity, autoSyncWithCloud]);
 
-    const uid = getCachedDataOwnerUid();
-    if (!uid) {
-      stopCloudFirestoreRealtime();
-      return;
-    }
-
-    const stopRealtime = startCloudFirestoreRealtime(uid);
-
-    void refreshPending().then(() => {
-      if (canAttemptCloudSync()) void tryPromptAfterReconnect();
-    });
-
-    const unsubData = subscribeOfflineData(() => {
-      void refreshPending();
-    });
-
-    const unsubActivity = subscribeCloudActivity((state) => {
-      setCloudUploading(state.uploading);
-    });
-
+  useEffect(() => {
+    if (!authReady || !isAuthenticated) return;
     const onAppState = (state: AppStateStatus) => {
-      if (state === 'active' && canAttemptCloudSync()) {
-        void tryPromptAfterReconnect();
+      if (state === 'active' && connectivityMonitor.canSync()) {
+        void autoSyncWithCloud();
       }
     };
     const sub = AppState.addEventListener('change', onAppState);
-
-    return () => {
-      stopRealtime();
-      unsubData();
-      unsubActivity();
-      sub.remove();
-    };
-  }, [
-    authReady,
-    isAuthenticated,
-    online,
-    user?.uid,
-    isAuthorizedMember,
-    refreshPending,
-    tryPromptAfterReconnect,
-  ]);
+    return () => sub.remove();
+  }, [authReady, isAuthenticated, autoSyncWithCloud]);
 
   const confirmSync = useCallback(async () => {
-    const uid = getCachedDataOwnerUid();
-    if (!uid) return;
     setSyncing(true);
     try {
-      await pushDeviceUpdatesToCloud(uid);
-      modalDismissedRef.current = false;
+      await syncEngine.forceSync();
       setModalVisible(false);
       await refreshPending();
     } finally {
@@ -193,26 +122,19 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshPending]);
 
-  const dismissModal = useCallback(() => {
-    modalDismissedRef.current = true;
-    setModalVisible(false);
-  }, []);
-
-  useEffect(() => {
-    if (!authReady || !isAuthenticated || !online) return;
-    void autoSyncWithCloud();
-  }, [authReady, isAuthenticated, online, autoSyncWithCloud]);
+  const dismissModal = useCallback(() => setModalVisible(false), []);
 
   const value = useMemo(
     () => ({
       online,
+      connectivity,
       pendingCount,
       pendingSummary,
-      syncing,
-      cloudUploading: cloudUploading || getCloudActivityState().uploading,
+      syncing: syncing || connectivity === 'SYNCING',
+      cloudUploading: connectivity === 'SYNCING',
       openSyncPrompt,
     }),
-    [online, pendingCount, pendingSummary, syncing, cloudUploading, openSyncPrompt],
+    [online, connectivity, pendingCount, pendingSummary, syncing, openSyncPrompt],
   );
 
   return (
@@ -231,18 +153,10 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Faixa global de status — visível apenas sem login Google (modo offline). */
 export function OfflineSyncBanner() {
   const { isAuthenticated } = useAuth();
-
   if (isAuthenticated) return null;
-
-  return (
-    <OfflineStatusBanner
-      offline
-      pendingCount={0}
-    />
-  );
+  return <OfflineStatusBanner offline pendingCount={0} />;
 }
 
 export function useOfflineSyncState(): OfflineSyncContextType {

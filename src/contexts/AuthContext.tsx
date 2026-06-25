@@ -21,10 +21,10 @@ import {
 import { resolveMemberAccess } from '../services/firebase/authorizedEmailsFirestore';
 import { getCachedDataOwnerUid, setAuthUidState } from '../services/firebase/authUid';
 import { clearMemoryCloudCache, clearCloudDataCache } from '../services/cloudDataCache';
-import { readOfflineCloudEntry } from '../services/offline/offlineCloudEngine';
-import { migrateLocalDeviceDataOnLogin } from '../services/migrateLocalOnLogin';
+import { migrateLegacyToDexie } from '../offline-first/db/migration';
+import { syncEngine } from '../offline-first/sync/SyncEngine';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
-import { stopCloudFirestoreRealtime } from '../services/offline/cloudFirestoreRealtime';
+import { stopRealtimeSync } from '../offline-first/sync/RealtimeBridge';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -81,10 +81,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           resetCloudSyncStatus();
           void (async () => {
             try {
-              await migrateLocalDeviceDataOnLogin(access.dataOwnerUid);
-              await readOfflineCloudEntry(access.dataOwnerUid, { forcePull: true });
+              await migrateLegacyToDexie(access.dataOwnerUid);
+              await syncEngine.init(access.dataOwnerUid);
+              await syncEngine.forceSync();
             } catch {
-              // Login continua; sync pode ser retentado pelo OfflineSyncContext.
+              // Login continua; sync retentado pelo motor offline-first.
             }
           })();
         })();
@@ -119,7 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthUidState(null, null, true);
     clearMemoryCloudCache();
     resetCloudSyncStatus();
-    stopCloudFirestoreRealtime();
+    syncEngine.shutdown();
+    stopRealtimeSync();
     if (dataUid) {
       await clearCloudDataCache(dataUid);
     }

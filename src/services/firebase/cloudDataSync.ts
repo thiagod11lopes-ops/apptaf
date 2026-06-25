@@ -1,16 +1,10 @@
-import type { CadastroItemPersist } from '../cadastrosIndexedDb';
-import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
-import {
-  readCloudDataCache,
-  getMemoryCloudCache,
-  setMemoryCloudCache,
-  type CloudDataCacheEntry,
-} from '../cloudDataCache';
-import { calcularResumoInicioTafFromHistorico } from '../../utils/resultadoGeralHistorico';
+import type { CloudDataCacheEntry } from '../cloudDataCache';
+import { getTafDatabase } from '../offline-first/db/tafDatabase';
+import { dataStore } from '../offline-first/store/DataStore';
 import { waitForAuthenticatedUid } from './authUid';
 import { canAttemptCloudSync } from '../offline/networkStatus';
 import { getCloudActivityState, subscribeCloudActivity } from '../offline/cloudSyncActivity';
-import { readOfflineCloudEntry } from '../offline/offlineCloudEngine';
+import { syncEngine } from '../offline-first/sync/SyncEngine';
 
 export type CloudDataLoadState = {
   percent: number;
@@ -22,22 +16,6 @@ export type CloudDataLoadState = {
   pendingSync?: number;
 };
 
-function buildCacheEntry(
-  uid: string,
-  cadastros: CadastroItemPersist[],
-  sessoes: SessaoAplicacaoTaf[],
-): CloudDataCacheEntry {
-  return {
-    uid,
-    cadastros,
-    sessoes,
-    resumo: calcularResumoInicioTafFromHistorico(sessoes, cadastros),
-    syncedAt: Date.now(),
-    pendingOps: [],
-    tombstones: { cadastros: {}, sessoes: {} },
-  };
-}
-
 export async function loadHomeCloudData(
   onProgress: (state: CloudDataLoadState) => void,
   options?: { forceRefresh?: boolean },
@@ -46,85 +24,62 @@ export async function loadHomeCloudData(
   if (!uid) return null;
 
   const online = canAttemptCloudSync();
-  const forceRefresh = options?.forceRefresh === true;
+  const useDexie = getTafDatabase() != null;
 
-  const cached =
-    !forceRefresh
-      ? getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid))
-      : null;
-
-  const report = (entry: CloudDataCacheEntry, loading: boolean, fromCache: boolean) => {
+  const reportFromStore = async (loading: boolean, fromCache: boolean) => {
+    const cadastros = await dataStore.getCadastros(uid);
+    const sessoes = await dataStore.getSessoes(uid);
+    const resumo = await dataStore.getResumo(uid);
     onProgress({
-      percent: loading ? getCloudActivityState().syncProgress || 12 : 100,
+      percent: loading ? getCloudActivityState().syncProgress || 15 : 100,
       loading,
+      loadedCadastros: cadastros.length,
+      loadedSessoes: sessoes.length,
+      fromCache,
+      offline: !online,
+      pendingSync: await dataStore.pendingCount(uid),
+    });
+    return {
+      uid,
+      cadastros,
+      sessoes,
+      resumo,
+      syncedAt: Date.now(),
+      pendingOps: [],
+      tombstones: { cadastros: {}, sessoes: {} },
+    } satisfies CloudDataCacheEntry;
+  };
+
+  if (!useDexie) {
+    const { readOfflineCloudEntry } = await import('../offline/offlineCloudEngine');
+    const entry = await readOfflineCloudEntry(uid, { autoSync: online, forcePull: options?.forceRefresh });
+    onProgress({
+      percent: 100,
+      loading: false,
       loadedCadastros: entry.cadastros.length,
       loadedSessoes: entry.sessoes.length,
-      fromCache,
+      fromCache: false,
       offline: !online,
       pendingSync: entry.pendingOps?.length ?? 0,
     });
-  };
-
-  if (!online) {
-    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
-    report(entry, false, true);
     return entry;
   }
 
-  if (cached && (cached.cadastros.length > 0 || cached.sessoes.length > 0)) {
-    setMemoryCloudCache(cached);
-    report(cached, true, true);
-  } else {
-    onProgress({
-      percent: 8,
-      loading: true,
-      loadedCadastros: 0,
-      loadedSessoes: 0,
-      fromCache: false,
-      offline: false,
-    });
-  }
+  await reportFromStore(online, true);
 
-  const unsubProgress = subscribeCloudActivity((state) => {
+  const unsub = subscribeCloudActivity((state) => {
     if (!state.syncing) return;
-    const current = getMemoryCloudCache(uid) ?? cached;
-    onProgress({
-      percent: Math.max(state.syncProgress, 12),
-      loading: true,
-      loadedCadastros: current?.cadastros.length ?? 0,
-      loadedSessoes: current?.sessoes.length ?? 0,
-      fromCache: true,
-      offline: false,
-      pendingSync: current?.pendingOps?.length ?? 0,
-    });
+    void reportFromStore(true, true);
   });
 
   try {
-    const entry = await readOfflineCloudEntry(uid, {
-      autoSync: true,
-      forcePull: forceRefresh,
-    });
-    report(entry, false, false);
-    return entry;
-  } catch (error) {
-    if (cached) {
-      report(cached, false, true);
-      return cached;
+    if (online && options?.forceRefresh) {
+      await syncEngine.forceSync();
+    } else if (online) {
+      await syncEngine.scheduleProcess(true);
     }
-    throw error;
+    return await reportFromStore(false, false);
   } finally {
-    unsubProgress();
+    unsub();
   }
 }
-
-export function getCachedCadastros(uid: string): CadastroItemPersist[] | null {
-  const mem = getMemoryCloudCache(uid);
-  return mem?.cadastros ?? null;
-}
-
-export function getCachedSessoes(uid: string): SessaoAplicacaoTaf[] | null {
-  const mem = getMemoryCloudCache(uid);
-  return mem?.sessoes ?? null;
-}
-
-export { buildCacheEntry };

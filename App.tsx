@@ -5,8 +5,10 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
-import { AuthProvider } from './src/contexts/AuthContext';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { OfflineSyncProvider } from './src/contexts/OfflineSyncContext';
+import { DataStoreProvider } from './src/offline-first/store/DataStoreContext';
+import { getCachedDataOwnerUid } from './src/services/firebase/authUid';
 import { PhoneFrameShell } from './src/components/premium/PhoneFrameShell';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -35,6 +37,9 @@ function AppRoot() {
       root.style.display = 'flex';
       root.style.flexDirection = 'column';
     }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+    }
     body.style.backgroundColor = theme.tokens.bg;
     html.classList.toggle('dark', isDark);
   }, [isDark, themeMode, theme.tokens.bg]);
@@ -58,6 +63,12 @@ function AppRoot() {
   );
 }
 
+function AppWithDataStore({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  const ownerUid = isAuthenticated ? getCachedDataOwnerUid() : null;
+  return <DataStoreProvider ownerUid={ownerUid}>{children}</DataStoreProvider>;
+}
+
 function AppWithTheme() {
   const { fontsLoaded, fontError } = useAppFonts();
   const ready = fontsLoaded || (Platform.OS === 'web' && !!fontError);
@@ -73,9 +84,11 @@ function AppWithTheme() {
   return (
     <ThemeProvider fontsLoaded={fontsLoaded && !fontError}>
       <AuthProvider>
-        <OfflineSyncProvider>
-          <AppRoot />
-        </OfflineSyncProvider>
+        <AppWithDataStore>
+          <OfflineSyncProvider>
+            <AppRoot />
+          </OfflineSyncProvider>
+        </AppWithDataStore>
       </AuthProvider>
     </ThemeProvider>
   );

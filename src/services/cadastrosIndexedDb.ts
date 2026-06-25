@@ -34,13 +34,20 @@ export type CadastroItemPersist = {
 };
 
 import { toCadastroLight } from '../utils/cadastroLight';
-import { waitForAuthenticatedUid } from './firebase/authUid';
+import { waitForAuthenticatedUid, getCachedLoginUid } from './firebase/authUid';
+import { getTafDatabase } from '../offline-first/db/tafDatabase';
+import { dataStore } from '../offline-first/store/DataStore';
+import { resolveOwnerUid, saveCadastro, softDeleteCadastro } from '../offline-first/db/localDb';
 import {
   readOfflineCloudEntry,
   upsertCadastroOffline,
   upsertCadastrosLoteOffline,
   deleteCadastroOffline,
 } from './offline/offlineCloudEngine';
+
+function useOfflineFirstDb(): boolean {
+  return getTafDatabase() != null;
+}
 
 const DB_NAME = 'taf_cadastros_db';
 const DB_VERSION = 1;
@@ -98,20 +105,30 @@ export async function clearLocalCadastros(): Promise<void> {
 }
 
 async function resolveCloudCadastros(uid: string): Promise<CadastroItemPersist[]> {
+  if (useOfflineFirstDb()) return dataStore.getCadastros(uid);
   const entry = await readOfflineCloudEntry(uid, { autoSync: false });
   return entry.cadastros;
 }
 
 export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
   const uid = await waitForAuthenticatedUid();
+  if (useOfflineFirstDb()) {
+    return dataStore.getCadastros(uid);
+  }
   if (uid) {
-    return resolveCloudCadastros(uid);
+    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
+    return entry.cadastros;
   }
   return getAllCadastrosLocal();
 }
 
 export async function addCadastro(item: CadastroItemPersist): Promise<void> {
   const uid = await waitForAuthenticatedUid();
+  if (useOfflineFirstDb()) {
+    const owner = resolveOwnerUid(uid);
+    await saveCadastro(item, owner, getCachedLoginUid());
+    return;
+  }
   if (uid) {
     await upsertCadastroOffline(uid, item);
     return;
@@ -139,6 +156,10 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
 export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<void> {
   if (items.length === 0) return;
   const uid = await waitForAuthenticatedUid();
+  if (useOfflineFirstDb()) {
+    await dataStore.upsertCadastrosBatch(items, resolveOwnerUid(uid));
+    return;
+  }
   if (uid) {
     await upsertCadastrosLoteOffline(uid, items);
     return;
@@ -161,6 +182,10 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
 
 export async function deleteCadastro(id: string): Promise<void> {
   const uid = await waitForAuthenticatedUid();
+  if (useOfflineFirstDb()) {
+    await dataStore.deleteCadastro(id, resolveOwnerUid(uid));
+    return;
+  }
   if (uid) {
     await deleteCadastroOffline(uid, id);
     return;

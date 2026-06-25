@@ -5,6 +5,8 @@ export type CloudActivityState = {
   uploading: boolean;
   /** Sincronização completa (pull/merge) em andamento. */
   syncing: boolean;
+  /** Progresso estimado da sincronização (0–100). */
+  syncProgress: number;
   /** Uploads individuais ativos (contador). */
   activeUploads: number;
   /** Última sincronização bem-sucedida com Firebase (ms). */
@@ -19,6 +21,7 @@ export type CloudActivityState = {
 
 let activeUploads = 0;
 let syncing = false;
+let syncProgress = 0;
 let realtimeListening = false;
 let realtimeApplying = false;
 let lastSyncedAt: number | null = null;
@@ -29,6 +32,7 @@ function snapshot(): CloudActivityState {
   return {
     uploading: activeUploads > 0,
     syncing,
+    syncProgress,
     activeUploads,
     lastSyncedAt,
     cloudReady,
@@ -73,11 +77,18 @@ export async function withCloudUpload<T>(fn: () => Promise<T>): Promise<T> {
 
 export function beginCloudSync(): void {
   syncing = true;
+  syncProgress = 8;
   notify();
 }
 
 export function endCloudSync(): void {
   syncing = false;
+  syncProgress = 0;
+  notify();
+}
+
+export function setSyncProgress(percent: number): void {
+  syncProgress = Math.max(0, Math.min(100, Math.round(percent)));
   notify();
 }
 
@@ -108,6 +119,7 @@ export function setCloudSyncResult(ok: boolean): void {
 export function resetCloudSyncStatus(): void {
   lastSyncedAt = null;
   cloudReady = false;
+  syncProgress = 0;
   realtimeListening = false;
   realtimeApplying = false;
   notify();

@@ -9,10 +9,8 @@ import {
 import { calcularResumoInicioTafFromHistorico } from '../../utils/resultadoGeralHistorico';
 import { waitForAuthenticatedUid } from './authUid';
 import { canAttemptCloudSync } from '../offline/networkStatus';
-import {
-  readOfflineCloudEntry,
-  syncOfflineCloudData,
-} from '../offline/offlineCloudEngine';
+import { getCloudActivityState, subscribeCloudActivity } from '../offline/cloudSyncActivity';
+import { readOfflineCloudEntry } from '../offline/offlineCloudEngine';
 
 export type CloudDataLoadState = {
   percent: number;
@@ -40,10 +38,6 @@ function buildCacheEntry(
   };
 }
 
-export async function syncCloudDataCache(uid: string): Promise<CloudDataCacheEntry> {
-  return syncOfflineCloudData(uid);
-}
-
 export async function loadHomeCloudData(
   onProgress: (state: CloudDataLoadState) => void,
   options?: { forceRefresh?: boolean },
@@ -52,31 +46,34 @@ export async function loadHomeCloudData(
   if (!uid) return null;
 
   const online = canAttemptCloudSync();
+  const forceRefresh = options?.forceRefresh === true;
 
   const cached =
-    !options?.forceRefresh
+    !forceRefresh
       ? getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid))
       : null;
 
-  if (cached && (cached.cadastros.length > 0 || cached.sessoes.length > 0)) {
+  const report = (entry: CloudDataCacheEntry, loading: boolean, fromCache: boolean) => {
     onProgress({
-      percent: 100,
-      loading: online,
-      loadedCadastros: cached.cadastros.length,
-      loadedSessoes: cached.sessoes.length,
-      fromCache: true,
+      percent: loading ? getCloudActivityState().syncProgress || 12 : 100,
+      loading,
+      loadedCadastros: entry.cadastros.length,
+      loadedSessoes: entry.sessoes.length,
+      fromCache,
       offline: !online,
-      pendingSync: cached.pendingOps?.length ?? 0,
+      pendingSync: entry.pendingOps?.length ?? 0,
     });
-  } else if (!online) {
-    onProgress({
-      percent: 100,
-      loading: false,
-      loadedCadastros: 0,
-      loadedSessoes: 0,
-      fromCache: true,
-      offline: true,
-    });
+  };
+
+  if (!online) {
+    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
+    report(entry, false, true);
+    return entry;
+  }
+
+  if (cached && (cached.cadastros.length > 0 || cached.sessoes.length > 0)) {
+    setMemoryCloudCache(cached);
+    report(cached, true, true);
   } else {
     onProgress({
       percent: 8,
@@ -88,46 +85,35 @@ export async function loadHomeCloudData(
     });
   }
 
-  if (!online) {
-    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
+  const unsubProgress = subscribeCloudActivity((state) => {
+    if (!state.syncing) return;
+    const current = getMemoryCloudCache(uid) ?? cached;
     onProgress({
-      percent: 100,
-      loading: false,
-      loadedCadastros: entry.cadastros.length,
-      loadedSessoes: entry.sessoes.length,
+      percent: Math.max(state.syncProgress, 12),
+      loading: true,
+      loadedCadastros: current?.cadastros.length ?? 0,
+      loadedSessoes: current?.sessoes.length ?? 0,
       fromCache: true,
-      offline: true,
-      pendingSync: entry.pendingOps?.length ?? 0,
+      offline: false,
+      pendingSync: current?.pendingOps?.length ?? 0,
     });
-    return entry;
-  }
+  });
 
   try {
-    const entry = await syncOfflineCloudData(uid);
-    onProgress({
-      percent: 100,
-      loading: false,
-      loadedCadastros: entry.cadastros.length,
-      loadedSessoes: entry.sessoes.length,
-      fromCache: false,
-      offline: false,
-      pendingSync: entry.pendingOps?.length ?? 0,
+    const entry = await readOfflineCloudEntry(uid, {
+      autoSync: true,
+      forcePull: forceRefresh,
     });
+    report(entry, false, false);
     return entry;
   } catch (error) {
     if (cached) {
-      onProgress({
-        percent: 100,
-        loading: false,
-        loadedCadastros: cached.cadastros.length,
-        loadedSessoes: cached.sessoes.length,
-        fromCache: true,
-        offline: false,
-        pendingSync: cached.pendingOps?.length ?? 0,
-      });
+      report(cached, false, true);
       return cached;
     }
     throw error;
+  } finally {
+    unsubProgress();
   }
 }
 

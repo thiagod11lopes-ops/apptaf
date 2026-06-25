@@ -6,6 +6,7 @@ import {
   writeCloudDataCache,
   getMemoryCloudCache,
   setMemoryCloudCache,
+  isCloudCacheFresh,
   type CloudDataCacheEntry,
 } from '../cloudDataCache';
 import {
@@ -35,10 +36,12 @@ import { getRecordUpdatedAt, stampCadastro, stampSessao } from './recordTimestam
 import {
   withCloudUpload,
   setCloudSyncResult,
+  setSyncProgress,
   beginCloudSync,
   endCloudSync,
   beginRealtimeApply,
   endRealtimeApply,
+  getCloudActivityState,
 } from './cloudSyncActivity';
 
 export { subscribeCloudActivity, getCloudActivityState } from './cloudSyncActivity';
@@ -46,6 +49,41 @@ export type { CloudActivityState } from './cloudSyncActivity';
 
 let syncMutex: Promise<void> = Promise.resolve();
 let syncListeners = new Set<(entry: CloudDataCacheEntry) => void>();
+const inFlightSyncByUid = new Map<string, Promise<CloudDataCacheEntry>>();
+
+/** Intervalo mínimo entre pulls completos quando o tempo real já está ativo. */
+const MIN_FULL_SYNC_MS = 60_000;
+
+function shouldRunFullSync(entry: CloudDataCacheEntry, forcePull: boolean): boolean {
+  if (forcePull) return true;
+  if ((entry.pendingOps?.length ?? 0) > 0) return true;
+
+  const activity = getCloudActivityState();
+  if (!activity.cloudReady) return true;
+
+  if (activity.realtimeListening && isCloudCacheFresh(entry)) {
+    return false;
+  }
+
+  if (Date.now() - entry.syncedAt < MIN_FULL_SYNC_MS) {
+    return false;
+  }
+
+  return !isCloudCacheFresh(entry);
+}
+
+function coalescedSync(uid: string): Promise<CloudDataCacheEntry> {
+  const existing = inFlightSyncByUid.get(uid);
+  if (existing) return existing;
+
+  const promise = syncOfflineCloudData(uid).finally(() => {
+    if (inFlightSyncByUid.get(uid) === promise) {
+      inFlightSyncByUid.delete(uid);
+    }
+  });
+  inFlightSyncByUid.set(uid, promise);
+  return promise;
+}
 
 export function subscribeOfflineData(listener: (entry: CloudDataCacheEntry) => void): () => void {
   syncListeners.add(listener);
@@ -167,19 +205,24 @@ async function pullAndMerge(
   const tombstones = entry.tombstones ?? emptyTombstones();
 
   try {
+    setSyncProgress(20);
     let [remoteCadastros, remoteSessoes] = await Promise.all([
       getAllCadastrosFirestoreLight(uid),
       getAllSessoesFirestoreLight(uid),
     ]);
+    setSyncProgress(55);
 
     const hasPending = (localBefore.pendingOps?.length ?? 0) > 0;
     const remoteEmpty = remoteCadastros.length === 0 && remoteSessoes.length === 0;
     const localHasData =
       localBefore.cadastros.length > 0 || localBefore.sessoes.length > 0;
 
+    let didPush = false;
     if (hasPending || (remoteEmpty && localHasData)) {
       try {
+        setSyncProgress(62);
         await pushLocalChangesToCloud(uid, localBefore, remoteCadastros, remoteSessoes);
+        didPush = true;
       } catch (error) {
         if (typeof console !== 'undefined') {
           console.warn('[TAF sync] Falha ao enviar dados locais; continuando pull da nuvem.', error);
@@ -187,10 +230,15 @@ async function pullAndMerge(
       }
     }
 
-    [remoteCadastros, remoteSessoes] = await Promise.all([
-      getAllCadastrosFirestoreLight(uid),
-      getAllSessoesFirestoreLight(uid),
-    ]);
+    if (didPush) {
+      setSyncProgress(78);
+      [remoteCadastros, remoteSessoes] = await Promise.all([
+        getAllCadastrosFirestoreLight(uid),
+        getAllSessoesFirestoreLight(uid),
+      ]);
+    }
+
+    setSyncProgress(92);
 
     return {
       entry: {
@@ -266,12 +314,16 @@ export async function syncOfflineCloudData(uid: string): Promise<CloudDataCacheE
     beginCloudSync();
     let remoteFetched = false;
     try {
+      setSyncProgress(10);
       let entry = await loadEntry(uid);
+      setSyncProgress(18);
       entry = await flushPendingOps(uid, entry);
       const pull = await pullAndMerge(uid, entry);
       entry = pull.entry;
       remoteFetched = pull.remoteFetched;
+      setSyncProgress(96);
       await saveEntry(entry);
+      setSyncProgress(100);
       resolved = entry;
     } finally {
       endCloudSync();
@@ -297,17 +349,21 @@ export async function readOfflineCloudEntry(
 ): Promise<CloudDataCacheEntry> {
   const entry = await loadEntry(uid);
   const autoSync = options?.autoSync !== false;
+  const forcePull = options?.forcePull === true;
 
   if (!autoSync) {
     return entry;
   }
 
-  // Online: sempre reconcilia com a nuvem (chefe ↔ e-mails autorizados).
-  if (canAttemptCloudSync() || options?.forcePull) {
-    return syncOfflineCloudData(uid);
+  if (!canAttemptCloudSync() && !forcePull) {
+    return entry;
   }
 
-  return entry;
+  if (!shouldRunFullSync(entry, forcePull)) {
+    return entry;
+  }
+
+  return coalescedSync(uid);
 }
 
 export async function hasPendingLocalChanges(uid: string): Promise<boolean> {
@@ -317,7 +373,7 @@ export async function hasPendingLocalChanges(uid: string): Promise<boolean> {
 
 /** Envia alterações locais (fila pendente) para a nuvem e reconcilia com o servidor. */
 export async function pushDeviceUpdatesToCloud(uid: string): Promise<CloudDataCacheEntry> {
-  return syncOfflineCloudData(uid);
+  return coalescedSync(uid);
 }
 
 async function appendPending(uid: string, op: PendingOp): Promise<CloudDataCacheEntry> {

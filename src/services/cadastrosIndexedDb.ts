@@ -98,7 +98,7 @@ export async function clearLocalCadastros(): Promise<void> {
 }
 
 async function resolveCloudCadastros(uid: string): Promise<CadastroItemPersist[]> {
-  const entry = await readOfflineCloudEntry(uid);
+  const entry = await readOfflineCloudEntry(uid, { autoSync: false });
   return entry.cadastros;
 }
 

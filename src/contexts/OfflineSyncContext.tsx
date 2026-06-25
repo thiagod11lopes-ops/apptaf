@@ -25,6 +25,7 @@ import {
   getCloudActivityState,
   subscribeCloudActivity,
 } from '../services/offline/cloudSyncActivity';
+import { isCloudCacheFresh } from '../services/cloudDataCache';
 import {
   summarizePendingOps,
   type PendingSyncSummary,
@@ -87,6 +88,20 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     autoSyncInFlightRef.current = true;
     setSyncing(true);
     try {
+      const activity = getCloudActivityState();
+      const cached = await readOfflineCloudEntry(uid, { autoSync: false });
+      const pending = cached.pendingOps?.length ?? 0;
+
+      if (
+        activity.realtimeListening &&
+        activity.cloudReady &&
+        pending === 0 &&
+        isCloudCacheFresh(cached)
+      ) {
+        await refreshPending();
+        return;
+      }
+
       await pushDeviceUpdatesToCloud(uid);
       await refreshPending();
     } finally {

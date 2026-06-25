@@ -79,7 +79,7 @@ export async function clearLocalSessoesAplicacao(): Promise<void> {
 }
 
 async function resolveCloudSessoes(uid: string): Promise<SessaoAplicacaoTaf[]> {
-  const entry = await readOfflineCloudEntry(uid);
+  const entry = await readOfflineCloudEntry(uid, { autoSync: false });
   return entry.sessoes;
 }
 
@@ -127,7 +127,7 @@ export async function addSessaoAplicacao(
 export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicacaoTaf | null> {
   const uid = await waitForAuthenticatedUid();
   if (uid) {
-    const entry = await readOfflineCloudEntry(uid);
+    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
     const local = entry.sessoes.find((s) => s.id === id);
     if (local) return local;
     if (isOnline()) {

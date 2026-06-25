@@ -87,7 +87,7 @@ export function CloudUserLoadIndicator({
             style={[
               styles.fill,
               {
-                width: `${Math.max(0, Math.min(100, showUploadPulse ? 72 : showSyncPulse ? 48 : smooth))}%`,
+                width: `${Math.max(0, Math.min(100, smooth))}%`,
                 backgroundColor:
                   showUploadPulse || showSyncPulse ? theme.primary : receivingFromCloudOnly ? theme.gain : theme.loss,
               },

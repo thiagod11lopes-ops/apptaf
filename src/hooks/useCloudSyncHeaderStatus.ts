@@ -74,7 +74,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const percent = loadingInitial
     ? (cloudLoad?.percent ?? 0)
     : syncingCloud
-      ? 48
+      ? Math.max(activity.syncProgress, 12)
       : uploadingCloud
         ? 72
         : 100;

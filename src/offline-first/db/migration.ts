@@ -1,6 +1,4 @@
 import { readCloudDataCache } from '../../services/cloudDataCache';
-import { clearLocalCadastros } from '../../services/cadastrosIndexedDb';
-import { clearLocalSessoesAplicacao } from '../../services/resultadosAplicadosIndexedDb';
 import { getMeta, setMeta, getTafDatabase } from './tafDatabase';
 import {
   ANONYMOUS_OWNER,
@@ -169,7 +167,10 @@ export async function migrateLegacyLocalToOwner(
     for (const sess of sessoes) {
       await saveSessao(sess, targetOwnerUid, userId);
     }
-    await Promise.all([clearLocalCadastros(), clearLocalSessoesAplicacao()]);
+    await Promise.all([
+      import('../../services/cadastrosIndexedDb').then((m) => m.clearLocalCadastros()),
+      import('../../services/resultadosAplicadosIndexedDb').then((m) => m.clearLocalSessoesAplicacao()),
+    ]);
   } else {
     const { migrateLocalDeviceDataOnLogin } = await import('../../services/migrateLocalOnLogin');
     await migrateLocalDeviceDataOnLogin(targetOwnerUid);

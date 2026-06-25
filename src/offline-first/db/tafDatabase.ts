@@ -52,3 +52,18 @@ export async function setMeta(key: string, value: string): Promise<void> {
   if (!db) return;
   await db.meta.put({ key, value });
 }
+
+/** Limpa o banco Dexie entre testes automatizados. */
+export async function closeTafDatabaseForTests(): Promise<void> {
+  if (!dbInstance) return;
+  dbInstance.close();
+  await dbInstance.delete();
+  dbInstance = null;
+}
+
+/** Simula reload da página mantendo IndexedDB. */
+export function resetTafDatabaseConnectionForTests(): void {
+  if (!dbInstance) return;
+  dbInstance.close();
+  dbInstance = null;
+}

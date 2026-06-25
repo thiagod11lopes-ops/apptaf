@@ -17,6 +17,8 @@ export function useDeviceLayout() {
   /** Celular deitado: oculta menu lateral com abas */
   const hideSidebarForLandscape = isLandscape && isCompactDevice;
 
+  const usePhoneFrame = isDesktopWeb;
+
   return {
     width,
     height,
@@ -28,8 +30,8 @@ export function useDeviceLayout() {
     isPortrait: !isLandscape,
     isCompactDevice,
     hideSidebarForLandscape,
-    /** Shell SISMAV — não exibe sidebar em paisagem em dispositivos compactos */
-    useSidebarShell: isDesktopWeb && !hideSidebarForLandscape,
-    usePhoneFrame: false,
+    /** Desktop web: moldura de celular; mobile usa layout nativo sem sidebar */
+    useSidebarShell: isDesktopWeb && !hideSidebarForLandscape && !usePhoneFrame,
+    usePhoneFrame,
   };
 }

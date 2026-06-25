@@ -34,7 +34,7 @@ export type CadastroItemPersist = {
 };
 
 import { toCadastroLight } from '../utils/cadastroLight';
-import { waitForAuthenticatedUid } from './firebase/authUid';
+import { waitForAuthenticatedUid, resolveStorageOwnerUid } from './firebase/authUid';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { dataStore } from '../offline-first/store/DataStore';
 import {
@@ -110,10 +110,11 @@ async function resolveCloudCadastros(uid: string): Promise<CadastroItemPersist[]
 }
 
 export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
-  const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
     return dataStore.getCadastros(uid);
   }
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     const entry = await readOfflineCloudEntry(uid, { autoSync: false });
     return entry.cadastros;
@@ -122,11 +123,12 @@ export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
 }
 
 export async function addCadastro(item: CadastroItemPersist): Promise<void> {
-  const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
     await dataStore.upsertCadastro(item, uid);
     return;
   }
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertCadastroOffline(uid, item);
     return;
@@ -153,11 +155,12 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
 
 export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<void> {
   if (items.length === 0) return;
-  const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
     await dataStore.upsertCadastrosBatch(items, uid);
     return;
   }
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertCadastrosLoteOffline(uid, items);
     return;
@@ -179,11 +182,12 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
 }
 
 export async function deleteCadastro(id: string): Promise<void> {
-  const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
     await dataStore.deleteCadastro(id, uid);
     return;
   }
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     await deleteCadastroOffline(uid, id);
     return;

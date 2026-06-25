@@ -31,6 +31,15 @@ export function resolveRecordConflict<T extends SyncRecord>(
   local: T,
   remote: T,
 ): ConflictResolution & { record: T } {
+  if (local.syncStatus === 'pending' && local.deleted !== true) {
+    return {
+      winner: 'local',
+      record: local,
+      hadConflict: true,
+      reason: 'Alteração local pendente de envio — mantida offline',
+    };
+  }
+
   const localDeleted = local.deleted === true;
   const remoteDeleted = remote.deleted === true;
 

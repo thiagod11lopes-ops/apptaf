@@ -1,5 +1,7 @@
 import { getFirebaseAuth } from '../../config/firebase';
 
+const PERSISTED_OWNER_KEY = 'taf:lastDataOwnerUid';
+
 /**
  * UID do login Firebase e UID dono dos dados (chefe quando membro autorizado).
  */
@@ -7,6 +9,30 @@ let authReady = false;
 let loginUid: string | null = null;
 let dataOwnerUid: string | null = null;
 const waiters = new Set<(ownerUid: string | null) => void>();
+
+function readPersistedDataOwnerUid(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  const v = localStorage.getItem(PERSISTED_OWNER_KEY);
+  return v?.trim() || null;
+}
+
+function persistDataOwnerUid(uid: string): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(PERSISTED_OWNER_KEY, uid);
+  } catch {
+    // quota / modo privado
+  }
+}
+
+function clearPersistedDataOwnerUid(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(PERSISTED_OWNER_KEY);
+  } catch {
+    // silencioso
+  }
+}
 
 function notifyWaiters() {
   for (const waiter of waiters) {
@@ -26,6 +52,11 @@ export function setAuthUidState(
   loginUid = nextLoginUid ?? resolveUidFromFirebase();
   dataOwnerUid = nextDataOwnerUid ?? loginUid ?? resolveUidFromFirebase();
   authReady = ready;
+  if (loginUid && dataOwnerUid) {
+    persistDataOwnerUid(dataOwnerUid);
+  } else if (ready && !loginUid) {
+    clearPersistedDataOwnerUid();
+  }
   notifyWaiters();
 }
 
@@ -34,7 +65,20 @@ export function getCachedLoginUid(): string | null {
 }
 
 export function getCachedDataOwnerUid(): string | null {
-  return dataOwnerUid ?? loginUid ?? resolveUidFromFirebase();
+  return (
+    dataOwnerUid ??
+    loginUid ??
+    resolveUidFromFirebase() ??
+    readPersistedDataOwnerUid()
+  );
+}
+
+/** Aguarda auth e devolve UID para leitura/gravação local (Dexie). */
+export async function resolveStorageOwnerUid(): Promise<string | null> {
+  if (!authReady) {
+    await waitForAuthUid();
+  }
+  return getCachedDataOwnerUid();
 }
 
 /** @deprecated use getCachedDataOwnerUid */

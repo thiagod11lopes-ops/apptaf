@@ -49,6 +49,8 @@ async function applySnapshot(
   sessoes: SessaoAplicacaoTaf[],
 ): Promise<void> {
   if (activeUid !== uid) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
   applying = true;
   beginRealtimeApply();
   try {

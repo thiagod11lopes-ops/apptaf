@@ -3,13 +3,11 @@ import { View, StyleSheet, Image, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
-import { useNetworkOnline } from '../services/offline/networkStatus';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
-import { loadHomeCloudData } from '../services/firebase/cloudDataSync';
 import {
   calcularResumoInicioTafFromHistorico,
   type ResumoInicioTafHistorico,
@@ -25,67 +23,25 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   semTeste: 0,
 };
 
-const LOAD_IDLE = {
-  percent: 0,
-  loading: false,
-  loadedCadastros: 0,
-  loadedSessoes: 0,
-  fromCache: false,
-};
-
 export default function HomeScreen() {
   const { theme } = useTheme();
-  const { user, isAuthenticated, authReady } = useAuth();
-  const online = useNetworkOnline();
+  const { user, authReady, isAuthenticated } = useAuth();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
-  const [cloudLoad, setCloudLoad] = useState(LOAD_IDLE);
 
   const recarregarResumo = useCallback(async () => {
     if (!authReady) return;
-
-    if (!isAuthenticated) {
-      setCloudLoad(LOAD_IDLE);
-      try {
-        const [cadastros, sessoes] = await Promise.all([
-          getAllCadastros(),
-          getAllSessoesAplicacao(),
-        ]);
-        setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros));
-      } catch {
-        setResumo(RESUMO_INICIAL);
-      }
-      return;
-    }
-
     try {
-      const entry = await loadHomeCloudData((state) => {
-        setCloudLoad({
-          percent: state.percent,
-          loading: state.loading,
-          loadedCadastros: state.loadedCadastros,
-          loadedSessoes: state.loadedSessoes,
-          fromCache: state.fromCache,
-        });
-      });
-
-      if (entry) {
-        setResumo(entry.resumo);
-      }
+      const [cadastros, sessoes] = await Promise.all([
+        getAllCadastros(),
+        getAllSessoesAplicacao(),
+      ]);
+      setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros));
     } catch {
-      setResumo(RESUMO_INICIAL);
-      setCloudLoad(LOAD_IDLE);
+      // Mantém resumo anterior — falha de rede não zera a tela.
     }
   }, [authReady, isAuthenticated, user?.uid]);
 
   useAuthDataReload(recarregarResumo);
-
-  const cloudLoadProps = useMemo(() => {
-    if (!isAuthenticated) return undefined;
-    return {
-      percent: cloudLoad.percent,
-      loading: online ? cloudLoad.loading : false,
-    };
-  }, [isAuthenticated, cloudLoad.loading, cloudLoad.percent, online]);
 
   const frameShadow =
     Platform.OS === 'web'
@@ -105,7 +61,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.page}>
       <View style={styles.topSection}>
-        <AppHeader title="TAF" cloudLoad={cloudLoadProps} subtitle="Teste de Aptidão Física" />
+        <AppHeader title="TAF" subtitle="Teste de Aptidão Física" />
         <TopActionIcons activeRoute="Home" inline />
 
         <View style={styles.statsGrid}>

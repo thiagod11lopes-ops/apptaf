@@ -12,7 +12,7 @@ export type SessaoAplicacaoTaf = {
   updatedAt?: number;
 };
 
-import { waitForAuthenticatedUid } from './firebase/authUid';
+import { waitForAuthenticatedUid, resolveStorageOwnerUid } from './firebase/authUid';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { dataStore } from '../offline-first/store/DataStore';
 import {
@@ -90,10 +90,11 @@ async function resolveCloudSessoes(uid: string): Promise<SessaoAplicacaoTaf[]> {
 }
 
 export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
-  const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
     return dataStore.getSessoes(uid);
   }
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     const entry = await readOfflineCloudEntry(uid, { autoSync: false });
     return entry.sessoes;
@@ -113,13 +114,15 @@ export async function addSessaoAplicacao(
     resultados: input.resultados,
   };
 
-  const uid = await waitForAuthenticatedUid();
+  const uid = await resolveStorageOwnerUid();
   if (useOfflineFirstDb()) {
     await dataStore.upsertSessao(sessao, uid);
     return id;
   }
-  if (uid) {
-    await upsertSessaoOffline(uid, sessao);
+
+  const authUid = await waitForAuthenticatedUid();
+  if (authUid) {
+    await upsertSessaoOffline(authUid, sessao);
     return id;
   }
 
@@ -139,8 +142,8 @@ export async function addSessaoAplicacao(
 }
 
 export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicacaoTaf | null> {
-  const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
     const local = await dataStore.getSessaoById(id, uid);
     if (local) return local;
     if (uid && canAttemptCloudSync()) {
@@ -152,6 +155,7 @@ export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicaca
     }
     return null;
   }
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     const entry = await readOfflineCloudEntry(uid, { autoSync: false });
     const local = entry.sessoes.find((s) => s.id === id);
@@ -179,11 +183,12 @@ export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicaca
 }
 
 export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise<void> {
-  const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
     await dataStore.upsertSessao(sessao, uid);
     return;
   }
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertSessaoOffline(uid, sessao);
     return;
@@ -205,11 +210,12 @@ export async function deleteSessaoAplicacao(id: string): Promise<void> {
   if (!id.trim()) {
     throw new Error('ID da sessão inválido.');
   }
-  const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
     await dataStore.deleteSessao(id, uid);
     return;
   }
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     await deleteSessaoOffline(uid, id);
     return;

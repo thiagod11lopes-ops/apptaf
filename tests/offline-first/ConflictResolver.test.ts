@@ -44,4 +44,12 @@ describe('ConflictResolver', () => {
     const r = resolveRecordConflict(local, remote);
     expect(r.record.deleted).toBe(true);
   });
+
+  it('pendente local prevalece sobre remoto (offline)', () => {
+    const local = cad({ syncStatus: 'pending', nome: 'Offline', updatedAt: 1000 });
+    const remote = cad({ syncStatus: 'synced', nome: 'Nuvem', updatedAt: 9000 });
+    const r = resolveRecordConflict(local, remote);
+    expect(r.winner).toBe('local');
+    expect(r.record.nome).toBe('Offline');
+  });
 });

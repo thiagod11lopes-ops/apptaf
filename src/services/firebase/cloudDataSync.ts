@@ -1,7 +1,7 @@
 import type { CloudDataCacheEntry } from '../cloudDataCache';
 import { getTafDatabase } from '../../offline-first/db/tafDatabase';
 import { dataStore } from '../../offline-first/store/DataStore';
-import { waitForAuthenticatedUid } from './authUid';
+import { resolveStorageOwnerUid } from './authUid';
 import { canAttemptCloudSync } from '../offline/networkStatus';
 import { syncEngine } from '../../offline-first/sync/SyncEngine';
 
@@ -20,7 +20,7 @@ export async function loadHomeCloudData(
   onProgress: (state: CloudDataLoadState) => void,
   options?: { forceRefresh?: boolean },
 ): Promise<CloudDataCacheEntry | null> {
-  const uid = await waitForAuthenticatedUid();
+  const uid = await resolveStorageOwnerUid();
   if (!uid) return null;
 
   const online = canAttemptCloudSync();

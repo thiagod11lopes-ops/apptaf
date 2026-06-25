@@ -21,6 +21,7 @@ import {
 import { resolveMemberAccess } from '../services/firebase/authorizedEmailsFirestore';
 import { getCachedDataOwnerUid, setAuthUidState } from '../services/firebase/authUid';
 import { clearMemoryCloudCache, clearCloudDataCache } from '../services/cloudDataCache';
+import { syncOfflineCloudData } from '../services/offline/offlineCloudEngine';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -74,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsAuthorizedMember(access.isAuthorizedMember);
           setAuthUidState(mapped.uid, access.dataOwnerUid, true);
           setAuthReady(true);
+          void syncOfflineCloudData(access.dataOwnerUid).catch(() => undefined);
         })();
       });
     })();

@@ -191,11 +191,20 @@ async function pushLocalWinsToCloud(
 }
 
 export async function syncOfflineCloudData(uid: string): Promise<CloudDataCacheEntry> {
-  let entry = await loadEntry(uid);
-  entry = await flushPendingOps(uid, entry);
-  entry = await pullAndMerge(uid, entry);
-  await saveEntry(entry);
-  return entry;
+  let resolved!: CloudDataCacheEntry;
+
+  const run = syncMutex.then(async () => {
+    let entry = await loadEntry(uid);
+    entry = await flushPendingOps(uid, entry);
+    entry = await pullAndMerge(uid, entry);
+    await saveEntry(entry);
+    resolved = entry;
+  });
+
+  syncMutex = run.then(() => undefined).catch(() => undefined);
+  await run;
+
+  return resolved;
 }
 
 function enqueueSync(uid: string): void {
@@ -209,12 +218,20 @@ export async function readOfflineCloudEntry(
   options?: { autoSync?: boolean },
 ): Promise<CloudDataCacheEntry> {
   const entry = await loadEntry(uid);
+  const autoSync = options?.autoSync !== false;
   const pendingCount = entry.pendingOps?.length ?? 0;
-  const mayAutoSync =
-    options?.autoSync !== false && isOnline() && pendingCount === 0;
-  if (mayAutoSync) {
-    enqueueSync(uid);
+  const vazio = entry.cadastros.length === 0 && entry.sessoes.length === 0;
+
+  if (!autoSync || !isOnline() || pendingCount > 0) {
+    return entry;
   }
+
+  // Dispositivo novo ou cache vazio: aguarda pull da nuvem (evita lista vazia no celular).
+  if (vazio) {
+    return syncOfflineCloudData(uid);
+  }
+
+  enqueueSync(uid);
   return entry;
 }
 

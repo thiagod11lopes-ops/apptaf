@@ -12,7 +12,7 @@ export type SessaoAplicacaoTaf = {
   updatedAt?: number;
 };
 
-import { waitForAuthUid, waitForAuthenticatedUid } from './firebase/authUid';
+import { waitForAuthenticatedUid } from './firebase/authUid';
 import {
   readOfflineCloudEntry,
   upsertSessaoOffline,
@@ -103,7 +103,7 @@ export async function addSessaoAplicacao(
     resultados: input.resultados,
   };
 
-  const uid = await waitForAuthUid();
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertSessaoOffline(uid, sessao);
     return id;
@@ -125,7 +125,7 @@ export async function addSessaoAplicacao(
 }
 
 export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicacaoTaf | null> {
-  const uid = await waitForAuthUid();
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     const entry = await readOfflineCloudEntry(uid);
     const local = entry.sessoes.find((s) => s.id === id);
@@ -153,7 +153,7 @@ export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicaca
 }
 
 export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise<void> {
-  const uid = await waitForAuthUid();
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertSessaoOffline(uid, sessao);
     return;
@@ -175,7 +175,7 @@ export async function deleteSessaoAplicacao(id: string): Promise<void> {
   if (!id.trim()) {
     throw new Error('ID da sessão inválido.');
   }
-  const uid = await waitForAuthUid();
+  const uid = await waitForAuthenticatedUid();
   if (uid) {
     await deleteSessaoOffline(uid, id);
     return;

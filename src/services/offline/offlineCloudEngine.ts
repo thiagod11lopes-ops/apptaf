@@ -30,8 +30,6 @@ import {
 } from './pendingOps';
 import {
   dedupeCadastrosByNipNewest,
-  mergeCadastros,
-  mergeSessoes,
 } from './conflictMerge';
 import { getRecordUpdatedAt, stampCadastro, stampSessao } from './recordTimestamps';
 import {
@@ -157,51 +155,46 @@ async function flushPendingOps(uid: string, entry: CloudDataCacheEntry): Promise
 }
 
 async function pullAndMerge(uid: string, entry: CloudDataCacheEntry): Promise<CloudDataCacheEntry> {
-  const localVazio = entry.cadastros.length === 0 && entry.sessoes.length === 0;
+  if (!isOnline()) return entry;
+
+  const localBefore = entry;
+  const tombstones = entry.tombstones ?? emptyTombstones();
 
   try {
-    const [remoteCadastros, remoteSessoes] = await Promise.all([
+    let [remoteCadastros, remoteSessoes] = await Promise.all([
       getAllCadastrosFirestoreLight(uid),
       getAllSessoesFirestoreLight(uid),
     ]);
 
-    const tombstones = entry.tombstones ?? emptyTombstones();
+    // 1) Envia alterações locais pendentes para a nuvem antes de substituir o cache.
+    await pushLocalChangesToCloud(uid, localBefore, remoteCadastros, remoteSessoes);
 
-    if (localVazio && (remoteCadastros.length > 0 || remoteSessoes.length > 0)) {
-      return {
-        ...buildEntry(uid, remoteCadastros, remoteSessoes, {
-          pendingOps: entry.pendingOps,
-          tombstones,
-        }),
-        syncedAt: Date.now(),
-      };
-    }
+    // 2) Online: nuvem é a fonte da verdade — recarrega e ignora cache local antigo.
+    [remoteCadastros, remoteSessoes] = await Promise.all([
+      getAllCadastrosFirestoreLight(uid),
+      getAllSessoesFirestoreLight(uid),
+    ]);
 
-    const mergedCadastros = dedupeCadastrosByNipNewest(
-      mergeCadastros(entry.cadastros, remoteCadastros, tombstones.cadastros),
-    );
-    const mergedSessoes = mergeSessoes(entry.sessoes, remoteSessoes, tombstones.sessoes);
-
-    const merged = buildEntry(uid, mergedCadastros, mergedSessoes, {
-      pendingOps: entry.pendingOps,
-      tombstones,
-    });
-
-    await pushLocalWinsToCloud(uid, entry, merged, remoteCadastros, remoteSessoes);
-
-    return { ...merged, syncedAt: Date.now() };
+    return {
+      ...buildEntry(uid, remoteCadastros, remoteSessoes, {
+        pendingOps: entry.pendingOps,
+        tombstones,
+      }),
+      syncedAt: Date.now(),
+    };
   } catch (error) {
+    const localVazio = localBefore.cadastros.length === 0 && localBefore.sessoes.length === 0;
     if (localVazio && typeof console !== 'undefined') {
       console.warn('[TAF sync] Falha ao baixar dados da nuvem:', error);
     }
-    return entry;
+    return localBefore;
   }
 }
 
-async function pushLocalWinsToCloud(
+/** Envia ao Firebase apenas itens locais mais recentes ou ausentes na nuvem. */
+async function pushLocalChangesToCloud(
   uid: string,
-  localBefore: CloudDataCacheEntry,
-  merged: CloudDataCacheEntry,
+  local: CloudDataCacheEntry,
   remoteCadastros: CadastroItemPersist[],
   remoteSessoes: SessaoAplicacaoTaf[],
 ): Promise<void> {
@@ -209,10 +202,9 @@ async function pushLocalWinsToCloud(
   const remoteSessMap = new Map(remoteSessoes.map((s) => [s.id, s]));
 
   const cadastrosToUpload: CadastroItemPersist[] = [];
-  for (const item of merged.cadastros) {
+  for (const item of local.cadastros) {
     const remote = remoteCadMap.get(item.id);
-    const local = localBefore.cadastros.find((c) => c.id === item.id);
-    const localTs = local ? getRecordUpdatedAt(local) : 0;
+    const localTs = getRecordUpdatedAt(item);
     const remoteTs = remote ? getRecordUpdatedAt(remote) : 0;
     if (!remote || localTs > remoteTs) {
       cadastrosToUpload.push(item);
@@ -227,16 +219,15 @@ async function pushLocalWinsToCloud(
         try {
           await addCadastroFirestore(uid, item);
         } catch {
-          // permanece na fila via pendingOps se necessário
+          // Mantido na fila pendingOps se flush falhar depois.
         }
       }
     }
   }
 
-  for (const sessao of merged.sessoes) {
+  for (const sessao of local.sessoes) {
     const remote = remoteSessMap.get(sessao.id);
-    const local = localBefore.sessoes.find((s) => s.id === sessao.id);
-    const localTs = local ? getRecordUpdatedAt(local) : 0;
+    const localTs = getRecordUpdatedAt(sessao);
     const remoteTs = remote ? getRecordUpdatedAt(remote) : 0;
     if (!remote || localTs > remoteTs) {
       try {
@@ -475,7 +466,7 @@ export function triggerBackgroundSync(uid: string | null): void {
   enqueueSync(uid);
 }
 
-/** Mescla alterações recebidas em tempo real do Firestore (sem reenviar à nuvem). */
+/** Aplica snapshot da nuvem (tempo real) — substitui cache local, mantém fila pendente. */
 export async function mergeRemoteCloudData(
   uid: string,
   remoteCadastros: CadastroItemPersist[],
@@ -485,16 +476,11 @@ export async function mergeRemoteCloudData(
     beginRealtimeApply();
     try {
       const entry = await loadEntry(uid);
-      const tombstones = entry.tombstones ?? emptyTombstones();
-      const mergedCadastros = dedupeCadastrosByNipNewest(
-        mergeCadastros(entry.cadastros, remoteCadastros, tombstones.cadastros),
-      );
-      const mergedSessoes = mergeSessoes(entry.sessoes, remoteSessoes, tombstones.sessoes);
-      const merged = buildEntry(uid, mergedCadastros, mergedSessoes, {
+      const next = buildEntry(uid, remoteCadastros, remoteSessoes, {
         pendingOps: entry.pendingOps,
-        tombstones,
+        tombstones: entry.tombstones ?? emptyTombstones(),
       });
-      await saveEntry({ ...merged, syncedAt: Date.now() });
+      await saveEntry({ ...next, syncedAt: Date.now() });
       setCloudSyncResult(true);
     } finally {
       endRealtimeApply();
@@ -505,7 +491,7 @@ export async function mergeRemoteCloudData(
   await run;
 }
 
-/** Incorpora dados gravados no aparelho sem login e envia à nuvem após autenticação. */
+/** Envia dados do aparelho (sem login) à nuvem e recarrega só da nuvem. */
 export async function importLocalDeviceDataToCloud(
   uid: string,
   localCadastros: CadastroItemPersist[],
@@ -513,26 +499,64 @@ export async function importLocalDeviceDataToCloud(
 ): Promise<void> {
   if (localCadastros.length === 0 && localSessoes.length === 0) return;
 
-  const run = syncMutex.then(async () => {
-    const entry = await loadEntry(uid);
-    const tombstones = entry.tombstones ?? emptyTombstones();
-    const stampedCad = localCadastros.map((c) => stampCadastro(c));
-    const stampedSess = localSessoes.map((s) => stampSessao(s));
+  const stampedCad = localCadastros.map((c) => stampCadastro(c));
+  const stampedSess = localSessoes.map((s) => stampSessao(s));
 
-    const mergedCadastros = dedupeCadastrosByNipNewest(
-      mergeCadastros(entry.cadastros, stampedCad, tombstones.cadastros),
-    );
-    const mergedSessoes = mergeSessoes(entry.sessoes, stampedSess, tombstones.sessoes);
-
-    const next = buildEntry(uid, mergedCadastros, mergedSessoes, {
-      pendingOps: entry.pendingOps,
-      tombstones,
+  if (!isOnline()) {
+    const run = syncMutex.then(async () => {
+      const entry = await loadEntry(uid);
+      const pendingOps = compactPendingOps([
+        ...(entry.pendingOps ?? []),
+        ...stampedCad.map((item) => ({
+          kind: 'upsertCadastro' as const,
+          at: item.updatedAt!,
+          item,
+        })),
+        ...stampedSess.map((sessao) => ({
+          kind: 'upsertSessao' as const,
+          at: sessao.updatedAt!,
+          sessao,
+        })),
+      ]);
+      const next = buildEntry(uid, entry.cadastros, entry.sessoes, {
+        pendingOps,
+        tombstones: entry.tombstones,
+      });
+      await saveEntry(next);
     });
-    await saveEntry(next);
-  });
+    syncMutex = run.then(() => undefined).catch(() => undefined);
+    await run;
+    return;
+  }
 
-  syncMutex = run.then(() => undefined).catch(() => undefined);
-  await run;
+  try {
+    if (stampedCad.length > 0) {
+      await withCloudUpload(() => addCadastrosEmLoteFirestore(uid, stampedCad));
+    }
+    for (const sessao of stampedSess) {
+      await withCloudUpload(() => addSessaoFirestore(uid, sessao));
+    }
+  } catch {
+    const run = syncMutex.then(async () => {
+      const entry = await loadEntry(uid);
+      const pendingOps = compactPendingOps([
+        ...(entry.pendingOps ?? []),
+        ...stampedCad.map((item) => ({
+          kind: 'upsertCadastro' as const,
+          at: item.updatedAt!,
+          item,
+        })),
+        ...stampedSess.map((sessao) => ({
+          kind: 'upsertSessao' as const,
+          at: sessao.updatedAt!,
+          sessao,
+        })),
+      ]);
+      await saveEntry({ ...entry, pendingOps });
+    });
+    syncMutex = run.then(() => undefined).catch(() => undefined);
+    await run;
+  }
 
   await syncOfflineCloudData(uid);
 }

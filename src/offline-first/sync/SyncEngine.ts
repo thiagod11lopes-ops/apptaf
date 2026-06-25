@@ -13,6 +13,7 @@ import {
   updateSessaoFirestore,
 } from '../../services/firebase/sessoesFirestore';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
+import { applyTeamWipeIfNeeded } from '../../services/applyTeamWipeIfNeeded';
 import type { CadastroRecord, SessaoRecord, SyncQueueEntry } from '../types';
 import {
   applyRemoteCadastro,
@@ -287,6 +288,8 @@ export class SyncEngine {
   async pullFromRemote(force = false): Promise<void> {
     if (!ownerUid || !connectivityMonitor.canSync() || !systemState.canUseFirebase()) return;
     if (!force && Date.now() - lastPullAt < MIN_PULL_MS) return;
+
+    await applyTeamWipeIfNeeded(ownerUid, getCachedLoginUid());
 
     const [remoteCadastros, remoteSessoes] = await Promise.all([
       getAllCadastrosFirestoreLight(ownerUid),

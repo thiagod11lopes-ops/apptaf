@@ -18,11 +18,12 @@ import {
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
-import { resolveMemberAccess } from '../services/firebase/authorizedEmailsFirestore';
+import { resolveMemberAccess, registerAuthorizedMemberLogin } from '../services/firebase/authorizedEmailsFirestore';
 import { setAuthUidState } from '../services/firebase/authUid';
 import { clearMemoryCloudCache } from '../services/cloudDataCache';
 import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../offline-first/db/migration';
 import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
+import { applyTeamWipeIfNeeded } from '../services/applyTeamWipeIfNeeded';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { stopRealtimeSync } from '../offline-first/sync/RealtimeBridge';
 import { systemState } from '../offline-first/sync/SystemState';
@@ -76,7 +77,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const mapped = mapFirebaseUser(fbUser);
           const access = await resolveMemberAccess(mapped.uid, mapped.email);
           resetCloudSyncStatus();
+          if (access.isAuthorizedMember && mapped.email) {
+            await registerAuthorizedMemberLogin(access.dataOwnerUid, mapped.email, mapped.uid);
+          }
           try {
+            await applyTeamWipeIfNeeded(access.dataOwnerUid, mapped.uid);
             await migrateDeviceDataOnLogin(access.dataOwnerUid);
             await migrateLegacyToDexie(access.dataOwnerUid);
             await syncEngine.init(access.dataOwnerUid);

@@ -4,8 +4,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   serverTimestamp,
   setDoc,
+  where,
   writeBatch,
 } from 'firebase/firestore';
 import { getFirestoreDb } from '../../config/firebase';
@@ -51,6 +53,42 @@ export async function resolveMemberAccess(
   }
 
   return { dataOwnerUid: data.bossUid, isAuthorizedMember: true };
+}
+
+/** Registra o UID Firebase do membro autorizado (para limpeza total na nuvem). */
+export async function registerAuthorizedMemberLogin(
+  bossUid: string,
+  email: string,
+  memberUid: string,
+): Promise<void> {
+  const db = getFirestoreDb();
+  if (!db || !memberUid.trim() || memberUid === bossUid) return;
+
+  const emailKey = normalizeAuthEmail(email);
+  await setDoc(
+    doc(db, MEMBER_LOOKUP_COLLECTION, emailKey),
+    {
+      memberUid,
+      lastLoginAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
+/** UIDs de login dos e-mails autorizados que já entraram pelo menos uma vez. */
+export async function listMemberLoginUidsForBoss(bossUid: string): Promise<string[]> {
+  const db = getFirestoreDb();
+  if (!db) return [];
+
+  const snap = await getDocs(query(collection(db, MEMBER_LOOKUP_COLLECTION), where('bossUid', '==', bossUid)));
+  const uids = new Set<string>();
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data() as { memberUid?: string; ativo?: boolean };
+    if (data.ativo === false) continue;
+    const memberUid = data.memberUid?.trim();
+    if (memberUid && memberUid !== bossUid) uids.add(memberUid);
+  }
+  return [...uids];
 }
 
 export async function listAuthorizedEmails(bossUid: string): Promise<AuthorizedEmailEntry[]> {

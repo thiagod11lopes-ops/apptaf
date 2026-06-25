@@ -33,6 +33,10 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
   }, [loading]);
 
   const executar = useCallback(async () => {
+    if (!isBoss) {
+      setErro('Somente o e-mail chefe pode excluir todos os dados.');
+      return;
+    }
     setLoading(true);
     setErro(null);
     setSucesso(null);
@@ -45,12 +49,16 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
 
       const partes = ['Dados locais removidos.'];
       if (result.cloudCleared && result.cloudCounts) {
-        const { cadastros, sessoes } = result.cloudCounts;
+        const { cadastros, sessoes, memberAccountsWiped } = result.cloudCounts;
         partes.push(
           `Nuvem zerada: ${cadastros.toLocaleString('pt-BR')} cadastro${cadastros !== 1 ? 's' : ''} e ${sessoes.toLocaleString('pt-BR')} sessão${sessoes !== 1 ? 'ões' : ''} de TAF.`,
         );
-      } else if (isAuthenticated && firebaseEnabled && !isBoss) {
-        partes.push('Os dados na nuvem do chefe não foram alterados.');
+        if (memberAccountsWiped > 0) {
+          partes.push(
+            `${memberAccountsWiped} conta${memberAccountsWiped !== 1 ? 's' : ''} autorizada${memberAccountsWiped !== 1 ? 's' : ''} também limpa${memberAccountsWiped !== 1 ? 's' : ''} na nuvem.`,
+          );
+        }
+        partes.push('Aparelhos autorizados serão esvaziados ao sincronizar.');
       }
 
       setSucesso(partes.join(' '));
@@ -62,14 +70,22 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [apagaNuvem, isAuthenticated, firebaseEnabled, isBoss, onWiped]);
+  }, [apagaNuvem, isBoss, onWiped]);
+
+  if (!isBoss) return null;
 
   const listaItens = [
     'Cadastros de militares',
     'Resultados e sessões de TAF',
-    'Pré-cadastros de provas',
+    'Aplicadores e pré-cadastros de provas',
     'Cache e alterações pendentes neste dispositivo',
-    ...(apagaNuvem ? ['Todos os dados na nuvem (Firebase)'] : []),
+    ...(apagaNuvem
+      ? [
+          'Todos os dados na nuvem (Firebase) do chefe',
+          'Dados na nuvem de e-mails autorizados que já entraram no sistema',
+          'Sincronização para esvaziar aparelhos autorizados',
+        ]
+      : []),
   ];
 
   const footerPrimeiro = (
@@ -137,8 +153,9 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
       <View style={[styles.dangerBox, { backgroundColor: theme.lossMuted, borderColor: theme.loss }]}>
         <ShieldAlert size={22} color={theme.loss} strokeWidth={2.2} />
         <Text style={[ts.caption, styles.dangerHint, { color: theme.textSecondary }]}>
-          Remove permanentemente cadastros, resultados e cache local
-          {apagaNuvem ? ' — incluindo a nuvem' : ''}. Faça backup antes se precisar recuperar depois.
+          Remove permanentemente cadastros, resultados e cache
+          {apagaNuvem ? ' — incluindo nuvem do chefe e contas autorizadas' : ' neste dispositivo'}.
+          Faça backup antes se precisar recuperar depois.
         </Text>
       </View>
 
@@ -191,12 +208,6 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
               </Text>
             ))}
           </View>
-          {isAuthenticated && firebaseEnabled && !isBoss ? (
-            <Text style={[styles.note, { color: theme.textMuted }]}>
-              Como membro autorizado, apenas os dados deste aparelho serão limpos. A nuvem do chefe permanece
-              intacta.
-            </Text>
-          ) : null}
         </View>
       </ModernModal>
 
@@ -217,12 +228,12 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
             <ShieldAlert size={28} color="#FFFFFF" strokeWidth={2.2} />
             <Text style={styles.finalBannerTitle}>Perigo — exclusão irreversível</Text>
             <Text style={styles.finalBannerText}>
-              O sistema ficará completamente vazio. Confirme apenas se tiver certeza absoluta.
+              O sistema ficará completamente vazio para o chefe e para todos os e-mails autorizados.
             </Text>
           </LinearGradient>
           <Text style={[styles.message, { color: theme.text }]}>
             Ao tocar em <Text style={styles.strong}>Excluir tudo</Text>, todos os registros serão removidos
-            {apagaNuvem ? ' deste dispositivo e da nuvem' : ' deste dispositivo'}.
+            {apagaNuvem ? ' deste dispositivo, da nuvem e das contas autorizadas' : ' deste dispositivo'}.
           </Text>
         </View>
       </ModernModal>
@@ -280,11 +291,6 @@ const styles = StyleSheet.create({
   listItem: {
     fontSize: 13,
     lineHeight: 18,
-  },
-  note: {
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'center',
   },
   finalBanner: {
     borderRadius: 14,

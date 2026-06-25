@@ -51,13 +51,16 @@ export default function ConfiguracoesScreen() {
           <BackupTafCsvBlock />
         </Card>
 
-        <Card elevated>
-          <Text style={[ts.h2, { color: theme.loss }]}>Zona de perigo</Text>
-          <Text style={[ts.caption, styles.sectionHint, { color: theme.textSecondary }]}>
-            Exclua todos os cadastros e resultados para deixar o sistema vazio. Requer confirmação dupla.
-          </Text>
-          <ExcluirTodosDadosBlock />
-        </Card>
+        {isAuthenticated && firebaseEnabled && isBoss ? (
+          <Card elevated>
+            <Text style={[ts.h2, { color: theme.loss }]}>Zona de perigo</Text>
+            <Text style={[ts.caption, styles.sectionHint, { color: theme.textSecondary }]}>
+              Exclua todos os cadastros e resultados para deixar o sistema vazio — na nuvem e nos e-mails
+              autorizados. Requer confirmação dupla.
+            </Text>
+            <ExcluirTodosDadosBlock />
+          </Card>
+        ) : null}
 
         <Text style={[ts.caption, styles.footer]}>
           Design SISMAV · tema claro/escuro com persistência local.

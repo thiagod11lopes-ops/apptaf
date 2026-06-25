@@ -1,11 +1,15 @@
 import { clearLocalCadastros } from './cadastrosIndexedDb';
 import { clearLocalSessoesAplicacao } from './resultadosAplicadosIndexedDb';
+import { clearLocalAplicadores } from './aplicadoresIndexedDb';
 import { clearAllPreCadastrosTaf } from './preCadastroTafStorage';
 import {
   clearMemoryCloudCache,
   resetCloudDataCache,
 } from './cloudDataCache';
-import { wipeCloudUserDataFirestore, type WipeCloudCounts } from './firebase/wipeCloudDataFirestore';
+import {
+  wipeCloudTeamDataFirestore,
+  type WipeCloudTeamResult,
+} from './firebase/wipeCloudDataFirestore';
 import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHistorico';
 import { isFirebaseConfigured } from '../config/firebase';
 import { wipeOwnerData } from '../offline-first/db/localDb';
@@ -13,23 +17,25 @@ import { getTafDatabase, setMeta } from '../offline-first/db/tafDatabase';
 import { resetCloudSyncStatus, setCloudSyncResult } from './offline/cloudSyncActivity';
 import { syncEngine } from '../offline-first/sync/SyncEngine';
 import { clearPersistedStorageOwner } from './firebase/authUid';
+import { setLocalTeamWipeAck } from './applyTeamWipeIfNeeded';
 
 export type WipeSystemDataOptions = {
   uid: string | null;
-  /** Apaga também cadastros e resultados no Firebase (somente chefe da conta). */
+  /** Apaga nuvem do chefe e contas autorizadas (somente e-mail chefe). */
   wipeCloud: boolean;
 };
 
 export type WipeSystemDataResult = {
   localCleared: boolean;
   cloudCleared: boolean;
-  cloudCounts?: WipeCloudCounts;
+  cloudCounts?: WipeCloudTeamResult;
 };
 
 export async function wipeSystemData(options: WipeSystemDataOptions): Promise<WipeSystemDataResult> {
   await Promise.all([
     clearLocalCadastros(),
     clearLocalSessoesAplicacao(),
+    clearLocalAplicadores(),
     clearAllPreCadastrosTaf(),
   ]);
 
@@ -55,7 +61,8 @@ export async function wipeSystemData(options: WipeSystemDataOptions): Promise<Wi
     return { localCleared: true, cloudCleared: false };
   }
 
-  const cloudCounts = await wipeCloudUserDataFirestore(uid);
+  const cloudCounts = await wipeCloudTeamDataFirestore(uid);
+  await setLocalTeamWipeAck(uid, cloudCounts.teamWipeAt);
   return {
     localCleared: true,
     cloudCleared: true,

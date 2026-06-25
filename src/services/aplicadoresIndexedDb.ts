@@ -60,6 +60,20 @@ export async function getAllAplicadoresLocal(): Promise<AplicadorItemPersist[]> 
   }
 }
 
+export async function clearLocalAplicadores(): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const req = tx.objectStore(STORE_NAME).clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // Sem IndexedDB.
+  }
+}
+
 export async function getAllAplicadores(): Promise<AplicadorItemPersist[]> {
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();

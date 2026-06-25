@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { useTheme } from '../../contexts/ThemeContext';
-import { useDataStoreState } from '../../offline-first/store/DataStoreContext';
-import { syncLogger } from '../../offline-first/sync/SyncLogger';
-import { getCloudActivityState } from '../../services/offline/cloudSyncActivity';
-import type { SyncLogEntry } from '../../offline-first/types';
+import { useTheme } from '../contexts/ThemeContext';
+import { useDataStoreState } from '../offline-first/store/DataStoreContext';
+import { syncLogger } from '../offline-first/sync/SyncLogger';
+import { getCloudActivityState } from '../services/offline/cloudSyncActivity';
+import type { SyncLogEntry } from '../offline-first/types';
 
 export function SyncDiagnosticsPanel() {
   const { theme } = useTheme();

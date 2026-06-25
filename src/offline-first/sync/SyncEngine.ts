@@ -59,6 +59,17 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
   const payload = JSON.parse(entry.payload) as Record<string, unknown>;
 
   if (entry.collection === 'cadastros') {
+    if (payload.kind === 'cadastrosBatch' && Array.isArray(payload.items)) {
+      const items = payload.items as CadastroItemPersist[];
+      for (let i = 0; i < items.length; i += 500) {
+        await addCadastrosEmLoteFirestore(uid, items.slice(i, i + 500));
+      }
+      for (const item of items) {
+        const row = item as CadastroRecord;
+        await putCadastroRecord({ ...row, ownerUid: uid, syncStatus: 'synced' });
+      }
+      return;
+    }
     if (entry.operationType === 'DELETE') {
       await deleteCadastroFirestore(uid, entry.documentId);
       const dbCad = await listCadastros(uid, true);

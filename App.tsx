@@ -38,7 +38,11 @@ function AppRoot() {
       root.style.flexDirection = 'column';
     }
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+      const base =
+        typeof window !== 'undefined' && window.location.pathname.startsWith('/apptaf')
+          ? '/apptaf'
+          : '';
+      navigator.serviceWorker.register(`${base}/sw.js`).catch(() => undefined);
     }
     body.style.backgroundColor = theme.tokens.bg;
     html.classList.toggle('dark', isDark);

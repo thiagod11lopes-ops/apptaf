@@ -1,10 +1,10 @@
 import type { CloudDataCacheEntry } from '../cloudDataCache';
-import { getTafDatabase } from '../offline-first/db/tafDatabase';
-import { dataStore } from '../offline-first/store/DataStore';
+import { getTafDatabase } from '../../offline-first/db/tafDatabase';
+import { dataStore } from '../../offline-first/store/DataStore';
 import { waitForAuthenticatedUid } from './authUid';
 import { canAttemptCloudSync } from '../offline/networkStatus';
 import { getCloudActivityState, subscribeCloudActivity } from '../offline/cloudSyncActivity';
-import { syncEngine } from '../offline-first/sync/SyncEngine';
+import { syncEngine } from '../../offline-first/sync/SyncEngine';
 
 export type CloudDataLoadState = {
   percent: number;

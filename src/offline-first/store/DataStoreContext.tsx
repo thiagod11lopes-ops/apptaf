@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { dataStore } from './store/DataStore';
-import { connectivityMonitor, getConnectivityState } from './sync/ConnectivityMonitor';
-import { syncEngine } from './sync/SyncEngine';
-import type { ConnectivityState } from './types';
+import { dataStore } from './DataStore';
+import { connectivityMonitor, getConnectivityState } from '../sync/ConnectivityMonitor';
+import { syncEngine } from '../sync/SyncEngine';
+import type { ConnectivityState } from '../types';
 
 type DataStoreContextValue = {
   connectivity: ConnectivityState;

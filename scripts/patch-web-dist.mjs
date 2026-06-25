@@ -73,4 +73,9 @@ fs.writeFileSync(
 // Evita Jekyll no GitHub Pages (senão o README vira a página inicial)
 fs.writeFileSync(path.join(distDir, '.nojekyll'), '');
 
+const swSrc = path.resolve('public/sw.js');
+if (fs.existsSync(swSrc)) {
+  fs.copyFileSync(swSrc, path.join(distDir, 'sw.js'));
+}
+
 console.log('patch-web-dist: OK', prefix);

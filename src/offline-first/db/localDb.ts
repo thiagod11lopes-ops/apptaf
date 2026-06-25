@@ -159,9 +159,48 @@ export async function saveCadastrosBatch(
   ownerUid: string,
   userId: string | null,
 ): Promise<void> {
-  for (const item of items) {
-    await saveCadastro(item, ownerUid, userId);
+  if (items.length === 0) return;
+  const db = getTafDatabase();
+  if (!db) {
+    for (const item of items) {
+      await saveCadastro(item, ownerUid, userId);
+    }
+    return;
   }
+
+  const records: CadastroRecord[] = [];
+
+  for (const item of items) {
+    const existing = await db.cadastros.get(item.id);
+    const operation =
+      existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
+    const record = await toCadastroRecord(
+      existing && existing.ownerUid === ownerUid ? { ...existing, ...item } : item,
+      ownerUid,
+      userId,
+      operation,
+    );
+    if (existing && existing.ownerUid === ownerUid) {
+      record.createdAt = existing.createdAt;
+    }
+    records.push(record);
+  }
+
+  await db.cadastros.bulkPut(records);
+
+  await syncQueue.enqueue({
+    operationType: 'UPDATE',
+    collection: 'cadastros',
+    documentId: `__batch__:${Date.now()}`,
+    payload: { kind: 'cadastrosBatch', items: records },
+    ownerUid,
+  });
+}
+
+export async function getSessaoRaw(id: string): Promise<SessaoRecord | undefined> {
+  const db = getTafDatabase();
+  if (!db) return undefined;
+  return db.sessoes.get(id);
 }
 
 export async function softDeleteCadastro(
@@ -169,8 +208,8 @@ export async function softDeleteCadastro(
   ownerUid: string,
   userId: string | null,
 ): Promise<void> {
-  const existing = await getCadastroById(ownerUid, id);
-  if (!existing) return;
+  const existing = await getCadastroRaw(id);
+  if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
   const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');
   await putCadastroRecord(record);
   await syncQueue.enqueue({
@@ -187,15 +226,18 @@ export async function saveSessao(
   ownerUid: string,
   userId: string | null,
 ): Promise<SessaoRecord> {
-  const existing = await getSessaoById(ownerUid, item.id);
-  const operation = existing ? 'UPDATE' : 'CREATE';
+  const existing = await getSessaoRaw(item.id);
+  const operation =
+    existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
   const record = await toSessaoRecord(
-    existing ? { ...existing, ...item } : item,
+    existing && existing.ownerUid === ownerUid ? { ...existing, ...item } : item,
     ownerUid,
     userId,
     operation,
   );
-  if (existing) record.createdAt = existing.createdAt;
+  if (existing && existing.ownerUid === ownerUid) {
+    record.createdAt = existing.createdAt;
+  }
   await putSessaoRecord(record);
   await syncQueue.enqueue({
     operationType: operation,

@@ -37,7 +37,7 @@ type AuthContextType = {
   /** Entrou com e-mail autorizado pelo chefe — usa banco do chefe. */
   isAuthorizedMember: boolean;
   signInWithGoogle: (idToken?: string) => Promise<boolean>;
-  logout: () => Promise<void>;
+  logout: (options?: { preserveForcedOffline?: boolean }) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result.mode === 'redirect';
   }, [firebaseEnabled]);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (options?: { preserveForcedOffline?: boolean }) => {
     await signOutFirebase();
     setUser(null);
     setIsAuthorizedMember(false);
@@ -120,7 +120,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetCloudSyncStatus();
     syncEngine.shutdown();
     stopRealtimeSync();
-    void systemState.setOnlineActive();
+    if (!options?.preserveForcedOffline) {
+      void systemState.setOnlineActive();
+    }
     notifyDataChanged();
   }, []);
 

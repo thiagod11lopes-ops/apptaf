@@ -45,7 +45,7 @@ function canAttemptSyncNow(): boolean {
 }
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, authReady } = useAuth();
+  const { isAuthenticated, authReady, logout } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
   const [systemMode, setSystemMode] = useState<SystemSyncMode>(systemState.getMode());
   const [pendingSummary, setPendingSummary] = useState<PendingSyncSummary>(EMPTY_SUMMARY);
@@ -114,7 +114,8 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     syncEngine.deactivateOnlineMode();
     setSystemMode(SYSTEM_STATE.FORCED_OFFLINE);
     setGateVisible(false);
-  }, []);
+    await logout({ preserveForcedOffline: true });
+  }, [logout]);
 
   const tryReturnToOnline = useCallback(async () => {
     await systemState.setOnlineActive();

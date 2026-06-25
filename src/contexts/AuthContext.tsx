@@ -75,20 +75,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const mapped = mapFirebaseUser(fbUser);
           const access = await resolveMemberAccess(mapped.uid, mapped.email);
+          resetCloudSyncStatus();
+          try {
+            await migrateDeviceDataOnLogin(access.dataOwnerUid);
+            await migrateLegacyToDexie(access.dataOwnerUid);
+            await syncEngine.init(access.dataOwnerUid);
+          } catch {
+            // Login continua; gate de sync reavalia após authReady.
+          }
           setUser(mapped);
           setIsAuthorizedMember(access.isAuthorizedMember);
           setAuthUidState(mapped.uid, access.dataOwnerUid, true);
           setAuthReady(true);
-          resetCloudSyncStatus();
-          void (async () => {
-            try {
-              await migrateDeviceDataOnLogin(access.dataOwnerUid);
-              await migrateLegacyToDexie(access.dataOwnerUid);
-              await syncEngine.init(access.dataOwnerUid);
-            } catch {
-              // Login continua; sync retentado pelo motor offline-first.
-            }
-          })();
         })();
       });
     })();

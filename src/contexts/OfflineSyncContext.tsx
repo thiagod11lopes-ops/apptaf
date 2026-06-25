@@ -42,6 +42,10 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
   sessoes: 0,
 };
 
+function canAttemptSyncNow(): boolean {
+  return connectivityMonitor.canSync() && !systemState.isForcedOffline();
+}
+
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, authReady } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
@@ -50,34 +54,34 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const [gateVisible, setGateVisible] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const gateCheckInFlight = useRef(false);
+  const prevCanSyncRef = useRef(canAttemptSyncNow());
 
   const online =
     connectivity === 'ONLINE' || connectivity === 'DEGRADED' || connectivity === 'SYNCING';
   const isForcedOffline = systemMode === SYSTEM_STATE.FORCED_OFFLINE;
   const pendingCount = pendingSummary.total;
 
-  const refreshPending = useCallback(async () => {
+  const refreshPending = useCallback(async (): Promise<PendingSyncSummary> => {
     const uid = getCachedDataOwnerUid();
     if (!uid || !isAuthenticated) {
       setPendingSummary(EMPTY_SUMMARY);
-      return;
+      return EMPTY_SUMMARY;
     }
     const summary = await getPendingSyncItems(uid);
     setPendingSummary(summary);
+    return summary;
   }, [isAuthenticated]);
 
   const evaluateSyncGate = useCallback(async () => {
     if (!authReady || !isAuthenticated || gateCheckInFlight.current) return;
-    if (!connectivityMonitor.canSync()) return;
-    if (systemState.isForcedOffline()) return;
+    if (!canAttemptSyncNow()) return;
 
     const uid = getCachedDataOwnerUid();
     if (!uid) return;
 
     gateCheckInFlight.current = true;
     try {
-      await refreshPending();
-      const summary = await getPendingSyncItems(uid);
+      const summary = await refreshPending();
       if (summary.total > 0) {
         setGateVisible(true);
         return;
@@ -128,13 +132,32 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     connectivityMonitor.start();
-    return connectivityMonitor.subscribe(setConnectivity);
-  }, []);
+    return connectivityMonitor.subscribe((state) => {
+      setConnectivity(state);
+      const canSync = state === 'ONLINE' || state === 'DEGRADED';
+      const nowCanSync = canSync && !systemState.isForcedOffline();
+      const wasCanSync = prevCanSyncRef.current;
+      prevCanSyncRef.current = nowCanSync;
+      if (!wasCanSync && nowCanSync && authReady && isAuthenticated) {
+        void evaluateSyncGate();
+      }
+    });
+  }, [authReady, isAuthenticated, evaluateSyncGate]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated) return;
-    void refreshPending();
-    return dataStore.subscribe(() => void refreshPending());
+    void refreshPending().then((summary) => {
+      if (summary.total > 0 && canAttemptSyncNow()) {
+        setGateVisible(true);
+      }
+    });
+    return dataStore.subscribe(() => {
+      void refreshPending().then((summary) => {
+        if (summary.total > 0 && canAttemptSyncNow()) {
+          setGateVisible(true);
+        }
+      });
+    });
   }, [authReady, isAuthenticated, refreshPending]);
 
   useEffect(() => {
@@ -143,9 +166,16 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, [authReady, isAuthenticated, online, evaluateSyncGate]);
 
   useEffect(() => {
+    if (!authReady || !isAuthenticated || pendingCount <= 0 || isForcedOffline) return;
+    if (canAttemptSyncNow()) {
+      void evaluateSyncGate();
+    }
+  }, [pendingCount, authReady, isAuthenticated, isForcedOffline, evaluateSyncGate]);
+
+  useEffect(() => {
     if (!authReady || !isAuthenticated) return;
     const onAppState = (state: AppStateStatus) => {
-      if (state === 'active' && connectivityMonitor.canSync() && !systemState.isForcedOffline()) {
+      if (state === 'active' && canAttemptSyncNow()) {
         void evaluateSyncGate();
       }
     };

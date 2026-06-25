@@ -127,6 +127,7 @@ export class SyncEngine {
 
     const pending = await getPendingSyncItems(dataOwnerUid);
     if (pending.total > 0) {
+      notify();
       return;
     }
 
@@ -199,6 +200,14 @@ export class SyncEngine {
     if (!ownerUid || processing || !connectivityMonitor.canSync()) return false;
     if (systemState.isForcedOffline() && !options?.forceUpload) return false;
     if (!options?.bypassGap && Date.now() - lastProcessFinishedAt < MIN_PROCESS_GAP_MS) return false;
+
+    if (!options?.forceUpload && ownerUid) {
+      const blocked = await getPendingSyncItems(ownerUid);
+      if (blocked.total > 0) {
+        notify();
+        return false;
+      }
+    }
 
     processing = true;
     connectivityMonitor.setSyncing(true);

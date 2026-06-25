@@ -3,18 +3,20 @@ import { closeTafDatabaseForTests } from '../../src/offline-first/db/tafDatabase
 import { setAuthUidState } from '../../src/services/firebase/authUid';
 
 const scheduleProcessMock = vi.fn().mockResolvedValue(undefined);
+const notifyDataChangedMock = vi.fn();
 
 vi.mock('../../src/offline-first/sync/SyncEngine', () => ({
   syncEngine: {
     scheduleProcess: scheduleProcessMock,
   },
-  notifyDataChanged: vi.fn(),
+  notifyDataChanged: notifyDataChangedMock,
   subscribeDataChanged: vi.fn(() => () => {}),
 }));
 
-describe('DataStore — sync imediato após escrita', () => {
+describe('DataStore — escrita local', () => {
   beforeEach(async () => {
     scheduleProcessMock.mockClear();
+    notifyDataChangedMock.mockClear();
     setAuthUidState('user-1', 'owner-1', true);
     const { dataStore } = await import('../../src/offline-first/store/DataStore');
     await dataStore.upsertCadastro(
@@ -33,7 +35,8 @@ describe('DataStore — sync imediato após escrita', () => {
     await closeTafDatabaseForTests();
   });
 
-  it('dispara scheduleProcess(true) após upsertCadastro', () => {
-    expect(scheduleProcessMock).toHaveBeenCalledWith(true);
+  it('notifica UI sem disparar sync automático', () => {
+    expect(notifyDataChangedMock).toHaveBeenCalled();
+    expect(scheduleProcessMock).not.toHaveBeenCalled();
   });
 });

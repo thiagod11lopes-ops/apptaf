@@ -8,7 +8,6 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
 import { useAuth } from './AuthContext';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import { connectivityMonitor, getConnectivityState } from '../offline-first/sync/ConnectivityMonitor';
@@ -55,6 +54,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const [syncing, setSyncing] = useState(false);
   const gateCheckInFlight = useRef(false);
   const prevCanSyncRef = useRef(canAttemptSyncNow());
+  const gateCheckedForSession = useRef(false);
 
   const online =
     connectivity === 'ONLINE' || connectivity === 'DEGRADED' || connectivity === 'SYNCING';
@@ -87,6 +87,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         return;
       }
       setGateVisible(false);
+      if (syncEngine.isOnlineModeActive()) return;
       await systemState.setOnlineActive();
       await syncEngine.enableOnlineMode();
     } finally {
@@ -110,6 +111,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
   const handleWorkOffline = useCallback(async () => {
     await systemState.setForcedOffline();
+    syncEngine.deactivateOnlineMode();
     setSystemMode(SYSTEM_STATE.FORCED_OFFLINE);
     setGateVisible(false);
   }, []);
@@ -145,12 +147,18 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, [authReady, isAuthenticated, evaluateSyncGate]);
 
   useEffect(() => {
+    if (!authReady || !isAuthenticated) {
+      gateCheckedForSession.current = false;
+      return;
+    }
+    if (gateCheckedForSession.current) return;
+    gateCheckedForSession.current = true;
+    void evaluateSyncGate();
+  }, [authReady, isAuthenticated, evaluateSyncGate]);
+
+  useEffect(() => {
     if (!authReady || !isAuthenticated) return;
-    void refreshPending().then((summary) => {
-      if (summary.total > 0 && canAttemptSyncNow()) {
-        setGateVisible(true);
-      }
-    });
+    void refreshPending();
     return dataStore.subscribe(() => {
       void refreshPending().then((summary) => {
         if (summary.total > 0 && canAttemptSyncNow()) {
@@ -159,29 +167,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       });
     });
   }, [authReady, isAuthenticated, refreshPending]);
-
-  useEffect(() => {
-    if (!authReady || !isAuthenticated || !online) return;
-    void evaluateSyncGate();
-  }, [authReady, isAuthenticated, online, evaluateSyncGate]);
-
-  useEffect(() => {
-    if (!authReady || !isAuthenticated || pendingCount <= 0 || isForcedOffline) return;
-    if (canAttemptSyncNow()) {
-      void evaluateSyncGate();
-    }
-  }, [pendingCount, authReady, isAuthenticated, isForcedOffline, evaluateSyncGate]);
-
-  useEffect(() => {
-    if (!authReady || !isAuthenticated) return;
-    const onAppState = (state: AppStateStatus) => {
-      if (state === 'active' && canAttemptSyncNow()) {
-        void evaluateSyncGate();
-      }
-    };
-    const sub = AppState.addEventListener('change', onAppState);
-    return () => sub.remove();
-  }, [authReady, isAuthenticated, evaluateSyncGate]);
 
   const value = useMemo(
     () => ({

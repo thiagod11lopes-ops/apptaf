@@ -42,6 +42,7 @@ const BACKOFF_BASE_MS = 1500;
 const BACKOFF_MAX_MS = 60_000;
 
 let ownerUid: string | null = null;
+let onlineModeUid: string | null = null;
 let processing = false;
 let processTimer: ReturnType<typeof setTimeout> | null = null;
 let connectivityUnsub: (() => void) | null = null;
@@ -103,23 +104,26 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
 }
 
 export class SyncEngine {
+  /** Modo online ativo: tempo real ligado, sem sync periódico. */
+  isOnlineModeActive(): boolean {
+    return (
+      ownerUid != null &&
+      onlineModeUid === ownerUid &&
+      systemState.canUseFirebase() &&
+      !systemState.isForcedOffline()
+    );
+  }
+
   async init(dataOwnerUid: string): Promise<void> {
     ownerUid = dataOwnerUid;
     await systemState.hydrate();
     await getMeta(`migrated:${dataOwnerUid}`);
     connectivityMonitor.start();
     stopRealtimeSync();
+    onlineModeUid = null;
 
     connectivityUnsub?.();
-    let prevConn = connectivityMonitor.getState();
-    connectivityUnsub = connectivityMonitor.subscribe((state) => {
-      const cameOnline =
-        (state === 'ONLINE' || state === 'DEGRADED') && prevConn === 'OFFLINE';
-      prevConn = state;
-      if (cameOnline && systemState.canUseFirebase()) {
-        void this.scheduleProcess(false);
-      }
-    });
+    connectivityUnsub = null;
 
     if (systemState.isForcedOffline()) {
       return;
@@ -131,18 +135,23 @@ export class SyncEngine {
       return;
     }
 
-    startRealtimeSync(dataOwnerUid, () => notify());
-    await this.scheduleProcess(true);
+    await this.enableOnlineMode();
   }
 
-  /** Ativa modo online: tempo real + pull após upload confirmado. */
+  /** Liga tempo real uma vez. Não dispara pull/sync periódico. */
   async enableOnlineMode(): Promise<void> {
     if (!ownerUid || systemState.isForcedOffline()) return;
+    if (this.isOnlineModeActive()) return;
+
     stopRealtimeSync();
     startRealtimeSync(ownerUid, () => notify());
-    lastPullAt = 0;
-    lastProcessFinishedAt = 0;
-    await this.scheduleProcess(true);
+    onlineModeUid = ownerUid;
+  }
+
+  /** Desliga tempo real (ex.: modo offline controlado). */
+  deactivateOnlineMode(): void {
+    stopRealtimeSync();
+    onlineModeUid = null;
   }
 
   /**
@@ -173,6 +182,7 @@ export class SyncEngine {
     connectivityUnsub?.();
     connectivityUnsub = null;
     ownerUid = null;
+    onlineModeUid = null;
     if (processTimer) clearTimeout(processTimer);
     processTimer = null;
   }
@@ -204,7 +214,6 @@ export class SyncEngine {
     if (!options?.forceUpload && ownerUid) {
       const blocked = await getPendingSyncItems(ownerUid);
       if (blocked.total > 0) {
-        notify();
         return false;
       }
     }

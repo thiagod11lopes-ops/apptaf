@@ -7,7 +7,8 @@ import {
   SafeAreaView,
   TouchableOpacity,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ChevronRight, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -60,11 +61,7 @@ export default function ResultadosScreen() {
       .finally(() => setCarregando(false));
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      carregar();
-    }, [carregar]),
-  );
+  useAuthDataReload(carregar);
 
   const abrirSessao = useCallback(
     (sessao: SessaoAplicacaoTaf) => {

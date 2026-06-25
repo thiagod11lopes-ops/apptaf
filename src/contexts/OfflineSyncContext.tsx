@@ -75,14 +75,10 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     setModalVisible(true);
   }, [pendingCount]);
 
-  const autoPushPendingToCloud = useCallback(async () => {
+  const autoSyncWithCloud = useCallback(async () => {
     if (!authReady || !isAuthenticated || !isOnline() || autoSyncInFlightRef.current) return;
     const uid = getCachedDataOwnerUid();
     if (!uid) return;
-
-    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
-    const summary = summarizePendingOps(entry.pendingOps);
-    if (summary.total <= 0) return;
 
     autoSyncInFlightRef.current = true;
     setSyncing(true);
@@ -97,9 +93,8 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
   const tryPromptAfterReconnect = useCallback(async () => {
     if (!authReady || !isAuthenticated || !isOnline()) return;
-    await refreshPending();
-    await autoPushPendingToCloud();
-  }, [authReady, isAuthenticated, refreshPending, autoPushPendingToCloud]);
+    await autoSyncWithCloud();
+  }, [authReady, isAuthenticated, autoSyncWithCloud]);
 
   useEffect(() => {
     return subscribeOnlineStatus((nextOnline) => {
@@ -125,9 +120,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     const uid = getCachedDataOwnerUid();
     const unsubData = uid
       ? subscribeOfflineData(() => {
-          void refreshPending().then(() => {
-            if (isOnline()) void autoPushPendingToCloud();
-          });
+          void refreshPending();
         })
       : () => undefined;
 
@@ -142,12 +135,17 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     };
     const sub = AppState.addEventListener('change', onAppState);
 
+    const pullInterval = setInterval(() => {
+      if (isOnline()) void autoSyncWithCloud();
+    }, 45_000);
+
     return () => {
       unsubData();
       unsubActivity();
       sub.remove();
+      clearInterval(pullInterval);
     };
-  }, [authReady, isAuthenticated, refreshPending, tryPromptAfterReconnect, autoPushPendingToCloud]);
+  }, [authReady, isAuthenticated, refreshPending, tryPromptAfterReconnect, autoSyncWithCloud]);
 
   const confirmSync = useCallback(async () => {
     const uid = getCachedDataOwnerUid();
@@ -169,9 +167,9 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!authReady || !isAuthenticated || !online || pendingCount <= 0) return;
-    void autoPushPendingToCloud();
-  }, [authReady, isAuthenticated, online, pendingCount, autoPushPendingToCloud]);
+    if (!authReady || !isAuthenticated || !online) return;
+    void autoSyncWithCloud();
+  }, [authReady, isAuthenticated, online, autoSyncWithCloud]);
 
   const value = useMemo(
     () => ({

@@ -9,7 +9,8 @@ import {
   TouchableOpacity,
   TextInput,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
@@ -70,11 +71,7 @@ export default function AplicacaoTAFScreen() {
       .catch(() => undefined);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      carregarCadastros();
-    }, [carregarCadastros])
-  );
+  useAuthDataReload(carregarCadastros);
 
   const abrirModalBusca = useCallback(() => {
     setNomeOuNip('');

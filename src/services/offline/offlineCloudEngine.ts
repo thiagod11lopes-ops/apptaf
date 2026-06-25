@@ -274,23 +274,16 @@ export async function readOfflineCloudEntry(
 ): Promise<CloudDataCacheEntry> {
   const entry = await loadEntry(uid);
   const autoSync = options?.autoSync !== false;
-  const vazio = entry.cadastros.length === 0 && entry.sessoes.length === 0;
 
   if (!autoSync) {
     return entry;
   }
 
-  // Dispositivo novo, cache vazio ou pull forçado: aguarda sincronização com a nuvem.
-  if (vazio || options?.forcePull) {
+  // Online: sempre reconcilia com a nuvem (chefe ↔ e-mails autorizados).
+  if (isOnline() || options?.forcePull) {
     return syncOfflineCloudData(uid);
   }
 
-  if ((entry.pendingOps?.length ?? 0) > 0) {
-    enqueueSync(uid);
-    return entry;
-  }
-
-  enqueueSync(uid);
   return entry;
 }
 

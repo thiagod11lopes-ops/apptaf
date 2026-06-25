@@ -7,7 +7,8 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { Card } from '../components/Card';
@@ -38,11 +39,7 @@ export default function EstatisticasScreen() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      carregar();
-    }, [carregar]),
-  );
+  useAuthDataReload(carregar);
 
   const s = stats;
   const sparkTotais = useMemo(

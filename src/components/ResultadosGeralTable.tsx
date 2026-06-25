@@ -28,12 +28,12 @@ import { getUiColors } from '../theme/uiColors';
 import { escalarLargurasColunas, tableAvailableWidth } from '../theme/tableLayout';
 
 const COL = {
+  postoGrad: 76,
   nip: 112,
   nome: 168,
   status: 88,
   nota: 62,
   situacao: 84,
-  permanencia: 104,
   acoes: 76,
 } as const;
 
@@ -98,6 +98,20 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
 
   const columns = useMemo(
     () => [
+      columnHelper.accessor('postoGrad', {
+        header: 'Posto/Grad.',
+        size: colSizes.postoGrad,
+        enableSorting: true,
+        meta: { align: 'left' as const },
+        cell: (info) => (
+          <SearchHighlightText
+            text={info.getValue()}
+            queryLower={buscaLower}
+            style={cellBase}
+            numberOfLines={1}
+          />
+        ),
+      }),
       columnHelper.accessor('nip', {
         header: 'NIP',
         size: colSizes.nip,
@@ -196,20 +210,11 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
         header: 'Permanência',
         meta: { align: 'center' as const },
         columns: [
-          columnHelper.accessor('permanenciaTempo', {
-            header: 'Permanência',
-            size: colSizes.permanencia,
-            enableSorting: true,
-            meta: { align: 'center' as const, groupStart: true },
-            cell: (info) => (
-              <SearchHighlightText text={info.getValue()} queryLower={buscaLower} style={cellBase} />
-            ),
-          }),
           columnHelper.accessor('situacaoPermanencia', {
             header: 'Situação',
             size: colSizes.situacao,
             enableSorting: true,
-            meta: { align: 'center' as const },
+            meta: { align: 'center' as const, groupStart: true },
             cell: (info) => (
               <SearchHighlightText
                 text={info.getValue()}

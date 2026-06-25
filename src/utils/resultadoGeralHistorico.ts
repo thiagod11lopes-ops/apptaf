@@ -6,6 +6,7 @@ import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { formatNipInput, nipDigitos } from './nipFormat';
 import type { PendenciaParcialItem, ResultadoGeralItem } from './resultadoTafCadastro';
+import { postoGradFromLinhaId } from './resultadoTafCadastro';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 
 type ModalidadeHistorico = {
@@ -108,6 +109,7 @@ function aggParaLinha(agg: AggRow): ResultadoGeralItem {
 
   return {
     id: agg.id,
+    postoGrad: '—',
     nip: agg.nip || '—',
     nome: agg.nome || '—',
     notaCorrida: temCorrida ? agg.corrida!.nota : '—',
@@ -240,7 +242,10 @@ export function listarResultadosGeralFromHistorico(
 ): ResultadoGeralItem[] {
   const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
   return agregarHistoricoPorParticipante(unificadas, cadastros)
-    .map(aggParaLinha)
+    .map((agg) => ({
+      ...aggParaLinha(agg),
+      postoGrad: postoGradFromLinhaId(agg.id, agg.nip, cadastros),
+    }))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 

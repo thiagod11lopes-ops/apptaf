@@ -29,12 +29,6 @@ export function estimarFolhasA4PdfResultadosTaf(quantidadeLinhas: number): numbe
 /** Tempo padrão da prova de permanência em relatórios PDF. */
 export const PERMANENCIA_TEMPO_PDF_PADRAO = '10 minutos';
 
-function permanenciaTempoParaPdf(linha: ResultadoTafLinha): string {
-  const temPermanencia =
-    linha.situacaoPermanencia !== '—' || linha.permanenciaTempo !== '—';
-  return temPermanencia ? PERMANENCIA_TEMPO_PDF_PADRAO : '—';
-}
-
 function escapeHtml(s: string): string {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -51,6 +45,7 @@ export function buildResultadosTafHtml(
   const rows = linhas
     .map(
       (r) => `<tr>
+        <td>${escapeHtml(r.postoGrad)}</td>
         <td>${escapeHtml(r.nip)}</td>
         <td>${escapeHtml(r.nome)}</td>
         <td class="nota">${escapeHtml(r.notaCorrida)}</td>
@@ -59,7 +54,6 @@ export function buildResultadosTafHtml(
         <td class="nota">${escapeHtml(r.notaNatacao)}</td>
         <td>${escapeHtml(r.situacaoNatacao)}</td>
         <td class="col-rubrica">${celulaRubricaHtml(r.rubricaNatacaoSvg)}</td>
-        <td>${escapeHtml(permanenciaTempoParaPdf(r))}</td>
         <td>${escapeHtml(r.situacaoPermanencia)}</td>
         <td class="col-rubrica">${celulaRubricaHtml(r.rubricaPermanenciaSvg)}</td>
       </tr>`,
@@ -86,6 +80,7 @@ export function buildResultadosTafHtml(
   <table class="resultados-taf">
     <thead>
       <tr>
+        <th>Posto/Grad.</th>
         <th>NIP</th>
         <th>Nome</th>
         <th>Nota corrida</th>
@@ -94,7 +89,6 @@ export function buildResultadosTafHtml(
         <th>Nota natação</th>
         <th>Situação natação</th>
         <th class="col-rubrica">Rúbrica</th>
-        <th>Permanência (tempo)</th>
         <th>Situação permanência</th>
         <th class="col-rubrica">Rúbrica</th>
       </tr>

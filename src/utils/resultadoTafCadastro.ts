@@ -6,6 +6,7 @@ import { temRegistroModalidade } from './tafRegistro';
 
 export type ResultadoTafLinha = {
   id: string;
+  postoGrad: string;
   nip: string;
   nome: string;
   notaCorrida: string;
@@ -150,6 +151,26 @@ export function listarResultadosGeral(cadastros: CadastroItemPersist[]): Resulta
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
+export function postoGradFromCadastro(
+  c: Pick<CadastroItemPersist, 'categoria' | 'oficial' | 'praca'>,
+): string {
+  if (c.categoria === 'Oficiais') return (c.oficial || '').trim() || '—';
+  return (c.praca || '').trim() || '—';
+}
+
+export function postoGradFromLinhaId(
+  linhaId: string,
+  nip: string,
+  cadastros: CadastroItemPersist[],
+): string {
+  const porId = cadastros.find((c) => c.id === linhaId);
+  if (porId) return postoGradFromCadastro(porId);
+  const chave = nip !== '—' ? nip : '';
+  if (!chave) return '—';
+  const busca = buscarCadastroPorNomeOuNip(cadastros, chave);
+  return busca.kind === 'found' ? postoGradFromCadastro(busca.cadastro) : '—';
+}
+
 export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTafLinha {
   const t = tempos(c);
   const temCorrida = !!(t.corrida || (c.notaCorrida || '').trim());
@@ -158,6 +179,7 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
 
   return {
     id: c.id,
+    postoGrad: postoGradFromCadastro(c),
     nip: c.nip || '—',
     nome: c.nome || '—',
     notaCorrida: temCorrida ? (c.notaCorrida || '—').trim() || '—' : '—',

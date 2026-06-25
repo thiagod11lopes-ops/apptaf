@@ -28,6 +28,7 @@ const MIN_BUSCA = 3;
 
 function linhaCombinaBusca(item: ResultadoGeralItem, q: string, qDigits: string): boolean {
   const haystack = [
+    item.postoGrad,
     item.nip,
     item.nome,
     item.statusTaf,

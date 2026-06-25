@@ -73,7 +73,19 @@ export async function importarCadastrosDePdf(
   }
 
   if (paraSalvar.length > 0) {
-    await addCadastrosEmLote(paraSalvar);
+    try {
+      await addCadastrosEmLote(paraSalvar);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Falha ao enviar cadastros à nuvem.';
+      return {
+        totalNoArquivo: linhas.length,
+        importados: paraSalvar.length,
+        ignoradosDuplicados,
+        erros: [
+          `${paraSalvar.length} cadastro(s) neste aparelho, mas a nuvem não foi atualizada: ${msg}`,
+        ],
+      };
+    }
   }
 
   return {

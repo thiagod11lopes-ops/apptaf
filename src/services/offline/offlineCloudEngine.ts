@@ -125,6 +125,8 @@ async function flushPendingOps(uid: string, entry: CloudDataCacheEntry): Promise
 async function pullAndMerge(uid: string, entry: CloudDataCacheEntry): Promise<CloudDataCacheEntry> {
   if (!isOnline()) return entry;
 
+  const localVazio = entry.cadastros.length === 0 && entry.sessoes.length === 0;
+
   try {
     const [remoteCadastros, remoteSessoes] = await Promise.all([
       getAllCadastrosFirestoreLight(uid),
@@ -132,6 +134,17 @@ async function pullAndMerge(uid: string, entry: CloudDataCacheEntry): Promise<Cl
     ]);
 
     const tombstones = entry.tombstones ?? emptyTombstones();
+
+    if (localVazio && (remoteCadastros.length > 0 || remoteSessoes.length > 0)) {
+      return {
+        ...buildEntry(uid, remoteCadastros, remoteSessoes, {
+          pendingOps: entry.pendingOps,
+          tombstones,
+        }),
+        syncedAt: Date.now(),
+      };
+    }
+
     const mergedCadastros = dedupeCadastrosByNipNewest(
       mergeCadastros(entry.cadastros, remoteCadastros, tombstones.cadastros),
     );
@@ -145,7 +158,10 @@ async function pullAndMerge(uid: string, entry: CloudDataCacheEntry): Promise<Cl
     await pushLocalWinsToCloud(uid, entry, merged, remoteCadastros, remoteSessoes);
 
     return { ...merged, syncedAt: Date.now() };
-  } catch {
+  } catch (error) {
+    if (localVazio && typeof console !== 'undefined') {
+      console.warn('[TAF sync] Falha ao baixar dados da nuvem:', error);
+    }
     return entry;
   }
 }
@@ -299,24 +315,33 @@ export async function upsertCadastrosLoteOffline(
     map.set(item.id, item);
   }
 
+  const hadPending = (entry.pendingOps?.length ?? 0) > 0;
   const next = buildEntry(uid, [...map.values()], entry.sessoes, {
     pendingOps: entry.pendingOps,
     tombstones: entry.tombstones,
   });
   await saveEntry(next);
 
-  if (isOnline() && (entry.pendingOps?.length ?? 0) === 0) {
+  if (!hadPending) {
     try {
       await addCadastrosEmLoteFirestore(uid, stamped);
       await syncOfflineCloudData(uid);
       return;
     } catch {
-      // enfileira individualmente
+      // Tenta enviar item a item via fila + flush.
     }
   }
 
   for (const item of stamped) {
     await appendPending(uid, { kind: 'upsertCadastro', at: item.updatedAt!, item });
+  }
+
+  const synced = await syncOfflineCloudData(uid);
+  const pending = synced.pendingOps?.length ?? 0;
+  if (pending > 0 && isOnline()) {
+    throw new Error(
+      `${pending} cadastro(s) não foram enviados à nuvem. Verifique a conexão e tente sincronizar.`,
+    );
   }
 }
 

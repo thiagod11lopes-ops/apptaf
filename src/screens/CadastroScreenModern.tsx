@@ -27,6 +27,8 @@ import { LabelNip } from '../components/LabelNip';
 import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
 import { addCadastro, deleteCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
+import { subscribeOfflineData } from '../services/offline/offlineCloudEngine';
+import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import {
   notaCorridaParaPersistencia,
   textoNotaCorridaFromCadastro,
@@ -89,7 +91,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 export default function CadastroScreenModern() {
   const { theme, fontsLoaded } = useTheme();
-  const { isAuthorizedMember } = useAuth();
+  const { isAuthorizedMember, isAuthenticated } = useAuth();
   const navigation = useNavigation();
   const ts = theme.textStyles;
   const regularFont = fontFamily('regular', fontsLoaded);
@@ -265,6 +267,15 @@ export default function CadastroScreenModern() {
   }, []);
 
   useAuthDataReload(recarregarCadastros);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const uid = getCachedDataOwnerUid();
+    if (!uid) return;
+    return subscribeOfflineData(() => {
+      recarregarCadastros();
+    });
+  }, [isAuthenticated, recarregarCadastros]);
 
   useEffect(() => {
     if (!modalCadastroSucesso) return;

@@ -107,12 +107,34 @@ async function executeOpOnCloud(uid: string, op: PendingOp): Promise<void> {
 }
 
 async function flushPendingOps(uid: string, entry: CloudDataCacheEntry): Promise<CloudDataCacheEntry> {
-  if (!isOnline() || entry.pendingOps.length === 0) return entry;
+  if (entry.pendingOps.length === 0) return entry;
+
+  const compact = compactPendingOps(entry.pendingOps);
+  const upserts = compact.filter(
+    (op): op is Extract<PendingOp, { kind: 'upsertCadastro' }> => op.kind === 'upsertCadastro',
+  );
+  const others = compact.filter((op) => op.kind !== 'upsertCadastro');
 
   let tombstones = entry.tombstones ?? emptyTombstones();
   const remaining: PendingOp[] = [];
 
-  for (const op of entry.pendingOps) {
+  if (upserts.length > 0) {
+    try {
+      await withCloudUpload(() =>
+        addCadastrosEmLoteFirestore(
+          uid,
+          upserts.map((op) => op.item),
+        ),
+      );
+      for (const op of upserts) {
+        tombstones = applyPendingToTombstones(tombstones, op);
+      }
+    } catch {
+      remaining.push(...upserts);
+    }
+  }
+
+  for (const op of others) {
     try {
       await executeOpOnCloud(uid, op);
       tombstones = applyPendingToTombstones(tombstones, op);
@@ -129,8 +151,6 @@ async function flushPendingOps(uid: string, entry: CloudDataCacheEntry): Promise
 }
 
 async function pullAndMerge(uid: string, entry: CloudDataCacheEntry): Promise<CloudDataCacheEntry> {
-  if (!isOnline()) return entry;
-
   const localVazio = entry.cadastros.length === 0 && entry.sessoes.length === 0;
 
   try {
@@ -182,16 +202,27 @@ async function pushLocalWinsToCloud(
   const remoteCadMap = new Map(remoteCadastros.map((c) => [c.id, c]));
   const remoteSessMap = new Map(remoteSessoes.map((s) => [s.id, s]));
 
+  const cadastrosToUpload: CadastroItemPersist[] = [];
   for (const item of merged.cadastros) {
     const remote = remoteCadMap.get(item.id);
     const local = localBefore.cadastros.find((c) => c.id === item.id);
     const localTs = local ? getRecordUpdatedAt(local) : 0;
     const remoteTs = remote ? getRecordUpdatedAt(remote) : 0;
     if (!remote || localTs > remoteTs) {
-      try {
-        await addCadastroFirestore(uid, item);
-      } catch {
-        // permanece na fila via pendingOps se necessário
+      cadastrosToUpload.push(item);
+    }
+  }
+
+  if (cadastrosToUpload.length > 0) {
+    try {
+      await withCloudUpload(() => addCadastrosEmLoteFirestore(uid, cadastrosToUpload));
+    } catch {
+      for (const item of cadastrosToUpload) {
+        try {
+          await addCadastroFirestore(uid, item);
+        } catch {
+          // permanece na fila via pendingOps se necessário
+        }
       }
     }
   }
@@ -239,20 +270,24 @@ function enqueueSync(uid: string): void {
 
 export async function readOfflineCloudEntry(
   uid: string,
-  options?: { autoSync?: boolean },
+  options?: { autoSync?: boolean; forcePull?: boolean },
 ): Promise<CloudDataCacheEntry> {
   const entry = await loadEntry(uid);
   const autoSync = options?.autoSync !== false;
-  const pendingCount = entry.pendingOps?.length ?? 0;
   const vazio = entry.cadastros.length === 0 && entry.sessoes.length === 0;
 
-  if (!autoSync || !isOnline() || pendingCount > 0) {
+  if (!autoSync) {
     return entry;
   }
 
-  // Dispositivo novo ou cache vazio: aguarda pull da nuvem (evita lista vazia no celular).
-  if (vazio) {
+  // Dispositivo novo, cache vazio ou pull forçado: aguarda sincronização com a nuvem.
+  if (vazio || options?.forcePull) {
     return syncOfflineCloudData(uid);
+  }
+
+  if ((entry.pendingOps?.length ?? 0) > 0) {
+    enqueueSync(uid);
+    return entry;
   }
 
   enqueueSync(uid);
@@ -324,39 +359,69 @@ export async function upsertCadastrosLoteOffline(
 ): Promise<void> {
   if (items.length === 0) return;
   const stamped = items.map((i) => stampCadastro(i));
-  const entry = await loadEntry(uid);
+  let entry = await loadEntry(uid);
+
+  if ((entry.pendingOps?.length ?? 0) > 0) {
+    entry = await flushPendingOps(uid, entry);
+    await saveEntry(entry);
+  }
+
   const map = new Map(entry.cadastros.map((c) => [c.id, c]));
   for (const item of stamped) {
     map.set(item.id, item);
   }
 
-  const hadPending = (entry.pendingOps?.length ?? 0) > 0;
   const next = buildEntry(uid, [...map.values()], entry.sessoes, {
     pendingOps: entry.pendingOps,
     tombstones: entry.tombstones,
   });
   await saveEntry(next);
 
-  if (!hadPending) {
-    try {
-      await withCloudUpload(() => addCadastrosEmLoteFirestore(uid, stamped));
-      await syncOfflineCloudData(uid);
-      return;
-    } catch {
-      // Tenta enviar item a item via fila + flush.
-    }
-  }
-
-  for (const item of stamped) {
-    await appendPending(uid, { kind: 'upsertCadastro', at: item.updatedAt!, item });
+  let batchError: unknown;
+  try {
+    await withCloudUpload(() => addCadastrosEmLoteFirestore(uid, stamped));
+  } catch (error) {
+    batchError = error;
+    const pendingOps = compactPendingOps([
+      ...(entry.pendingOps ?? []),
+      ...stamped.map((item) => ({
+        kind: 'upsertCadastro' as const,
+        at: item.updatedAt!,
+        item,
+      })),
+    ]);
+    await saveEntry({ ...next, pendingOps });
   }
 
   const synced = await syncOfflineCloudData(uid);
   const pending = synced.pendingOps?.length ?? 0;
-  if (pending > 0 && isOnline()) {
+
+  if (pending > 0) {
+    const detail =
+      batchError instanceof Error
+        ? batchError.message
+        : batchError
+          ? String(batchError)
+          : 'Falha no envio em lote.';
     throw new Error(
-      `${pending} cadastro(s) não foram enviados à nuvem. Verifique a conexão e tente sincronizar.`,
+      `${pending} cadastro(s) não foram enviados à nuvem: ${detail}`,
     );
+  }
+
+  if (stamped.length > 0) {
+    try {
+      const remote = await getAllCadastrosFirestoreLight(uid);
+      if (remote.length === 0) {
+        throw new Error(
+          `${stamped.length} cadastro(s) neste aparelho, mas a nuvem continua vazia. Confira login e conexão.`,
+        );
+      }
+    } catch (verifyError) {
+      if (verifyError instanceof Error && verifyError.message.includes('nuvem continua vazia')) {
+        throw verifyError;
+      }
+      // Falha ao verificar (rede) — dados locais e sync concluídos.
+    }
   }
 }
 

@@ -75,8 +75,7 @@ export async function loadHomeCloudData(
   if (cached && (isCloudCacheInstant(cached) || !online)) {
     setMemoryCloudCache(cached);
     showCached(cached, online);
-    const pendingCount = cached.pendingOps?.length ?? 0;
-    if (online && pendingCount === 0) {
+    if (online) {
       try {
         const entry = await syncOfflineCloudData(uid);
         onProgress({
@@ -96,6 +95,9 @@ export async function loadHomeCloudData(
     }
     return cached;
   }
+
+  const cachedVazio =
+    cached == null || (cached.cadastros.length === 0 && cached.sessoes.length === 0);
 
   if (cached && cached.cadastros.length > 0) {
     showCached(cached, online);
@@ -126,7 +128,11 @@ export async function loadHomeCloudData(
 
   const cachedBeforeSync = getMemoryCloudCache(uid) ?? (await readCloudDataCache(uid));
   const pendingBeforeSync = cachedBeforeSync?.pendingOps?.length ?? 0;
-  if (pendingBeforeSync > 0) {
+  const localVazio =
+    !cachedBeforeSync ||
+    (cachedBeforeSync.cadastros.length === 0 && cachedBeforeSync.sessoes.length === 0);
+
+  if (pendingBeforeSync > 0 && !localVazio) {
     const entry = await readOfflineCloudEntry(uid, { autoSync: false });
     onProgress({
       percent: 100,
@@ -137,7 +143,30 @@ export async function loadHomeCloudData(
       offline: false,
       pendingSync: pendingBeforeSync,
     });
+    void syncOfflineCloudData(uid).catch(() => undefined);
     return entry;
+  }
+
+  if (cachedVazio && online) {
+    try {
+      const entry = await readOfflineCloudEntry(uid, { forcePull: true });
+      onProgress({
+        percent: 100,
+        loading: false,
+        loadedCadastros: entry.cadastros.length,
+        loadedSessoes: entry.sessoes.length,
+        fromCache: false,
+        offline: false,
+        pendingSync: entry.pendingOps?.length ?? 0,
+      });
+      return entry;
+    } catch (error) {
+      if (cached) {
+        showCached(cached, false);
+        return cached;
+      }
+      throw error;
+    }
   }
 
   try {

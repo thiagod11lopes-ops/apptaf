@@ -16,7 +16,6 @@ import { dataStore } from '../offline-first/store/DataStore';
 import { getPendingSyncItems, type PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
 import { systemState, SYSTEM_STATE, type SystemSyncMode } from '../offline-first/sync/SystemState';
 import { SincronizacaoNecessariaModal } from '../components/sismav/SincronizacaoNecessariaModal';
-import { OfflineStatusBanner } from '../components/sismav/OfflineStatusBanner';
 import type { ConnectivityState } from '../offline-first/types';
 
 type OfflineSyncContextType = {
@@ -200,26 +199,9 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  const isOfflineView =
-    isAuthenticated && (isForcedOffline || connectivity === 'OFFLINE' || !canAttemptSyncNow());
-
   return (
     <OfflineSyncContext.Provider value={value}>
       {children}
-      {isOfflineView ? (
-        <OfflineStatusBanner
-          offline
-          forcedOffline={isForcedOffline}
-          pendingCount={pendingCount}
-          onPressSync={
-            isForcedOffline
-              ? () => void tryReturnToOnline()
-              : pendingCount > 0
-                ? () => openSyncPrompt()
-                : undefined
-          }
-        />
-      ) : null}
       {isAuthenticated ? (
         <SincronizacaoNecessariaModal
           visible={gateVisible && canAttemptSyncNow()}
@@ -231,12 +213,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       ) : null}
     </OfflineSyncContext.Provider>
   );
-}
-
-export function OfflineSyncBanner() {
-  const { isAuthenticated } = useAuth();
-  if (isAuthenticated) return null;
-  return <OfflineStatusBanner offline pendingCount={0} />;
 }
 
 export function useOfflineSyncState(): OfflineSyncContextType {

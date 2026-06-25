@@ -49,15 +49,24 @@ export function setAuthUidState(
   nextDataOwnerUid: string | null,
   ready: boolean,
 ): void {
-  loginUid = nextLoginUid ?? resolveUidFromFirebase();
-  dataOwnerUid = nextDataOwnerUid ?? loginUid ?? resolveUidFromFirebase();
-  authReady = ready;
-  if (loginUid && dataOwnerUid) {
+  if (nextLoginUid != null) {
+    loginUid = nextLoginUid;
+    dataOwnerUid = nextDataOwnerUid ?? nextLoginUid;
     persistDataOwnerUid(dataOwnerUid);
-  } else if (ready && !loginUid) {
-    clearPersistedDataOwnerUid();
+  } else {
+    loginUid = null;
+    dataOwnerUid = readPersistedDataOwnerUid() ?? dataOwnerUid;
   }
+  authReady = ready;
   notifyWaiters();
+}
+
+/** Limpa vínculo persistido (ex.: após "Excluir todos os dados"). */
+export function clearPersistedStorageOwner(): void {
+  clearPersistedDataOwnerUid();
+  if (!loginUid) {
+    dataOwnerUid = null;
+  }
 }
 
 export function getCachedLoginUid(): string | null {

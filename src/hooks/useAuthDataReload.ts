@@ -31,14 +31,14 @@ export function useAuthDataReload(reload: () => void | Promise<void>) {
   );
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!authReady) return;
     return subscribeDataChanged(() => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         void runReload();
       }, DATA_CHANGE_DEBOUNCE_MS);
     });
-  }, [isAuthenticated, runReload]);
+  }, [authReady, runReload]);
 
   useEffect(
     () => () => {

@@ -19,10 +19,10 @@ import {
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
 import { resolveMemberAccess } from '../services/firebase/authorizedEmailsFirestore';
-import { getCachedDataOwnerUid, setAuthUidState } from '../services/firebase/authUid';
-import { clearMemoryCloudCache, clearCloudDataCache } from '../services/cloudDataCache';
+import { setAuthUidState } from '../services/firebase/authUid';
+import { clearMemoryCloudCache } from '../services/cloudDataCache';
 import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../offline-first/db/migration';
-import { syncEngine } from '../offline-first/sync/SyncEngine';
+import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { stopRealtimeSync } from '../offline-first/sync/RealtimeBridge';
 import { systemState } from '../offline-first/sync/SystemState';
@@ -112,7 +112,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [firebaseEnabled]);
 
   const logout = useCallback(async () => {
-    const dataUid = getCachedDataOwnerUid();
     await signOutFirebase();
     setUser(null);
     setIsAuthorizedMember(false);
@@ -122,9 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     syncEngine.shutdown();
     stopRealtimeSync();
     void systemState.setOnlineActive();
-    if (dataUid) {
-      await clearCloudDataCache(dataUid);
-    }
+    notifyDataChanged();
   }, []);
 
   const isBoss = user != null && !isAuthorizedMember;

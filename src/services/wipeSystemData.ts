@@ -12,6 +12,7 @@ import { wipeOwnerData } from '../offline-first/db/localDb';
 import { getTafDatabase, setMeta } from '../offline-first/db/tafDatabase';
 import { resetCloudSyncStatus, setCloudSyncResult } from './offline/cloudSyncActivity';
 import { syncEngine } from '../offline-first/sync/SyncEngine';
+import { clearPersistedStorageOwner } from './firebase/authUid';
 
 export type WipeSystemDataOptions = {
   uid: string | null;
@@ -42,6 +43,7 @@ export async function wipeSystemData(options: WipeSystemDataOptions): Promise<Wi
       await setMeta(`migrated:${uid}`, '0');
       await syncEngine.resetAfterWipe(uid);
     }
+    clearPersistedStorageOwner();
     resetCloudSyncStatus();
     setCloudSyncResult(true);
   } else {

@@ -18,6 +18,10 @@ import {
   subscribeOfflineData,
 } from '../services/offline/offlineCloudEngine';
 import {
+  getCloudActivityState,
+  subscribeCloudActivity,
+} from '../services/offline/cloudSyncActivity';
+import {
   summarizePendingOps,
   type PendingSyncSummary,
 } from '../services/offline/pendingOps';
@@ -29,6 +33,7 @@ type OfflineSyncContextType = {
   pendingCount: number;
   pendingSummary: PendingSyncSummary;
   syncing: boolean;
+  cloudUploading: boolean;
   openSyncPrompt: () => void;
 };
 
@@ -46,8 +51,10 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   });
   const [modalVisible, setModalVisible] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [cloudUploading, setCloudUploading] = useState(false);
   const wasOfflineRef = useRef(!isOnline());
   const modalDismissedRef = useRef(false);
+  const autoSyncInFlightRef = useRef(false);
 
   const refreshPending = useCallback(async () => {
     const uid = getCachedDataOwnerUid();
@@ -68,18 +75,31 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     setModalVisible(true);
   }, [pendingCount]);
 
+  const autoPushPendingToCloud = useCallback(async () => {
+    if (!authReady || !isAuthenticated || !isOnline() || autoSyncInFlightRef.current) return;
+    const uid = getCachedDataOwnerUid();
+    if (!uid) return;
+
+    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
+    const summary = summarizePendingOps(entry.pendingOps);
+    if (summary.total <= 0) return;
+
+    autoSyncInFlightRef.current = true;
+    setSyncing(true);
+    try {
+      await pushDeviceUpdatesToCloud(uid);
+      await refreshPending();
+    } finally {
+      setSyncing(false);
+      autoSyncInFlightRef.current = false;
+    }
+  }, [authReady, isAuthenticated, refreshPending]);
+
   const tryPromptAfterReconnect = useCallback(async () => {
     if (!authReady || !isAuthenticated || !isOnline()) return;
     await refreshPending();
-    const uid = getCachedDataOwnerUid();
-    if (!uid) return;
-    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
-    const summary = summarizePendingOps(entry.pendingOps);
-    if (summary.total > 0 && !modalDismissedRef.current) {
-      setPendingSummary(summary);
-      setModalVisible(true);
-    }
-  }, [authReady, isAuthenticated, refreshPending]);
+    await autoPushPendingToCloud();
+  }, [authReady, isAuthenticated, refreshPending, autoPushPendingToCloud]);
 
   useEffect(() => {
     return subscribeOnlineStatus((nextOnline) => {
@@ -105,9 +125,15 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     const uid = getCachedDataOwnerUid();
     const unsubData = uid
       ? subscribeOfflineData(() => {
-          void refreshPending();
+          void refreshPending().then(() => {
+            if (isOnline()) void autoPushPendingToCloud();
+          });
         })
       : () => undefined;
+
+    const unsubActivity = subscribeCloudActivity((state) => {
+      setCloudUploading(state.uploading);
+    });
 
     const onAppState = (state: AppStateStatus) => {
       if (state === 'active' && isOnline()) {
@@ -118,9 +144,10 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
     return () => {
       unsubData();
+      unsubActivity();
       sub.remove();
     };
-  }, [authReady, isAuthenticated, refreshPending, tryPromptAfterReconnect]);
+  }, [authReady, isAuthenticated, refreshPending, tryPromptAfterReconnect, autoPushPendingToCloud]);
 
   const confirmSync = useCallback(async () => {
     const uid = getCachedDataOwnerUid();
@@ -141,15 +168,21 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     setModalVisible(false);
   }, []);
 
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !online || pendingCount <= 0) return;
+    void autoPushPendingToCloud();
+  }, [authReady, isAuthenticated, online, pendingCount, autoPushPendingToCloud]);
+
   const value = useMemo(
     () => ({
       online,
       pendingCount,
       pendingSummary,
       syncing,
+      cloudUploading: cloudUploading || getCloudActivityState().uploading,
       openSyncPrompt,
     }),
-    [online, pendingCount, pendingSummary, syncing, openSyncPrompt],
+    [online, pendingCount, pendingSummary, syncing, cloudUploading, openSyncPrompt],
   );
 
   return (

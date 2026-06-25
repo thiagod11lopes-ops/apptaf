@@ -7,7 +7,7 @@ import { PressableScale } from '../premium/PressableScale';
 import { FONT_BRAND, FONT_BRAND_SUB } from '../../theme/typography';
 import { PREMIUM } from '../../theme/premium';
 import { CloudUserLoadIndicator } from './CloudUserLoadIndicator';
-import { useAccountCloudLabel } from '../../hooks/useAccountCloudLabel';
+import { useCloudSyncHeaderStatus } from '../../hooks/useCloudSyncHeaderStatus';
 
 export type CloudUserLoadProps = {
   /** @deprecated Preferir rótulo automático via useAccountCloudLabel no AppHeader. */
@@ -29,10 +29,8 @@ type Props = {
 export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack }: Props) {
   const { theme, isDark } = useTheme();
   const t = theme.tokens;
-  const accountLabel = useAccountCloudLabel();
-  const statusLabel = accountLabel;
-  const statusLoading = cloudLoad?.loading ?? false;
-  const statusPercent = cloudLoad?.percent ?? 100;
+  const { label: statusLabel, loading: statusLoading, percent: statusPercent, uploading } =
+    useCloudSyncHeaderStatus(cloudLoad);
 
   if (darkHero) {
     return (
@@ -59,6 +57,7 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
                 label={statusLabel}
                 percent={statusPercent}
                 loading={statusLoading && statusLabel !== 'Offline'}
+                uploading={uploading}
               />
             ) : null}
             <View style={[styles.rule, styles.ruleCentered, { backgroundColor: 'rgba(255,255,255,0.45)' }]} />
@@ -92,6 +91,7 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
             label={statusLabel}
             percent={statusPercent}
             loading={statusLoading && statusLabel !== 'Offline'}
+            uploading={uploading}
           />
         ) : null}
         <LinearGradient

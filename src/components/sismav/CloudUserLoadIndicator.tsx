@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { CloudUpload } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSmoothPercent } from '../../hooks/useSmoothPercent';
 
@@ -7,45 +8,63 @@ type Props = {
   label: string;
   percent: number;
   loading: boolean;
+  /** Envio ativo para Firebase (tempo real). */
+  uploading?: boolean;
 };
 
-export function CloudUserLoadIndicator({ label, percent, loading }: Props) {
+export function CloudUserLoadIndicator({ label, percent, loading, uploading = false }: Props) {
   const { theme } = useTheme();
   const smooth = useSmoothPercent(percent, loading);
   const showBar = loading || smooth < 100;
   const isOfflineLabel = label.trim().toLowerCase() === 'offline';
+  const showUploadPulse = uploading && !isOfflineLabel;
 
   return (
     <View style={styles.wrap}>
-      <Text
-        style={[
-          styles.label,
-          isOfflineLabel && styles.labelOffline,
-          {
-            color: loading
-              ? theme.textMuted
-              : isOfflineLabel
-                ? theme.loss
-                : theme.gain,
-            fontWeight: isOfflineLabel ? '900' : '600',
-          },
-        ]}
-      >
-        {label}
-        {loading ? ` · ${Math.round(smooth)}%` : null}
-      </Text>
+      <View style={styles.labelRow}>
+        {showUploadPulse ? (
+          <CloudUpload size={14} color={theme.primary} strokeWidth={2.4} />
+        ) : loading && !isOfflineLabel ? (
+          <ActivityIndicator size="small" color={theme.gain} />
+        ) : null}
+        <Text
+          style={[
+            styles.label,
+            isOfflineLabel && styles.labelOffline,
+            showUploadPulse && styles.labelUploading,
+            {
+              color: showUploadPulse
+                ? theme.primary
+                : loading
+                  ? theme.textMuted
+                  : isOfflineLabel
+                    ? theme.loss
+                    : theme.gain,
+              fontWeight: isOfflineLabel || showUploadPulse ? '800' : '600',
+            },
+          ]}
+        >
+          {label}
+          {loading && !showUploadPulse && !isOfflineLabel ? ` · ${Math.round(smooth)}%` : null}
+        </Text>
+      </View>
       {showBar && !isOfflineLabel ? (
         <View style={[styles.track, { backgroundColor: theme.border }]}>
           <View
             style={[
               styles.fill,
               {
-                width: `${Math.max(0, Math.min(100, smooth))}%`,
-                backgroundColor: theme.gain,
+                width: `${Math.max(0, Math.min(100, showUploadPulse ? 72 : smooth))}%`,
+                backgroundColor: showUploadPulse ? theme.primary : theme.gain,
               },
             ]}
           />
         </View>
+      ) : null}
+      {showUploadPulse ? (
+        <Text style={[styles.hint, { color: theme.textMuted }]}>
+          Dados sendo atualizados na nuvem em tempo real
+        </Text>
       ) : null}
     </View>
   );
@@ -58,17 +77,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    width: '100%',
+    paddingHorizontal: 8,
+  },
   label: {
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
-    width: '100%',
+    flexShrink: 1,
+  },
+  labelUploading: {
+    fontSize: 12,
+    letterSpacing: 0.1,
   },
   labelOffline: {
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
+  },
+  hint: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.2,
+    lineHeight: 14,
+    paddingHorizontal: 12,
   },
   track: {
     width: '72%',

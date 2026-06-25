@@ -21,21 +21,22 @@ import {
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { notifyDataChanged, subscribeDataChanged } from '../sync/SyncEngine';
 import { syncQueue } from '../sync/SyncQueue';
+import { isAwaitingCloudConfirmation } from '../sync/cloudDisplayGate';
 
 export class DataStore {
   async getCadastros(ownerUid: string | null): Promise<CadastroItemPersist[]> {
     const rows = await listCadastros(resolveOwnerUid(ownerUid));
-    return rows.map(stripMeta);
+    return filterRowsForDisplay(rows).map(stripMeta);
   }
 
   async getAplicadores(ownerUid: string | null): Promise<AplicadorItemPersist[]> {
     const rows = await listAplicadores(resolveOwnerUid(ownerUid));
-    return rows.map(stripMeta);
+    return filterRowsForDisplay(rows).map(stripMeta);
   }
 
   async getSessoes(ownerUid: string | null): Promise<SessaoAplicacaoTaf[]> {
     const rows = await listSessoes(resolveOwnerUid(ownerUid));
-    return rows.map(stripMeta);
+    return filterRowsForDisplay(rows).map(stripMeta);
   }
 
   async getResumo(ownerUid: string | null): Promise<ResumoInicioTafHistorico> {
@@ -83,12 +84,20 @@ export class DataStore {
 
   async getSessaoById(id: string, ownerUid: string | null): Promise<SessaoAplicacaoTaf | null> {
     const row = await getSessaoById(resolveOwnerUid(ownerUid), id);
-    return row ? stripMeta(row) : null;
+    if (!row || row.deleted) return null;
+    if (getCachedLoginUid() && isAwaitingCloudConfirmation() && row.syncStatus !== 'synced') {
+      return null;
+    }
+    return stripMeta(row);
   }
 
   async getCadastroById(id: string, ownerUid: string | null): Promise<CadastroItemPersist | null> {
     const row = await getCadastroById(resolveOwnerUid(ownerUid), id);
-    return row ? stripMeta(row) : null;
+    if (!row || row.deleted) return null;
+    if (getCachedLoginUid() && isAwaitingCloudConfirmation() && row.syncStatus !== 'synced') {
+      return null;
+    }
+    return stripMeta(row);
   }
 
   async pendingCount(ownerUid: string | null): Promise<number> {
@@ -98,6 +107,14 @@ export class DataStore {
   subscribe(listener: () => void): () => void {
     return subscribeDataChanged(listener);
   }
+}
+
+function filterRowsForDisplay<T extends { syncStatus?: string; deleted?: boolean }>(rows: T[]): T[] {
+  const visible = rows.filter((row) => row.deleted !== true);
+  if (getCachedLoginUid() && isAwaitingCloudConfirmation()) {
+    return visible.filter((row) => row.syncStatus === 'synced');
+  }
+  return visible;
 }
 
 function stripMeta<T extends CadastroItemPersist | AplicadorItemPersist | SessaoAplicacaoTaf>(

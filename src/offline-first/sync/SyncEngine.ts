@@ -45,6 +45,7 @@ import {
   setCloudSyncResult,
   setSyncProgress,
 } from '../../services/offline/cloudSyncActivity';
+import { confirmCloudDisplayReady } from './cloudDisplayGate';
 
 type StoreListener = () => void;
 
@@ -185,10 +186,7 @@ export class SyncEngine {
     );
   }
 
-  async init(
-    dataOwnerUid: string,
-    options?: { alwaysConnect?: boolean },
-  ): Promise<void> {
+  async init(dataOwnerUid: string): Promise<void> {
     ownerUid = dataOwnerUid;
     await systemState.hydrate();
     await getMeta(`migrated:${dataOwnerUid}`);
@@ -199,22 +197,38 @@ export class SyncEngine {
     connectivityUnsub?.();
     connectivityUnsub = null;
 
-    if (systemState.isForcedOffline()) {
-      if (!connectivityMonitor.canSync()) return;
-      await systemState.setOnlineActive();
-    }
-
-    if (connectivityMonitor.canSync()) {
-      await this.cacheCloudSnapshotLocally();
-    }
-
-    const pending = await getPendingSyncItems(dataOwnerUid);
-    if (pending.total > 0 && !options?.alwaysConnect) {
+    if (!connectivityMonitor.canSync()) {
       notify();
       return;
     }
 
+    if (systemState.isForcedOffline()) {
+      await systemState.setOnlineActive();
+    }
+
+    const pending = await getPendingSyncItems(dataOwnerUid);
+    if (pending.total > 0) {
+      await this.uploadPendingOnly();
+      const still = await getPendingSyncItems(dataOwnerUid);
+      if (still.total > 0) {
+        notify();
+        return;
+      }
+    }
+
+    await this.connectOnlineFromCloud();
+  }
+
+  /** Envia pendentes, baixa snapshot da nuvem e liga tempo real. */
+  async connectOnlineFromCloud(): Promise<void> {
+    if (!ownerUid || systemState.isForcedOffline()) return;
+    if (!connectivityMonitor.canSync()) return;
+
+    await systemState.setOnlineActive();
+    await this.cacheCloudSnapshotLocally();
     await this.enableOnlineMode();
+    confirmCloudDisplayReady();
+    notify();
   }
 
   /** Copia snapshot da nuvem para o IndexedDB (respeita registros locais pendentes). */
@@ -263,8 +277,6 @@ export class SyncEngine {
       const still = await getPendingSyncItems(ownerUid);
       if (still.total === 0) {
         await syncQueue.clearDone(ownerUid);
-        await systemState.setOnlineActive();
-        await this.enableOnlineMode();
         return { success: true };
       }
     }
@@ -272,8 +284,6 @@ export class SyncEngine {
     const still = await getPendingSyncItems(ownerUid);
     if (still.total === 0) {
       await syncQueue.clearDone(ownerUid);
-      await systemState.setOnlineActive();
-      await this.enableOnlineMode();
       return { success: true };
     }
     return { success: false, error: 'pending_remain' };

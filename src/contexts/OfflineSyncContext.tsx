@@ -88,6 +88,12 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     return summary;
   }, [isAuthenticated]);
 
+  const connectOnlineFromCloud = useCallback(async () => {
+    await systemState.setOnlineActive();
+    setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
+    await syncEngine.connectOnlineFromCloud();
+  }, []);
+
   const evaluateSyncGate = useCallback(async () => {
     if (!authReady || !isAuthenticated || gateCheckInFlight.current) return;
     if (!connectivityMonitor.canSync()) return;
@@ -95,37 +101,39 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     gateCheckInFlight.current = true;
     try {
       await reconcileCloudWhenLoggedIn();
-      await syncEngine.cacheCloudSnapshotLocally();
-      const summary = await refreshPending();
+      let summary = await refreshPending();
       if (summary.total > 0) {
-        await systemState.setOnlineActive();
-        setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-        await syncEngine.enableOnlineMode();
-        if (isBoss && bossSkippedUploadRef.current) {
-          setGateVisible(false);
+        setSyncing(true);
+        try {
+          await syncEngine.uploadPendingOnly();
+          summary = await refreshPending();
+        } finally {
+          setSyncing(false);
+        }
+        if (summary.total > 0) {
+          if (isBoss && bossSkippedUploadRef.current) {
+            await connectOnlineFromCloud();
+            setGateVisible(false);
+            return;
+          }
+          setGateVisible(true);
           return;
         }
-        setGateVisible(true);
-        return;
       }
       setGateVisible(false);
       if (syncEngine.isOnlineModeActive()) return;
-      await systemState.setOnlineActive();
-      setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-      await syncEngine.enableOnlineMode();
+      await connectOnlineFromCloud();
     } finally {
       gateCheckInFlight.current = false;
     }
-  }, [authReady, isAuthenticated, isBoss, reconcileCloudWhenLoggedIn, refreshPending]);
+  }, [authReady, isAuthenticated, isBoss, reconcileCloudWhenLoggedIn, refreshPending, connectOnlineFromCloud]);
 
   const handleContinueOnlineWithoutUpload = useCallback(async () => {
     if (!isBoss) return;
     bossSkippedUploadRef.current = true;
     setGateVisible(false);
-    await systemState.setOnlineActive();
-    setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-    await syncEngine.enableOnlineMode();
-  }, [isBoss]);
+    await connectOnlineFromCloud();
+  }, [isBoss, connectOnlineFromCloud]);
 
   const handleUpload = useCallback(async () => {
     if (syncGateBusyRef.current) return;
@@ -137,7 +145,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       if (summary.total === 0) {
         setGateVisible(false);
         bossSkippedUploadRef.current = false;
-        setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
+        await connectOnlineFromCloud();
       }
     } finally {
       setSyncing(false);
@@ -145,7 +153,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         syncGateBusyRef.current = false;
       }, 0);
     }
-  }, [refreshPending]);
+  }, [refreshPending, connectOnlineFromCloud]);
 
   const handleWorkOffline = useCallback(async () => {
     if (!isBoss) return;
@@ -215,7 +223,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (isBoss && bossSkippedUploadRef.current) return;
-        void systemState.setOnlineActive().then(() => syncEngine.enableOnlineMode());
         if (canAttemptSyncNow(isAuthenticated)) {
           setGateVisible(true);
         }

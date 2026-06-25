@@ -6,6 +6,7 @@ import {
   getCloudActivityState,
   subscribeCloudActivity,
 } from '../services/offline/cloudSyncActivity';
+import { isAwaitingCloudConfirmation } from '../offline-first/sync/cloudDisplayGate';
 import type { CloudUserLoadProps } from '../components/sismav/AppHeader';
 
 export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
@@ -65,6 +66,10 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     if (syncingCloud || loadingInitial) return 'Baixando e reconciliando dados com a nuvem…';
     if (applyingRemote) return 'Atualizando dados recebidos da nuvem…';
     if (uploadingCloud) return 'Dados sendo atualizados na nuvem em tempo real';
+    if (isAwaitingCloudConfirmation() && pendingCount > 0) {
+      return 'Enviando alterações locais para a nuvem…';
+    }
+    if (isAwaitingCloudConfirmation()) return 'Conectando com a nuvem…';
     if (pendingCount > 0) return 'Alterações locais aguardando envio à nuvem';
     if (syncedWithCloud && realtimeActive) return 'Dados sincronizados em tempo real com a nuvem';
     if (syncedWithCloud) return 'Dados sincronizados de acordo com a nuvem';

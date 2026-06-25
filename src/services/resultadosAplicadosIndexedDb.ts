@@ -46,7 +46,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-async function getAllSessoesAplicacaoLocal(): Promise<SessaoAplicacaoTaf[]> {
+export async function getAllSessoesAplicacaoLocal(): Promise<SessaoAplicacaoTaf[]> {
   try {
     const db = await openDb();
     return await new Promise((resolve, reject) => {

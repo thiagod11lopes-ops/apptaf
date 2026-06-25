@@ -22,6 +22,9 @@ import { resolveMemberAccess } from '../services/firebase/authorizedEmailsFirest
 import { getCachedDataOwnerUid, setAuthUidState } from '../services/firebase/authUid';
 import { clearMemoryCloudCache, clearCloudDataCache } from '../services/cloudDataCache';
 import { readOfflineCloudEntry } from '../services/offline/offlineCloudEngine';
+import { migrateLocalDeviceDataOnLogin } from '../services/migrateLocalOnLogin';
+import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
+import { stopCloudFirestoreRealtime } from '../services/offline/cloudFirestoreRealtime';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -75,7 +78,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsAuthorizedMember(access.isAuthorizedMember);
           setAuthUidState(mapped.uid, access.dataOwnerUid, true);
           setAuthReady(true);
-          void readOfflineCloudEntry(access.dataOwnerUid, { forcePull: true }).catch(() => undefined);
+          resetCloudSyncStatus();
+          void (async () => {
+            try {
+              await migrateLocalDeviceDataOnLogin(access.dataOwnerUid);
+              await readOfflineCloudEntry(access.dataOwnerUid, { forcePull: true });
+            } catch {
+              // Login continua; sync pode ser retentado pelo OfflineSyncContext.
+            }
+          })();
         })();
       });
     })();
@@ -107,6 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthorizedMember(false);
     setAuthUidState(null, null, true);
     clearMemoryCloudCache();
+    resetCloudSyncStatus();
+    stopCloudFirestoreRealtime();
     if (dataUid) {
       await clearCloudDataCache(dataUid);
     }

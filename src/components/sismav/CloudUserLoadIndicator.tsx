@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { CloudUpload } from 'lucide-react-native';
+import { Cloud, CloudUpload } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSmoothPercent } from '../../hooks/useSmoothPercent';
 
@@ -10,20 +10,39 @@ type Props = {
   loading: boolean;
   /** Envio ativo para Firebase (tempo real). */
   uploading?: boolean;
+  /** Download/reconciliação com Firebase. */
+  syncing?: boolean;
+  /** Última leitura confirmada com a nuvem. */
+  syncedWithCloud?: boolean;
+  statusHint?: string | null;
 };
 
-export function CloudUserLoadIndicator({ label, percent, loading, uploading = false }: Props) {
+export function CloudUserLoadIndicator({
+  label,
+  percent,
+  loading,
+  uploading = false,
+  syncing = false,
+  syncedWithCloud = false,
+  statusHint = null,
+}: Props) {
   const { theme } = useTheme();
   const smooth = useSmoothPercent(percent, loading);
   const showBar = loading || smooth < 100;
   const isOfflineLabel = label.trim().toLowerCase() === 'offline';
   const showUploadPulse = uploading && !isOfflineLabel;
+  const showSyncPulse = syncing && !isOfflineLabel;
+  const hint = statusHint?.trim() || null;
 
   return (
     <View style={styles.wrap}>
       <View style={styles.labelRow}>
         {showUploadPulse ? (
           <CloudUpload size={14} color={theme.primary} strokeWidth={2.4} />
+        ) : showSyncPulse ? (
+          <ActivityIndicator size="small" color={theme.primary} />
+        ) : syncedWithCloud && !isOfflineLabel ? (
+          <Cloud size={14} color={theme.gain} strokeWidth={2.4} />
         ) : loading && !isOfflineLabel ? (
           <ActivityIndicator size="small" color={theme.gain} />
         ) : null}
@@ -31,21 +50,24 @@ export function CloudUserLoadIndicator({ label, percent, loading, uploading = fa
           style={[
             styles.label,
             isOfflineLabel && styles.labelOffline,
-            showUploadPulse && styles.labelUploading,
+            (showUploadPulse || showSyncPulse) && styles.labelUploading,
+            syncedWithCloud && !loading && styles.labelSynced,
             {
-              color: showUploadPulse
+              color: showUploadPulse || showSyncPulse
                 ? theme.primary
-                : loading
-                  ? theme.textMuted
-                  : isOfflineLabel
-                    ? theme.loss
-                    : theme.gain,
-              fontWeight: isOfflineLabel || showUploadPulse ? '800' : '600',
+                : syncedWithCloud && !loading
+                  ? theme.gain
+                  : loading
+                    ? theme.textMuted
+                    : isOfflineLabel
+                      ? theme.loss
+                      : theme.gain,
+              fontWeight: isOfflineLabel || showUploadPulse || showSyncPulse ? '800' : '600',
             },
           ]}
         >
           {label}
-          {loading && !showUploadPulse && !isOfflineLabel ? ` · ${Math.round(smooth)}%` : null}
+          {loadingInitialPercent(showSyncPulse, showUploadPulse, loading, isOfflineLabel, smooth)}
         </Text>
       </View>
       {showBar && !isOfflineLabel ? (
@@ -54,20 +76,40 @@ export function CloudUserLoadIndicator({ label, percent, loading, uploading = fa
             style={[
               styles.fill,
               {
-                width: `${Math.max(0, Math.min(100, showUploadPulse ? 72 : smooth))}%`,
-                backgroundColor: showUploadPulse ? theme.primary : theme.gain,
+                width: `${Math.max(0, Math.min(100, showUploadPulse ? 72 : showSyncPulse ? 48 : smooth))}%`,
+                backgroundColor:
+                  showUploadPulse || showSyncPulse ? theme.primary : theme.gain,
               },
             ]}
           />
         </View>
       ) : null}
-      {showUploadPulse ? (
-        <Text style={[styles.hint, { color: theme.textMuted }]}>
-          Dados sendo atualizados na nuvem em tempo real
+      {hint ? (
+        <Text
+          style={[
+            styles.hint,
+            {
+              color: syncedWithCloud && !loading ? theme.gain : theme.textMuted,
+              fontWeight: syncedWithCloud && !loading ? '700' : '600',
+            },
+          ]}
+        >
+          {hint}
         </Text>
       ) : null}
     </View>
   );
+}
+
+function loadingInitialPercent(
+  showSyncPulse: boolean,
+  showUploadPulse: boolean,
+  loading: boolean,
+  isOfflineLabel: boolean,
+  smooth: number,
+): string {
+  if (!loading || showSyncPulse || showUploadPulse || isOfflineLabel) return '';
+  return ` · ${Math.round(smooth)}%`;
 }
 
 const styles = StyleSheet.create({
@@ -90,6 +132,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     flexShrink: 1,
+  },
+  labelSynced: {
+    fontSize: 12,
   },
   labelUploading: {
     fontSize: 12,

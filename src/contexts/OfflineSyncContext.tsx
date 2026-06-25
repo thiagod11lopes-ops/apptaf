@@ -18,6 +18,10 @@ import {
   subscribeOfflineData,
 } from '../services/offline/offlineCloudEngine';
 import {
+  startCloudFirestoreRealtime,
+  stopCloudFirestoreRealtime,
+} from '../services/offline/cloudFirestoreRealtime';
+import {
   getCloudActivityState,
   subscribeCloudActivity,
 } from '../services/offline/cloudSyncActivity';
@@ -40,7 +44,7 @@ type OfflineSyncContextType = {
 const OfflineSyncContext = createContext<OfflineSyncContextType | null>(null);
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, authReady } = useAuth();
+  const { isAuthenticated, authReady, user, isAuthorizedMember } = useAuth();
   const [online, setOnline] = useState(isOnline());
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingSummary, setPendingSummary] = useState<PendingSyncSummary>({
@@ -111,18 +115,26 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, [tryPromptAfterReconnect]);
 
   useEffect(() => {
-    if (!authReady || !isAuthenticated) return;
+    if (!authReady || !isAuthenticated || !online) {
+      stopCloudFirestoreRealtime();
+      return;
+    }
+
+    const uid = getCachedDataOwnerUid();
+    if (!uid) {
+      stopCloudFirestoreRealtime();
+      return;
+    }
+
+    const stopRealtime = startCloudFirestoreRealtime(uid);
 
     void refreshPending().then(() => {
       if (isOnline()) void tryPromptAfterReconnect();
     });
 
-    const uid = getCachedDataOwnerUid();
-    const unsubData = uid
-      ? subscribeOfflineData(() => {
-          void refreshPending();
-        })
-      : () => undefined;
+    const unsubData = subscribeOfflineData(() => {
+      void refreshPending();
+    });
 
     const unsubActivity = subscribeCloudActivity((state) => {
       setCloudUploading(state.uploading);
@@ -135,17 +147,21 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     };
     const sub = AppState.addEventListener('change', onAppState);
 
-    const pullInterval = setInterval(() => {
-      if (isOnline()) void autoSyncWithCloud();
-    }, 45_000);
-
     return () => {
+      stopRealtime();
       unsubData();
       unsubActivity();
       sub.remove();
-      clearInterval(pullInterval);
     };
-  }, [authReady, isAuthenticated, refreshPending, tryPromptAfterReconnect, autoSyncWithCloud]);
+  }, [
+    authReady,
+    isAuthenticated,
+    online,
+    user?.uid,
+    isAuthorizedMember,
+    refreshPending,
+    tryPromptAfterReconnect,
+  ]);
 
   const confirmSync = useCallback(async () => {
     const uid = getCachedDataOwnerUid();

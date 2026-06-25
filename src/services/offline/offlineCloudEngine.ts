@@ -34,7 +34,13 @@ import {
   mergeSessoes,
 } from './conflictMerge';
 import { getRecordUpdatedAt, stampCadastro, stampSessao } from './recordTimestamps';
-import { withCloudSync, withCloudUpload } from './cloudSyncActivity';
+import {
+  withCloudSync,
+  withCloudUpload,
+  setCloudSyncResult,
+  beginRealtimeApply,
+  endRealtimeApply,
+} from './cloudSyncActivity';
 
 export { subscribeCloudActivity, getCloudActivityState } from './cloudSyncActivity';
 export type { CloudActivityState } from './cloudSyncActivity';
@@ -467,4 +473,66 @@ export async function deleteSessaoOffline(uid: string, id: string): Promise<void
 export function triggerBackgroundSync(uid: string | null): void {
   if (!uid || !isOnline()) return;
   enqueueSync(uid);
+}
+
+/** Mescla alterações recebidas em tempo real do Firestore (sem reenviar à nuvem). */
+export async function mergeRemoteCloudData(
+  uid: string,
+  remoteCadastros: CadastroItemPersist[],
+  remoteSessoes: SessaoAplicacaoTaf[],
+): Promise<void> {
+  const run = syncMutex.then(async () => {
+    beginRealtimeApply();
+    try {
+      const entry = await loadEntry(uid);
+      const tombstones = entry.tombstones ?? emptyTombstones();
+      const mergedCadastros = dedupeCadastrosByNipNewest(
+        mergeCadastros(entry.cadastros, remoteCadastros, tombstones.cadastros),
+      );
+      const mergedSessoes = mergeSessoes(entry.sessoes, remoteSessoes, tombstones.sessoes);
+      const merged = buildEntry(uid, mergedCadastros, mergedSessoes, {
+        pendingOps: entry.pendingOps,
+        tombstones,
+      });
+      await saveEntry({ ...merged, syncedAt: Date.now() });
+      setCloudSyncResult(true);
+    } finally {
+      endRealtimeApply();
+    }
+  });
+
+  syncMutex = run.then(() => undefined).catch(() => undefined);
+  await run;
+}
+
+/** Incorpora dados gravados no aparelho sem login e envia à nuvem após autenticação. */
+export async function importLocalDeviceDataToCloud(
+  uid: string,
+  localCadastros: CadastroItemPersist[],
+  localSessoes: SessaoAplicacaoTaf[],
+): Promise<void> {
+  if (localCadastros.length === 0 && localSessoes.length === 0) return;
+
+  const run = syncMutex.then(async () => {
+    const entry = await loadEntry(uid);
+    const tombstones = entry.tombstones ?? emptyTombstones();
+    const stampedCad = localCadastros.map((c) => stampCadastro(c));
+    const stampedSess = localSessoes.map((s) => stampSessao(s));
+
+    const mergedCadastros = dedupeCadastrosByNipNewest(
+      mergeCadastros(entry.cadastros, stampedCad, tombstones.cadastros),
+    );
+    const mergedSessoes = mergeSessoes(entry.sessoes, stampedSess, tombstones.sessoes);
+
+    const next = buildEntry(uid, mergedCadastros, mergedSessoes, {
+      pendingOps: entry.pendingOps,
+      tombstones,
+    });
+    await saveEntry(next);
+  });
+
+  syncMutex = run.then(() => undefined).catch(() => undefined);
+  await run;
+
+  await syncOfflineCloudData(uid);
 }

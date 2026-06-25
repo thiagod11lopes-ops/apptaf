@@ -67,7 +67,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-async function getAllCadastrosLocal(): Promise<CadastroItemPersist[]> {
+export async function getAllCadastrosLocal(): Promise<CadastroItemPersist[]> {
   try {
     const db = await openDb();
     return await new Promise((resolve, reject) => {

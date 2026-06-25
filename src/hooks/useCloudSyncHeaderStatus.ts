@@ -17,32 +17,71 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   useEffect(() => subscribeCloudActivity(setActivity), []);
 
   const isOnlineAccount = isAuthenticated && accountLabel !== 'Offline';
-  const uploading =
+
+  const syncingCloud =
     isOnlineAccount &&
     online &&
-    (activity.uploading || activity.syncing || syncingContext);
+    (activity.syncing || activity.realtimeApplying || syncingContext);
+
+  const uploadingCloud =
+    isOnlineAccount && online && activity.uploading && !syncingCloud;
+
+  const realtimeActive = isOnlineAccount && online && activity.realtimeListening;
 
   const loadingInitial = isOnlineAccount && online && (cloudLoad?.loading ?? false);
-  const loading = loadingInitial || uploading;
+  const loading = loadingInitial || syncingCloud || uploadingCloud;
+
+  const syncedWithCloud =
+    isOnlineAccount &&
+    online &&
+    !loading &&
+    pendingCount === 0 &&
+    activity.cloudReady;
 
   const label = useMemo(() => {
     if (!isOnlineAccount) return accountLabel;
-    if (uploading) return `${accountLabel} · enviando para a nuvem`;
+    if (syncingCloud) return `${accountLabel} · sincronizando com a nuvem`;
+    if (uploadingCloud) return `${accountLabel} · enviando para a nuvem`;
     if (pendingCount > 0 && online) return `${accountLabel} · ${pendingCount} na fila`;
     return accountLabel;
-  }, [accountLabel, isOnlineAccount, online, pendingCount, uploading]);
+  }, [accountLabel, isOnlineAccount, online, pendingCount, syncingCloud, uploadingCloud]);
+
+  const statusHint = useMemo(() => {
+    if (!isOnlineAccount) return null;
+    if (!online) return null;
+    if (syncingCloud || loadingInitial) return 'Baixando e reconciliando dados com a nuvem…';
+    if (uploadingCloud) return 'Dados sendo atualizados na nuvem em tempo real';
+    if (pendingCount > 0) return 'Alterações locais aguardando envio à nuvem';
+    if (syncedWithCloud && realtimeActive) return 'Dados sincronizados em tempo real com a nuvem';
+    if (syncedWithCloud) return 'Dados sincronizados de acordo com a nuvem';
+    return 'Exibindo cache local · aguardando confirmação da nuvem';
+  }, [
+    isOnlineAccount,
+    online,
+    syncingCloud,
+    loadingInitial,
+    uploadingCloud,
+    pendingCount,
+    syncedWithCloud,
+    realtimeActive,
+  ]);
 
   const percent = loadingInitial
     ? (cloudLoad?.percent ?? 0)
-    : uploading
-      ? 72
-      : 100;
+    : syncingCloud
+      ? 48
+      : uploadingCloud
+        ? 72
+        : 100;
 
   return {
     label,
     loading,
     percent,
-    uploading,
+    uploading: uploadingCloud,
+    syncing: syncingCloud,
+    syncedWithCloud,
+    statusHint,
     isOnlineAccount,
   };
 }

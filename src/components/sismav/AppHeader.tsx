@@ -29,8 +29,15 @@ type Props = {
 export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack }: Props) {
   const { theme, isDark } = useTheme();
   const t = theme.tokens;
-  const { label: statusLabel, loading: statusLoading, percent: statusPercent, uploading } =
-    useCloudSyncHeaderStatus(cloudLoad);
+  const {
+    label: statusLabel,
+    loading: statusLoading,
+    percent: statusPercent,
+    uploading,
+    syncing,
+    syncedWithCloud,
+    statusHint,
+  } = useCloudSyncHeaderStatus(cloudLoad);
 
   if (darkHero) {
     return (
@@ -58,6 +65,9 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
                 percent={statusPercent}
                 loading={statusLoading && statusLabel !== 'Offline'}
                 uploading={uploading}
+                syncing={syncing}
+                syncedWithCloud={syncedWithCloud}
+                statusHint={statusHint}
               />
             ) : null}
             <View style={[styles.rule, styles.ruleCentered, { backgroundColor: 'rgba(255,255,255,0.45)' }]} />
@@ -92,6 +102,9 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
             percent={statusPercent}
             loading={statusLoading && statusLabel !== 'Offline'}
             uploading={uploading}
+            syncing={syncing}
+            syncedWithCloud={syncedWithCloud}
+            statusHint={statusHint}
           />
         ) : null}
         <LinearGradient

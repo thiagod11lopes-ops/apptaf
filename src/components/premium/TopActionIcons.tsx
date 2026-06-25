@@ -1,6 +1,6 @@
 import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
-import { BookOpen, ClipboardList, Settings, User } from 'lucide-react-native';
+import { BookOpen, ClipboardList, Settings, User, UserRoundCheck } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { navigateTab } from '../../navigation/navigationRef';
@@ -17,6 +17,7 @@ const TOP_LINKS: {
   Icon: typeof BookOpen;
 }[] = [
   { route: 'Normas', label: 'Normas', Icon: BookOpen },
+  { route: 'CadastroAplicador', label: 'Aplicador de teste físico', Icon: UserRoundCheck },
   { route: 'AplicacaoTAF', label: 'Registrador de TAF', Icon: ClipboardList },
 ];
 

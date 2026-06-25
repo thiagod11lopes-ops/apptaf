@@ -17,6 +17,7 @@ import HomeScreen from '../screens/HomeScreen';
 import NormasScreen from '../screens/NormasScreen';
 import CadastroScreenModern from '../screens/CadastroScreenModern';
 import AplicacaoTAFScreen from '../screens/AplicacaoTAFScreen';
+import CadastroAplicadorScreen from '../screens/CadastroAplicadorScreen';
 import AplicarTAFScreen from '../screens/AplicarTAFScreen';
 import EstatisticasScreen from '../screens/EstatisticasScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
@@ -70,7 +71,7 @@ export default function AppNavigator() {
       <View style={[styles.shell, { backgroundColor: 'transparent' }]}>
         <AppShell
           activeRoute={activeRoute}
-          fullWidth={activeRoute === 'Cadastro' || activeRoute === 'AplicarTAF'}
+          fullWidth={activeRoute === 'Cadastro' || activeRoute === 'CadastroAplicador' || activeRoute === 'AplicarTAF'}
         >
           <Stack.Navigator
             initialRouteName="Home"
@@ -89,6 +90,7 @@ export default function AppNavigator() {
           <Stack.Screen name="Normas" component={NormasScreen} />
           <Stack.Screen name="Cadastro" component={CadastroScreenModern} />
           <Stack.Screen name="AplicacaoTAF" component={AplicacaoTAFScreen} />
+          <Stack.Screen name="CadastroAplicador" component={CadastroAplicadorScreen} />
           <Stack.Screen name="AplicarTAF" component={AplicarTAFScreen} />
           <Stack.Screen
             name="CadastrarResultados"

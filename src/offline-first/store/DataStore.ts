@@ -1,15 +1,19 @@
 import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
+import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
 import { calcularResumoInicioTafFromHistorico } from '../../utils/resultadoGeralHistorico';
 import type { ResumoInicioTafHistorico } from '../../utils/resultadoGeralHistorico';
 import {
   listCadastros,
+  listAplicadores,
   listSessoes,
   resolveOwnerUid,
   saveCadastro,
+  saveAplicador,
   saveCadastrosBatch,
   saveSessao,
   softDeleteCadastro,
+  softDeleteAplicador,
   softDeleteSessao,
   getCadastroById,
   getSessaoById,
@@ -21,6 +25,11 @@ import { syncQueue } from '../sync/SyncQueue';
 export class DataStore {
   async getCadastros(ownerUid: string | null): Promise<CadastroItemPersist[]> {
     const rows = await listCadastros(resolveOwnerUid(ownerUid));
+    return rows.map(stripMeta);
+  }
+
+  async getAplicadores(ownerUid: string | null): Promise<AplicadorItemPersist[]> {
+    const rows = await listAplicadores(resolveOwnerUid(ownerUid));
     return rows.map(stripMeta);
   }
 
@@ -42,6 +51,11 @@ export class DataStore {
     notifyDataChanged();
   }
 
+  async upsertAplicador(item: AplicadorItemPersist, ownerUid: string | null): Promise<void> {
+    await saveAplicador(item, resolveOwnerUid(ownerUid), getCachedLoginUid());
+    notifyDataChanged();
+  }
+
   async upsertCadastrosBatch(items: CadastroItemPersist[], ownerUid: string | null): Promise<void> {
     await saveCadastrosBatch(items, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
@@ -49,6 +63,11 @@ export class DataStore {
 
   async deleteCadastro(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteCadastro(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
+    notifyDataChanged();
+  }
+
+  async deleteAplicador(id: string, ownerUid: string | null): Promise<void> {
+    await softDeleteAplicador(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
   }
 
@@ -81,7 +100,9 @@ export class DataStore {
   }
 }
 
-function stripMeta<T extends CadastroItemPersist | SessaoAplicacaoTaf>(row: T & Record<string, unknown>): T {
+function stripMeta<T extends CadastroItemPersist | AplicadorItemPersist | SessaoAplicacaoTaf>(
+  row: T & Record<string, unknown>,
+): T {
   const copy = { ...row } as Record<string, unknown>;
   for (const key of [
     'ownerUid',

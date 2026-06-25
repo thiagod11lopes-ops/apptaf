@@ -1,4 +1,5 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import type { AplicadorItemPersist } from '../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 
 export type SyncStatus = 'pending' | 'synced' | 'conflict' | 'failed';
@@ -25,6 +26,10 @@ export interface CadastroRecord extends CadastroItemPersist, SyncableMeta {
 }
 
 export interface SessaoRecord extends SessaoAplicacaoTaf, SyncableMeta {
+  ownerUid: string;
+}
+
+export interface AplicadorRecord extends AplicadorItemPersist, SyncableMeta {
   ownerUid: string;
 }
 

@@ -16,6 +16,7 @@ export type RootStackParamList = {
   Normas: undefined;
   Cadastro: undefined;
   AplicacaoTAF: undefined;
+  CadastroAplicador: undefined;
   AplicarTAF: undefined;
   Estatisticas: undefined;
   Resultados: undefined;

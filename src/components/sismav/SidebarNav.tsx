@@ -9,6 +9,7 @@ import {
   Settings,
   BookOpen,
   User,
+  UserRoundCheck,
 } from 'lucide-react-native';
 import type { RootStackParamList } from '../../navigation/types';
 import { navigateTab } from '../../navigation/navigationRef';
@@ -83,6 +84,18 @@ export function SidebarNav({ activeRoute }: Props) {
         >
           <BookOpen size={18} color="#FFFFFF" strokeWidth={2} opacity={activeRoute === 'Normas' ? 1 : 0.85} />
           <Text style={[styles.tabLabel, activeRoute === 'Normas' && styles.tabLabelActive]}>Normas</Text>
+        </PressableScale>
+
+        <PressableScale
+          onPress={() => navigateTab('CadastroAplicador')}
+          style={[styles.settingsBtn, activeRoute === 'CadastroAplicador' && styles.footerBtnActive]}
+          accessibilityLabel="Aplicador de teste físico"
+          accessibilityState={{ selected: activeRoute === 'CadastroAplicador' }}
+        >
+          <UserRoundCheck size={18} color="#FFFFFF" strokeWidth={2} opacity={activeRoute === 'CadastroAplicador' ? 1 : 0.85} />
+          <Text style={[styles.tabLabel, activeRoute === 'CadastroAplicador' && styles.tabLabelActive]}>
+            Aplicador
+          </Text>
         </PressableScale>
 
         <PressableScale

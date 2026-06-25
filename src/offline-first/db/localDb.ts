@@ -1,6 +1,7 @@
 import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
+import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
-import type { CadastroRecord, SessaoRecord } from '../types';
+import type { AplicadorRecord, CadastroRecord, SessaoRecord } from '../types';
 import { getTafDatabase } from './tafDatabase';
 import { getDeviceId } from '../deviceId';
 import { bumpRecordMeta } from '../sync/ConflictResolver';
@@ -57,10 +58,39 @@ export async function toSessaoRecord(
   return bumpRecordMeta(base, deviceId, userId, operation);
 }
 
+export async function toAplicadorRecord(
+  item: AplicadorItemPersist,
+  ownerUid: string,
+  userId: string | null,
+  operation: 'CREATE' | 'UPDATE',
+): Promise<AplicadorRecord> {
+  const deviceId = await getDeviceId();
+  const base: AplicadorRecord = {
+    ...item,
+    ownerUid,
+    createdAt: Date.now(),
+    updatedAt: item.updatedAt ?? Date.now(),
+    version: 1,
+    deviceId,
+    userId,
+    syncStatus: 'synced',
+    deleted: false,
+    lastModifiedBy: deviceId,
+  };
+  return bumpRecordMeta(base, deviceId, userId, operation);
+}
+
 export async function listCadastros(ownerUid: string, includeDeleted = false): Promise<CadastroRecord[]> {
   const db = getTafDatabase();
   if (!db) return [];
   const rows = await db.cadastros.where('ownerUid').equals(ownerUid).toArray();
+  return includeDeleted ? rows : rows.filter((r) => !r.deleted);
+}
+
+export async function listAplicadores(ownerUid: string, includeDeleted = false): Promise<AplicadorRecord[]> {
+  const db = getTafDatabase();
+  if (!db) return [];
+  const rows = await db.aplicadores.where('ownerUid').equals(ownerUid).toArray();
   return includeDeleted ? rows : rows.filter((r) => !r.deleted);
 }
 
@@ -100,6 +130,12 @@ export async function putSessaoRecord(record: SessaoRecord): Promise<void> {
   await db.sessoes.put(record);
 }
 
+export async function putAplicadorRecord(record: AplicadorRecord): Promise<void> {
+  const db = getTafDatabase();
+  if (!db) return;
+  await db.aplicadores.put(record);
+}
+
 export async function importCadastroRecord(record: CadastroRecord): Promise<void> {
   const db = getTafDatabase();
   if (!db) return;
@@ -116,6 +152,12 @@ export async function getCadastroRaw(id: string): Promise<CadastroRecord | undef
   const db = getTafDatabase();
   if (!db) return undefined;
   return db.cadastros.get(id);
+}
+
+export async function getAplicadorRaw(id: string): Promise<AplicadorRecord | undefined> {
+  const db = getTafDatabase();
+  if (!db) return undefined;
+  return db.aplicadores.get(id);
 }
 
 export async function saveCadastro(
@@ -221,6 +263,37 @@ export async function softDeleteCadastro(
   });
 }
 
+export async function saveAplicador(
+  item: AplicadorItemPersist,
+  ownerUid: string,
+  userId: string | null,
+): Promise<AplicadorRecord> {
+  const existing = await getAplicadorRaw(item.id);
+  const operation = existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
+  const record = await toAplicadorRecord(
+    existing && existing.ownerUid === ownerUid ? { ...existing, ...item } : item,
+    ownerUid,
+    userId,
+    operation,
+  );
+  if (existing && existing.ownerUid === ownerUid) {
+    record.createdAt = existing.createdAt;
+  }
+  await putAplicadorRecord(record);
+  return record;
+}
+
+export async function softDeleteAplicador(
+  id: string,
+  ownerUid: string,
+  userId: string | null,
+): Promise<void> {
+  const existing = await getAplicadorRaw(id);
+  if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
+  const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');
+  await putAplicadorRecord(record);
+}
+
 export async function saveSessao(
   item: SessaoAplicacaoTaf,
   ownerUid: string,
@@ -321,6 +394,7 @@ export async function wipeOwnerData(ownerUid: string): Promise<void> {
   const db = getTafDatabase();
   if (!db) return;
   await db.cadastros.where('ownerUid').equals(ownerUid).delete();
+  await db.aplicadores.where('ownerUid').equals(ownerUid).delete();
   await db.sessoes.where('ownerUid').equals(ownerUid).delete();
   await db.syncQueue.where('ownerUid').equals(ownerUid).delete();
 }

@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type {
+  AplicadorRecord,
   CadastroRecord,
   SessaoRecord,
   SyncQueueEntry,
@@ -11,6 +12,7 @@ export type MetaEntry = { key: string; value: string };
 
 export class TafDatabase extends Dexie {
   cadastros!: Table<CadastroRecord, string>;
+  aplicadores!: Table<AplicadorRecord, string>;
   sessoes!: Table<SessaoRecord, string>;
   syncQueue!: Table<SyncQueueEntry, string>;
   changeLog!: Table<ChangeLogEntry, number>;
@@ -29,6 +31,9 @@ export class TafDatabase extends Dexie {
     });
     this.version(2).stores({
       sessoes: 'id, ownerUid, criadoEm, updatedAt, syncStatus, deleted, [ownerUid+deleted], [ownerUid+syncStatus]',
+    });
+    this.version(3).stores({
+      aplicadores: 'id, ownerUid, nip, updatedAt, deleted, [ownerUid+deleted]',
     });
   }
 }

@@ -11,15 +11,20 @@ type Props = {
   visible: boolean;
   summary: PendingSyncSummary | null;
   loading?: boolean;
+  /** Somente o chefe pode continuar online sem enviar pendentes. */
+  allowSkipUploadOnline?: boolean;
   onUpload: () => void;
-  onWorkOffline: () => void;
+  onContinueOnline?: () => void;
+  onWorkOffline?: () => void;
 };
 
 export function SincronizacaoNecessariaModal({
   visible,
   summary,
   loading = false,
+  allowSkipUploadOnline = false,
   onUpload,
+  onContinueOnline,
   onWorkOffline,
 }: Props) {
   const { theme } = useTheme();
@@ -49,16 +54,29 @@ export function SincronizacaoNecessariaModal({
           )}
         </LinearGradient>
       </PressableScale>
-      <PressableScale
-        onPress={onWorkOffline}
-        disabled={loading}
-        style={[styles.btnGhost, { borderColor: theme.border, opacity: loading ? 0.5 : 1 }]}
-      >
-        <WifiOff size={16} color={theme.textSecondary} strokeWidth={2.2} />
-        <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>
-          Cancelar e trabalhar offline
-        </Text>
-      </PressableScale>
+      {allowSkipUploadOnline && onContinueOnline ? (
+        <PressableScale
+          onPress={onContinueOnline}
+          disabled={loading}
+          style={[styles.btnGhost, { borderColor: theme.border, opacity: loading ? 0.5 : 1 }]}
+        >
+          <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>
+            Continuar online sem enviar
+          </Text>
+        </PressableScale>
+      ) : null}
+      {allowSkipUploadOnline && onWorkOffline ? (
+        <PressableScale
+          onPress={onWorkOffline}
+          disabled={loading}
+          style={[styles.btnGhost, { borderColor: theme.border, opacity: loading ? 0.5 : 1 }]}
+        >
+          <WifiOff size={16} color={theme.textSecondary} strokeWidth={2.2} />
+          <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>
+            Cancelar e trabalhar offline
+          </Text>
+        </PressableScale>
+      ) : null}
     </View>
   );
 
@@ -91,11 +109,17 @@ export function SincronizacaoNecessariaModal({
                 · {summary.sessoes} sessão{summary.sessoes !== 1 ? 'ões' : ''} de TAF
               </Text>
             ) : null}
+            {summary.aplicadores > 0 ? (
+              <Text style={[styles.statsLine, { color: theme.text }]}>
+                · {summary.aplicadores} aplicador{summary.aplicadores !== 1 ? 'es' : ''}
+              </Text>
+            ) : null}
           </View>
         ) : null}
         <Text style={[styles.hint, { color: theme.textMuted }]}>
-          Enviar para nuvem usa o Firebase como fonte principal. Trabalhar offline mantém tudo apenas neste
-          dispositivo até você sincronizar manualmente.
+          {allowSkipUploadOnline
+            ? 'Como chefe, você pode enviar agora ou continuar online e sincronizar depois. E-mails autorizados precisam enviar antes de continuar.'
+            : 'Envie os dados locais para a nuvem antes de continuar. Apenas o e-mail chefe pode pular este envio e permanecer online.'}
         </Text>
       </View>
     </ModernModal>

@@ -53,7 +53,7 @@ function canAttemptSyncNow(isAuthenticated: boolean): boolean {
 }
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, authReady, logout } = useAuth();
+  const { isAuthenticated, authReady, logout, isBoss } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
   const [systemMode, setSystemMode] = useState<SystemSyncMode>(systemState.getMode());
   const [pendingSummary, setPendingSummary] = useState<PendingSyncSummary>(EMPTY_SUMMARY);
@@ -61,6 +61,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const [syncing, setSyncing] = useState(false);
   const gateCheckInFlight = useRef(false);
   const syncGateBusyRef = useRef(false);
+  const bossSkippedUploadRef = useRef(false);
   const prevHasNetworkRef = useRef(hasNetworkConnectivity());
   const gateCheckedForSession = useRef(false);
 
@@ -98,6 +99,15 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       await syncEngine.cacheCloudSnapshotLocally();
       const summary = await refreshPending();
       if (summary.total > 0) {
+        if (isBoss && bossSkippedUploadRef.current) {
+          setGateVisible(false);
+          if (!syncEngine.isOnlineModeActive()) {
+            await systemState.setOnlineActive();
+            setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
+            await syncEngine.enableOnlineMode();
+          }
+          return;
+        }
         setGateVisible(true);
         return;
       }
@@ -109,7 +119,16 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     } finally {
       gateCheckInFlight.current = false;
     }
-  }, [authReady, isAuthenticated, reconcileCloudWhenLoggedIn, refreshPending]);
+  }, [authReady, isAuthenticated, isBoss, reconcileCloudWhenLoggedIn, refreshPending]);
+
+  const handleContinueOnlineWithoutUpload = useCallback(async () => {
+    if (!isBoss) return;
+    bossSkippedUploadRef.current = true;
+    setGateVisible(false);
+    await systemState.setOnlineActive();
+    setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
+    await syncEngine.enableOnlineMode();
+  }, [isBoss]);
 
   const handleUpload = useCallback(async () => {
     if (syncGateBusyRef.current) return;
@@ -120,6 +139,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       const summary = await refreshPending();
       if (summary.total === 0) {
         setGateVisible(false);
+        bossSkippedUploadRef.current = false;
         setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
       }
     } finally {
@@ -131,12 +151,14 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, [refreshPending]);
 
   const handleWorkOffline = useCallback(async () => {
+    if (!isBoss) return;
+    bossSkippedUploadRef.current = false;
     await systemState.setForcedOffline();
     syncEngine.deactivateOnlineMode();
     setSystemMode(SYSTEM_STATE.FORCED_OFFLINE);
     setGateVisible(false);
     await logout({ preserveForcedOffline: true });
-  }, [logout]);
+  }, [isBoss, logout]);
 
   const tryReturnToOnline = useCallback(async () => {
     await systemState.setOnlineActive();
@@ -175,6 +197,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authReady || !isAuthenticated) {
       gateCheckedForSession.current = false;
+      bossSkippedUploadRef.current = false;
       return;
     }
     if (gateCheckedForSession.current) return;
@@ -191,14 +214,16 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         if (syncGateBusyRef.current) return;
         if (summary.total === 0) {
           setGateVisible(false);
+          bossSkippedUploadRef.current = false;
           return;
         }
+        if (isBoss && bossSkippedUploadRef.current) return;
         if (canAttemptSyncNow(isAuthenticated)) {
           setGateVisible(true);
         }
       });
     });
-  }, [authReady, isAuthenticated, refreshPending]);
+  }, [authReady, isAuthenticated, isBoss, refreshPending]);
 
   const value = useMemo(
     () => ({
@@ -235,8 +260,10 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           visible={gateVisible && canAttemptSyncNow(isAuthenticated)}
           summary={pendingSummary}
           loading={syncing}
+          allowSkipUploadOnline={isBoss}
           onUpload={() => void handleUpload()}
-          onWorkOffline={() => void handleWorkOffline()}
+          onContinueOnline={isBoss ? () => void handleContinueOnlineWithoutUpload() : undefined}
+          onWorkOffline={isBoss ? () => void handleWorkOffline() : undefined}
         />
       ) : null}
     </OfflineSyncContext.Provider>

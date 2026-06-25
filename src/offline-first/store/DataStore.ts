@@ -37,47 +37,47 @@ export class DataStore {
     return calcularResumoInicioTafFromHistorico(sessoes, cadastros);
   }
 
-  async upsertCadastro(item: CadastroItemPersist, ownerUid: string): Promise<void> {
+  async upsertCadastro(item: CadastroItemPersist, ownerUid: string | null): Promise<void> {
     await saveCadastro(item, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
     void syncEngine.scheduleProcess(true);
   }
 
-  async upsertCadastrosBatch(items: CadastroItemPersist[], ownerUid: string): Promise<void> {
+  async upsertCadastrosBatch(items: CadastroItemPersist[], ownerUid: string | null): Promise<void> {
     await saveCadastrosBatch(items, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
     void syncEngine.scheduleProcess(true);
   }
 
-  async deleteCadastro(id: string, ownerUid: string): Promise<void> {
+  async deleteCadastro(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteCadastro(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
     void syncEngine.scheduleProcess(true);
   }
 
-  async upsertSessao(sessao: SessaoAplicacaoTaf, ownerUid: string): Promise<void> {
+  async upsertSessao(sessao: SessaoAplicacaoTaf, ownerUid: string | null): Promise<void> {
     await saveSessao(sessao, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
     void syncEngine.scheduleProcess(true);
   }
 
-  async deleteSessao(id: string, ownerUid: string): Promise<void> {
+  async deleteSessao(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteSessao(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
     void syncEngine.scheduleProcess(true);
   }
 
-  async getSessaoById(id: string, ownerUid: string): Promise<SessaoAplicacaoTaf | null> {
+  async getSessaoById(id: string, ownerUid: string | null): Promise<SessaoAplicacaoTaf | null> {
     const row = await getSessaoById(resolveOwnerUid(ownerUid), id);
     return row ? stripMeta(row) : null;
   }
 
-  async getCadastroById(id: string, ownerUid: string): Promise<CadastroItemPersist | null> {
+  async getCadastroById(id: string, ownerUid: string | null): Promise<CadastroItemPersist | null> {
     const row = await getCadastroById(resolveOwnerUid(ownerUid), id);
     return row ? stripMeta(row) : null;
   }
 
-  async pendingCount(ownerUid: string): Promise<number> {
+  async pendingCount(ownerUid: string | null): Promise<number> {
     return syncQueue.countPending(resolveOwnerUid(ownerUid));
   }
 

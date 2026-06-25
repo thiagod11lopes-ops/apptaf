@@ -15,8 +15,6 @@ export type SessaoAplicacaoTaf = {
 import { waitForAuthenticatedUid } from './firebase/authUid';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { dataStore } from '../offline-first/store/DataStore';
-import { resolveOwnerUid, saveSessao, softDeleteSessao } from '../offline-first/db/localDb';
-import { getCachedLoginUid } from './firebase/authUid';
 import {
   readOfflineCloudEntry,
   upsertSessaoOffline,
@@ -117,7 +115,7 @@ export async function addSessaoAplicacao(
 
   const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
-    await saveSessao(sessao, resolveOwnerUid(uid), getCachedLoginUid());
+    await dataStore.upsertSessao(sessao, uid);
     return id;
   }
   if (uid) {
@@ -143,7 +141,7 @@ export async function addSessaoAplicacao(
 export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicacaoTaf | null> {
   const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
-    const local = await dataStore.getSessaoById(id, resolveOwnerUid(uid));
+    const local = await dataStore.getSessaoById(id, uid);
     if (local) return local;
     if (uid && canAttemptCloudSync()) {
       try {
@@ -183,7 +181,7 @@ export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicaca
 export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise<void> {
   const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
-    await saveSessao(sessao, resolveOwnerUid(uid), getCachedLoginUid());
+    await dataStore.upsertSessao(sessao, uid);
     return;
   }
   if (uid) {
@@ -209,7 +207,7 @@ export async function deleteSessaoAplicacao(id: string): Promise<void> {
   }
   const uid = await waitForAuthenticatedUid();
   if (useOfflineFirstDb()) {
-    await dataStore.deleteSessao(id, resolveOwnerUid(uid));
+    await dataStore.deleteSessao(id, uid);
     return;
   }
   if (uid) {

@@ -21,7 +21,7 @@ import {
 import { resolveMemberAccess } from '../services/firebase/authorizedEmailsFirestore';
 import { getCachedDataOwnerUid, setAuthUidState } from '../services/firebase/authUid';
 import { clearMemoryCloudCache, clearCloudDataCache } from '../services/cloudDataCache';
-import { migrateLegacyToDexie } from '../offline-first/db/migration';
+import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../offline-first/db/migration';
 import { syncEngine } from '../offline-first/sync/SyncEngine';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { stopRealtimeSync } from '../offline-first/sync/RealtimeBridge';
@@ -81,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           resetCloudSyncStatus();
           void (async () => {
             try {
+              await migrateDeviceDataOnLogin(access.dataOwnerUid);
               await migrateLegacyToDexie(access.dataOwnerUid);
               await syncEngine.init(access.dataOwnerUid);
               await syncEngine.forceSync();

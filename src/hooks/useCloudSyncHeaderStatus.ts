@@ -35,12 +35,15 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const loadingInitial = isOnlineAccount && effectiveOnline && (cloudLoad?.loading ?? false);
   const loading = loadingInitial || syncingCloud || uploadingCloud;
 
+  const cloudConnected =
+    isOnlineAccount && effectiveOnline && (activity.cloudReady || activity.realtimeListening);
+
   const syncedWithCloud =
     isOnlineAccount &&
     effectiveOnline &&
     !loading &&
     pendingCount === 0 &&
-    activity.cloudReady;
+    cloudConnected;
 
   const statusSuffix = useMemo(() => {
     if (!isOnlineAccount) return null;
@@ -65,12 +68,12 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     if (pendingCount > 0) return 'Alterações locais aguardando envio à nuvem';
     if (syncedWithCloud && realtimeActive) return 'Dados sincronizados em tempo real com a nuvem';
     if (syncedWithCloud) return 'Dados sincronizados de acordo com a nuvem';
+    if (cloudConnected) return 'Conectado à nuvem em tempo real';
     return 'Exibindo cache local · aguardando confirmação da nuvem';
   }, [
     isAuthenticated,
     accountLabel,
     isForcedOffline,
-    isOnlineAccount,
     effectiveOnline,
     syncingCloud,
     loadingInitial,
@@ -79,6 +82,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     pendingCount,
     syncedWithCloud,
     realtimeActive,
+    cloudConnected,
   ]);
 
   const percent = loadingInitial

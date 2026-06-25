@@ -438,6 +438,7 @@ export class SyncEngine {
 
     lastPullAt = Date.now();
     await setMeta(`lastPull:${ownerUid}`, String(lastPullAt));
+    setCloudSyncResult(true);
     await syncLogger.info(
       'sync',
       `Pull concluído: ${remoteCadastros.length} cadastros, ${remoteSessoes.length} sessões, ${remoteAplicadores.length} aplicadores`,

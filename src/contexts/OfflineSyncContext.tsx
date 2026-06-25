@@ -73,7 +73,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const reconcileCloudWhenLoggedIn = useCallback(async () => {
     if (!authReady || !isAuthenticated) return;
     if (!connectivityMonitor.canSync()) return;
-    if (!systemState.isForcedOffline()) return;
     await systemState.setOnlineActive();
     setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
   }, [authReady, isAuthenticated]);
@@ -99,15 +98,11 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       await syncEngine.cacheCloudSnapshotLocally();
       const summary = await refreshPending();
       if (summary.total > 0) {
-        if (isBoss) {
-          await systemState.setOnlineActive();
-          setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-          await syncEngine.enableOnlineMode();
-          if (bossSkippedUploadRef.current) {
-            setGateVisible(false);
-            return;
-          }
-          setGateVisible(true);
+        await systemState.setOnlineActive();
+        setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
+        await syncEngine.enableOnlineMode();
+        if (isBoss && bossSkippedUploadRef.current) {
+          setGateVisible(false);
           return;
         }
         setGateVisible(true);
@@ -220,6 +215,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (isBoss && bossSkippedUploadRef.current) return;
+        void systemState.setOnlineActive().then(() => syncEngine.enableOnlineMode());
         if (canAttemptSyncNow(isAuthenticated)) {
           setGateVisible(true);
         }

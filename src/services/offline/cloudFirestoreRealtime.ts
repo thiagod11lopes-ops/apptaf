@@ -7,7 +7,7 @@ import { toCadastroLight } from '../../utils/cadastroLight';
 import { toSessaoLight } from '../../utils/sessaoLight';
 import { dedupeCadastrosPorNip } from '../../utils/dedupeCadastrosPorNip';
 import { mergeRemoteCloudData } from './offlineCloudEngine';
-import { isOnline } from './networkStatus';
+import { canAttemptCloudSync } from './networkStatus';
 import { setRealtimeListening } from './cloudSyncActivity';
 
 let activeUid: string | null = null;
@@ -82,7 +82,7 @@ export function stopCloudFirestoreRealtime(): void {
 export function startCloudFirestoreRealtime(uid: string): () => void {
   stopCloudFirestoreRealtime();
 
-  if (!uid || !isOnline()) {
+  if (!uid || !canAttemptCloudSync()) {
     return stopCloudFirestoreRealtime;
   }
 

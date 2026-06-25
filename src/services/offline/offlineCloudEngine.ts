@@ -20,7 +20,7 @@ import {
 } from '../firebase/sessoesFirestore';
 import { getAllCadastrosFirestoreLight } from '../firebase/cadastrosFirestore';
 import { getAllSessoesFirestoreLight } from '../firebase/sessoesFirestore';
-import { isOnline } from './networkStatus';
+import { canAttemptCloudSync } from './networkStatus';
 import {
   compactPendingOps,
   applyPendingToTombstones,
@@ -33,9 +33,10 @@ import {
 } from './conflictMerge';
 import { getRecordUpdatedAt, stampCadastro, stampSessao } from './recordTimestamps';
 import {
-  withCloudSync,
   withCloudUpload,
   setCloudSyncResult,
+  beginCloudSync,
+  endCloudSync,
   beginRealtimeApply,
   endRealtimeApply,
 } from './cloudSyncActivity';
@@ -154,8 +155,13 @@ async function flushPendingOps(uid: string, entry: CloudDataCacheEntry): Promise
   };
 }
 
-async function pullAndMerge(uid: string, entry: CloudDataCacheEntry): Promise<CloudDataCacheEntry> {
-  if (!isOnline()) return entry;
+async function pullAndMerge(
+  uid: string,
+  entry: CloudDataCacheEntry,
+): Promise<{ entry: CloudDataCacheEntry; remoteFetched: boolean }> {
+  if (!canAttemptCloudSync()) {
+    return { entry, remoteFetched: false };
+  }
 
   const localBefore = entry;
   const tombstones = entry.tombstones ?? emptyTombstones();
@@ -166,28 +172,41 @@ async function pullAndMerge(uid: string, entry: CloudDataCacheEntry): Promise<Cl
       getAllSessoesFirestoreLight(uid),
     ]);
 
-    // 1) Envia alterações locais pendentes para a nuvem antes de substituir o cache.
-    await pushLocalChangesToCloud(uid, localBefore, remoteCadastros, remoteSessoes);
+    const hasPending = (localBefore.pendingOps?.length ?? 0) > 0;
+    const remoteEmpty = remoteCadastros.length === 0 && remoteSessoes.length === 0;
+    const localHasData =
+      localBefore.cadastros.length > 0 || localBefore.sessoes.length > 0;
 
-    // 2) Online: nuvem é a fonte da verdade — recarrega e ignora cache local antigo.
+    if (hasPending || (remoteEmpty && localHasData)) {
+      try {
+        await pushLocalChangesToCloud(uid, localBefore, remoteCadastros, remoteSessoes);
+      } catch (error) {
+        if (typeof console !== 'undefined') {
+          console.warn('[TAF sync] Falha ao enviar dados locais; continuando pull da nuvem.', error);
+        }
+      }
+    }
+
     [remoteCadastros, remoteSessoes] = await Promise.all([
       getAllCadastrosFirestoreLight(uid),
       getAllSessoesFirestoreLight(uid),
     ]);
 
     return {
-      ...buildEntry(uid, remoteCadastros, remoteSessoes, {
-        pendingOps: entry.pendingOps,
-        tombstones,
-      }),
-      syncedAt: Date.now(),
+      entry: {
+        ...buildEntry(uid, remoteCadastros, remoteSessoes, {
+          pendingOps: entry.pendingOps,
+          tombstones,
+        }),
+        syncedAt: Date.now(),
+      },
+      remoteFetched: true,
     };
   } catch (error) {
-    const localVazio = localBefore.cadastros.length === 0 && localBefore.sessoes.length === 0;
-    if (localVazio && typeof console !== 'undefined') {
+    if (typeof console !== 'undefined') {
       console.warn('[TAF sync] Falha ao baixar dados da nuvem:', error);
     }
-    return localBefore;
+    return { entry: localBefore, remoteFetched: false };
   }
 }
 
@@ -243,15 +262,22 @@ async function pushLocalChangesToCloud(
 export async function syncOfflineCloudData(uid: string): Promise<CloudDataCacheEntry> {
   let resolved!: CloudDataCacheEntry;
 
-  const run = syncMutex.then(async () =>
-    withCloudSync(async () => {
+  const run = syncMutex.then(async () => {
+    beginCloudSync();
+    let remoteFetched = false;
+    try {
       let entry = await loadEntry(uid);
       entry = await flushPendingOps(uid, entry);
-      entry = await pullAndMerge(uid, entry);
+      const pull = await pullAndMerge(uid, entry);
+      entry = pull.entry;
+      remoteFetched = pull.remoteFetched;
       await saveEntry(entry);
       resolved = entry;
-    }),
-  );
+    } finally {
+      endCloudSync();
+      setCloudSyncResult(remoteFetched);
+    }
+  });
 
   syncMutex = run.then(() => undefined).catch(() => undefined);
   await run;
@@ -277,7 +303,7 @@ export async function readOfflineCloudEntry(
   }
 
   // Online: sempre reconcilia com a nuvem (chefe ↔ e-mails autorizados).
-  if (isOnline() || options?.forcePull) {
+  if (canAttemptCloudSync() || options?.forcePull) {
     return syncOfflineCloudData(uid);
   }
 
@@ -307,7 +333,7 @@ async function appendPending(uid: string, op: PendingOp): Promise<CloudDataCache
 
 /** Online: envia imediatamente ao Firebase; offline: enfileira. */
 async function pushOpWhenOnline(uid: string, op: PendingOp): Promise<void> {
-  if (!isOnline()) {
+  if (!canAttemptCloudSync()) {
     await appendPending(uid, op);
     return;
   }
@@ -462,7 +488,7 @@ export async function deleteSessaoOffline(uid: string, id: string): Promise<void
 }
 
 export function triggerBackgroundSync(uid: string | null): void {
-  if (!uid || !isOnline()) return;
+  if (!uid || !canAttemptCloudSync()) return;
   enqueueSync(uid);
 }
 
@@ -502,7 +528,7 @@ export async function importLocalDeviceDataToCloud(
   const stampedCad = localCadastros.map((c) => stampCadastro(c));
   const stampedSess = localSessoes.map((s) => stampSessao(s));
 
-  if (!isOnline()) {
+  if (!canAttemptCloudSync()) {
     const run = syncMutex.then(async () => {
       const entry = await loadEntry(uid);
       const pendingOps = compactPendingOps([

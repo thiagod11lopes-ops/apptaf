@@ -11,7 +11,7 @@ import React, {
 import { AppState, type AppStateStatus } from 'react-native';
 import { useAuth } from './AuthContext';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
-import { isOnline, subscribeOnlineStatus } from '../services/offline/networkStatus';
+import { canAttemptCloudSync, subscribeOnlineStatus } from '../services/offline/networkStatus';
 import {
   pushDeviceUpdatesToCloud,
   readOfflineCloudEntry,
@@ -45,7 +45,7 @@ const OfflineSyncContext = createContext<OfflineSyncContextType | null>(null);
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, authReady, user, isAuthorizedMember } = useAuth();
-  const [online, setOnline] = useState(isOnline());
+  const [online, setOnline] = useState(() => canAttemptCloudSync());
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingSummary, setPendingSummary] = useState<PendingSyncSummary>({
     total: 0,
@@ -56,7 +56,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [cloudUploading, setCloudUploading] = useState(false);
-  const wasOfflineRef = useRef(!isOnline());
+  const wasOfflineRef = useRef(!canAttemptCloudSync());
   const modalDismissedRef = useRef(false);
   const autoSyncInFlightRef = useRef(false);
 
@@ -80,7 +80,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, [pendingCount]);
 
   const autoSyncWithCloud = useCallback(async () => {
-    if (!authReady || !isAuthenticated || !isOnline() || autoSyncInFlightRef.current) return;
+    if (!authReady || !isAuthenticated || !canAttemptCloudSync() || autoSyncInFlightRef.current) return;
     const uid = getCachedDataOwnerUid();
     if (!uid) return;
 
@@ -96,19 +96,20 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, [authReady, isAuthenticated, refreshPending]);
 
   const tryPromptAfterReconnect = useCallback(async () => {
-    if (!authReady || !isAuthenticated || !isOnline()) return;
+    if (!authReady || !isAuthenticated || !canAttemptCloudSync()) return;
     await autoSyncWithCloud();
   }, [authReady, isAuthenticated, autoSyncWithCloud]);
 
   useEffect(() => {
-    return subscribeOnlineStatus((nextOnline) => {
-      setOnline(nextOnline);
-      if (nextOnline && wasOfflineRef.current) {
+    return subscribeOnlineStatus(() => {
+      const syncAllowed = canAttemptCloudSync();
+      setOnline(syncAllowed);
+      if (syncAllowed && wasOfflineRef.current) {
         wasOfflineRef.current = false;
         modalDismissedRef.current = false;
         void tryPromptAfterReconnect();
       }
-      if (!nextOnline) {
+      if (!syncAllowed) {
         wasOfflineRef.current = true;
       }
     });
@@ -129,7 +130,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     const stopRealtime = startCloudFirestoreRealtime(uid);
 
     void refreshPending().then(() => {
-      if (isOnline()) void tryPromptAfterReconnect();
+      if (canAttemptCloudSync()) void tryPromptAfterReconnect();
     });
 
     const unsubData = subscribeOfflineData(() => {
@@ -141,7 +142,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     });
 
     const onAppState = (state: AppStateStatus) => {
-      if (state === 'active' && isOnline()) {
+      if (state === 'active' && canAttemptCloudSync()) {
         void tryPromptAfterReconnect();
       }
     };

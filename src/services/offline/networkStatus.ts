@@ -93,6 +93,11 @@ export function isOnline(): boolean {
   return computeOnlineState(lastReachable);
 }
 
+/** Tenta Firebase quando o navegador reporta online (evita falso offline do probe de rede). */
+export function canAttemptCloudSync(): boolean {
+  return readNavigatorOnline();
+}
+
 export function subscribeOnlineStatus(listener: OnlineListener): () => void {
   listeners.add(listener);
   ensureWindowEvents();

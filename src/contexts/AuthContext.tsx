@@ -86,10 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await migrateDeviceDataOnLogin(access.dataOwnerUid);
             await migrateLegacyToDexie(access.dataOwnerUid);
             await systemState.hydrate();
+            const isBossLogin = !access.isAuthorizedMember;
             if (connectivityMonitor.canSync()) {
               await systemState.setOnlineActive();
             }
-            await syncEngine.init(access.dataOwnerUid);
+            await syncEngine.init(access.dataOwnerUid, {
+              alwaysConnect: isBossLogin && connectivityMonitor.canSync(),
+            });
           } catch {
             // Login continua; gate de sync reavalia após authReady.
           }

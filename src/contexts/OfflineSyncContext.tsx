@@ -99,13 +99,15 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       await syncEngine.cacheCloudSnapshotLocally();
       const summary = await refreshPending();
       if (summary.total > 0) {
-        if (isBoss && bossSkippedUploadRef.current) {
-          setGateVisible(false);
-          if (!syncEngine.isOnlineModeActive()) {
-            await systemState.setOnlineActive();
-            setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-            await syncEngine.enableOnlineMode();
+        if (isBoss) {
+          await systemState.setOnlineActive();
+          setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
+          await syncEngine.enableOnlineMode();
+          if (bossSkippedUploadRef.current) {
+            setGateVisible(false);
+            return;
           }
+          setGateVisible(true);
           return;
         }
         setGateVisible(true);

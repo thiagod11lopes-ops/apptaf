@@ -185,7 +185,10 @@ export class SyncEngine {
     );
   }
 
-  async init(dataOwnerUid: string): Promise<void> {
+  async init(
+    dataOwnerUid: string,
+    options?: { alwaysConnect?: boolean },
+  ): Promise<void> {
     ownerUid = dataOwnerUid;
     await systemState.hydrate();
     await getMeta(`migrated:${dataOwnerUid}`);
@@ -206,7 +209,7 @@ export class SyncEngine {
     }
 
     const pending = await getPendingSyncItems(dataOwnerUid);
-    if (pending.total > 0) {
+    if (pending.total > 0 && !options?.alwaysConnect) {
       notify();
       return;
     }

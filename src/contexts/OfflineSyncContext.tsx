@@ -214,7 +214,12 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     <OfflineSyncContext.Provider value={value}>
       {children}
       {isAuthenticated && isForcedOffline ? (
-        <OfflineStatusBanner offline forcedOffline pendingCount={pendingCount} />
+        <OfflineStatusBanner
+          offline
+          forcedOffline
+          pendingCount={pendingCount}
+          onPressSync={() => void tryReturnToOnline()}
+        />
       ) : null}
       {isAuthenticated ? (
         <SincronizacaoNecessariaModal

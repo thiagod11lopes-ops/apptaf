@@ -7,9 +7,7 @@ import { Card } from '../components/Card';
 import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
 import { ExcluirTodosDadosBlock } from '../components/ExcluirTodosDadosBlock';
 import { AuthorizedEmailsBlock } from '../components/AuthorizedEmailsBlock';
-import { SyncDiagnosticsPanel } from '../components/SyncDiagnosticsPanel';
 import { useAuth } from '../contexts/AuthContext';
-import { PREMIUM } from '../theme/premium';
 
 export default function ConfiguracoesScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
@@ -37,13 +35,6 @@ export default function ConfiguracoesScreen() {
             />
           </View>
         </Card>
-
-        {isAuthenticated && firebaseEnabled ? (
-          <Card elevated>
-            <Text style={ts.h2}>Sincronização e diagnóstico</Text>
-            <SyncDiagnosticsPanel />
-          </Card>
-        ) : null}
 
         {isAuthenticated && firebaseEnabled && isBoss ? (
           <Card elevated>

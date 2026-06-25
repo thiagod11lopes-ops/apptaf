@@ -26,7 +26,7 @@ export function OfflineStatusBanner({ offline, pendingCount, forcedOffline = fal
       ? 'Modo offline'
       : `${pendingCount} alteração${pendingCount !== 1 ? 'ões' : ''} aguardando nuvem`;
   const subtitle = forcedOffline
-    ? 'Dados salvos só neste dispositivo. Use Configurações para voltar ao modo online.'
+    ? 'Dados salvos só neste dispositivo. Toque para voltar ao modo online.'
     : isOfflineMode
       ? 'Registros de TAF e cadastros são salvos neste dispositivo.'
       : 'Toque para enviar as atualizações deste dispositivo à nuvem.';
@@ -57,10 +57,15 @@ export function OfflineStatusBanner({ offline, pendingCount, forcedOffline = fal
           <Text style={styles.actionText}>Sincronizar</Text>
         </View>
       ) : null}
+      {forcedOffline && onPressSync ? (
+        <View style={styles.actionChip}>
+          <Text style={styles.actionText}>Online</Text>
+        </View>
+      ) : null}
     </LinearGradient>
   );
 
-  if (!isOfflineMode && onPressSync) {
+  if ((!isOfflineMode || forcedOffline) && onPressSync) {
     return (
       <PressableScale onPress={onPressSync} style={styles.wrap}>
         {content}

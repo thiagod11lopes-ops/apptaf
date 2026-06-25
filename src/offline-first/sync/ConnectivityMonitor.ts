@@ -1,11 +1,11 @@
 import { doc, getDoc } from 'firebase/firestore';
 import type { ConnectivityState } from '../types';
 import { getFirestoreDb } from '../../config/firebase';
+import { probeInternetReachable } from '../../utils/probeInternetReachable';
 import { syncLogger } from './SyncLogger';
 
 type Listener = (state: ConnectivityState) => void;
 
-const REACHABILITY_URL = 'https://connectivitycheck.gstatic.com/generate_204';
 const listeners = new Set<Listener>();
 let state: ConnectivityState = 'OFFLINE';
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -19,16 +19,7 @@ function readNavigatorOnline(): boolean {
 }
 
 async function probeInternet(): Promise<boolean> {
-  if (!readNavigatorOnline()) return false;
-  try {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 4000);
-    const res = await fetch(REACHABILITY_URL, { method: 'GET', cache: 'no-store', signal: ctrl.signal });
-    clearTimeout(timeout);
-    return res.status === 204 || res.ok;
-  } catch {
-    return false;
-  }
+  return probeInternetReachable(4000);
 }
 
 async function probeFirestore(): Promise<boolean> {

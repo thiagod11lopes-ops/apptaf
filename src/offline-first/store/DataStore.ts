@@ -17,6 +17,7 @@ import {
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { syncEngine, subscribeDataChanged, notifyDataChanged } from '../sync/SyncEngine';
 import { syncQueue } from '../sync/SyncQueue';
+import { systemState } from '../sync/SystemState';
 
 export class DataStore {
   async getCadastros(ownerUid: string | null): Promise<CadastroItemPersist[]> {
@@ -40,31 +41,41 @@ export class DataStore {
   async upsertCadastro(item: CadastroItemPersist, ownerUid: string | null): Promise<void> {
     await saveCadastro(item, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
-    void syncEngine.scheduleProcess(true);
+    if (!systemState.isForcedOffline()) {
+      void syncEngine.scheduleProcess(true);
+    }
   }
 
   async upsertCadastrosBatch(items: CadastroItemPersist[], ownerUid: string | null): Promise<void> {
     await saveCadastrosBatch(items, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
-    void syncEngine.scheduleProcess(true);
+    if (!systemState.isForcedOffline()) {
+      void syncEngine.scheduleProcess(true);
+    }
   }
 
   async deleteCadastro(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteCadastro(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
-    void syncEngine.scheduleProcess(true);
+    if (!systemState.isForcedOffline()) {
+      void syncEngine.scheduleProcess(true);
+    }
   }
 
   async upsertSessao(sessao: SessaoAplicacaoTaf, ownerUid: string | null): Promise<void> {
     await saveSessao(sessao, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
-    void syncEngine.scheduleProcess(true);
+    if (!systemState.isForcedOffline()) {
+      void syncEngine.scheduleProcess(true);
+    }
   }
 
   async deleteSessao(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteSessao(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
-    void syncEngine.scheduleProcess(true);
+    if (!systemState.isForcedOffline()) {
+      void syncEngine.scheduleProcess(true);
+    }
   }
 
   async getSessaoById(id: string, ownerUid: string | null): Promise<SessaoAplicacaoTaf | null> {

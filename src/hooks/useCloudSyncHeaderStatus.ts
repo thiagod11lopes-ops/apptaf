@@ -11,31 +11,33 @@ import type { CloudUserLoadProps } from '../components/sismav/AppHeader';
 export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const { isAuthenticated } = useAuth();
   const accountLabel = useAccountCloudLabel();
-  const { syncing: syncingContext, pendingCount, online } = useOfflineSyncState();
+  const { syncing: syncingContext, pendingCount, online, isForcedOffline } = useOfflineSyncState();
   const [activity, setActivity] = useState(getCloudActivityState);
 
   useEffect(() => subscribeCloudActivity(setActivity), []);
 
-  const isOnlineAccount = isAuthenticated && accountLabel !== 'Offline';
+  const isOnlineAccount = isAuthenticated && accountLabel !== 'Offline' && !isForcedOffline;
+
+  const effectiveOnline = online && !isForcedOffline;
 
   const syncingCloud =
     isOnlineAccount &&
-    online &&
+    effectiveOnline &&
     (activity.syncing || syncingContext);
 
-  const applyingRemote = isOnlineAccount && online && activity.realtimeApplying;
+  const applyingRemote = isOnlineAccount && effectiveOnline && activity.realtimeApplying;
 
   const uploadingCloud =
-    isOnlineAccount && online && activity.uploading && !syncingCloud;
+    isOnlineAccount && effectiveOnline && activity.uploading && !syncingCloud;
 
-  const realtimeActive = isOnlineAccount && online && activity.realtimeListening;
+  const realtimeActive = isOnlineAccount && effectiveOnline && activity.realtimeListening;
 
-  const loadingInitial = isOnlineAccount && online && (cloudLoad?.loading ?? false);
+  const loadingInitial = isOnlineAccount && effectiveOnline && (cloudLoad?.loading ?? false);
   const loading = loadingInitial || syncingCloud || uploadingCloud;
 
   const syncedWithCloud =
     isOnlineAccount &&
-    online &&
+    effectiveOnline &&
     !loading &&
     pendingCount === 0 &&
     activity.cloudReady;
@@ -44,9 +46,9 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     if (!isOnlineAccount) return null;
     if (syncingCloud) return 'sincronizando com a nuvem';
     if (uploadingCloud) return 'enviando para a nuvem';
-    if (pendingCount > 0 && online) return `${pendingCount} na fila`;
+    if (pendingCount > 0 && effectiveOnline) return `${pendingCount} na fila`;
     return null;
-  }, [isOnlineAccount, online, pendingCount, syncingCloud, uploadingCloud]);
+  }, [isOnlineAccount, effectiveOnline, pendingCount, syncingCloud, uploadingCloud]);
 
   const label = statusSuffix ? `${accountLabel} · ${statusSuffix}` : accountLabel;
 
@@ -54,8 +56,10 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const receivingFromCloudOnly = syncedWithCloud;
 
   const statusHint = useMemo(() => {
+    if (!isAuthenticated || accountLabel === 'Offline') return null;
+    if (isForcedOffline) return 'Modo offline controlado · dados só neste dispositivo';
     if (!isOnlineAccount) return null;
-    if (!online) return null;
+    if (!effectiveOnline) return null;
     if (syncingCloud || loadingInitial) return 'Baixando e reconciliando dados com a nuvem…';
     if (applyingRemote) return 'Atualizando dados recebidos da nuvem…';
     if (uploadingCloud) return 'Dados sendo atualizados na nuvem em tempo real';
@@ -64,8 +68,11 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     if (syncedWithCloud) return 'Dados sincronizados de acordo com a nuvem';
     return 'Exibindo cache local · aguardando confirmação da nuvem';
   }, [
+    isAuthenticated,
+    accountLabel,
+    isForcedOffline,
     isOnlineAccount,
-    online,
+    effectiveOnline,
     syncingCloud,
     loadingInitial,
     applyingRemote,

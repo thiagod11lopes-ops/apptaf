@@ -25,6 +25,7 @@ import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../offline-first
 import { syncEngine } from '../offline-first/sync/SyncEngine';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { stopRealtimeSync } from '../offline-first/sync/RealtimeBridge';
+import { systemState } from '../offline-first/sync/SystemState';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -84,7 +85,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               await migrateDeviceDataOnLogin(access.dataOwnerUid);
               await migrateLegacyToDexie(access.dataOwnerUid);
               await syncEngine.init(access.dataOwnerUid);
-              await syncEngine.forceSync();
             } catch {
               // Login continua; sync retentado pelo motor offline-first.
             }
@@ -123,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetCloudSyncStatus();
     syncEngine.shutdown();
     stopRealtimeSync();
+    void systemState.setOnlineActive();
     if (dataUid) {
       await clearCloudDataCache(dataUid);
     }

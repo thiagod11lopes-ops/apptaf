@@ -21,16 +21,21 @@ type Props = {
   children: React.ReactNode;
   footer?: React.ReactNode;
   icon?: React.ReactNode;
+  /** Quando false, overlay e botão X não fecham o modal. */
+  dismissable?: boolean;
 };
 
-export function ModernModal({ visible, onClose, title, children, footer, icon }: Props) {
+export function ModernModal({ visible, onClose, title, children, footer, icon, dismissable = true }: Props) {
   const { theme, isDark } = useTheme();
   const t = theme.tokens;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={dismissable ? onClose : undefined}>
       <View style={styles.modalRoot}>
-        <Pressable style={[styles.overlay, { backgroundColor: t.overlayBg }]} onPress={onClose}>
+        <Pressable
+          style={[styles.overlay, { backgroundColor: t.overlayBg }]}
+          onPress={dismissable ? onClose : undefined}
+        >
           {Platform.OS === 'ios' ? (
             <BlurView intensity={24} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
           ) : null}
@@ -51,9 +56,13 @@ export function ModernModal({ visible, onClose, title, children, footer, icon }:
           >
             {icon ? <View style={styles.iconBox}>{icon}</View> : null}
             <Text style={styles.headerTitle}>{title}</Text>
-            <PressableScale onPress={onClose} style={styles.closeBtn} accessibilityLabel="Fechar">
-              <X size={18} color="#FFFFFF" strokeWidth={2.5} />
-            </PressableScale>
+            {dismissable ? (
+              <PressableScale onPress={onClose} style={styles.closeBtn} accessibilityLabel="Fechar">
+                <X size={18} color="#FFFFFF" strokeWidth={2.5} />
+              </PressableScale>
+            ) : (
+              <View style={styles.closeBtn} />
+            )}
           </LinearGradient>
           <LinearGradient
             colors={[...t.gradientPanelBody]}

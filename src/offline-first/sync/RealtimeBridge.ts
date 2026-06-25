@@ -15,6 +15,7 @@ import {
   setCloudSyncResult,
   setRealtimeListening,
 } from '../../services/offline/cloudSyncActivity';
+import { systemState } from './SystemState';
 
 let activeUid: string | null = null;
 let unsubCadastros: (() => void) | null = null;
@@ -116,6 +117,7 @@ function scheduleApply(uid: string): void {
 }
 
 export function startRealtimeSync(uid: string, onUpdate: () => void): void {
+  if (systemState.isForcedOffline()) return;
   stopRealtimeSync();
   const db = getFirestoreDb();
   if (!db || !uid) return;

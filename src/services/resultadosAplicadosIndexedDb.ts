@@ -22,6 +22,7 @@ import {
 } from './offline/offlineCloudEngine';
 import { getSessaoByIdFirestore } from './firebase/sessoesFirestore';
 import { canAttemptCloudSync } from './offline/networkStatus';
+import { systemState } from '../offline-first/sync/SystemState';
 
 function useOfflineFirstDb(): boolean {
   return getTafDatabase() != null;
@@ -146,7 +147,7 @@ export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicaca
     const uid = await resolveStorageOwnerUid();
     const local = await dataStore.getSessaoById(id, uid);
     if (local) return local;
-    if (uid && canAttemptCloudSync()) {
+    if (uid && canAttemptCloudSync() && systemState.canUseFirebase()) {
       try {
         return await getSessaoByIdFirestore(uid, id);
       } catch {

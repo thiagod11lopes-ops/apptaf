@@ -2,6 +2,7 @@ import type { CloudDataCacheEntry } from '../cloudDataCache';
 import { getTafDatabase } from '../../offline-first/db/tafDatabase';
 import { dataStore } from '../../offline-first/store/DataStore';
 import { resolveStorageOwnerUid } from './authUid';
+import { systemState } from '../../offline-first/sync/SystemState';
 import { canAttemptCloudSync } from '../offline/networkStatus';
 import { syncEngine } from '../../offline-first/sync/SyncEngine';
 
@@ -68,7 +69,7 @@ export async function loadHomeCloudData(
     return entry;
   }
 
-  if (online && options?.forceRefresh) {
+  if (online && options?.forceRefresh && systemState.canUseFirebase()) {
     onProgress({
       percent: 15,
       loading: true,

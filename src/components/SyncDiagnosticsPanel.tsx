@@ -1,14 +1,21 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { useDataStoreState } from '../offline-first/store/DataStoreContext';
+import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { syncLogger } from '../offline-first/sync/SyncLogger';
 import { getCloudActivityState } from '../services/offline/cloudSyncActivity';
+import { SYSTEM_STATE } from '../offline-first/sync/SystemState';
 import type { SyncLogEntry } from '../offline-first/types';
 
 export function SyncDiagnosticsPanel() {
   const { theme } = useTheme();
-  const { connectivity, pendingCount, forceSync } = useDataStoreState();
+  const {
+    connectivity,
+    pendingCount,
+    systemMode,
+    isForcedOffline,
+    tryReturnToOnline,
+  } = useOfflineSyncState();
   const [logs, setLogs] = useState<SyncLogEntry[]>([]);
   const [syncing, setSyncing] = useState(false);
   const activity = getCloudActivityState();
@@ -23,10 +30,10 @@ export function SyncDiagnosticsPanel() {
     return () => clearInterval(timer);
   }, [reload]);
 
-  const onForceSync = async () => {
+  const onReturnOnline = async () => {
     setSyncing(true);
     try {
-      await forceSync();
+      await tryReturnToOnline();
       await reload();
     } finally {
       setSyncing(false);
@@ -37,17 +44,22 @@ export function SyncDiagnosticsPanel() {
     <View style={styles.wrap}>
       <Text style={[styles.title, { color: theme.text }]}>Diagnóstico de sincronização</Text>
       <Text style={[styles.meta, { color: theme.textMuted }]}>
-        Conectividade: {connectivity} · Fila: {pendingCount} · Nuvem pronta:{' '}
+        Modo: {systemMode === SYSTEM_STATE.FORCED_OFFLINE ? 'OFFLINE controlado' : 'ONLINE ativo'} ·
+        Conectividade: {connectivity} · Pendentes: {pendingCount} · Nuvem pronta:{' '}
         {activity.cloudReady ? 'sim' : 'não'} · Tempo real:{' '}
         {activity.realtimeListening ? 'ativo' : 'inativo'}
       </Text>
-      <Pressable
-        onPress={() => void onForceSync()}
-        style={[styles.btn, { backgroundColor: theme.primary, opacity: syncing ? 0.6 : 1 }]}
-        disabled={syncing}
-      >
-        <Text style={styles.btnText}>{syncing ? 'Sincronizando…' : 'Forçar sincronização'}</Text>
-      </Pressable>
+      {isForcedOffline ? (
+        <Pressable
+          onPress={() => void onReturnOnline()}
+          style={[styles.btn, { backgroundColor: theme.primary, opacity: syncing ? 0.6 : 1 }]}
+          disabled={syncing}
+        >
+          <Text style={styles.btnText}>
+            {syncing ? 'Verificando…' : 'Voltar ao modo online'}
+          </Text>
+        </Pressable>
+      ) : null}
       <ScrollView style={styles.logBox} nestedScrollEnabled>
         {logs.map((log, i) => (
           <Text
@@ -78,6 +90,6 @@ const styles = StyleSheet.create({
   meta: { fontSize: 12, lineHeight: 18 },
   btn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, alignSelf: 'flex-start' },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  logBox: { maxHeight: 220, marginTop: 4 },
+  logBox: { maxHeight: 200, marginTop: 4 },
   logLine: { fontSize: 11, lineHeight: 16, marginBottom: 4 },
 });

@@ -27,6 +27,9 @@ export class TafDatabase extends Dexie {
       syncLogs: '++id, category, level, timestamp',
       meta: 'key',
     });
+    this.version(2).stores({
+      sessoes: 'id, ownerUid, criadoEm, updatedAt, syncStatus, deleted, [ownerUid+deleted], [ownerUid+syncStatus]',
+    });
   }
 }
 

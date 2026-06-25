@@ -105,6 +105,15 @@ export class SyncQueue {
     );
     return failed.length;
   }
+
+  async clearDone(ownerUid: string): Promise<void> {
+    const db = getTafDatabase();
+    if (!db) return;
+    const done = await db.syncQueue.where('[ownerUid+status]').equals([ownerUid, 'done']).toArray();
+    if (done.length > 0) {
+      await db.syncQueue.bulkDelete(done.map((d) => d.operationId));
+    }
+  }
 }
 
 export const syncQueue = new SyncQueue();

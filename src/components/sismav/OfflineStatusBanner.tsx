@@ -9,22 +9,27 @@ import { PREMIUM } from '../../theme/premium';
 type Props = {
   offline: boolean;
   pendingCount: number;
+  forcedOffline?: boolean;
   onPressSync?: () => void;
 };
 
-export function OfflineStatusBanner({ offline, pendingCount, onPressSync }: Props) {
+export function OfflineStatusBanner({ offline, pendingCount, forcedOffline = false, onPressSync }: Props) {
   const { theme } = useTheme();
 
   if (!offline && pendingCount <= 0) return null;
 
   const isOfflineMode = offline;
   const Icon = isOfflineMode ? WifiOff : CloudUpload;
-  const title = isOfflineMode
-    ? 'Modo offline'
-    : `${pendingCount} alteração${pendingCount !== 1 ? 'ões' : ''} aguardando nuvem`;
-  const subtitle = isOfflineMode
-    ? 'Registros de TAF e cadastros são salvos neste dispositivo.'
-    : 'Toque para enviar as atualizações deste dispositivo à nuvem.';
+  const title = forcedOffline
+    ? 'Modo offline controlado'
+    : isOfflineMode
+      ? 'Modo offline'
+      : `${pendingCount} alteração${pendingCount !== 1 ? 'ões' : ''} aguardando nuvem`;
+  const subtitle = forcedOffline
+    ? 'Dados salvos só neste dispositivo. Use Configurações para voltar ao modo online.'
+    : isOfflineMode
+      ? 'Registros de TAF e cadastros são salvos neste dispositivo.'
+      : 'Toque para enviar as atualizações deste dispositivo à nuvem.';
 
   const colors = isOfflineMode
     ? (['#451a03', '#92400e'] as const)

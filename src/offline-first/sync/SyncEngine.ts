@@ -27,6 +27,8 @@ import { syncQueue } from './SyncQueue';
 import { syncLogger } from './SyncLogger';
 import { connectivityMonitor } from './ConnectivityMonitor';
 import { startRealtimeSync, stopRealtimeSync } from './RealtimeBridge';
+import { systemState } from './SystemState';
+import { getPendingSyncItems } from './pendingSyncItems';
 import {
   beginCloudSync,
   endCloudSync,
@@ -103,10 +105,10 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
 export class SyncEngine {
   async init(dataOwnerUid: string): Promise<void> {
     ownerUid = dataOwnerUid;
+    await systemState.hydrate();
     await getMeta(`migrated:${dataOwnerUid}`);
     connectivityMonitor.start();
     stopRealtimeSync();
-    startRealtimeSync(dataOwnerUid, () => notify());
 
     connectivityUnsub?.();
     let prevConn = connectivityMonitor.getState();
@@ -114,10 +116,55 @@ export class SyncEngine {
       const cameOnline =
         (state === 'ONLINE' || state === 'DEGRADED') && prevConn === 'OFFLINE';
       prevConn = state;
-      if (cameOnline) void this.scheduleProcess(false);
+      if (cameOnline && systemState.canUseFirebase()) {
+        void this.scheduleProcess(false);
+      }
     });
 
+    if (systemState.isForcedOffline()) {
+      return;
+    }
+
+    const pending = await getPendingSyncItems(dataOwnerUid);
+    if (pending.total > 0) {
+      return;
+    }
+
+    startRealtimeSync(dataOwnerUid, () => notify());
     await this.scheduleProcess(true);
+  }
+
+  /** Ativa modo online: tempo real + pull após upload confirmado. */
+  async enableOnlineMode(): Promise<void> {
+    if (!ownerUid || systemState.isForcedOffline()) return;
+    stopRealtimeSync();
+    startRealtimeSync(ownerUid, () => notify());
+    lastPullAt = 0;
+    lastProcessFinishedAt = 0;
+    await this.scheduleProcess(true);
+  }
+
+  /**
+   * Envia apenas pendentes (upload idempotente via fila).
+   * Não faz pull até confirmação de escrita.
+   */
+  async uploadPendingOnly(): Promise<{ success: boolean; error?: string }> {
+    if (!ownerUid) return { success: false, error: 'no_owner' };
+    if (!connectivityMonitor.canSync()) return { success: false, error: 'offline' };
+
+    lastProcessFinishedAt = 0;
+    await syncQueue.resetFailedToPending(ownerUid);
+
+    const uploaded = await this.processQueue({ uploadOnly: true, bypassGap: true, forceUpload: true });
+    if (!uploaded) return { success: false, error: 'upload_failed' };
+
+    const still = await getPendingSyncItems(ownerUid);
+    if (still.total > 0) return { success: false, error: 'pending_remain' };
+
+    await syncQueue.clearDone(ownerUid);
+    await systemState.setOnlineActive();
+    await this.enableOnlineMode();
+    return { success: true };
   }
 
   shutdown(): void {
@@ -135,7 +182,7 @@ export class SyncEngine {
   }
 
   scheduleProcess(immediate = false): Promise<void> {
-    if (!ownerUid) return Promise.resolve();
+    if (!ownerUid || systemState.isForcedOffline()) return Promise.resolve();
     if (processTimer) clearTimeout(processTimer);
     return new Promise((resolve) => {
       processTimer = setTimeout(() => {
@@ -144,9 +191,14 @@ export class SyncEngine {
     });
   }
 
-  async processQueue(): Promise<void> {
-    if (!ownerUid || processing || !connectivityMonitor.canSync()) return;
-    if (Date.now() - lastProcessFinishedAt < MIN_PROCESS_GAP_MS) return;
+  async processQueue(options?: {
+    uploadOnly?: boolean;
+    bypassGap?: boolean;
+    forceUpload?: boolean;
+  }): Promise<boolean> {
+    if (!ownerUid || processing || !connectivityMonitor.canSync()) return false;
+    if (systemState.isForcedOffline() && !options?.forceUpload) return false;
+    if (!options?.bypassGap && Date.now() - lastProcessFinishedAt < MIN_PROCESS_GAP_MS) return false;
 
     processing = true;
     connectivityMonitor.setSyncing(true);
@@ -173,13 +225,17 @@ export class SyncEngine {
       }
 
       setSyncProgress(70);
-      await this.pullFromRemote(false);
+      if (!options?.uploadOnly && systemState.canUseFirebase()) {
+        await this.pullFromRemote(false);
+      }
       setSyncProgress(100);
       setCloudSyncResult(true);
       notify();
+      return true;
     } catch (error) {
       await syncLogger.error('sync', error instanceof Error ? error.message : String(error));
       setCloudSyncResult(false);
+      return false;
     } finally {
       processing = false;
       lastProcessFinishedAt = Date.now();
@@ -196,7 +252,7 @@ export class SyncEngine {
   }
 
   async pullFromRemote(force = false): Promise<void> {
-    if (!ownerUid || !connectivityMonitor.canSync()) return;
+    if (!ownerUid || !connectivityMonitor.canSync() || !systemState.canUseFirebase()) return;
     if (!force && Date.now() - lastPullAt < MIN_PULL_MS) return;
 
     const [remoteCadastros, remoteSessoes] = await Promise.all([
@@ -245,11 +301,11 @@ export class SyncEngine {
   }
 
   async forceSync(): Promise<void> {
-    if (!ownerUid) return;
+    if (!ownerUid || systemState.isForcedOffline()) return;
     lastPullAt = 0;
     lastProcessFinishedAt = 0;
     await syncQueue.resetFailedToPending(ownerUid);
-    await this.processQueue();
+    await this.processQueue({ bypassGap: true });
   }
 
   async getPendingCount(): Promise<number> {

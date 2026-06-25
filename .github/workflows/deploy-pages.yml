@@ -49,6 +49,9 @@ jobs:
       - name: Copiar ícone PWA
         run: mkdir -p dist/assets && cp assets/icon.png dist/assets/icon.png
 
+      - name: Impedir deploy Vercel na branch gh-pages
+        run: cp scripts/vercel-gh-pages.json dist/vercel.json
+
       - name: Publicar na branch gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:

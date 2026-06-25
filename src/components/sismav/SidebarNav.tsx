@@ -15,6 +15,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import { navigateTab } from '../../navigation/navigationRef';
 import { PressableScale } from '../premium/PressableScale';
 import { useAccountCloudLabel } from '../../hooks/useAccountCloudLabel';
+import { useAuth } from '../../contexts/AuthContext';
 import { FONT_BRAND, FONT_BRAND_SUB } from '../../theme/typography';
 
 const appLogo = require('../../../assets/icon.png');
@@ -35,6 +36,7 @@ type Props = {
 
 export function SidebarNav({ activeRoute }: Props) {
   const accountLabel = useAccountCloudLabel();
+  const { isBoss } = useAuth();
 
   return (
     <View style={styles.wrap}>
@@ -86,17 +88,19 @@ export function SidebarNav({ activeRoute }: Props) {
           <Text style={[styles.tabLabel, activeRoute === 'Normas' && styles.tabLabelActive]}>Normas</Text>
         </PressableScale>
 
-        <PressableScale
-          onPress={() => navigateTab('CadastroAplicador')}
-          style={[styles.settingsBtn, activeRoute === 'CadastroAplicador' && styles.footerBtnActive]}
-          accessibilityLabel="Aplicador de teste físico"
-          accessibilityState={{ selected: activeRoute === 'CadastroAplicador' }}
-        >
-          <UserRoundCheck size={18} color="#FFFFFF" strokeWidth={2} opacity={activeRoute === 'CadastroAplicador' ? 1 : 0.85} />
-          <Text style={[styles.tabLabel, activeRoute === 'CadastroAplicador' && styles.tabLabelActive]}>
-            Aplicador
-          </Text>
-        </PressableScale>
+        {isBoss ? (
+          <PressableScale
+            onPress={() => navigateTab('CadastroAplicador')}
+            style={[styles.settingsBtn, activeRoute === 'CadastroAplicador' && styles.footerBtnActive]}
+            accessibilityLabel="Aplicador de teste físico"
+            accessibilityState={{ selected: activeRoute === 'CadastroAplicador' }}
+          >
+            <UserRoundCheck size={18} color="#FFFFFF" strokeWidth={2} opacity={activeRoute === 'CadastroAplicador' ? 1 : 0.85} />
+            <Text style={[styles.tabLabel, activeRoute === 'CadastroAplicador' && styles.tabLabelActive]}>
+              Aplicador
+            </Text>
+          </PressableScale>
+        ) : null}
 
         <PressableScale
           onPress={() => navigateTab('AplicacaoTAF')}

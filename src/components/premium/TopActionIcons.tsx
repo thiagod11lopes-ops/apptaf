@@ -29,7 +29,7 @@ type Props = {
 
 export function TopActionIcons({ activeRoute, inline = false }: Props) {
   const { theme } = useTheme();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isBoss } = useAuth();
   const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
   const iconSize = ICON_SIZE;
   const btnSize = BTN_SIZE;
@@ -50,7 +50,11 @@ export function TopActionIcons({ activeRoute, inline = false }: Props) {
 
   return (
     <View style={[styles.row, inline && styles.rowInline]}>
-      {TOP_LINKS.filter((link) => activeRoute !== link.route).map((link) => {
+      {TOP_LINKS.filter(
+        (link) =>
+          activeRoute !== link.route &&
+          (link.route !== 'CadastroAplicador' || isBoss),
+      ).map((link) => {
         const Icon = link.Icon;
         return (
           <PressableScale

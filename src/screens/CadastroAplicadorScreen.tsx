@@ -12,6 +12,7 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
+import { useAuth } from '../contexts/AuthContext';
 import { X, Pencil, Trash2 } from 'lucide-react-native';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
@@ -52,6 +53,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 export default function CadastroAplicadorScreen() {
   const { theme, fontsLoaded } = useTheme();
+  const { isBoss } = useAuth();
   const navigation = useNavigation();
   const ts = theme.textStyles;
   const regularFont = fontFamily('regular', fontsLoaded);
@@ -210,31 +212,33 @@ export default function CadastroAplicadorScreen() {
             onBack={() => navigation.navigate('Home' as never)}
           />
 
-          <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-            <TouchableOpacity
-              accessibilityLabel="Mostrar formulário de aplicador"
-              onPress={() => setMostrarFormulario((v) => !v)}
-              style={[
-                styles.toggleBtn,
-                mostrarFormulario
-                  ? { backgroundColor: selectedBgColor, borderColor: selectedBgColor }
-                  : { backgroundColor: unselectedBgColor, borderColor: theme.borderSubtle },
-              ]}
-            >
-              <Text
+          {isBoss ? (
+            <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+              <TouchableOpacity
+                accessibilityLabel="Mostrar formulário de aplicador"
+                onPress={() => setMostrarFormulario((v) => !v)}
                 style={[
-                  ts.caption,
-                  mostrarFormulario ? { color: selectedTextColor } : { color: unselectedTextColor },
-                  styles.toggleBtnText,
+                  styles.toggleBtn,
+                  mostrarFormulario
+                    ? { backgroundColor: selectedBgColor, borderColor: selectedBgColor }
+                    : { backgroundColor: unselectedBgColor, borderColor: theme.borderSubtle },
                 ]}
-                numberOfLines={1}
               >
-                Cadastrar Aplicador
-              </Text>
-            </TouchableOpacity>
-          </View>
+                <Text
+                  style={[
+                    ts.caption,
+                    mostrarFormulario ? { color: selectedTextColor } : { color: unselectedTextColor },
+                    styles.toggleBtnText,
+                  ]}
+                  numberOfLines={1}
+                >
+                  Cadastrar Aplicador
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
-          {mostrarFormulario ? (
+          {isBoss && mostrarFormulario ? (
             <Card elevated style={styles.formCard}>
               <View style={styles.section}>
                 <FieldLabel>Categoria</FieldLabel>
@@ -517,20 +521,26 @@ export default function CadastroAplicadorScreen() {
                             {item.sexo === 'F' ? 'Feminino' : 'Masculino'}
                           </Text>
                           <View style={[styles.acoesRow, { width: 80 }]}>
-                            <TouchableOpacity
-                              accessibilityLabel="Editar aplicador"
-                              onPress={() => handleEditar(item)}
-                              style={styles.acaoBtn}
-                            >
-                              <Pencil size={16} color={theme.primary} strokeWidth={2} />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              accessibilityLabel="Excluir aplicador"
-                              onPress={() => setExcluirId(item.id)}
-                              style={styles.acaoBtn}
-                            >
-                              <Trash2 size={16} color={dangerColor} strokeWidth={2} />
-                            </TouchableOpacity>
+                            {isBoss ? (
+                              <>
+                                <TouchableOpacity
+                                  accessibilityLabel="Editar aplicador"
+                                  onPress={() => handleEditar(item)}
+                                  style={styles.acaoBtn}
+                                >
+                                  <Pencil size={16} color={theme.primary} strokeWidth={2} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  accessibilityLabel="Excluir aplicador"
+                                  onPress={() => setExcluirId(item.id)}
+                                  style={styles.acaoBtn}
+                                >
+                                  <Trash2 size={16} color={dangerColor} strokeWidth={2} />
+                                </TouchableOpacity>
+                              </>
+                            ) : (
+                              <Text style={[styles.tabelaCellText, { color: theme.textMuted }]}>—</Text>
+                            )}
                           </View>
                         </View>
                       ))}

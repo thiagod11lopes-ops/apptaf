@@ -1,11 +1,12 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { addCadastrosEmLote, getAllCadastros } from '../services/cadastrosIndexedDb';
-import { extrairTextoDePdf } from './extractPdfText';
+import { extrairItensDePdf } from './extractPdfText';
+import { reconstruirTextoDeItensPdf } from './pdfTextLayout';
 import { nipDigitos } from './nipFormat';
 import {
   linhaRelacaoParaCadastro,
   linhasRelacaoParaCadastros,
-  parseRelacaoCadastroPdfText,
+  parseRelacaoCadastroPdf,
 } from './parseRelacaoCadastroPdf';
 
 export type ResultadoImportacaoPlanilha = {
@@ -20,8 +21,9 @@ export async function importarCadastrosDePdf(
   opcoes?: { substituirDuplicados?: boolean },
 ): Promise<ResultadoImportacaoPlanilha> {
   const substituir = opcoes?.substituirDuplicados ?? false;
-  const texto = (await extrairTextoDePdf(arrayBuffer)).trim();
-  const linhas = parseRelacaoCadastroPdfText(texto);
+  const itens = await extrairItensDePdf(arrayBuffer);
+  const texto = reconstruirTextoDeItensPdf(itens).trim();
+  const linhas = parseRelacaoCadastroPdf({ texto, items: itens });
 
   if (!texto || texto.length < 20) {
     return {
@@ -40,7 +42,7 @@ export async function importarCadastrosDePdf(
       importados: 0,
       ignoradosDuplicados: 0,
       erros: [
-        'Nenhum militar encontrado no arquivo. Confira se o PDF contém as colunas Posto/Graduação, NIP e Militar (como na relação SISTAF).',
+        'Nenhum militar encontrado no arquivo. Confira se o PDF contém NIP, posto/graduação e nome (relação HNMD) ou as colunas Posto/Graduação, NIP e Militar (SISTAF).',
       ],
     };
   }
@@ -84,5 +86,5 @@ export async function importarCadastrosDePdf(
 
 /** Útil para testes com texto já extraído. */
 export function cadastrosFromPdfText(texto: string): CadastroItemPersist[] {
-  return linhasRelacaoParaCadastros(parseRelacaoCadastroPdfText(texto));
+  return linhasRelacaoParaCadastros(parseRelacaoCadastroPdf(texto));
 }

@@ -1,5 +1,6 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { formatNipInput } from './nipFormat';
+import { agruparItensPdfEmLinhas, type PdfTextItem } from './pdfTextLayout';
 
 export type LinhaRelacaoCadastro = {
   posto: string;
@@ -195,6 +196,78 @@ function parsePorRegexGlobal(texto: string): LinhaRelacaoCadastro[] {
   return registros;
 }
 
+/** NIP no formato 00.0000.00 (relação HNMD / oficiais). */
+const NIP_FORMATADO_RE = /^\d{2}\.\d{4}\.\d{2}$/;
+
+const LINHA_HNMD_IGNORAR_RE =
+  /^(oficiais|praças|pracas|página|pagina|relação|relacao|nome|nip|categoria|posto|graduação|graduacao)$/i;
+
+function linhaHnmdDeTokens(tokens: PdfTextItem[]): LinhaRelacaoCadastro | null {
+  if (tokens.length < 3) return null;
+
+  const nipToken = tokens.find((t) => NIP_FORMATADO_RE.test(t.str.trim()));
+  if (!nipToken) return null;
+
+  const nomeToken = tokens[tokens.length - 1];
+  const nome = nomeToken.str.trim();
+  if (!nome || nome.length < 4 || !/[A-Za-zÀ-ú]/.test(nome)) return null;
+  if (LINHA_HNMD_IGNORAR_RE.test(nome)) return null;
+
+  const ordenados = [...tokens].sort((a, b) => a.x - b.x);
+  const nipIdx = ordenados.findIndex((t) => t === nipToken);
+  const postoToken = ordenados[nipIdx + 1];
+  if (!postoToken) return null;
+
+  const posto = postoToken.str.trim();
+  if (!posto || NIP_FORMATADO_RE.test(posto) || LINHA_HNMD_IGNORAR_RE.test(posto)) return null;
+
+  return criarRegistro(posto, nipToken.str.trim(), nome);
+}
+
+/**
+ * Relação tabular HNMD: coluna 1 = NIP, coluna 2 = posto/graduação, última = nome.
+ * Colunas intermediárias (corpo, arma etc.) são ignoradas.
+ */
+export function parseRelacaoHnmdPdfItems(items: PdfTextItem[]): LinhaRelacaoCadastro[] {
+  if (!items.length) return [];
+
+  const registros: LinhaRelacaoCadastro[] = [];
+  const linhas = agruparItensPdfEmLinhas(items);
+
+  for (const linha of linhas) {
+    const reg = linhaHnmdDeTokens(linha);
+    if (reg) registros.push(reg);
+  }
+
+  return registros;
+}
+
+function pareceFormatoHnmd(items: PdfTextItem[]): boolean {
+  const linhas = agruparItensPdfEmLinhas(items);
+  let comNip = 0;
+  for (const linha of linhas) {
+    if (linha.some((t) => NIP_FORMATADO_RE.test(t.str.trim()))) comNip += 1;
+  }
+  return comNip >= 3;
+}
+
+/**
+ * Interpreta PDF de cadastro (HNMD tabular ou SISTAF legado).
+ */
+export function parseRelacaoCadastroPdf(
+  entrada: string | { texto: string; items?: PdfTextItem[] },
+): LinhaRelacaoCadastro[] {
+  const texto = typeof entrada === 'string' ? entrada : entrada.texto;
+  const items = typeof entrada === 'string' ? undefined : entrada.items;
+
+  if (items?.length && pareceFormatoHnmd(items)) {
+    const hnmd = parseRelacaoHnmdPdfItems(items);
+    if (hnmd.length > 0) return hnmd;
+  }
+
+  return parseRelacaoCadastroPdfText(texto);
+}
+
 /**
  * Interpreta o texto extraído de PDFs no formato SISTAF (Posto/Grad, NIP, Militar).
  */
@@ -234,4 +307,9 @@ export function linhaRelacaoParaCadastro(
 
 export function linhasRelacaoParaCadastros(linhas: LinhaRelacaoCadastro[]): CadastroItemPersist[] {
   return linhas.map((l) => linhaRelacaoParaCadastro(l));
+}
+
+/** Útil para testes com itens posicionais do PDF.js. */
+export function cadastrosFromPdfItems(items: PdfTextItem[]): CadastroItemPersist[] {
+  return linhasRelacaoParaCadastros(parseRelacaoCadastroPdf({ texto: '', items }));
 }

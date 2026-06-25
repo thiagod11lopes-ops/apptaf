@@ -1,7 +1,13 @@
 /**
  * PDF.js legacy (UMD) via CDN — evita import.meta do pdfjs-dist v6 no bundle Expo Web.
  */
-import { reconstruirTextoDeItensPdf } from './pdfTextLayout';
+import {
+  normalizarItensPdf,
+  reconstruirTextoDeItensPdf,
+  type PdfTextItem,
+} from './pdfTextLayout';
+
+export type { PdfTextItem };
 
 const PDFJS_LEGACY = '3.11.174';
 
@@ -90,7 +96,7 @@ function carregarPdfJsLegacy(): Promise<PdfJsLib> {
   return pdfJsWebPromise;
 }
 
-export async function extrairTextoDePdf(arrayBuffer: ArrayBuffer): Promise<string> {
+export async function extrairItensDePdf(arrayBuffer: ArrayBuffer): Promise<PdfTextItem[]> {
   const { getDocument } = await carregarPdfJsLegacy();
   const data = arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer);
 
@@ -99,14 +105,18 @@ export async function extrairTextoDePdf(arrayBuffer: ArrayBuffer): Promise<strin
     useSystemFonts: true,
   }).promise;
 
-  const partes: string[] = [];
+  const itens: PdfTextItem[] = [];
 
   for (let pagina = 1; pagina <= pdf.numPages; pagina += 1) {
     const page = await pdf.getPage(pagina);
     const content = await page.getTextContent();
-    const textoPagina = reconstruirTextoDeItensPdf(content.items);
-    if (textoPagina.trim()) partes.push(textoPagina);
+    itens.push(...normalizarItensPdf(content.items, pagina));
   }
 
-  return partes.join('\n');
+  return itens;
+}
+
+export async function extrairTextoDePdf(arrayBuffer: ArrayBuffer): Promise<string> {
+  const itens = await extrairItensDePdf(arrayBuffer);
+  return reconstruirTextoDeItensPdf(itens);
 }

@@ -1,6 +1,12 @@
-import { reconstruirTextoDeItensPdf } from './pdfTextLayout';
+import {
+  normalizarItensPdf,
+  reconstruirTextoDeItensPdf,
+  type PdfTextItem,
+} from './pdfTextLayout';
 
-export async function extrairTextoDePdf(arrayBuffer: ArrayBuffer): Promise<string> {
+export type { PdfTextItem };
+
+export async function extrairItensDePdf(arrayBuffer: ArrayBuffer): Promise<PdfTextItem[]> {
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc =
     'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.0.227/build/pdf.worker.min.mjs';
@@ -12,16 +18,23 @@ export async function extrairTextoDePdf(arrayBuffer: ArrayBuffer): Promise<strin
     useSystemFonts: true,
   }).promise;
 
-  const partes: string[] = [];
+  const itens: PdfTextItem[] = [];
 
   for (let pagina = 1; pagina <= pdf.numPages; pagina += 1) {
     const page = await pdf.getPage(pagina);
     const content = await page.getTextContent();
-    const textoPagina = reconstruirTextoDeItensPdf(
-      content.items as Array<{ str?: string; transform?: number[] }>,
+    itens.push(
+      ...normalizarItensPdf(
+        content.items as Array<{ str?: string; transform?: number[] }>,
+        pagina,
+      ),
     );
-    if (textoPagina.trim()) partes.push(textoPagina);
   }
 
-  return partes.join('\n');
+  return itens;
+}
+
+export async function extrairTextoDePdf(arrayBuffer: ArrayBuffer): Promise<string> {
+  const itens = await extrairItensDePdf(arrayBuffer);
+  return reconstruirTextoDeItensPdf(itens);
 }

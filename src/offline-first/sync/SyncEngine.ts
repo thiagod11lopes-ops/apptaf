@@ -129,6 +129,10 @@ export class SyncEngine {
       return;
     }
 
+    if (connectivityMonitor.canSync()) {
+      await this.cacheCloudSnapshotLocally();
+    }
+
     const pending = await getPendingSyncItems(dataOwnerUid);
     if (pending.total > 0) {
       notify();
@@ -138,10 +142,21 @@ export class SyncEngine {
     await this.enableOnlineMode();
   }
 
-  /** Liga tempo real uma vez. Não dispara pull/sync periódico. */
+  /** Copia snapshot da nuvem para o IndexedDB (respeita registros locais pendentes). */
+  async cacheCloudSnapshotLocally(): Promise<void> {
+    if (!ownerUid || !connectivityMonitor.canSync() || !systemState.canUseFirebase()) return;
+    await this.pullFromRemote(true);
+  }
+
+  /** Liga tempo real uma vez e garante cache local completo da nuvem. */
   async enableOnlineMode(): Promise<void> {
     if (!ownerUid || systemState.isForcedOffline()) return;
-    if (this.isOnlineModeActive()) return;
+
+    const alreadyListening = onlineModeUid === ownerUid;
+    if (connectivityMonitor.canSync()) {
+      await this.cacheCloudSnapshotLocally();
+    }
+    if (alreadyListening) return;
 
     stopRealtimeSync();
     startRealtimeSync(ownerUid, () => notify());

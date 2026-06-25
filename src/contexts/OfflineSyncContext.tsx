@@ -81,6 +81,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
     gateCheckInFlight.current = true;
     try {
+      await syncEngine.cacheCloudSnapshotLocally();
       const summary = await refreshPending();
       if (summary.total > 0) {
         setGateVisible(true);
@@ -123,7 +124,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, [evaluateSyncGate]);
 
   const openSyncPrompt = useCallback(() => {
-    if (pendingCount <= 0) return;
+    if (pendingCount <= 0 || !canAttemptSyncNow()) return;
     setGateVisible(true);
   }, [pendingCount]);
 
@@ -140,6 +141,10 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       const nowCanSync = canSync && !systemState.isForcedOffline();
       const wasCanSync = prevCanSyncRef.current;
       prevCanSyncRef.current = nowCanSync;
+      if (wasCanSync && !nowCanSync && authReady && isAuthenticated) {
+        syncEngine.deactivateOnlineMode();
+        setGateVisible(false);
+      }
       if (!wasCanSync && nowCanSync && authReady && isAuthenticated) {
         void evaluateSyncGate();
       }
@@ -195,20 +200,29 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     ],
   );
 
+  const isOfflineView =
+    isAuthenticated && (isForcedOffline || connectivity === 'OFFLINE' || !canAttemptSyncNow());
+
   return (
     <OfflineSyncContext.Provider value={value}>
       {children}
-      {isAuthenticated && isForcedOffline ? (
+      {isOfflineView ? (
         <OfflineStatusBanner
           offline
-          forcedOffline
+          forcedOffline={isForcedOffline}
           pendingCount={pendingCount}
-          onPressSync={() => void tryReturnToOnline()}
+          onPressSync={
+            isForcedOffline
+              ? () => void tryReturnToOnline()
+              : pendingCount > 0
+                ? () => openSyncPrompt()
+                : undefined
+          }
         />
       ) : null}
       {isAuthenticated ? (
         <SincronizacaoNecessariaModal
-          visible={gateVisible}
+          visible={gateVisible && canAttemptSyncNow()}
           summary={pendingSummary}
           loading={syncing}
           onUpload={() => void handleUpload()}

@@ -57,9 +57,8 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
 
   const statusHint = useMemo(() => {
     if (!isAuthenticated || accountLabel === 'Offline') return null;
-    if (isForcedOffline) return 'Modo offline controlado · dados só neste dispositivo';
-    if (!isOnlineAccount) return null;
-    if (!effectiveOnline) return null;
+    if (isForcedOffline) return 'Modo offline controlado · dados locais completos';
+    if (!effectiveOnline) return 'Sem conexão · dados da nuvem disponíveis localmente';
     if (syncingCloud || loadingInitial) return 'Baixando e reconciliando dados com a nuvem…';
     if (applyingRemote) return 'Atualizando dados recebidos da nuvem…';
     if (uploadingCloud) return 'Dados sendo atualizados na nuvem em tempo real';

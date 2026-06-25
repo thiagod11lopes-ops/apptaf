@@ -22,13 +22,17 @@ export function OfflineStatusBanner({ offline, pendingCount, forcedOffline = fal
   const Icon = isOfflineMode ? WifiOff : CloudUpload;
   const title = forcedOffline
     ? 'Modo offline controlado'
-    : isOfflineMode
-      ? 'Modo offline'
-      : `${pendingCount} alteração${pendingCount !== 1 ? 'ões' : ''} aguardando nuvem`;
+    : isOfflineMode && pendingCount > 0
+      ? `${pendingCount} alteração${pendingCount !== 1 ? 'ões' : ''} locais pendentes`
+      : isOfflineMode
+        ? 'Modo offline'
+        : `${pendingCount} alteração${pendingCount !== 1 ? 'ões' : ''} aguardando nuvem`;
   const subtitle = forcedOffline
-    ? 'Dados salvos só neste dispositivo. Toque para voltar ao modo online.'
+    ? 'Todos os dados estão neste dispositivo. Toque para voltar ao modo online.'
     : isOfflineMode
-      ? 'Registros de TAF e cadastros são salvos neste dispositivo.'
+      ? pendingCount > 0
+        ? 'Dados da nuvem salvos localmente. Edite à vontade; envie pelo modal ao reconectar.'
+        : 'Dados da nuvem salvos neste dispositivo. Você pode ver e editar normalmente.'
       : 'Toque para enviar as atualizações deste dispositivo à nuvem.';
 
   const colors = isOfflineMode
@@ -62,10 +66,15 @@ export function OfflineStatusBanner({ offline, pendingCount, forcedOffline = fal
           <Text style={styles.actionText}>Online</Text>
         </View>
       ) : null}
+      {!forcedOffline && isOfflineMode && pendingCount > 0 && onPressSync ? (
+        <View style={styles.actionChip}>
+          <Text style={styles.actionText}>Enviar</Text>
+        </View>
+      ) : null}
     </LinearGradient>
   );
 
-  if ((!isOfflineMode || forcedOffline) && onPressSync) {
+  if ((!isOfflineMode || forcedOffline || pendingCount > 0) && onPressSync) {
     return (
       <PressableScale onPress={onPressSync} style={styles.wrap}>
         {content}

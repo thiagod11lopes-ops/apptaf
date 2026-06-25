@@ -37,6 +37,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
     () => cabecalhoColunaProvaResultados(resultados),
     [resultados],
   );
+  const returnTo = route.params?.returnTo ?? 'AplicarTAF';
   const grayBg = theme.background;
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = theme.border;
@@ -51,7 +52,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
         <View style={styles.centerWrap}>
           <View style={styles.headerRow}>
             <TouchableOpacity
-              onPress={() => navigation.goBack()}
+              onPress={() => navigation.navigate(returnTo)}
               style={styles.backBtn}
               accessibilityLabel="Voltar"
             >

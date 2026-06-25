@@ -832,7 +832,7 @@ export default function AplicarTAFScreen() {
               text: 'OK',
               onPress: () => {
                 void gravarSessaoAplicacao(resultados).then(() => {
-                  navigation.navigate('CadastrarResultados', { resultados });
+                  navigation.navigate('CadastrarResultados', { resultados, returnTo: 'AplicarTAF' });
                 });
               },
             },
@@ -850,7 +850,7 @@ export default function AplicarTAFScreen() {
             text: 'OK',
             onPress: () => {
               void gravarSessaoAplicacao(resultados).then(() => {
-                navigation.navigate('CadastrarResultados', { resultados });
+                navigation.navigate('CadastrarResultados', { resultados, returnTo: 'AplicarTAF' });
               });
             },
           },
@@ -877,7 +877,7 @@ export default function AplicarTAFScreen() {
     pendingResultadosNavRef.current = null;
     if (res) {
       void gravarSessaoAplicacao(res).then(() => {
-        navigation.navigate('CadastrarResultados', { resultados: res });
+        navigation.navigate('CadastrarResultados', { resultados: res, returnTo: 'AplicarTAF' });
       });
     }
   }, [navigation, gravarSessaoAplicacao]);
@@ -962,7 +962,7 @@ export default function AplicarTAFScreen() {
     }
     void gravarSessaoAplicacao(atualizados).then(async () => {
       await persistirRubricasNoCadastro(atualizados);
-      navigation.navigate('CadastrarResultados', { resultados: atualizados });
+      navigation.navigate('CadastrarResultados', { resultados: atualizados, returnTo: 'AplicarTAF' });
     });
     pendingResultadosNavRef.current = null;
     setModalParcialAviso(null);

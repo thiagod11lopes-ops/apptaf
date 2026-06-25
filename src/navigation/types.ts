@@ -22,5 +22,5 @@ export type RootStackParamList = {
   Resultados: undefined;
   Configuracoes: undefined;
   Login: undefined;
-  CadastrarResultados: { resultados: ResultadoCorridaItem[] };
+  CadastrarResultados: { resultados: ResultadoCorridaItem[]; returnTo?: keyof RootStackParamList };
 };

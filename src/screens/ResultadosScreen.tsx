@@ -65,7 +65,10 @@ export default function ResultadosScreen() {
 
   const abrirSessao = useCallback(
     (sessao: SessaoAplicacaoTaf) => {
-      navigation.navigate('CadastrarResultados', { resultados: sessao.resultados });
+      navigation.navigate('CadastrarResultados', {
+        resultados: sessao.resultados,
+        returnTo: 'Resultados',
+      });
     },
     [navigation],
   );

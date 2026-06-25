@@ -95,6 +95,28 @@ async function enqueueLocalAplicadoresMissingFromRemote(ownerUid: string): Promi
   }
 }
 
+/** Coloca na fila registros Dexie marcados como pending que ainda não estão na fila. */
+async function enqueueDexiePendingIntoQueue(ownerUid: string): Promise<void> {
+  const summary = await getPendingSyncItems(ownerUid);
+  if (summary.total === 0) return;
+
+  const queueItems = await syncQueue.listPending(ownerUid);
+  const queued = new Set(queueItems.map((q) => `${q.collection}:${q.documentId}`));
+
+  for (const item of summary.items) {
+    const key = `${item.collection}:${item.id}`;
+    if (queued.has(key)) continue;
+    await syncQueue.enqueue({
+      operationType: item.record.deleted ? 'DELETE' : 'UPDATE',
+      collection: item.collection,
+      documentId: item.id,
+      payload: item.record,
+      ownerUid,
+    });
+    queued.add(key);
+  }
+}
+
 async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
   const uid = entry.ownerUid;
   const payload = JSON.parse(entry.payload) as Record<string, unknown>;
@@ -230,16 +252,28 @@ export class SyncEngine {
     lastProcessFinishedAt = 0;
     await syncQueue.resetFailedToPending(ownerUid);
 
-    const uploaded = await this.processQueue({ uploadOnly: true, bypassGap: true, forceUpload: true });
-    if (!uploaded) return { success: false, error: 'upload_failed' };
+    for (let round = 0; round < 4; round++) {
+      await enqueueDexiePendingIntoQueue(ownerUid);
+      const uploaded = await this.processQueue({ uploadOnly: true, bypassGap: true, forceUpload: true });
+      if (!uploaded) return { success: false, error: 'upload_failed' };
+
+      const still = await getPendingSyncItems(ownerUid);
+      if (still.total === 0) {
+        await syncQueue.clearDone(ownerUid);
+        await systemState.setOnlineActive();
+        await this.enableOnlineMode();
+        return { success: true };
+      }
+    }
 
     const still = await getPendingSyncItems(ownerUid);
-    if (still.total > 0) return { success: false, error: 'pending_remain' };
-
-    await syncQueue.clearDone(ownerUid);
-    await systemState.setOnlineActive();
-    await this.enableOnlineMode();
-    return { success: true };
+    if (still.total === 0) {
+      await syncQueue.clearDone(ownerUid);
+      await systemState.setOnlineActive();
+      await this.enableOnlineMode();
+      return { success: true };
+    }
+    return { success: false, error: 'pending_remain' };
   }
 
   shutdown(): void {

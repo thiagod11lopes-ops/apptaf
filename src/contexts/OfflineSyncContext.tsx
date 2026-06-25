@@ -60,6 +60,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const [gateVisible, setGateVisible] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const gateCheckInFlight = useRef(false);
+  const syncGateBusyRef = useRef(false);
   const prevHasNetworkRef = useRef(hasNetworkConnectivity());
   const gateCheckedForSession = useRef(false);
 
@@ -111,16 +112,21 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, [authReady, isAuthenticated, reconcileCloudWhenLoggedIn, refreshPending]);
 
   const handleUpload = useCallback(async () => {
+    if (syncGateBusyRef.current) return;
+    syncGateBusyRef.current = true;
     setSyncing(true);
     try {
-      const result = await syncEngine.uploadPendingOnly();
-      if (result.success) {
+      await syncEngine.uploadPendingOnly();
+      const summary = await refreshPending();
+      if (summary.total === 0) {
         setGateVisible(false);
         setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-        await refreshPending();
       }
     } finally {
       setSyncing(false);
+      setTimeout(() => {
+        syncGateBusyRef.current = false;
+      }, 0);
     }
   }, [refreshPending]);
 
@@ -180,8 +186,14 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     if (!authReady || !isAuthenticated) return;
     void refreshPending();
     return dataStore.subscribe(() => {
+      if (syncGateBusyRef.current) return;
       void refreshPending().then((summary) => {
-        if (summary.total > 0 && canAttemptSyncNow(isAuthenticated)) {
+        if (syncGateBusyRef.current) return;
+        if (summary.total === 0) {
+          setGateVisible(false);
+          return;
+        }
+        if (canAttemptSyncNow(isAuthenticated)) {
           setGateVisible(true);
         }
       });

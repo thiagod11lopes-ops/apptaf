@@ -5,6 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
+import { ExcluirTodosDadosBlock } from '../components/ExcluirTodosDadosBlock';
 import { AuthorizedEmailsBlock } from '../components/AuthorizedEmailsBlock';
 import { useAuth } from '../contexts/AuthContext';
 import { PREMIUM } from '../theme/premium';
@@ -49,6 +50,14 @@ export default function ConfiguracoesScreen() {
             Faça backup completo do sistema ou restaure a partir de um arquivo CSV exportado anteriormente.
           </Text>
           <BackupTafCsvBlock />
+        </Card>
+
+        <Card elevated>
+          <Text style={[ts.h2, { color: theme.loss }]}>Zona de perigo</Text>
+          <Text style={[ts.caption, styles.sectionHint, { color: theme.textSecondary }]}>
+            Exclua todos os cadastros e resultados para deixar o sistema vazio. Requer confirmação dupla.
+          </Text>
+          <ExcluirTodosDadosBlock />
         </Card>
 
         <Text style={[ts.caption, styles.footer]}>

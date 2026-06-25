@@ -51,3 +51,14 @@ export async function removePreCadastroTaf(id: string): Promise<boolean> {
   await AsyncStorage.setItem(key, JSON.stringify(filtered));
   return true;
 }
+
+export async function clearAllPreCadastrosTaf(): Promise<void> {
+  try {
+    const uid = getCachedDataOwnerUid();
+    const keys = new Set([`${KEY_PREFIX}local`]);
+    if (uid) keys.add(`${KEY_PREFIX}${uid}`);
+    await Promise.all([...keys].map((key) => AsyncStorage.removeItem(key)));
+  } catch {
+    // silencioso
+  }
+}

@@ -185,3 +185,30 @@ export async function clearCloudDataCache(uid: string): Promise<void> {
     // silencioso
   }
 }
+
+/** Zera cache local/nuvem offline sem apagar Firestore remoto. */
+export async function resetCloudDataCache(
+  uid: string,
+  resumo: CloudDataCacheEntry['resumo'],
+): Promise<void> {
+  const entry: CloudDataCacheEntry = {
+    uid,
+    cadastros: [],
+    sessoes: [],
+    resumo,
+    syncedAt: Date.now(),
+    pendingOps: [],
+    tombstones: emptyTombstones(),
+  };
+  memory = entry;
+
+  try {
+    if (Platform.OS === 'web' && typeof indexedDB !== 'undefined') {
+      await writeToIdb(entry);
+    } else {
+      await writeToAsyncStorage(entry);
+    }
+  } catch {
+    // Mantém em memória nesta sessão.
+  }
+}

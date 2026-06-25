@@ -60,21 +60,23 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
           )}
           <View style={styles.heroText}>
             <Text style={[styles.heroTitle, { fontFamily: FONT_BRAND }]}>{title}</Text>
-            {accountLabel ? (
-              <CloudUserLoadIndicator
-                accountName={accountLabel}
-                statusSuffix={statusSuffix}
-                percent={statusPercent}
-                loading={statusLoading && accountLabel !== 'Offline'}
-                uploading={uploading}
-                syncing={syncing}
-                receivingFromCloudOnly={receivingFromCloudOnly}
-                statusHint={statusHint}
-              />
-            ) : null}
             <View style={[styles.rule, styles.ruleCentered, { backgroundColor: 'rgba(255,255,255,0.45)' }]} />
             {subtitle ? (
               <Text style={[styles.heroSub, { fontFamily: FONT_BRAND_SUB }]}>{subtitle}</Text>
+            ) : null}
+            {accountLabel ? (
+              <View style={styles.cloudBlock}>
+                <CloudUserLoadIndicator
+                  accountName={accountLabel}
+                  statusSuffix={statusSuffix}
+                  percent={statusPercent}
+                  loading={statusLoading && accountLabel !== 'Offline'}
+                  uploading={uploading}
+                  syncing={syncing}
+                  receivingFromCloudOnly={receivingFromCloudOnly}
+                  statusHint={statusHint}
+                />
+              </View>
             ) : null}
           </View>
           <View style={styles.sideSlot}>{right}</View>
@@ -98,18 +100,6 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
         <Text style={[theme.textStyles.brandTitle, styles.titleCenter, isDark && styles.titleOnDark]}>
           {title}
         </Text>
-        {accountLabel ? (
-          <CloudUserLoadIndicator
-            accountName={accountLabel}
-            statusSuffix={statusSuffix}
-            percent={statusPercent}
-            loading={statusLoading && accountLabel !== 'Offline'}
-            uploading={uploading}
-            syncing={syncing}
-            receivingFromCloudOnly={receivingFromCloudOnly}
-            statusHint={statusHint}
-          />
-        ) : null}
         <LinearGradient
           colors={[t.primary600, t.primary300]}
           start={{ x: 0, y: 0 }}
@@ -118,6 +108,20 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
         />
         {subtitle ? (
           <Text style={[theme.textStyles.brandSubtitle, styles.subtitleCenter]}>{subtitle}</Text>
+        ) : null}
+        {accountLabel ? (
+          <View style={styles.cloudBlock}>
+            <CloudUserLoadIndicator
+              accountName={accountLabel}
+              statusSuffix={statusSuffix}
+              percent={statusPercent}
+              loading={statusLoading && accountLabel !== 'Offline'}
+              uploading={uploading}
+              syncing={syncing}
+              receivingFromCloudOnly={receivingFromCloudOnly}
+              statusHint={statusHint}
+            />
+          </View>
         ) : null}
       </View>
       <View style={styles.sideSlot}>{right}</View>
@@ -154,14 +158,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   titleCenter: { textAlign: 'center', width: '100%' },
-  subtitleCenter: { textAlign: 'center', width: '100%' },
+  subtitleCenter: {
+    textAlign: 'center',
+    width: '100%',
+    marginTop: 12,
+  },
+  cloudBlock: {
+    width: '100%',
+    marginTop: 16,
+  },
   titleOnDark: { color: '#f1f5f9' },
   rule: {
     width: 28,
     height: 2,
     borderRadius: 2,
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: 10,
+    marginBottom: 0,
   },
   ruleCentered: { alignSelf: 'center' },
   heroCard: {
@@ -189,7 +201,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.72)',
     textTransform: 'uppercase',
     letterSpacing: 1.4,
-    marginTop: 8,
+    marginTop: 12,
     textAlign: 'center',
     width: '100%',
   },

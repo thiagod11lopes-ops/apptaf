@@ -27,7 +27,11 @@ import {
   tituloMesAno,
 } from '../../utils/historicoPorDia';
 import { listarResultadosGeralFromHistorico } from '../../utils/resultadoGeralHistorico';
+import { enriquecerLinhasComRubricas } from '../../utils/resultadoTafCadastro';
+import { carregarRubricasDasSessoesPorNip } from '../../utils/rubricasDasSessoes';
 import { exportResultadosTafPdf, PERMANENCIA_TEMPO_PDF_PADRAO } from '../../utils/exportResultadosTafPdf';
+import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
+import { RubricaCell } from '../RubricaThumb';
 import { PREMIUM } from '../../theme/premium';
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as const;
@@ -61,6 +65,27 @@ function situacaoParticipante(r: ResultadoCorridaItem): string {
 function tipoPermanenciaNota(nota: string): boolean {
   const n = nota.toLowerCase();
   return n === 'aprovado' || n === 'reprovado';
+}
+
+function rubricaSvgParticipante(
+  tipoProva: SessaoAplicacaoTaf['tipoProva'],
+  r: ResultadoCorridaItem,
+  cadastros: CadastroItemPersist[],
+): string | undefined {
+  const svgSessao = r.rubricaCandidatoSvg?.trim();
+  if (svgSessao) return svgSessao;
+
+  const busca = buscarCadastroPorNomeOuNip(
+    cadastros,
+    (r.nip ?? '').trim() || (r.nome ?? '').trim(),
+  );
+  if (busca.kind !== 'found') return undefined;
+
+  const prova = r.prova ?? tipoProva;
+  const c = busca.cadastro;
+  if (prova === 'natacao') return c.rubricaNatacaoSvg;
+  if (prova === 'permanencia') return c.rubricaPermanenciaSvg;
+  return c.rubricaCorridaSvg;
 }
 
 export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
@@ -124,11 +149,13 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
     setGerandoPdf(true);
     onAviso?.(null);
     try {
-      const linhas = listarResultadosGeralFromHistorico(sessoesDoDia, cadastros);
-      if (linhas.length === 0) {
+      const linhasBase = listarResultadosGeralFromHistorico(sessoesDoDia, cadastros);
+      if (linhasBase.length === 0) {
         onAviso?.('Não há participantes para exportar neste dia.');
         return;
       }
+      const rubSessoes = await carregarRubricasDasSessoesPorNip();
+      const linhas = enriquecerLinhasComRubricas(linhasBase, cadastros, rubSessoes);
       await exportResultadosTafPdf(linhas, `Resultados do dia — ${dataBrSelecionada}`);
     } catch (e) {
       onAviso?.(e instanceof Error ? e.message : 'Falha ao gerar PDF.');
@@ -352,6 +379,14 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
                       {situacaoParticipante(r)}
                     </Text>
                   </View>
+                  <View style={styles.partRubrica}>
+                    <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 4 }]}>Rúbrica</Text>
+                    <RubricaCell
+                      svgUri={rubricaSvgParticipante(sessao.tipoProva, r, cadastros)}
+                      maxWidth={120}
+                      maxHeight={52}
+                    />
+                  </View>
                 </View>
               ))}
             </View>
@@ -480,6 +515,12 @@ const styles = StyleSheet.create({
   },
   partMain: { flex: 1, minWidth: 0 },
   partMeta: { alignItems: 'flex-end', minWidth: 72 },
+  partRubrica: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    minWidth: 120,
+    maxWidth: 130,
+  },
   btnPdfOuter: { borderRadius: 12, overflow: 'hidden', marginTop: 4 },
   btnPdf: {
     flexDirection: 'row',

@@ -1,5 +1,7 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { nipDigitos } from './nipFormat';
+import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
+import { mesclarRubricas, rubricasDoCadastro, type RubricasPorNip } from './rubricasDasSessoes';
 import { temRegistroModalidade } from './tafRegistro';
 
 export type ResultadoTafLinha = {
@@ -184,6 +186,32 @@ export function mesclarRubricasNaLinha(
     rubricaNatacaoSvg: linha.rubricaNatacaoSvg ?? rubricas.natacao,
     rubricaPermanenciaSvg: linha.rubricaPermanenciaSvg ?? rubricas.permanencia,
   };
+}
+
+function cadastroPorLinha(
+  linha: ResultadoTafLinha,
+  cadastros: CadastroItemPersist[],
+): CadastroItemPersist | undefined {
+  const porId = cadastros.find((c) => c.id === linha.id);
+  if (porId) return porId;
+  const chave = linha.nip !== '—' ? linha.nip : linha.nome;
+  const busca = buscarCadastroPorNomeOuNip(cadastros, chave);
+  return busca.kind === 'found' ? busca.cadastro : undefined;
+}
+
+/** Preenche rúbricas ausentes na linha a partir do cadastro local e do mapa por NIP (sessões). */
+export function enriquecerLinhasComRubricas(
+  linhas: ResultadoTafLinha[],
+  cadastros: CadastroItemPersist[],
+  rubricasSessoes?: Map<string, RubricasPorNip>,
+): ResultadoTafLinha[] {
+  return linhas.map((linha) => {
+    const c = cadastroPorLinha(linha, cadastros);
+    const rubCadastro = c ? rubricasDoCadastro(c) : {};
+    const key = nipDigitos(linha.nip);
+    const rubSessao = key && rubricasSessoes ? rubricasSessoes.get(key) : undefined;
+    return mesclarRubricasNaLinha(linha, mesclarRubricas(rubCadastro, rubSessao));
+  });
 }
 
 function stripDiacritics(s: string): string {

@@ -1,4 +1,5 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 
 export type TipoProvaAplicada = 'corrida' | 'natacao' | 'permanencia';
 
@@ -8,6 +9,7 @@ export type SessaoAplicacaoTaf = {
   dataAplicacao: string;
   tipoProva: TipoProvaAplicada;
   resultados: ResultadoCorridaItem[];
+  aplicadorAssinatura?: AplicadorAssinaturaResumo;
   /** Unix ms — usado na sincronização offline (mais recente prevalece). */
   updatedAt?: number;
 };
@@ -113,6 +115,7 @@ export async function addSessaoAplicacao(
     dataAplicacao: input.dataAplicacao,
     tipoProva: input.tipoProva,
     resultados: input.resultados,
+    aplicadorAssinatura: input.aplicadorAssinatura,
   };
 
   const uid = await resolveStorageOwnerUid();

@@ -25,6 +25,7 @@ import {
   getAllAplicadores,
   type AplicadorItemPersist,
 } from '../services/aplicadoresIndexedDb';
+import { hashAplicadorSenha } from '../utils/aplicadorSenha';
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
 
@@ -63,7 +64,7 @@ export default function CadastroAplicadorScreen() {
   const [pracaSelecionada, setPracaSelecionada] = useState('');
   const [nip, setNip] = useState('');
   const [nome, setNome] = useState('');
-  const [sexo, setSexo] = useState<'M' | 'F'>('M');
+  const [senha, setSenha] = useState('');
   const [aplicadores, setAplicadores] = useState<AplicadorItemPersist[]>([]);
   const [faltantes, setFaltantes] = useState<string[]>([]);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
@@ -86,12 +87,13 @@ export default function CadastroAplicadorScreen() {
     setCategoria(next);
   }
 
-  function handleCadastrar() {
+  async function handleCadastrar() {
     if (!categoria) return;
 
     const faltantesAgora: string[] = [];
     if (!nip.trim()) faltantesAgora.push('NIP');
     if (!nome.trim()) faltantesAgora.push('Nome');
+    if (!editandoId && !senha.trim()) faltantesAgora.push('Senha');
     if (categoria === 'Oficiais' && !oficialSelecionado.trim()) faltantesAgora.push('Oficial');
     if (categoria === 'Praças' && !pracaSelecionada.trim()) faltantesAgora.push('Graduação');
 
@@ -115,14 +117,20 @@ export default function CadastroAplicadorScreen() {
 
     const isEdicao = !!editandoId;
     const id = editandoId ?? `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const anterior = editandoId ? aplicadores.find((a) => a.id === editandoId) : undefined;
+    let senhaHash = anterior?.senhaHash;
+    if (senha.trim()) {
+      senhaHash = await hashAplicadorSenha(senha);
+    }
+
     const novo: AplicadorItemPersist = {
       id,
       nip: nipFinal,
       nome: nome.trim(),
-      sexo,
       categoria,
       oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
       praca: categoria === 'Praças' ? pracaSelecionada : undefined,
+      senhaHash,
       updatedAt: Date.now(),
     };
 
@@ -133,12 +141,12 @@ export default function CadastroAplicadorScreen() {
     addAplicador(novo).catch(() => undefined);
 
     setEditandoId(null);
+    setSenha('');
 
     if (!isEdicao) {
       setModalCadastroSucesso(true);
       setNip('');
       setNome('');
-      setSexo('M');
       setOficialSelecionado('');
       setPracaSelecionada('');
       setCategoria('');
@@ -162,7 +170,7 @@ export default function CadastroAplicadorScreen() {
     }
     setNip(item.nip || '');
     setNome(item.nome || '');
-    setSexo(item.sexo === 'F' ? 'F' : 'M');
+    setSenha('');
   }
 
   async function handleConfirmarExcluir() {
@@ -403,35 +411,26 @@ export default function CadastroAplicadorScreen() {
               </View>
 
               <View style={styles.section}>
-                <FieldLabel>Gênero</FieldLabel>
-                <View style={[styles.segmented, { borderColor: theme.border }]}>
-                  {(['M', 'F'] as const).map((sx) => {
-                    const active = sexo === sx;
-                    return (
-                      <TouchableOpacity
-                        key={sx}
-                        accessibilityLabel={sx === 'M' ? 'Masculino' : 'Feminino'}
-                        onPress={() => setSexo(sx)}
-                        style={[
-                          styles.segmentBtn,
-                          active
-                            ? { backgroundColor: selectedBgColor }
-                            : { backgroundColor: unselectedBgColor },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            ts.caption,
-                            active ? { color: selectedTextColor } : { color: unselectedTextColor },
-                            styles.segmentText,
-                          ]}
-                        >
-                          {sx === 'M' ? 'Masculino' : 'Feminino'}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <FieldLabel>{editandoId ? 'Senha (deixe vazio para manter)' : 'Senha'}</FieldLabel>
+                <TextInput
+                  value={senha}
+                  onChangeText={setSenha}
+                  placeholder={editandoId ? 'Nova senha (opcional)' : 'Senha do aplicador'}
+                  placeholderTextColor={theme.textMuted}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="off"
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: inputBorderColor,
+                      backgroundColor: inputBgColor,
+                      color: inputTextColor,
+                      fontFamily: regularFont,
+                    },
+                  ]}
+                />
               </View>
 
               <View style={styles.btnRow}>
@@ -489,7 +488,7 @@ export default function CadastroAplicadorScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator>
                   <View style={[styles.tabelaCard, { borderColor: theme.border }]}>
                     <View style={[styles.tabelaHeaderRow, { borderBottomColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
-                      {['Posto/Grad.', 'NIP', 'Nome', 'Categoria', 'Gênero', 'Ações'].map((col) => (
+                      {['Posto/Grad.', 'NIP', 'Nome', 'Categoria', 'Ações'].map((col) => (
                         <Text
                           key={col}
                           style={[styles.tabelaHeaderCell, { color: theme.textSecondary, width: col === 'Ações' ? 80 : col === 'Nome' ? 160 : 90 }]}
@@ -516,9 +515,6 @@ export default function CadastroAplicadorScreen() {
                           </Text>
                           <Text style={[styles.tabelaCellText, { color: theme.text, width: 90 }]}>
                             {item.categoria}
-                          </Text>
-                          <Text style={[styles.tabelaCellText, { color: theme.text, width: 90 }]}>
-                            {item.sexo === 'F' ? 'Feminino' : 'Masculino'}
                           </Text>
                           <View style={[styles.acoesRow, { width: 80 }]}>
                             {isBoss ? (

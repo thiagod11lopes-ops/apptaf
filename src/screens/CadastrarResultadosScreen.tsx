@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,17 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, FileDown } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
+import { AplicadorAssinaturaBloco } from '../components/AplicadorAssinaturaBloco';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { formatMsByModality } from '../taf/tafTimeFormat';
-import { cabecalhoColunaProvaResultados } from '../utils/exportResumoAplicacaoPdf';
+import { cabecalhoColunaProvaResultados, exportResumoAplicacaoPdf } from '../utils/exportResumoAplicacaoPdf';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
@@ -38,9 +41,23 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
     [resultados],
   );
   const returnTo = route.params?.returnTo ?? 'AplicarTAF';
+  const aplicadorAssinatura = route.params?.aplicadorAssinatura;
+  const [exportandoPdf, setExportandoPdf] = useState(false);
   const grayBg = theme.background;
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = theme.border;
+
+  const exportarPdf = useCallback(async () => {
+    if (exportandoPdf || resultados.length === 0) return;
+    setExportandoPdf(true);
+    try {
+      await exportResumoAplicacaoPdf(resultados, textoColunaCadastro, aplicadorAssinatura);
+    } catch (e) {
+      Alert.alert('PDF', e instanceof Error ? e.message : 'Não foi possível gerar o PDF.');
+    } finally {
+      setExportandoPdf(false);
+    }
+  }, [aplicadorAssinatura, exportandoPdf, resultados, textoColunaCadastro]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
@@ -115,6 +132,26 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                 </View>
               </View>
             ))}
+
+            {aplicadorAssinatura ? <AplicadorAssinaturaBloco assinatura={aplicadorAssinatura} /> : null}
+
+            {resultados.length > 0 ? (
+              <TouchableOpacity
+                onPress={() => void exportarPdf()}
+                disabled={exportandoPdf}
+                style={[styles.btnPdf, { backgroundColor: theme.primary, opacity: exportandoPdf ? 0.7 : 1 }]}
+                accessibilityLabel="Gerar PDF do resumo"
+              >
+                {exportandoPdf ? (
+                  <ActivityIndicator color={theme.text} />
+                ) : (
+                  <>
+                    <FileDown size={18} color={theme.text} strokeWidth={2.5} />
+                    <Text style={[styles.btnPdfText, { color: theme.text }]}>Gerar PDF</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : null}
           </Card>
         </View>
       </ScrollView>
@@ -240,6 +277,19 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
     notaResumoRepro: {
       color: theme.isDark ? ink : '#B91C1C',
       fontSize: 12,
+    },
+    btnPdf: {
+      marginTop: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      borderRadius: 12,
+    },
+    btnPdfText: {
+      fontSize: 15,
+      fontWeight: '800',
     },
   });
 }

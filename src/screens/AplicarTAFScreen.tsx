@@ -38,13 +38,14 @@ import {
   type ModalTesteJaAplicadoInfo,
 } from '../components/sismav/ModalTesteJaAplicado';
 import { ConfirmacaoExcluirPreCadastroModal } from '../components/sismav/ConfirmacaoExcluirPreCadastroModal';
+import { FluxoAssinaturaAplicadorModal } from '../components/sismav/FluxoAssinaturaAplicadorModal';
 import {
   PermanenciaTafPanel,
   type ResultadoPermanenciaOpcao,
 } from '../components/PermanenciaTafPanel';
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
-import { addSessaoAplicacao, getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import { addSessaoAplicacao, getAllSessoesAplicacao, getSessaoAplicacaoById, updateSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
 import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import {
@@ -65,6 +66,7 @@ import {
 } from '../taf/natacaoNota';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { Check, Pause, Play } from 'lucide-react-native';
 import {
   aplicarTafTrialReducer,
@@ -241,11 +243,14 @@ export default function AplicarTAFScreen() {
   const [modalTempoRegistradoVisible, setModalTempoRegistradoVisible] = useState(false);
   const [modalParcialAviso, setModalParcialAviso] = useState<string | null>(null);
   const pendingResultadosNavRef = useRef<ResultadoCorridaItem[] | null>(null);
+  const resultadosPosMilitaresRef = useRef<ResultadoCorridaItem[] | null>(null);
+  const lastSessionIdRef = useRef<string | null>(null);
   /** Lista espelhada em estado para o modal de rúbrica re-renderizar ao mudar o participante. */
   const [listaResultadosRubricaNatacao, setListaResultadosRubricaNatacao] = useState<
     ResultadoCorridaItem[] | null
   >(null);
   const [modalRubricaNatacaoVisible, setModalRubricaNatacaoVisible] = useState(false);
+  const [fluxoAplicadorVisible, setFluxoAplicadorVisible] = useState(false);
   const [indiceRubricaNatacao, setIndiceRubricaNatacao] = useState(0);
   const [, setRubricasNatacaoSvg] = useState<string[]>([]);
   const [erroRubricaNatacao, setErroRubricaNatacao] = useState('');
@@ -659,9 +664,9 @@ export default function AplicarTAFScreen() {
   );
 
   const gravarSessaoAplicacao = useCallback(
-    async (resultados: ResultadoCorridaItem[]) => {
+    async (resultados: ResultadoCorridaItem[]): Promise<string | undefined> => {
       const tipo = tipoProvaRef.current ?? tipoProva;
-      if (!tipo || resultados.length === 0) return;
+      if (!tipo || resultados.length === 0) return undefined;
 
       const indicesRepeticao = nipsRepeticaoAutorizadaRef.current;
       if (indicesRepeticao.size > 0) {
@@ -674,13 +679,35 @@ export default function AplicarTAFScreen() {
         nipsRepeticaoAutorizadaRef.current = new Set();
       }
 
-      await addSessaoAplicacao({
+      return addSessaoAplicacao({
         dataAplicacao: dataHojeBr(),
         tipoProva: tipo,
         resultados,
       });
     },
     [tipoProva, nipsParticipantes],
+  );
+
+  const onConcluirAssinaturaAplicador = useCallback(
+    async (assinatura: AplicadorAssinaturaResumo) => {
+      setFluxoAplicadorVisible(false);
+      const res = resultadosPosMilitaresRef.current;
+      resultadosPosMilitaresRef.current = null;
+      if (lastSessionIdRef.current) {
+        const sessao = await getSessaoAplicacaoById(lastSessionIdRef.current);
+        if (sessao) {
+          await updateSessaoAplicacao({ ...sessao, aplicadorAssinatura: assinatura });
+        }
+      }
+      if (res) {
+        navigation.navigate('CadastrarResultados', {
+          resultados: res,
+          aplicadorAssinatura: assinatura,
+          returnTo: 'AplicarTAF',
+        });
+      }
+    },
+    [navigation],
   );
 
   const onCadastrarResultados = useCallback(async () => {
@@ -960,9 +987,11 @@ export default function AplicarTAFScreen() {
     if (modalParcialAviso) {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
-    void gravarSessaoAplicacao(atualizados).then(async () => {
+    void gravarSessaoAplicacao(atualizados).then(async (sessionId) => {
       await persistirRubricasNoCadastro(atualizados);
-      navigation.navigate('CadastrarResultados', { resultados: atualizados, returnTo: 'AplicarTAF' });
+      resultadosPosMilitaresRef.current = atualizados;
+      lastSessionIdRef.current = sessionId ?? null;
+      setFluxoAplicadorVisible(true);
     });
     pendingResultadosNavRef.current = null;
     setModalParcialAviso(null);
@@ -970,7 +999,6 @@ export default function AplicarTAFScreen() {
     indiceRubricaNatacao,
     listaResultadosRubricaNatacao,
     modalParcialAviso,
-    navigation,
     gravarSessaoAplicacao,
     rubricaCanvasWidth,
     rubricaStrokeAtual,
@@ -1822,6 +1850,11 @@ export default function AplicarTAFScreen() {
           </View>
         </View>
       </Modal>
+
+      <FluxoAssinaturaAplicadorModal
+        visible={fluxoAplicadorVisible}
+        onConcluir={(assinatura) => void onConcluirAssinaturaAplicador(assinatura)}
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContentCadastro}

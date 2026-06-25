@@ -2,6 +2,7 @@ import { Platform, Alert } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
 
@@ -37,6 +38,18 @@ export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[
   return 'Corredor / Nadador';
 }
 
+function blocoAplicadorAssinaturaHtml(assinatura?: AplicadorAssinaturaResumo): string {
+  if (!assinatura?.rubricaSvg) return '';
+  const rubrica = celulaRubricaHtml(assinatura.rubricaSvg);
+  return `<div class="aplicador-assinatura">
+    <div class="aplicador-rubrica">${rubrica}</div>
+    <hr class="aplicador-linha"/>
+    <p class="aplicador-categoria">${escapeHtml(assinatura.categoria)}</p>
+    <p class="aplicador-nome">${escapeHtml(assinatura.nome)}</p>
+    <p class="aplicador-nip">NIP ${escapeHtml(assinatura.nip || '—')}</p>
+  </div>`;
+}
+
 /**
  * HTML completo do resumo (impressão / PDF nativo).
  */
@@ -44,6 +57,7 @@ export function buildResumoAplicacaoHtml(
   resultados: ResultadoCorridaItem[],
   textoColunaCadastro: string,
   titulo = 'Resumo da aplicação — TAF',
+  aplicadorAssinatura?: AplicadorAssinaturaResumo,
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
   const colProva = escapeHtml(cabecalhoColunaProvaResultados(resultados));
@@ -87,6 +101,47 @@ export function buildResumoAplicacaoHtml(
     .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
     ${PDF_TABELA_COMPACTA_STYLES}
     ${RUBRICA_PDF_STYLES}
+    .aplicador-assinatura {
+      margin-top: 28px;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+    .aplicador-rubrica {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .aplicador-rubrica .rubrica-img {
+      width: 220px;
+      height: 90px;
+    }
+    .aplicador-linha {
+      width: 72%;
+      max-width: 420px;
+      margin: 0 auto 12px;
+      border: none;
+      border-top: 1px solid #374151;
+    }
+    .aplicador-categoria {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #6B7280;
+      margin: 0 0 4px;
+    }
+    .aplicador-nome {
+      font-size: 16px;
+      font-weight: 800;
+      margin: 0 0 4px;
+      color: #111827;
+    }
+    .aplicador-nip {
+      font-size: 13px;
+      font-weight: 600;
+      color: #6B7280;
+      margin: 0;
+    }
     ${PRINT_LANDSCAPE_CSS}
   </style>
 </head>
@@ -108,6 +163,7 @@ export function buildResumoAplicacaoHtml(
     <tbody>${rows}</tbody>
   </table>`
   }
+  ${blocoAplicadorAssinaturaHtml(aplicadorAssinatura)}
 </body>
 </html>`;
 }
@@ -118,8 +174,9 @@ export function buildResumoAplicacaoHtml(
 export async function exportResumoAplicacaoPdf(
   resultados: ResultadoCorridaItem[],
   textoColunaCadastro: string,
+  aplicadorAssinatura?: AplicadorAssinaturaResumo,
 ): Promise<void> {
-  const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro);
+  const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro, undefined, aplicadorAssinatura);
 
   if (Platform.OS === 'web') {
     const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;

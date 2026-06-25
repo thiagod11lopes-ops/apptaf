@@ -1,3 +1,5 @@
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+
 export type ResultadoCorridaItem = {
   corredor: number;
   nome: string;
@@ -22,5 +24,9 @@ export type RootStackParamList = {
   Resultados: undefined;
   Configuracoes: undefined;
   Login: undefined;
-  CadastrarResultados: { resultados: ResultadoCorridaItem[]; returnTo?: keyof RootStackParamList };
+  CadastrarResultados: {
+    resultados: ResultadoCorridaItem[];
+    returnTo?: keyof RootStackParamList;
+    aplicadorAssinatura?: AplicadorAssinaturaResumo;
+  };
 };

@@ -10,6 +10,8 @@ import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHis
 import { isFirebaseConfigured } from '../config/firebase';
 import { wipeOwnerData } from '../offline-first/db/localDb';
 import { getTafDatabase, setMeta } from '../offline-first/db/tafDatabase';
+import { resetCloudSyncStatus, setCloudSyncResult } from './offline/cloudSyncActivity';
+import { syncEngine } from '../offline-first/sync/SyncEngine';
 
 export type WipeSystemDataOptions = {
   uid: string | null;
@@ -38,7 +40,10 @@ export async function wipeSystemData(options: WipeSystemDataOptions): Promise<Wi
     if (getTafDatabase()) {
       await wipeOwnerData(uid);
       await setMeta(`migrated:${uid}`, '0');
+      await syncEngine.resetAfterWipe(uid);
     }
+    resetCloudSyncStatus();
+    setCloudSyncResult(true);
   } else {
     clearMemoryCloudCache();
   }

@@ -3,7 +3,6 @@ import { getTafDatabase } from '../../offline-first/db/tafDatabase';
 import { dataStore } from '../../offline-first/store/DataStore';
 import { waitForAuthenticatedUid } from './authUid';
 import { canAttemptCloudSync } from '../offline/networkStatus';
-import { getCloudActivityState, subscribeCloudActivity } from '../offline/cloudSyncActivity';
 import { syncEngine } from '../../offline-first/sync/SyncEngine';
 
 export type CloudDataLoadState = {
@@ -16,6 +15,7 @@ export type CloudDataLoadState = {
   pendingSync?: number;
 };
 
+/** Lê resumo da Home a partir do Dexie local (sem disparar sync em loop). */
 export async function loadHomeCloudData(
   onProgress: (state: CloudDataLoadState) => void,
   options?: { forceRefresh?: boolean },
@@ -26,13 +26,13 @@ export async function loadHomeCloudData(
   const online = canAttemptCloudSync();
   const useDexie = getTafDatabase() != null;
 
-  const reportFromStore = async (loading: boolean, fromCache: boolean) => {
+  const reportFromStore = async (fromCache: boolean) => {
     const cadastros = await dataStore.getCadastros(uid);
     const sessoes = await dataStore.getSessoes(uid);
     const resumo = await dataStore.getResumo(uid);
     onProgress({
-      percent: loading ? getCloudActivityState().syncProgress || 15 : 100,
-      loading,
+      percent: 100,
+      loading: false,
       loadedCadastros: cadastros.length,
       loadedSessoes: sessoes.length,
       fromCache,
@@ -52,7 +52,10 @@ export async function loadHomeCloudData(
 
   if (!useDexie) {
     const { readOfflineCloudEntry } = await import('../offline/offlineCloudEngine');
-    const entry = await readOfflineCloudEntry(uid, { autoSync: online, forcePull: options?.forceRefresh });
+    const entry = await readOfflineCloudEntry(uid, {
+      autoSync: online && !!options?.forceRefresh,
+      forcePull: options?.forceRefresh,
+    });
     onProgress({
       percent: 100,
       loading: false,
@@ -65,21 +68,17 @@ export async function loadHomeCloudData(
     return entry;
   }
 
-  await reportFromStore(online, true);
-
-  const unsub = subscribeCloudActivity((state) => {
-    if (!state.syncing) return;
-    void reportFromStore(true, true);
-  });
-
-  try {
-    if (online && options?.forceRefresh) {
-      await syncEngine.forceSync();
-    } else if (online) {
-      await syncEngine.scheduleProcess(true);
-    }
-    return await reportFromStore(false, false);
-  } finally {
-    unsub();
+  if (online && options?.forceRefresh) {
+    onProgress({
+      percent: 15,
+      loading: true,
+      loadedCadastros: 0,
+      loadedSessoes: 0,
+      fromCache: true,
+      offline: false,
+    });
+    await syncEngine.forceSync();
   }
+
+  return reportFromStore(!options?.forceRefresh);
 }

@@ -98,7 +98,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authReady || !isAuthenticated || !online) return;
     void autoSyncWithCloud();
-  }, [authReady, isAuthenticated, online, connectivity, autoSyncWithCloud]);
+  }, [authReady, isAuthenticated, online, autoSyncWithCloud]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated) return;

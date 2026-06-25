@@ -21,7 +21,9 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const syncingCloud =
     isOnlineAccount &&
     online &&
-    (activity.syncing || activity.realtimeApplying || syncingContext);
+    (activity.syncing || syncingContext);
+
+  const applyingRemote = isOnlineAccount && online && activity.realtimeApplying;
 
   const uploadingCloud =
     isOnlineAccount && online && activity.uploading && !syncingCloud;
@@ -55,6 +57,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     if (!isOnlineAccount) return null;
     if (!online) return null;
     if (syncingCloud || loadingInitial) return 'Baixando e reconciliando dados com a nuvem…';
+    if (applyingRemote) return 'Atualizando dados recebidos da nuvem…';
     if (uploadingCloud) return 'Dados sendo atualizados na nuvem em tempo real';
     if (pendingCount > 0) return 'Alterações locais aguardando envio à nuvem';
     if (syncedWithCloud && realtimeActive) return 'Dados sincronizados em tempo real com a nuvem';
@@ -65,6 +68,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     online,
     syncingCloud,
     loadingInitial,
+    applyingRemote,
     uploadingCloud,
     pendingCount,
     syncedWithCloud,

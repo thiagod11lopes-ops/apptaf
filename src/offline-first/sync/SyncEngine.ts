@@ -42,9 +42,12 @@ const BACKOFF_MAX_MS = 60_000;
 let ownerUid: string | null = null;
 let processing = false;
 let processTimer: ReturnType<typeof setTimeout> | null = null;
+let connectivityUnsub: (() => void) | null = null;
 let listeners = new Set<StoreListener>();
 let lastPullAt = 0;
 const MIN_PULL_MS = 45_000;
+const MIN_PROCESS_GAP_MS = 12_000;
+let lastProcessFinishedAt = 0;
 
 function notify(): void {
   listeners.forEach((fn) => fn());
@@ -105,10 +108,13 @@ export class SyncEngine {
     stopRealtimeSync();
     startRealtimeSync(dataOwnerUid, () => notify());
 
-    connectivityMonitor.subscribe((state) => {
-      if (state === 'ONLINE' || state === 'DEGRADED') {
-        void this.scheduleProcess(true);
-      }
+    connectivityUnsub?.();
+    let prevConn = connectivityMonitor.getState();
+    connectivityUnsub = connectivityMonitor.subscribe((state) => {
+      const cameOnline =
+        (state === 'ONLINE' || state === 'DEGRADED') && prevConn === 'OFFLINE';
+      prevConn = state;
+      if (cameOnline) void this.scheduleProcess(false);
     });
 
     await this.scheduleProcess(true);
@@ -116,6 +122,8 @@ export class SyncEngine {
 
   shutdown(): void {
     stopRealtimeSync();
+    connectivityUnsub?.();
+    connectivityUnsub = null;
     ownerUid = null;
     if (processTimer) clearTimeout(processTimer);
     processTimer = null;
@@ -138,6 +146,7 @@ export class SyncEngine {
 
   async processQueue(): Promise<void> {
     if (!ownerUid || processing || !connectivityMonitor.canSync()) return;
+    if (Date.now() - lastProcessFinishedAt < MIN_PROCESS_GAP_MS) return;
 
     processing = true;
     connectivityMonitor.setSyncing(true);
@@ -173,9 +182,17 @@ export class SyncEngine {
       setCloudSyncResult(false);
     } finally {
       processing = false;
+      lastProcessFinishedAt = Date.now();
       connectivityMonitor.setSyncing(false);
       endCloudSync();
     }
+  }
+
+  /** Após wipe local/nuvem — evita loop de sync e marca estado ocioso. */
+  async resetAfterWipe(dataOwnerUid: string): Promise<void> {
+    lastPullAt = Date.now();
+    lastProcessFinishedAt = Date.now();
+    await setMeta(`lastPull:${dataOwnerUid}`, String(lastPullAt));
   }
 
   async pullFromRemote(force = false): Promise<void> {
@@ -230,6 +247,7 @@ export class SyncEngine {
   async forceSync(): Promise<void> {
     if (!ownerUid) return;
     lastPullAt = 0;
+    lastProcessFinishedAt = 0;
     await syncQueue.resetFailedToPending(ownerUid);
     await this.processQueue();
   }

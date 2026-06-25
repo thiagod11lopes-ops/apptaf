@@ -92,6 +92,7 @@ async function applySnapshot(
     endRealtimeApply();
     if (pendingApply) {
       pendingApply = false;
+      scheduleApply(uid);
     }
   }
 }

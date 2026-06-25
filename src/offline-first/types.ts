@@ -6,7 +6,7 @@ export type SyncStatus = 'pending' | 'synced' | 'conflict' | 'failed';
 export type OperationType = 'CREATE' | 'UPDATE' | 'DELETE';
 export type QueueStatus = 'pending' | 'processing' | 'done' | 'failed';
 export type ConnectivityState = 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'SYNCING';
-export type CollectionName = 'cadastros' | 'sessoes';
+export type CollectionName = 'cadastros' | 'sessoes' | 'aplicadores';
 
 export interface SyncableMeta {
   createdAt: number;
@@ -71,7 +71,7 @@ export interface SyncLogEntry {
 
 export type ConflictResolution = {
   winner: 'local' | 'remote' | 'merged';
-  record: CadastroRecord | SessaoRecord;
+  record: CadastroRecord | SessaoRecord | AplicadorRecord;
   hadConflict: boolean;
   reason: string;
 };

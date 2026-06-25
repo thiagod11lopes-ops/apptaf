@@ -1,6 +1,6 @@
-import type { CadastroRecord, SessaoRecord, ConflictResolution } from '../types';
+import type { CadastroRecord, SessaoRecord, AplicadorRecord, ConflictResolution } from '../types';
 
-type SyncRecord = CadastroRecord | SessaoRecord;
+type SyncRecord = CadastroRecord | SessaoRecord | AplicadorRecord;
 
 function readVersion(record: Partial<SyncRecord> | null | undefined): number {
   return typeof record?.version === 'number' && record.version > 0 ? record.version : 1;

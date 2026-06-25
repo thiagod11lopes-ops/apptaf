@@ -1,4 +1,5 @@
 import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
+import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
 import {
   addCadastroFirestore,
@@ -7,6 +8,11 @@ import {
   getAllCadastrosFirestoreLight,
 } from '../../services/firebase/cadastrosFirestore';
 import {
+  addAplicadorFirestore,
+  deleteAplicadorFirestore,
+  getAllAplicadoresFirestore,
+} from '../../services/firebase/aplicadoresFirestore';
+import {
   addSessaoFirestore,
   deleteSessaoFirestore,
   getAllSessoesFirestoreLight,
@@ -14,12 +20,15 @@ import {
 } from '../../services/firebase/sessoesFirestore';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { applyTeamWipeIfNeeded } from '../../services/applyTeamWipeIfNeeded';
-import type { CadastroRecord, SessaoRecord, SyncQueueEntry } from '../types';
+import type { AplicadorRecord, CadastroRecord, SessaoRecord, SyncQueueEntry } from '../types';
 import {
+  applyRemoteAplicador,
   applyRemoteCadastro,
   applyRemoteSessao,
+  listAplicadores,
   listCadastros,
   listSessoes,
+  putAplicadorRecord,
   putCadastroRecord,
   putSessaoRecord,
 } from '../db/localDb';
@@ -61,6 +70,31 @@ function backoffDelay(retries: number): number {
   return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, retries));
 }
 
+/** Envia aplicadores locais que ainda não existem na nuvem (ex.: cadastrados antes da sync). */
+async function enqueueLocalAplicadoresMissingFromRemote(ownerUid: string): Promise<void> {
+  const loginUid = getCachedLoginUid();
+  if (!loginUid || loginUid !== ownerUid) return;
+
+  const [local, remote] = await Promise.all([
+    listAplicadores(ownerUid),
+    getAllAplicadoresFirestore(ownerUid),
+  ]);
+  const remoteIds = new Set(remote.map((a) => a.id));
+
+  for (const row of local) {
+    if (row.deleted || remoteIds.has(row.id) || row.syncStatus === 'pending') continue;
+    const pending = { ...row, syncStatus: 'pending' as const };
+    await putAplicadorRecord(pending);
+    await syncQueue.enqueue({
+      operationType: 'CREATE',
+      collection: 'aplicadores',
+      documentId: row.id,
+      payload: pending,
+      ownerUid,
+    });
+  }
+}
+
 async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
   const uid = entry.ownerUid;
   const payload = JSON.parse(entry.payload) as Record<string, unknown>;
@@ -87,6 +121,20 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
     await addCadastroFirestore(uid, payload as CadastroItemPersist);
     const saved = payload as CadastroRecord;
     await putCadastroRecord({ ...saved, ownerUid: uid, syncStatus: 'synced' });
+    return;
+  }
+
+  if (entry.collection === 'aplicadores') {
+    if (entry.operationType === 'DELETE') {
+      await deleteAplicadorFirestore(uid, entry.documentId);
+      const dbApp = await listAplicadores(uid, true);
+      const row = dbApp.find((a) => a.id === entry.documentId);
+      if (row) await putAplicadorRecord({ ...row, syncStatus: 'synced' });
+      return;
+    }
+    await addAplicadorFirestore(uid, payload as AplicadorItemPersist);
+    const savedApp = payload as AplicadorRecord;
+    await putAplicadorRecord({ ...savedApp, ownerUid: uid, syncStatus: 'synced' });
     return;
   }
 
@@ -291,9 +339,10 @@ export class SyncEngine {
 
     await applyTeamWipeIfNeeded(ownerUid, getCachedLoginUid());
 
-    const [remoteCadastros, remoteSessoes] = await Promise.all([
+    const [remoteCadastros, remoteSessoes, remoteAplicadores] = await Promise.all([
       getAllCadastrosFirestoreLight(ownerUid),
       getAllSessoesFirestoreLight(ownerUid),
+      getAllAplicadoresFirestore(ownerUid),
     ]);
 
     for (const cad of remoteCadastros) {
@@ -330,10 +379,33 @@ export class SyncEngine {
       );
     }
 
+    for (const app of remoteAplicadores) {
+      await applyRemoteAplicador(
+        {
+          ...app,
+          ownerUid,
+          version: 1,
+          syncStatus: 'synced',
+          deleted: false,
+          deviceId: 'remote',
+          userId: getCachedLoginUid(),
+          createdAt: app.updatedAt ?? Date.now(),
+          lastModifiedBy: 'remote',
+        },
+        ownerUid,
+      );
+    }
+
+    await enqueueLocalAplicadoresMissingFromRemote(ownerUid);
+
     lastPullAt = Date.now();
     await setMeta(`lastPull:${ownerUid}`, String(lastPullAt));
-    await syncLogger.info('sync', `Pull concluído: ${remoteCadastros.length} cadastros, ${remoteSessoes.length} sessões`);
+    await syncLogger.info(
+      'sync',
+      `Pull concluído: ${remoteCadastros.length} cadastros, ${remoteSessoes.length} sessões, ${remoteAplicadores.length} aplicadores`,
+    );
     notify();
+    void this.scheduleProcess(true);
   }
 
   async forceSync(): Promise<void> {

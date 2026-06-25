@@ -1,5 +1,5 @@
 import { getTafDatabase } from '../db/tafDatabase';
-import type { CadastroRecord, CollectionName, SessaoRecord } from '../types';
+import type { AplicadorRecord, CadastroRecord, CollectionName, SessaoRecord } from '../types';
 
 export type PendingSyncItem = {
   collection: CollectionName;
@@ -9,7 +9,7 @@ export type PendingSyncItem = {
   version: number;
   deviceId: string;
   syncStatus: 'pending';
-  record: CadastroRecord | SessaoRecord;
+  record: CadastroRecord | SessaoRecord | AplicadorRecord;
 };
 
 export type PendingSyncSummary = {
@@ -17,18 +17,20 @@ export type PendingSyncSummary = {
   total: number;
   cadastros: number;
   sessoes: number;
+  aplicadores: number;
 };
 
 /** Retorna todos os registros locais com syncStatus === "pending". */
 export async function getPendingSyncItems(ownerUid: string): Promise<PendingSyncSummary> {
   const db = getTafDatabase();
   if (!db || !ownerUid.trim()) {
-    return { items: [], total: 0, cadastros: 0, sessoes: 0 };
+    return { items: [], total: 0, cadastros: 0, sessoes: 0, aplicadores: 0 };
   }
 
-  const [cadRows, sessRows] = await Promise.all([
+  const [cadRows, sessRows, appRows] = await Promise.all([
     db.cadastros.where('[ownerUid+syncStatus]').equals([ownerUid, 'pending']).toArray(),
     db.sessoes.where('[ownerUid+syncStatus]').equals([ownerUid, 'pending']).toArray(),
+    db.aplicadores.where('[ownerUid+syncStatus]').equals([ownerUid, 'pending']).toArray(),
   ]);
 
   const items: PendingSyncItem[] = [];
@@ -59,6 +61,19 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
     });
   }
 
+  for (const row of appRows) {
+    items.push({
+      collection: 'aplicadores',
+      id: row.id,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      version: row.version,
+      deviceId: row.deviceId,
+      syncStatus: 'pending',
+      record: row,
+    });
+  }
+
   items.sort((a, b) => a.updatedAt - b.updatedAt);
 
   return {
@@ -66,5 +81,6 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
     total: items.length,
     cadastros: cadRows.length,
     sessoes: sessRows.length,
+    aplicadores: appRows.length,
   };
 }

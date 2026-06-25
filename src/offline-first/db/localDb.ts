@@ -73,11 +73,17 @@ export async function toAplicadorRecord(
     version: 1,
     deviceId,
     userId,
-    syncStatus: 'synced',
+    syncStatus: 'pending',
     deleted: false,
     lastModifiedBy: deviceId,
   };
   return bumpRecordMeta(base, deviceId, userId, operation);
+}
+
+export async function importAplicadorRecord(record: AplicadorRecord): Promise<void> {
+  const db = getTafDatabase();
+  if (!db) return;
+  await db.aplicadores.put({ ...record, syncStatus: 'synced' });
 }
 
 export async function listCadastros(ownerUid: string, includeDeleted = false): Promise<CadastroRecord[]> {
@@ -280,6 +286,13 @@ export async function saveAplicador(
     record.createdAt = existing.createdAt;
   }
   await putAplicadorRecord(record);
+  await syncQueue.enqueue({
+    operationType: operation,
+    collection: 'aplicadores',
+    documentId: record.id,
+    payload: record,
+    ownerUid,
+  });
   return record;
 }
 
@@ -292,6 +305,13 @@ export async function softDeleteAplicador(
   if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
   const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');
   await putAplicadorRecord(record);
+  await syncQueue.enqueue({
+    operationType: 'DELETE',
+    collection: 'aplicadores',
+    documentId: id,
+    payload: { id, deleted: true },
+    ownerUid,
+  });
 }
 
 export async function saveSessao(
@@ -384,6 +404,30 @@ export async function applyRemoteSessao(
   }
   await db.sessoes.put({
     ...(remote as SessaoRecord),
+    ownerUid,
+    syncStatus: 'synced',
+    deleted: remote.deleted ?? false,
+  });
+}
+
+export async function applyRemoteAplicador(
+  remote: Partial<AplicadorRecord> & { id: string },
+  ownerUid: string,
+): Promise<void> {
+  const db = getTafDatabase();
+  if (!db) return;
+  const local = await db.aplicadores.get(remote.id);
+  if (local && local.ownerUid === ownerUid) {
+    const { resolveRecordConflict } = await import('../sync/ConflictResolver');
+    const resolved = resolveRecordConflict(local, { ...local, ...remote, ownerUid } as AplicadorRecord);
+    if (resolved.hadConflict) {
+      await syncLogger.warn('conflict', resolved.reason, { id: remote.id, collection: 'aplicadores' });
+    }
+    await db.aplicadores.put({ ...resolved.record, syncStatus: 'synced' });
+    return;
+  }
+  await db.aplicadores.put({
+    ...(remote as AplicadorRecord),
     ownerUid,
     syncStatus: 'synced',
     deleted: remote.deleted ?? false,

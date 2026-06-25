@@ -38,6 +38,7 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
   total: 0,
   cadastros: 0,
   sessoes: 0,
+  aplicadores: 0,
 };
 
 function canAttemptSyncNow(): boolean {

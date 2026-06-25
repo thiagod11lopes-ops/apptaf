@@ -35,6 +35,10 @@ export class TafDatabase extends Dexie {
     this.version(3).stores({
       aplicadores: 'id, ownerUid, nip, updatedAt, deleted, [ownerUid+deleted]',
     });
+    this.version(4).stores({
+      aplicadores:
+        'id, ownerUid, nip, updatedAt, syncStatus, deleted, [ownerUid+deleted], [ownerUid+syncStatus]',
+    });
   }
 }
 

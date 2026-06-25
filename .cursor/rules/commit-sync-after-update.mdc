@@ -1,5 +1,5 @@
 ---
-description: Ao finalizar atualizações, perguntar commit e sync; executar se o usuário responder ok
+description: Ao finalizar atualizações com mudanças de código, fazer commit e push automaticamente
 alwaysApply: true
 ---
 
@@ -7,13 +7,13 @@ alwaysApply: true
 
 Ao **concluir uma tarefa de implementação ou correção** neste projeto (quando houver alterações nos arquivos):
 
-1. **Pergunte ao usuário** se deseja fazer **commit** e **sync** (push para o remoto).
-2. Use uma pergunta direta, por exemplo: *"Deseja que eu faça o commit e o sync (push) dessas alterações?"*
-3. **Se o usuário responder "ok"** (ou equivalente afirmativo: sim, pode, faça, etc.):
-   - Siga o protocolo de git do projeto (status, diff, log, mensagem de commit adequada).
-   - Faça o **commit** das alterações relevantes.
-   - Faça o **push** para o remoto (`git push`), a menos que o usuário peça explicitamente para não enviar.
-4. **Se o usuário não quiser**, não commite nem faça push.
-5. **Não commite nem faça push sem confirmação**, exceto quando o usuário já tiver pedido explicitamente na mesma mensagem.
+1. Siga o protocolo de git do projeto (status, diff, log, mensagem de commit adequada).
+2. Faça o **commit** das alterações relevantes (nunca incluir segredos como `.env`).
+3. Faça o **push** para `origin main` (`git push origin main`) para disparar o deploy.
+4. Informe o hash do commit e confirme que o push foi enviado.
 
-Não pergunte após tarefas puramente informativas (explicações, revisões sem mudanças de código) em que nenhum arquivo foi alterado.
+**Não commite nem faça push** quando:
+- A tarefa foi apenas informativa (explicação, revisão) sem alteração de arquivos.
+- O usuário pedir explicitamente para não commitar ou não enviar.
+
+Mensagens de commit: curtas, em português, estilo `fix:`, `feat:`, `chore:`.

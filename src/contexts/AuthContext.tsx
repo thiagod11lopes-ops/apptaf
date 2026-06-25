@@ -23,6 +23,7 @@ import { setAuthUidState } from '../services/firebase/authUid';
 import { clearMemoryCloudCache } from '../services/cloudDataCache';
 import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../offline-first/db/migration';
 import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
+import { connectivityMonitor } from '../offline-first/sync/ConnectivityMonitor';
 import { applyTeamWipeIfNeeded } from '../services/applyTeamWipeIfNeeded';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { stopRealtimeSync } from '../offline-first/sync/RealtimeBridge';
@@ -84,6 +85,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await applyTeamWipeIfNeeded(access.dataOwnerUid, mapped.uid);
             await migrateDeviceDataOnLogin(access.dataOwnerUid);
             await migrateLegacyToDexie(access.dataOwnerUid);
+            await systemState.hydrate();
+            if (connectivityMonitor.canSync()) {
+              await systemState.setOnlineActive();
+            }
             await syncEngine.init(access.dataOwnerUid);
           } catch {
             // Login continua; gate de sync reavalia após authReady.

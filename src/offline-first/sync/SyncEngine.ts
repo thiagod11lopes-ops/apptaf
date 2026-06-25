@@ -175,7 +175,8 @@ export class SyncEngine {
     connectivityUnsub = null;
 
     if (systemState.isForcedOffline()) {
-      return;
+      if (!connectivityMonitor.canSync()) return;
+      await systemState.setOnlineActive();
     }
 
     if (connectivityMonitor.canSync()) {

@@ -18,6 +18,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     online,
     usingCloudData,
     syncModalVisible,
+    uploadError,
   } = useOfflineSyncState();
   const [activity, setActivity] = useState(getCloudActivityState);
   const [awaitingCloud, setAwaitingCloud] = useState(isAwaitingCloudConfirmation);
@@ -72,11 +73,12 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const statusSuffix = useMemo(() => {
     if (!isOnlineAccount) return null;
     if (!effectiveOnline) return 'dados locais';
+    if (uploadError) return 'falha ao enviar';
     if (!usingCloudData && pendingCount > 0) return 'dados locais · pendências';
     if (syncingCloud) return 'sincronizando com a nuvem';
     if (uploadingCloud) return 'enviando para a nuvem';
     return null;
-  }, [isOnlineAccount, effectiveOnline, usingCloudData, pendingCount, syncingCloud, uploadingCloud]);
+  }, [isOnlineAccount, effectiveOnline, usingCloudData, pendingCount, syncingCloud, uploadingCloud, uploadError]);
 
   const label = statusSuffix ? `${accountLabel} · ${statusSuffix}` : accountLabel;
 
@@ -85,6 +87,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const statusHint = useMemo(() => {
     if (!isAuthenticated || accountLabel === 'Offline') return null;
     if (!effectiveOnline) return 'Sem conexão · exibindo dados do IndexedDB local';
+    if (uploadError) return uploadError;
     if (syncModalVisible) return 'Alterações locais aguardando envio para a nuvem…';
     if (!usingCloudData && pendingCount > 0) {
       return 'Com conexão · exibindo dados locais (alterações pendentes de envio)';
@@ -103,6 +106,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     accountLabel,
     effectiveOnline,
     usingCloudData,
+    uploadError,
     syncModalVisible,
     pendingCount,
     syncingCloud,

@@ -29,6 +29,7 @@ type OfflineSyncContextType = {
   pendingSummary: PendingSyncSummary;
   syncing: boolean;
   syncModalVisible: boolean;
+  uploadError: string | null;
   confirmSync: () => Promise<void>;
   dismissSync: () => void;
   openSyncModal: () => void;
@@ -111,6 +112,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       pendingSummary,
       syncing: managerState.uploading || connectivity === 'SYNCING',
       syncModalVisible: managerState.syncModalVisible,
+      uploadError: managerState.uploadError,
       confirmSync,
       dismissSync,
       openSyncModal,
@@ -123,6 +125,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       pendingSummary,
       managerState.uploading,
       managerState.syncModalVisible,
+      managerState.uploadError,
       confirmSync,
       dismissSync,
       openSyncModal,
@@ -136,6 +139,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         visible={managerState.syncModalVisible}
         summary={pendingCount > 0 ? pendingSummary : null}
         loading={managerState.uploading}
+        errorMessage={managerState.uploadError}
         onClose={dismissSync}
         onConfirm={() => void confirmSync()}
       />

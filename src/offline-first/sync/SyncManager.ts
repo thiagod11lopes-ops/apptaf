@@ -15,7 +15,29 @@ export type SyncManagerState = {
   uploading: boolean;
   /** Modal de envio de alterações offline — exibido ao reconectar com pendências. */
   syncModalVisible: boolean;
+  /** Mensagem amigável quando o envio para a nuvem falha. */
+  uploadError: string | null;
 };
+
+export function formatSyncUploadError(raw?: string | null): string {
+  if (!raw?.trim()) {
+    return 'Falha ao enviar alterações para a nuvem. Tente novamente.';
+  }
+  const msg = raw.trim();
+  if (msg === 'offline') {
+    return 'Sem conexão com a internet. Verifique a rede e tente novamente.';
+  }
+  if (msg === 'upload_failed' || msg === 'upload_incomplete' || msg === 'pending_remain') {
+    return 'Não foi possível enviar as alterações para a nuvem. Tente novamente.';
+  }
+  if (msg === 'no_owner') {
+    return 'Sessão inválida. Saia e entre novamente com Google.';
+  }
+  if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
+    return 'Permissão negada ao enviar para a nuvem. Verifique sua conta.';
+  }
+  return msg;
+}
 
 const EMPTY_SUMMARY: PendingSyncSummary = {
   items: [],
@@ -32,6 +54,7 @@ let mode: SyncManagerMode = 'LOCAL_ONLY';
 let pendingSummary: PendingSyncSummary = EMPTY_SUMMARY;
 let uploading = false;
 let syncModalRequired = false;
+let uploadError: string | null = null;
 let sessionEvalInFlight = false;
 let uploadInFlight = false;
 const listeners = new Set<Listener>();
@@ -42,6 +65,7 @@ function snapshot(): SyncManagerState {
     pendingSummary,
     uploading,
     syncModalVisible: syncModalRequired && pendingSummary.total > 0,
+    uploadError,
   };
 }
 
@@ -66,6 +90,7 @@ async function refreshPendingSummary(): Promise<PendingSyncSummary> {
   pendingSummary = await getPendingSyncItems(ownerUid);
   if (pendingSummary.total === 0) {
     syncModalRequired = false;
+    uploadError = null;
   }
   return pendingSummary;
 }
@@ -89,6 +114,7 @@ async function enterCloudActive(): Promise<void> {
   if (!ownerUid) return;
   mode = 'CLOUD_ACTIVE';
   syncModalRequired = false;
+  uploadError = null;
   notifyListeners();
 
   beginAwaitingCloudConfirmation();
@@ -106,6 +132,7 @@ async function uploadPendingAndEnterCloud(): Promise<void> {
 
   uploadInFlight = true;
   uploading = true;
+  uploadError = null;
   syncModalRequired = false;
   notifyListeners();
 
@@ -117,7 +144,9 @@ async function uploadPendingAndEnterCloud(): Promise<void> {
     await refreshPendingSummary();
 
     if (!result.success || pendingSummary.total > 0) {
-      await syncLogger.warn('sync-manager', result.error ?? 'upload_incomplete');
+      const rawError = result.error ?? (pendingSummary.total > 0 ? 'pending_remain' : 'upload_failed');
+      uploadError = formatSyncUploadError(rawError);
+      await syncLogger.warn('sync-manager', rawError);
       mode = 'LOCAL_ONLY';
       syncEngine.deactivateOnlineMode();
       syncModalRequired = pendingSummary.total > 0;
@@ -127,10 +156,9 @@ async function uploadPendingAndEnterCloud(): Promise<void> {
 
     await enterCloudActive();
   } catch (error) {
-    await syncLogger.error(
-      'sync-manager',
-      error instanceof Error ? error.message : String(error),
-    );
+    const rawError = error instanceof Error ? error.message : String(error);
+    uploadError = formatSyncUploadError(rawError);
+    await syncLogger.error('sync-manager', rawError);
     mode = 'LOCAL_ONLY';
     syncEngine.deactivateOnlineMode();
     syncModalRequired = pendingSummary.total > 0;
@@ -225,6 +253,11 @@ export const syncManager = {
     notifyListeners();
   },
 
+  clearUploadError(): void {
+    uploadError = null;
+    notifyListeners();
+  },
+
   /** Reabre o modal quando há pendências e ainda não está em modo nuvem. */
   openSyncModal(): void {
     if (pendingSummary.total > 0 && canReachFirebase()) {
@@ -251,6 +284,7 @@ export const syncManager = {
     pendingSummary = EMPTY_SUMMARY;
     uploading = false;
     syncModalRequired = false;
+    uploadError = null;
     notifyListeners();
   },
 

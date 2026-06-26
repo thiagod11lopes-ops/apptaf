@@ -11,6 +11,7 @@ type Props = {
   visible: boolean;
   summary: PendingSyncSummary | null;
   loading?: boolean;
+  errorMessage?: string | null;
   onClose: () => void;
   onConfirm: () => void;
 };
@@ -19,6 +20,7 @@ export function ConfirmacaoSincronizarNuvemModal({
   visible,
   summary,
   loading = false,
+  errorMessage = null,
   onClose,
   onConfirm,
 }: Props) {
@@ -66,12 +68,17 @@ export function ConfirmacaoSincronizarNuvemModal({
     <ModernModal
       visible={visible}
       onClose={loading ? () => {} : onClose}
-      title="Alterações locais encontradas"
+      title={errorMessage ? 'Falha ao enviar para a nuvem' : 'Alterações locais encontradas'}
       icon={<Wifi size={20} color="#FFFFFF" strokeWidth={2.2} />}
       footer={footer}
     >
       {summary ? (
         <View style={styles.body}>
+          {errorMessage ? (
+            <View style={[styles.errorBox, { backgroundColor: theme.lossMuted, borderColor: theme.loss }]}>
+              <Text style={[styles.errorText, { color: theme.loss }]}>{errorMessage}</Text>
+            </View>
+          ) : null}
           <Text style={[styles.message, { color: theme.text }]}>
             Este dispositivo possui dados atualizados no armazenamento local enquanto estava sem
             conexão. Deseja enviar essas alterações para a nuvem?
@@ -116,6 +123,17 @@ export function ConfirmacaoSincronizarNuvemModal({
 
 const styles = StyleSheet.create({
   body: { gap: 14 },
+  errorBox: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  errorText: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   message: {
     fontSize: 14,
     lineHeight: 21,

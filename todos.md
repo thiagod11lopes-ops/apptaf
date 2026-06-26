@@ -1,0 +1,6 @@
+- **COMPLETED**: Criar SyncManager (modos, gate, upload, cloud mirror) (id: 1)
+- **COMPLETED**: Refatorar SyncEngine + DataStore + SystemState (id: 2)
+- **COMPLETED**: Refatorar OfflineSyncContext + modal obrigatório (id: 3)
+- **COMPLETED**: Atualizar AuthContext e header; rodar testes (id: 4)
+- **COMPLETED**: Commit, push e documentação de entrega (id: 5)
+- **COMPLETED**: Corrigir travamento do modal ao enviar aplicadores (id: 6)

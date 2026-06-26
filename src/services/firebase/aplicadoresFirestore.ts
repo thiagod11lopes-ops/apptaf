@@ -25,12 +25,15 @@ export async function addAplicadorFirestore(uid: string, item: AplicadorItemPers
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
 
+  const docId = item.id || `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
   await setDoc(
-    doc(db, userAplicadoresPath(uid), item.id),
+    doc(db, userAplicadoresPath(uid), docId),
     sanitizeForFirestore({
-      nip: item.nip,
-      nome: item.nome,
-      categoria: item.categoria,
+      id: docId,
+      nip: item.nip || '',
+      nome: item.nome || 'Sem Nome',
+      categoria: item.categoria || 'Praças',
       sexo: item.sexo,
       oficial: item.oficial,
       praca: item.praca,
@@ -44,5 +47,6 @@ export async function addAplicadorFirestore(uid: string, item: AplicadorItemPers
 export async function deleteAplicadorFirestore(uid: string, id: string): Promise<void> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
+  if (!id) return; // Se não tem ID, não há o que deletar no Firestore
   await deleteDoc(doc(db, userAplicadoresPath(uid), id));
 }

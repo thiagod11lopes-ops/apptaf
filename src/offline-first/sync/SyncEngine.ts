@@ -168,8 +168,15 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       if (row) await putAplicadorRecord({ ...row, syncStatus: 'synced' });
       return;
     }
-    await addAplicadorFirestore(uid, payload as AplicadorItemPersist);
-    const savedApp = payload as AplicadorRecord;
+    
+    // Garantir que o payload tenha um ID válido
+    const appPayload = payload as AplicadorItemPersist;
+    if (!appPayload.id) {
+      appPayload.id = entry.documentId || `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+    
+    await addAplicadorFirestore(uid, appPayload);
+    const savedApp = appPayload as AplicadorRecord;
     await putAplicadorRecord({ ...savedApp, ownerUid: uid, syncStatus: 'synced' });
     return;
   }
@@ -411,7 +418,8 @@ export class SyncEngine {
             const msg = error instanceof Error ? error.message : String(error);
             await syncQueue.markFailed(item.operationId, msg, item.retries + 1);
             await syncLogger.error('queue', msg, { operationId: item.operationId });
-            await new Promise((r) => setTimeout(r, backoffDelay(item.retries + 1)));
+            // Pequeno delay para não travar a CPU em caso de loop de erros, mas sem fazer o usuário esperar minutos
+            await new Promise((r) => setTimeout(r, 500));
           }
         }
 

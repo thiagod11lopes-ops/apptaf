@@ -19,7 +19,7 @@ import {
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
 import { resolveMemberAccess, registerAuthorizedMemberLogin } from '../services/firebase/authorizedEmailsFirestore';
-import { setAuthUidState } from '../services/firebase/authUid';
+import { setAuthUidState, waitForAuthenticatedUid } from '../services/firebase/authUid';
 import { clearMemoryCloudCache } from '../services/cloudDataCache';
 import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../offline-first/db/migration';
 import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
@@ -76,11 +76,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           const mapped = mapFirebaseUser(fbUser);
-          const access = await resolveMemberAccess(mapped.uid, mapped.email);
+          let access = { dataOwnerUid: mapped.uid, isAuthorizedMember: false };
+
+          try {
+            access = await resolveMemberAccess(mapped.uid, mapped.email);
+          } catch {
+            // Nuvem indisponível — usa a própria conta Firebase.
+          }
+
           resetCloudSyncStatus();
+
           if (access.isAuthorizedMember && mapped.email) {
             await registerAuthorizedMemberLogin(access.dataOwnerUid, mapped.email, mapped.uid);
           }
+
           try {
             await applyTeamWipeIfNeeded(access.dataOwnerUid, mapped.uid);
             await migrateDeviceDataOnLogin(access.dataOwnerUid);
@@ -90,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } catch {
             confirmCloudDisplayReady();
           }
+
           setUser(mapped);
           setIsAuthorizedMember(access.isAuthorizedMember);
           setAuthUidState(mapped.uid, access.dataOwnerUid, true);
@@ -109,13 +119,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (idToken) {
       await signInWithGoogleCredential(idToken);
+      await waitForAuthenticatedUid(20_000);
       return false;
     }
     if (Platform.OS !== 'web') {
       throw new Error('No dispositivo móvel, use o botão Entrar com Google.');
     }
     const result = await signInWithGoogleWeb();
-    return result.mode === 'redirect';
+    if (result.mode === 'redirect') return true;
+    await waitForAuthenticatedUid(20_000);
+    return false;
   }, [firebaseEnabled]);
 
   const logout = useCallback(async () => {

@@ -38,14 +38,18 @@ export async function resolveMemberAccess(
   }
 
   if (email?.trim()) {
-    const emailKey = normalizeAuthEmail(email);
-    const snap = await getDoc(doc(db, MEMBER_LOOKUP_COLLECTION, emailKey));
+    try {
+      const emailKey = normalizeAuthEmail(email);
+      const snap = await getDoc(doc(db, MEMBER_LOOKUP_COLLECTION, emailKey));
 
-    if (snap.exists()) {
-      const data = snap.data() as { bossUid?: string; ativo?: boolean };
-      if (data.ativo === true && data.bossUid && data.bossUid !== loginUid) {
-        return { dataOwnerUid: data.bossUid, isAuthorizedMember: true };
+      if (snap.exists()) {
+        const data = snap.data() as { bossUid?: string; ativo?: boolean };
+        if (data.ativo === true && data.bossUid && data.bossUid !== loginUid) {
+          return { dataOwnerUid: data.bossUid, isAuthorizedMember: true };
+        }
       }
+    } catch {
+      // Firestore indisponível ou regras ainda não publicadas — tenta lookup por UID abaixo.
     }
   }
 
@@ -66,7 +70,7 @@ export async function resolveMemberAccess(
   return { dataOwnerUid: loginUid, isAuthorizedMember: false };
 }
 
-/** Registra o UID Firebase do membro autorizado (acesso à nuvem do chefe). */
+/** Registra o UID Firebase do membro autorizado (acesso à nuvem do chefe). Não bloqueia login se falhar. */
 export async function registerAuthorizedMemberLogin(
   bossUid: string,
   email: string,
@@ -76,25 +80,29 @@ export async function registerAuthorizedMemberLogin(
   if (!db || !memberUid.trim() || memberUid === bossUid) return;
 
   const emailKey = normalizeAuthEmail(email);
-  await setDoc(
-    doc(db, MEMBER_LOOKUP_COLLECTION, emailKey),
-    {
-      memberUid,
-      lastLoginAt: serverTimestamp(),
-    },
-    { merge: true },
-  );
+  try {
+    await setDoc(
+      doc(db, MEMBER_LOOKUP_COLLECTION, emailKey),
+      {
+        memberUid,
+        lastLoginAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
 
-  await setDoc(
-    doc(db, MEMBER_UID_LOOKUP_COLLECTION, memberUid),
-    {
-      bossUid,
-      ativo: true,
-      email: emailKey,
-      lastLoginAt: serverTimestamp(),
-    },
-    { merge: true },
-  );
+    await setDoc(
+      doc(db, MEMBER_UID_LOOKUP_COLLECTION, memberUid),
+      {
+        bossUid,
+        ativo: true,
+        email: emailKey,
+        lastLoginAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } catch {
+    // Regras do Firestore ainda não publicadas ou offline — login segue normalmente.
+  }
 }
 
 /** UIDs de login dos e-mails autorizados que já entraram pelo menos uma vez. */

@@ -25,16 +25,6 @@ export type WipeCloudTeamResult = WipeCloudCounts & {
   teamWipeAt: number;
 };
 
-function sumCounts(a: WipeCloudCounts, b: WipeCloudCounts): WipeCloudCounts {
-  return {
-    cadastros: a.cadastros + b.cadastros,
-    sessoes: a.sessoes + b.sessoes,
-    aplicadores: a.aplicadores + b.aplicadores,
-    cadastroRubricas: a.cadastroRubricas + b.cadastroRubricas,
-    sessaoRubricas: a.sessaoRubricas + b.sessaoRubricas,
-  };
-}
-
 async function deleteAllInCollection(collectionPath: string): Promise<number> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
@@ -72,21 +62,24 @@ export async function wipeCloudUserDataFirestore(uid: string): Promise<WipeCloud
 }
 
 /**
- * Zera dados do chefe, de contas autorizadas com dados próprios na nuvem
- * e marca a equipe para limpar cache local nos aparelhos autorizados.
+ * Zera dados do chefe na nuvem e marca a equipe para limpar cache local
+ * nos aparelhos autorizados (member_lookup continua para re-login).
  */
 export async function wipeCloudTeamDataFirestore(bossUid: string): Promise<WipeCloudTeamResult> {
-  let totals = await wipeCloudUserDataFirestore(bossUid);
+  const totals = await wipeCloudUserDataFirestore(bossUid);
 
-  const memberUids = await listMemberLoginUidsForBoss(bossUid);
-  for (const memberUid of memberUids) {
-    totals = sumCounts(totals, await wipeCloudUserDataFirestore(memberUid));
+  let memberAccountsWiped = 0;
+  try {
+    const memberUids = await listMemberLoginUidsForBoss(bossUid);
+    memberAccountsWiped = memberUids.length;
+  } catch {
+    memberAccountsWiped = 0;
   }
 
   const teamWipeAt = await setTeamWipeMarker(bossUid);
   return {
     ...totals,
-    memberAccountsWiped: memberUids.length,
+    memberAccountsWiped,
     teamWipeAt,
   };
 }

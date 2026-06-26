@@ -56,7 +56,7 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
         );
         if (memberAccountsWiped > 0) {
           partes.push(
-            `${memberAccountsWiped} conta${memberAccountsWiped !== 1 ? 's' : ''} autorizada${memberAccountsWiped !== 1 ? 's' : ''} também limpa${memberAccountsWiped !== 1 ? 's' : ''} na nuvem.`,
+            `${memberAccountsWiped} aparelho${memberAccountsWiped !== 1 ? 's' : ''} autorizado${memberAccountsWiped !== 1 ? 's' : ''} será${memberAccountsWiped !== 1 ? 'ão' : ''} esvaziado${memberAccountsWiped !== 1 ? 's' : ''} ao sincronizar.`,
           );
         }
         partes.push('Aparelhos autorizados serão esvaziados ao sincronizar.');
@@ -81,7 +81,6 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
     ...(apagaNuvem
       ? [
           'Todos os dados na nuvem (Firebase) do chefe',
-          'Dados na nuvem de e-mails autorizados que já entraram no sistema',
           'Sincronização para esvaziar aparelhos autorizados',
         ]
       : []),
@@ -153,7 +152,7 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
         <ShieldAlert size={22} color={theme.loss} strokeWidth={2.2} />
         <Text style={[ts.caption, styles.dangerHint, { color: theme.textSecondary }]}>
           Remove permanentemente cadastros, resultados e cache
-          {apagaNuvem ? ' — incluindo nuvem do chefe e contas autorizadas' : ' neste dispositivo'}.
+          {apagaNuvem ? ' — incluindo nuvem do chefe e aparelhos autorizados' : ' neste dispositivo'}.
           Faça backup antes se precisar recuperar depois.
         </Text>
       </View>
@@ -232,7 +231,7 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
           </LinearGradient>
           <Text style={[styles.message, { color: theme.text }]}>
             Ao tocar em <Text style={styles.strong}>Excluir tudo</Text>, todos os registros serão removidos
-            {apagaNuvem ? ' deste dispositivo, da nuvem e das contas autorizadas' : ' deste dispositivo'}.
+            {apagaNuvem ? ' deste dispositivo, da nuvem do chefe e dos aparelhos autorizados' : ' deste dispositivo'}.
           </Text>
         </View>
       </ModernModal>

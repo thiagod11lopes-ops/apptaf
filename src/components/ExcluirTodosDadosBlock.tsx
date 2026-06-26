@@ -37,6 +37,7 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
       setErro('Somente o e-mail chefe pode excluir todos os dados.');
       return;
     }
+    setStep('idle');
     setLoading(true);
     setErro(null);
     setSucesso(null);
@@ -62,11 +63,9 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
       }
 
       setSucesso(partes.join(' '));
-      setStep('idle');
       onWiped?.();
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível excluir todos os dados.');
-      setStep('warn2');
     } finally {
       setLoading(false);
     }

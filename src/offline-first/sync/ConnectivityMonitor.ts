@@ -7,7 +7,8 @@ import { syncLogger } from './SyncLogger';
 type Listener = (state: ConnectivityState) => void;
 
 const listeners = new Set<Listener>();
-let state: ConnectivityState = 'OFFLINE';
+let state: ConnectivityState =
+  typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : 'DEGRADED';
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let manualSyncLock = false;
 
@@ -88,9 +89,12 @@ export class ConnectivityMonitor {
 
   setSyncing(active: boolean): void {
     manualSyncLock = active;
-    state = active ? 'SYNCING' : state;
-    if (!active) void this.refresh();
-    else notify();
+    if (active) {
+      state = 'SYNCING';
+      notify();
+      return;
+    }
+    void this.refresh();
   }
 
   subscribe(listener: Listener): () => void {

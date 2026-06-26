@@ -42,7 +42,14 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
 };
 
 function hasNetworkConnectivity(state: ConnectivityState = getConnectivityState()): boolean {
-  return state === 'ONLINE' || state === 'DEGRADED';
+  return state === 'ONLINE' || state === 'DEGRADED' || state === 'SYNCING';
+}
+
+function readBrowserOnline(): boolean {
+  if (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean') {
+    return navigator.onLine;
+  }
+  return true;
 }
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
@@ -55,7 +62,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const prevHasNetworkRef = useRef(hasNetworkConnectivity());
   const syncCheckedForSession = useRef(false);
 
-  const online = hasNetworkConnectivity(connectivity);
+  const online = hasNetworkConnectivity(connectivity) || (isAuthenticated && readBrowserOnline());
   const isForcedOffline =
     systemMode === SYSTEM_STATE.FORCED_OFFLINE && !isAuthenticated;
   const pendingCount = pendingSummary.total;

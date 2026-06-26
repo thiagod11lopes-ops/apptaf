@@ -11,7 +11,7 @@ describe('probeInternetReachable', () => {
     await expect(probeInternetReachable()).resolves.toBe(false);
   });
 
-  it('usa favicon same-origin sem URL externa (sem CORS)', async () => {
+  it('usa index same-origin sem URL externa (sem CORS)', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('navigator', { onLine: true });
@@ -25,7 +25,7 @@ describe('probeInternetReachable', () => {
     expect(fetchMock).toHaveBeenCalled();
     const url = String(fetchMock.mock.calls[0]?.[0]);
     expect(url).toContain('thiagod11lopes-ops.github.io');
-    expect(url).toContain('favicon.ico');
+    expect(url).toContain('/apptaf/');
     expect(url).not.toContain('gstatic.com');
   });
 

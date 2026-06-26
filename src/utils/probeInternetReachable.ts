@@ -10,7 +10,7 @@ function readNavigatorOnline(): boolean {
 function sameOriginProbeUrl(): string | null {
   if (typeof window === 'undefined' || !window.location?.origin) return null;
   const base = (process.env.EXPO_BASE_URL || '').replace(/\/$/, '');
-  const path = base ? `${base}/favicon.ico` : '/favicon.ico';
+  const path = base ? `${base}/` : '/';
   try {
     return new URL(path, window.location.origin).href;
   } catch {

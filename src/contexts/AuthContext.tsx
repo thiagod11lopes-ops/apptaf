@@ -33,6 +33,8 @@ type AuthContextType = {
   user: AppAuthUser | null;
   isAuthenticated: boolean;
   authReady: boolean;
+  /** true enquanto resolve acesso, migração local e init da sessão após Google. */
+  isSessionLoading: boolean;
   firebaseEnabled: boolean;
   /** Chefe da conta — pode gerenciar e-mails autorizados e carregar planilha. */
   isBoss: boolean;
@@ -47,6 +49,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppAuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [isSessionLoading, setIsSessionLoading] = useState(false);
   const [isAuthorizedMember, setIsAuthorizedMember] = useState(false);
   const firebaseEnabled = isFirebaseConfigured();
 
@@ -68,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsub = onAuthStateChanged(auth, (fbUser) => {
         void (async () => {
           if (!fbUser) {
+            setIsSessionLoading(false);
             setUser(null);
             setIsAuthorizedMember(false);
             setAuthUidState(null, null, true);
@@ -75,35 +79,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
           }
 
-          const mapped = mapFirebaseUser(fbUser);
-          let access = { dataOwnerUid: mapped.uid, isAuthorizedMember: false };
-
+          setIsSessionLoading(true);
           try {
-            access = await resolveMemberAccess(mapped.uid, mapped.email);
-          } catch {
-            // Nuvem indisponível — usa a própria conta Firebase.
+            const mapped = mapFirebaseUser(fbUser);
+            let access = { dataOwnerUid: mapped.uid, isAuthorizedMember: false };
+
+            try {
+              access = await resolveMemberAccess(mapped.uid, mapped.email);
+            } catch {
+              // Nuvem indisponível — usa a própria conta Firebase.
+            }
+
+            resetCloudSyncStatus();
+
+            if (access.isAuthorizedMember && mapped.email) {
+              await registerAuthorizedMemberLogin(access.dataOwnerUid, mapped.email, mapped.uid);
+            }
+
+            try {
+              await applyTeamWipeIfNeeded(access.dataOwnerUid, mapped.uid);
+              await migrateDeviceDataOnLogin(access.dataOwnerUid);
+              await migrateLegacyToDexie(access.dataOwnerUid);
+              await systemState.hydrate();
+              await syncEngine.init(access.dataOwnerUid);
+            } catch {
+              confirmCloudDisplayReady();
+            }
+
+            setUser(mapped);
+            setIsAuthorizedMember(access.isAuthorizedMember);
+            setAuthUidState(mapped.uid, access.dataOwnerUid, true);
+            setAuthReady(true);
+          } finally {
+            setIsSessionLoading(false);
           }
-
-          resetCloudSyncStatus();
-
-          if (access.isAuthorizedMember && mapped.email) {
-            await registerAuthorizedMemberLogin(access.dataOwnerUid, mapped.email, mapped.uid);
-          }
-
-          try {
-            await applyTeamWipeIfNeeded(access.dataOwnerUid, mapped.uid);
-            await migrateDeviceDataOnLogin(access.dataOwnerUid);
-            await migrateLegacyToDexie(access.dataOwnerUid);
-            await systemState.hydrate();
-            await syncEngine.init(access.dataOwnerUid);
-          } catch {
-            confirmCloudDisplayReady();
-          }
-
-          setUser(mapped);
-          setIsAuthorizedMember(access.isAuthorizedMember);
-          setAuthUidState(mapped.uid, access.dataOwnerUid, true);
-          setAuthReady(true);
         })();
       });
     })();
@@ -152,13 +161,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated: user != null,
       authReady,
+      isSessionLoading,
       firebaseEnabled,
       isBoss,
       isAuthorizedMember,
       signInWithGoogle,
       logout,
     }),
-    [user, authReady, firebaseEnabled, isBoss, isAuthorizedMember, signInWithGoogle, logout],
+    [user, authReady, isSessionLoading, firebaseEnabled, isBoss, isAuthorizedMember, signInWithGoogle, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

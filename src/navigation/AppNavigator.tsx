@@ -8,7 +8,9 @@ import { GlassBottomBar } from '../components/premium/GlassBottomBar';
 import { SettingsTopButton } from '../components/premium/SettingsTopButton';
 import { AppShell } from '../components/sismav/AppShell';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
-import { navigationRef, getCurrentRouteName } from './navigationRef';
+import { navigationRef, getCurrentRouteName, navigateTab } from './navigationRef';
+import { AuthLoginRouteGate } from './AuthLoginRouteGate';
+import { hasPendingGoogleOAuthReturn } from '../services/firebase/googleAuth';
 import type { RootStackParamList } from './types';
 
 export type { ResultadoCorridaItem, RootStackParamList } from './types';
@@ -47,6 +49,13 @@ export default function AppNavigator() {
     setActiveRoute(getCurrentRouteName());
   }, []);
 
+  const handleNavReady = useCallback(() => {
+    syncRoute();
+    if (hasPendingGoogleOAuthReturn()) {
+      navigateTab('Login');
+    }
+  }, [syncRoute]);
+
   const navTheme = {
     ...DefaultTheme,
     dark: isDark,
@@ -65,9 +74,10 @@ export default function AppNavigator() {
     <NavigationContainer
       ref={navigationRef}
       theme={navTheme}
-      onReady={syncRoute}
+      onReady={handleNavReady}
       onStateChange={syncRoute}
     >
+      <AuthLoginRouteGate />
       <View style={[styles.shell, { backgroundColor: 'transparent' }]}>
         <AppShell
           activeRoute={activeRoute}

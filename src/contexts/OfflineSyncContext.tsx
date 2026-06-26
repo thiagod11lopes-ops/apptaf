@@ -15,7 +15,6 @@ import { syncEngine } from '../offline-first/sync/SyncEngine';
 import { dataStore } from '../offline-first/store/DataStore';
 import { getPendingSyncItems, type PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
 import { systemState, SYSTEM_STATE, type SystemSyncMode } from '../offline-first/sync/SystemState';
-import { SincronizacaoNecessariaModal } from '../components/sismav/SincronizacaoNecessariaModal';
 import type { ConnectivityState } from '../offline-first/types';
 
 type OfflineSyncContextType = {
@@ -45,37 +44,20 @@ function hasNetworkConnectivity(state: ConnectivityState = getConnectivityState(
   return state === 'ONLINE' || state === 'DEGRADED';
 }
 
-/** Logado + rede → sempre pode usar nuvem; offline controlado só sem login. */
-function canAttemptSyncNow(isAuthenticated: boolean): boolean {
-  if (!connectivityMonitor.canSync()) return false;
-  if (isAuthenticated) return true;
-  return !systemState.isForcedOffline();
-}
-
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, authReady, logout, isBoss } = useAuth();
+  const { isAuthenticated, authReady } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
   const [systemMode, setSystemMode] = useState<SystemSyncMode>(systemState.getMode());
   const [pendingSummary, setPendingSummary] = useState<PendingSyncSummary>(EMPTY_SUMMARY);
-  const [gateVisible, setGateVisible] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const gateCheckInFlight = useRef(false);
-  const syncGateBusyRef = useRef(false);
-  const bossSkippedUploadRef = useRef(false);
+  const syncInFlight = useRef(false);
   const prevHasNetworkRef = useRef(hasNetworkConnectivity());
-  const gateCheckedForSession = useRef(false);
+  const syncCheckedForSession = useRef(false);
 
   const online = hasNetworkConnectivity(connectivity);
   const isForcedOffline =
     systemMode === SYSTEM_STATE.FORCED_OFFLINE && !isAuthenticated;
   const pendingCount = pendingSummary.total;
-
-  const reconcileCloudWhenLoggedIn = useCallback(async () => {
-    if (!authReady || !isAuthenticated) return;
-    if (!connectivityMonitor.canSync()) return;
-    await systemState.setOnlineActive();
-    setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-  }, [authReady, isAuthenticated]);
 
   const refreshPending = useCallback(async (): Promise<PendingSyncSummary> => {
     const uid = getCachedDataOwnerUid();
@@ -94,87 +76,41 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     await syncEngine.connectOnlineFromCloud();
   }, []);
 
-  const evaluateSyncGate = useCallback(async () => {
-    if (!authReady || !isAuthenticated || gateCheckInFlight.current) return;
+  const syncWhenOnline = useCallback(async () => {
+    if (!authReady || !isAuthenticated || syncInFlight.current) return;
     if (!connectivityMonitor.canSync()) return;
 
-    gateCheckInFlight.current = true;
-    try {
-      await reconcileCloudWhenLoggedIn();
-      let summary = await refreshPending();
-      if (summary.total > 0) {
-        setSyncing(true);
-        try {
-          await syncEngine.uploadPendingOnly();
-          summary = await refreshPending();
-        } finally {
-          setSyncing(false);
-        }
-        if (summary.total > 0) {
-          if (isBoss && bossSkippedUploadRef.current) {
-            await connectOnlineFromCloud();
-            setGateVisible(false);
-            return;
-          }
-          setGateVisible(true);
-          return;
-        }
-      }
-      setGateVisible(false);
-      if (syncEngine.isOnlineModeActive()) return;
-      await connectOnlineFromCloud();
-    } finally {
-      gateCheckInFlight.current = false;
-    }
-  }, [authReady, isAuthenticated, isBoss, reconcileCloudWhenLoggedIn, refreshPending, connectOnlineFromCloud]);
-
-  const handleContinueOnlineWithoutUpload = useCallback(async () => {
-    if (!isBoss) return;
-    bossSkippedUploadRef.current = true;
-    setGateVisible(false);
-    await connectOnlineFromCloud();
-  }, [isBoss, connectOnlineFromCloud]);
-
-  const handleUpload = useCallback(async () => {
-    if (syncGateBusyRef.current) return;
-    syncGateBusyRef.current = true;
+    syncInFlight.current = true;
     setSyncing(true);
     try {
-      await syncEngine.uploadPendingOnly();
+      await systemState.setOnlineActive();
+      setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
+
       const summary = await refreshPending();
-      if (summary.total === 0) {
-        setGateVisible(false);
-        bossSkippedUploadRef.current = false;
+      if (summary.total > 0) {
+        await syncEngine.uploadPendingOnly();
+        await refreshPending();
+      }
+
+      if (!syncEngine.isOnlineModeActive()) {
         await connectOnlineFromCloud();
       }
     } finally {
       setSyncing(false);
-      setTimeout(() => {
-        syncGateBusyRef.current = false;
-      }, 0);
+      syncInFlight.current = false;
     }
-  }, [refreshPending, connectOnlineFromCloud]);
-
-  const handleWorkOffline = useCallback(async () => {
-    if (!isBoss) return;
-    bossSkippedUploadRef.current = false;
-    await systemState.setForcedOffline();
-    syncEngine.deactivateOnlineMode();
-    setSystemMode(SYSTEM_STATE.FORCED_OFFLINE);
-    setGateVisible(false);
-    await logout({ preserveForcedOffline: true });
-  }, [isBoss, logout]);
+  }, [authReady, isAuthenticated, refreshPending, connectOnlineFromCloud]);
 
   const tryReturnToOnline = useCallback(async () => {
     await systemState.setOnlineActive();
     setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-    await evaluateSyncGate();
-  }, [evaluateSyncGate]);
+    await syncWhenOnline();
+  }, [syncWhenOnline]);
 
   const openSyncPrompt = useCallback(() => {
-    if (pendingCount <= 0 || !canAttemptSyncNow(isAuthenticated)) return;
-    setGateVisible(true);
-  }, [isAuthenticated, pendingCount]);
+    if (!isAuthenticated || !connectivityMonitor.canSync()) return;
+    void syncWhenOnline();
+  }, [isAuthenticated, syncWhenOnline]);
 
   useEffect(() => {
     void systemState.hydrate().then(setSystemMode);
@@ -191,44 +127,36 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
       if (hadNetwork && !hasNetwork && authReady && isAuthenticated) {
         syncEngine.deactivateOnlineMode();
-        setGateVisible(false);
       }
       if (!hadNetwork && hasNetwork && authReady && isAuthenticated) {
-        void reconcileCloudWhenLoggedIn().then(() => evaluateSyncGate());
+        void syncWhenOnline();
       }
     });
-  }, [authReady, isAuthenticated, evaluateSyncGate, reconcileCloudWhenLoggedIn]);
+  }, [authReady, isAuthenticated, syncWhenOnline]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated) {
-      gateCheckedForSession.current = false;
-      bossSkippedUploadRef.current = false;
+      syncCheckedForSession.current = false;
       return;
     }
-    if (gateCheckedForSession.current) return;
-    gateCheckedForSession.current = true;
-    void evaluateSyncGate();
-  }, [authReady, isAuthenticated, evaluateSyncGate]);
+    if (syncCheckedForSession.current) return;
+    syncCheckedForSession.current = true;
+    void syncWhenOnline();
+  }, [authReady, isAuthenticated, syncWhenOnline]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated) return;
     void refreshPending();
     return dataStore.subscribe(() => {
-      if (syncGateBusyRef.current) return;
+      if (syncInFlight.current) return;
+      if (!connectivityMonitor.canSync()) return;
       void refreshPending().then((summary) => {
-        if (syncGateBusyRef.current) return;
-        if (summary.total === 0) {
-          setGateVisible(false);
-          bossSkippedUploadRef.current = false;
-          return;
-        }
-        if (isBoss && bossSkippedUploadRef.current) return;
-        if (canAttemptSyncNow(isAuthenticated)) {
-          setGateVisible(true);
+        if (summary.total > 0) {
+          void syncWhenOnline();
         }
       });
     });
-  }, [authReady, isAuthenticated, isBoss, refreshPending]);
+  }, [authReady, isAuthenticated, refreshPending, syncWhenOnline]);
 
   const value = useMemo(
     () => ({
@@ -236,7 +164,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       connectivity,
       systemMode,
       isForcedOffline,
-      syncGateActive: gateVisible,
+      syncGateActive: false,
       pendingCount,
       pendingSummary,
       syncing: syncing || connectivity === 'SYNCING',
@@ -248,7 +176,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       connectivity,
       systemMode,
       isForcedOffline,
-      gateVisible,
       pendingCount,
       pendingSummary,
       syncing,
@@ -257,22 +184,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return (
-    <OfflineSyncContext.Provider value={value}>
-      {children}
-      {isAuthenticated ? (
-        <SincronizacaoNecessariaModal
-          visible={gateVisible && canAttemptSyncNow(isAuthenticated)}
-          summary={pendingSummary}
-          loading={syncing}
-          allowSkipUploadOnline={isBoss}
-          onUpload={() => void handleUpload()}
-          onContinueOnline={isBoss ? () => void handleContinueOnlineWithoutUpload() : undefined}
-          onWorkOffline={isBoss ? () => void handleWorkOffline() : undefined}
-        />
-      ) : null}
-    </OfflineSyncContext.Provider>
-  );
+  return <OfflineSyncContext.Provider value={value}>{children}</OfflineSyncContext.Provider>;
 }
 
 export function useOfflineSyncState(): OfflineSyncContextType {

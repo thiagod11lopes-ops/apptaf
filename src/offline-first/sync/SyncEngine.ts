@@ -209,11 +209,6 @@ export class SyncEngine {
     const pending = await getPendingSyncItems(dataOwnerUid);
     if (pending.total > 0) {
       await this.uploadPendingOnly();
-      const still = await getPendingSyncItems(dataOwnerUid);
-      if (still.total > 0) {
-        notify();
-        return;
-      }
     }
 
     await this.connectOnlineFromCloud();

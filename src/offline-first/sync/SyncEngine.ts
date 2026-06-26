@@ -61,7 +61,17 @@ let listeners = new Set<StoreListener>();
 let lastPullAt = 0;
 const MIN_PULL_MS = 45_000;
 const MIN_PROCESS_GAP_MS = 12_000;
+const CLOUD_PULL_TIMEOUT_MS = 35_000;
 let lastProcessFinishedAt = 0;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timeout`)), ms);
+    }),
+  ]);
+}
 
 function notify(): void {
   listeners.forEach((fn) => fn());
@@ -186,6 +196,11 @@ export class SyncEngine {
     );
   }
 
+  /** Garante ownerUid antes de sync disparado pelo OfflineSyncContext. */
+  bindOwner(dataOwnerUid: string): void {
+    ownerUid = dataOwnerUid;
+  }
+
   async init(dataOwnerUid: string): Promise<void> {
     ownerUid = dataOwnerUid;
     await systemState.hydrate();
@@ -216,14 +231,34 @@ export class SyncEngine {
 
   /** Envia pendentes, baixa snapshot da nuvem e liga tempo real. */
   async connectOnlineFromCloud(): Promise<void> {
-    if (!ownerUid || systemState.isForcedOffline()) return;
-    if (!connectivityMonitor.canSync()) return;
+    if (!ownerUid || systemState.isForcedOffline()) {
+      confirmCloudDisplayReady();
+      return;
+    }
+    if (!connectivityMonitor.canSync()) {
+      confirmCloudDisplayReady();
+      return;
+    }
 
-    await systemState.setOnlineActive();
-    await this.cacheCloudSnapshotLocally();
-    await this.enableOnlineMode();
-    confirmCloudDisplayReady();
-    notify();
+    try {
+      await systemState.setOnlineActive();
+      await withTimeout(this.cacheCloudSnapshotLocally(), CLOUD_PULL_TIMEOUT_MS, 'pull');
+      await this.enableOnlineMode(true);
+    } catch (error) {
+      await syncLogger.error(
+        'sync',
+        error instanceof Error ? error.message : String(error),
+      );
+      try {
+        await this.enableOnlineMode(true);
+      } catch {
+        // Tempo real indisponível — libera UI mesmo assim.
+      }
+      setCloudSyncResult(false);
+    } finally {
+      confirmCloudDisplayReady();
+      notify();
+    }
   }
 
   /** Copia snapshot da nuvem para o IndexedDB (respeita registros locais pendentes). */
@@ -233,11 +268,11 @@ export class SyncEngine {
   }
 
   /** Liga tempo real uma vez e garante cache local completo da nuvem. */
-  async enableOnlineMode(): Promise<void> {
+  async enableOnlineMode(skipPull = false): Promise<void> {
     if (!ownerUid || systemState.isForcedOffline()) return;
 
     const alreadyListening = onlineModeUid === ownerUid;
-    if (connectivityMonitor.canSync()) {
+    if (!skipPull && connectivityMonitor.canSync()) {
       await this.cacheCloudSnapshotLocally();
     }
     if (alreadyListening) return;

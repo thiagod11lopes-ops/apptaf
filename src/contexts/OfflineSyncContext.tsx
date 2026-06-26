@@ -15,6 +15,7 @@ import { syncEngine } from '../offline-first/sync/SyncEngine';
 import { dataStore } from '../offline-first/store/DataStore';
 import { getPendingSyncItems, type PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
 import { systemState, SYSTEM_STATE, type SystemSyncMode } from '../offline-first/sync/SystemState';
+import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
 import type { ConnectivityState } from '../offline-first/types';
 
 type OfflineSyncContextType = {
@@ -70,19 +71,17 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     return summary;
   }, [isAuthenticated]);
 
-  const connectOnlineFromCloud = useCallback(async () => {
-    await systemState.setOnlineActive();
-    setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-    await syncEngine.connectOnlineFromCloud();
-  }, []);
-
   const syncWhenOnline = useCallback(async () => {
     if (!authReady || !isAuthenticated || syncInFlight.current) return;
     if (!connectivityMonitor.canSync()) return;
 
+    const uid = getCachedDataOwnerUid();
+    if (!uid) return;
+
     syncInFlight.current = true;
     setSyncing(true);
     try {
+      syncEngine.bindOwner(uid);
       await systemState.setOnlineActive();
       setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
 
@@ -92,14 +91,13 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         await refreshPending();
       }
 
-      if (!syncEngine.isOnlineModeActive()) {
-        await connectOnlineFromCloud();
-      }
+      await syncEngine.connectOnlineFromCloud();
     } finally {
+      confirmCloudDisplayReady();
       setSyncing(false);
       syncInFlight.current = false;
     }
-  }, [authReady, isAuthenticated, refreshPending, connectOnlineFromCloud]);
+  }, [authReady, isAuthenticated, refreshPending]);
 
   const tryReturnToOnline = useCallback(async () => {
     await systemState.setOnlineActive();

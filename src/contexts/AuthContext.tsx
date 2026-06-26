@@ -93,7 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             await syncEngine.init(access.dataOwnerUid);
           } catch {
-            // Login continua; gate de sync reavalia após authReady.
+            // Login continua; OfflineSyncContext reconecta após authReady.
+            confirmCloudDisplayReady();
           }
           setUser(mapped);
           setIsAuthorizedMember(access.isAuthorizedMember);

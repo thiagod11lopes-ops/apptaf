@@ -59,6 +59,7 @@ async function refreshPendingSummary(): Promise<PendingSyncSummary> {
     pendingSummary = EMPTY_SUMMARY;
     return EMPTY_SUMMARY;
   }
+  await syncEngine.preparePendingOwner(ownerUid);
   pendingSummary = await getPendingSyncItems(ownerUid);
   return pendingSummary;
 }

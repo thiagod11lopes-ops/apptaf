@@ -125,6 +125,24 @@ export class SyncQueue {
       .sort((a, b) => b.timestamp - a.timestamp);
     return withError[0]?.error ?? null;
   }
+
+  /** Move itens da fila de outro ownerUid (ex.: __local__) para a conta logada. */
+  async reassignPendingOwner(fromOwnerUids: string[], toOwnerUid: string): Promise<number> {
+    const db = getTafDatabase();
+    if (!db || !toOwnerUid.trim()) return 0;
+
+    let moved = 0;
+    for (const fromUid of fromOwnerUids) {
+      if (!fromUid || fromUid === toOwnerUid) continue;
+      const rows = await db.syncQueue.where('ownerUid').equals(fromUid).toArray();
+      for (const row of rows) {
+        if (row.status === 'done') continue;
+        await db.syncQueue.update(row.operationId, { ownerUid: toOwnerUid });
+        moved += 1;
+      }
+    }
+    return moved;
+  }
 }
 
 export const syncQueue = new SyncQueue();

@@ -16,6 +16,19 @@ type Props = {
   onContinueOffline: () => void;
 };
 
+function formatSyncError(error: string): string {
+  if (error === 'pending_remain') {
+    return 'Alguns registros não puderam ser enviados. Tente novamente.';
+  }
+  if (error === 'upload_failed') {
+    return 'Erro na comunicação com a nuvem.';
+  }
+  if (error === 'offline') {
+    return 'Sem conexão com a internet.';
+  }
+  return error;
+}
+
 export function SincronizacaoNecessariaModal({
   visible,
   summary,
@@ -103,16 +116,7 @@ export function SincronizacaoNecessariaModal({
         {error ? (
           <View style={[styles.errorBox, { backgroundColor: theme.lossMuted, borderColor: theme.loss }]}>
             <Text style={[styles.errorText, { color: theme.loss }]}>
-              Falha ao enviar:{' '}
-              {error === 'pending_remain'
-                ? 'Alguns registros não puderam ser enviados. Tente novamente.'
-                : error === 'upload_failed'
-                  ? 'Erro na comunicação com a nuvem.'
-                  : error === 'offline'
-                    ? 'Sem conexão com a internet.'
-                    : error.includes('permission') || error.includes('Permission')
-                      ? 'Sem permissão para gravar na nuvem. Verifique se está logado como chefe.'
-                      : error}
+              Falha ao enviar: {formatSyncError(error)}
             </Text>
           </View>
         ) : null}

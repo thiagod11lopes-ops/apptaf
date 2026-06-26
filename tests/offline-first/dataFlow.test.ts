@@ -4,6 +4,8 @@ import {
   ANONYMOUS_OWNER,
   listCadastros,
   listSessoes,
+  listAplicadores,
+  saveAplicador,
   saveCadastro,
   saveSessao,
 } from '../../src/offline-first/db/localDb';
@@ -14,6 +16,7 @@ import {
 import { syncQueue } from '../../src/offline-first/sync/SyncQueue';
 import { setAuthUidState } from '../../src/services/firebase/authUid';
 import type { CadastroItemPersist } from '../../src/services/cadastrosIndexedDb';
+import type { AplicadorItemPersist } from '../../src/services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../src/services/resultadosAplicadosIndexedDb';
 
 const BOSS_UID = 'boss-test-uid';
@@ -35,6 +38,16 @@ function sampleSessao(id = 'sess-1'): SessaoAplicacaoTaf {
     dataAplicacao: '01/01/2026',
     tipoProva: 'corrida',
     resultados: [],
+  };
+}
+
+function sampleAplicador(id = 'app-1'): AplicadorItemPersist {
+  return {
+    id,
+    nip: '12.3456.78',
+    nome: 'Aplicador Teste',
+    categoria: 'Praças',
+    praca: 'Sgt',
   };
 }
 
@@ -89,7 +102,7 @@ describe('login — migração anônimo → chefe', () => {
 
     const result = await migrateAnonymousDexieToOwner(BOSS_UID);
 
-    expect(result).toEqual({ cadastros: 1, sessoes: 1 });
+    expect(result).toEqual({ cadastros: 1, sessoes: 1, aplicadores: 0 });
     expect(await listCadastros(ANONYMOUS_OWNER)).toHaveLength(0);
     expect(await listSessoes(ANONYMOUS_OWNER)).toHaveLength(0);
 
@@ -98,6 +111,17 @@ describe('login — migração anônimo → chefe', () => {
     expect(bossCad[0]?.ownerUid).toBe(BOSS_UID);
 
     expect(await syncQueue.countPending(BOSS_UID)).toBeGreaterThanOrEqual(2);
+  });
+
+  it('move aplicadores __local__ para o chefe com fila pendente', async () => {
+    await saveAplicador(sampleAplicador(), ANONYMOUS_OWNER, null);
+
+    const result = await migrateAnonymousDexieToOwner(BOSS_UID);
+
+    expect(result.aplicadores).toBe(1);
+    expect(await listAplicadores(ANONYMOUS_OWNER)).toHaveLength(0);
+    expect(await listAplicadores(BOSS_UID)).toHaveLength(1);
+    expect(await syncQueue.countPending(BOSS_UID)).toBeGreaterThanOrEqual(1);
   });
 
   it('migrateDeviceDataOnLogin ignora quando não há dados locais', async () => {

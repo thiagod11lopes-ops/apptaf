@@ -18,13 +18,14 @@ import {
   getAllSessoesFirestoreLight,
   updateSessaoFirestore,
 } from '../../services/firebase/sessoesFirestore';
-import { getCachedLoginUid } from '../../services/firebase/authUid';
+import { getCachedLoginUid, getCachedDataOwnerUid, waitForAuthenticatedUid } from '../../services/firebase/authUid';
 import { applyTeamWipeIfNeeded } from '../../services/applyTeamWipeIfNeeded';
 import type { AplicadorRecord, CadastroRecord, SessaoRecord, SyncQueueEntry } from '../types';
 import {
   applyRemoteAplicador,
   applyRemoteCadastro,
   applyRemoteSessao,
+  ANONYMOUS_OWNER,
   listAplicadores,
   listCadastros,
   listSessoes,
@@ -47,6 +48,7 @@ import {
   withCloudUpload,
 } from '../../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from './cloudDisplayGate';
+import { migrateAnonymousDexieToOwner } from '../db/migration';
 
 type StoreListener = () => void;
 
@@ -82,6 +84,23 @@ function notify(): void {
 
 function backoffDelay(retries: number): number {
   return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, retries));
+}
+
+/** UID usado nas escritas Firestore — sempre a conta de dados da sessão autenticada. */
+function resolveFirestoreWriteUid(entryOwnerUid: string): string {
+  const dataOwner = getCachedDataOwnerUid();
+  const loginUid = getCachedLoginUid();
+  if (dataOwner?.trim()) return dataOwner.trim();
+  if (loginUid?.trim()) return loginUid.trim();
+  if (entryOwnerUid && entryOwnerUid !== ANONYMOUS_OWNER) return entryOwnerUid;
+  throw new Error('Sessão não autenticada para envio à nuvem.');
+}
+
+/** Unifica pendências locais (__local__ / fila órfã) na conta logada antes do upload. */
+async function reconcileSessionPendingOwner(targetOwnerUid: string): Promise<void> {
+  if (!targetOwnerUid.trim()) return;
+  await migrateAnonymousDexieToOwner(targetOwnerUid);
+  await syncQueue.reassignPendingOwner([ANONYMOUS_OWNER], targetOwnerUid);
 }
 
 /** Envia aplicadores locais que ainda não existem na nuvem (ex.: cadastrados antes da sync). */
@@ -137,7 +156,7 @@ async function enqueueDexiePendingIntoQueue(ownerUid: string): Promise<void> {
 }
 
 async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
-  const uid = entry.ownerUid;
+  const uid = resolveFirestoreWriteUid(entry.ownerUid);
   const payload = JSON.parse(entry.payload) as Record<string, unknown>;
 
   if (entry.collection === 'cadastros') {
@@ -291,12 +310,22 @@ export class SyncEngine {
     onlineModeUid = null;
   }
 
+  /** Unifica pendências locais antes de contar ou enviar. */
+  async preparePendingOwner(dataOwnerUid: string): Promise<void> {
+    await reconcileSessionPendingOwner(dataOwnerUid);
+  }
+
   /**
    * Envia apenas pendentes (upload idempotente via fila).
    * Não faz pull até confirmação de escrita.
    */
   async uploadPendingOnly(): Promise<{ success: boolean; error?: string }> {
     if (!ownerUid) return { success: false, error: 'no_owner' };
+
+    const loginUid = await waitForAuthenticatedUid(8000);
+    if (!loginUid) {
+      return { success: false, error: 'Sessão expirada. Saia e entre novamente com Google.' };
+    }
 
     await connectivityMonitor.refresh();
     const browserOnline =
@@ -306,6 +335,7 @@ export class SyncEngine {
     }
 
     lastProcessFinishedAt = 0;
+    await reconcileSessionPendingOwner(ownerUid);
     await syncQueue.resetFailedToPending(ownerUid);
 
     for (let round = 0; round < 4; round++) {

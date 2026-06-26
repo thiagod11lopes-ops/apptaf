@@ -168,6 +168,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         visible={isAuthenticated && managerState.showPendingModal && pendingCount > 0}
         summary={pendingSummary}
         loading={modalLoading || managerState.uploading}
+        error={managerState.lastError}
         onUpload={() => void handleUpload()}
         onContinueOffline={() => void handleContinueOffline()}
       />

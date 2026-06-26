@@ -9,6 +9,7 @@ export {
   subscribeSyncManager,
   getSyncManagerState,
   isCloudReadActive,
+  isSyncedDisplayActive,
 } from './sync/SyncManager';
 export type { SyncManagerMode, SyncManagerState } from './sync/SyncManager';
 export { syncQueue } from './sync/SyncQueue';

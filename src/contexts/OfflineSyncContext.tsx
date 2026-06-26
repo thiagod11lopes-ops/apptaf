@@ -23,8 +23,10 @@ import { ConfirmacaoSincronizarNuvemModal } from '../components/sismav/Confirmac
 type OfflineSyncContextType = {
   online: boolean;
   connectivity: ConnectivityState;
-  /** true = UI lê só dados synced da nuvem; false = lê IndexedDB local. */
+  /** true = online e lendo snapshot da nuvem; false = offline (último snapshot synced). */
   usingCloudData: boolean;
+  /** true = exibe só registros synced (nuvem ou snapshot offline). */
+  usingSyncedSnapshot: boolean;
   pendingCount: number;
   pendingSummary: PendingSyncSummary;
   syncing: boolean;
@@ -58,6 +60,8 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const pendingSummary = managerState.pendingSummary;
   const pendingCount = pendingSummary.total;
   const usingCloudData = managerState.mode === 'CLOUD_ACTIVE';
+  const usingSyncedSnapshot =
+    managerState.mode === 'CLOUD_ACTIVE' || managerState.mode === 'OFFLINE_SNAPSHOT';
 
   const evaluateSession = useCallback(async () => {
     if (!authReady || !isAuthenticated) return;
@@ -108,6 +112,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       online,
       connectivity,
       usingCloudData,
+      usingSyncedSnapshot,
       pendingCount,
       pendingSummary,
       syncing: managerState.uploading || connectivity === 'SYNCING',
@@ -121,6 +126,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       online,
       connectivity,
       usingCloudData,
+      usingSyncedSnapshot,
       pendingCount,
       pendingSummary,
       managerState.uploading,

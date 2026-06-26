@@ -72,13 +72,13 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
 
   const statusSuffix = useMemo(() => {
     if (!isOnlineAccount) return null;
-    if (!effectiveOnline) return 'dados locais';
+    if (!effectiveOnline) return 'último snapshot';
     if (uploadError) return 'falha ao enviar';
-    if (!usingCloudData && pendingCount > 0) return 'dados locais · pendências';
+    if (syncModalVisible && pendingCount > 0) return 'pendências de envio';
     if (syncingCloud) return 'sincronizando com a nuvem';
     if (uploadingCloud) return 'enviando para a nuvem';
     return null;
-  }, [isOnlineAccount, effectiveOnline, usingCloudData, pendingCount, syncingCloud, uploadingCloud, uploadError]);
+  }, [isOnlineAccount, effectiveOnline, pendingCount, syncingCloud, uploadingCloud, uploadError, syncModalVisible]);
 
   const label = statusSuffix ? `${accountLabel} · ${statusSuffix}` : accountLabel;
 
@@ -86,13 +86,13 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
 
   const statusHint = useMemo(() => {
     if (!isAuthenticated || accountLabel === 'Offline') return null;
-    if (!effectiveOnline) return 'Sem conexão · exibindo dados do IndexedDB local';
-    if (uploadError) return uploadError;
-    if (syncModalVisible) return 'Alterações locais aguardando envio para a nuvem…';
-    if (!usingCloudData && pendingCount > 0) {
-      return 'Com conexão · exibindo dados locais (alterações pendentes de envio)';
+    if (!effectiveOnline) {
+      return 'Sem conexão · exibindo último snapshot sincronizado da nuvem';
     }
-    if (!usingCloudData) return 'Exibindo dados locais do dispositivo';
+    if (uploadError) return uploadError;
+    if (syncModalVisible && pendingCount > 0) {
+      return 'Alterações locais aguardando envio · tela exibe dados da nuvem';
+    }
     if (syncingCloud || loadingInitial) return 'Baixando dados da nuvem…';
     if (applyingRemote) return 'Atualizando dados recebidos da nuvem…';
     if (uploadingCloud) return 'Enviando alteração para a nuvem…';
@@ -105,7 +105,6 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     isAuthenticated,
     accountLabel,
     effectiveOnline,
-    usingCloudData,
     uploadError,
     syncModalVisible,
     pendingCount,

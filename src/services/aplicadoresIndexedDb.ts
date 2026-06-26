@@ -6,6 +6,8 @@ export type AplicadorItemPersist = {
   sexo?: 'M' | 'F';
   oficial?: string;
   praca?: string;
+  /** Senha em texto — visível na planilha apenas para o e-mail chefe. */
+  senha?: string;
   /** SHA-256 da senha de assinatura do aplicador. */
   senhaHash?: string;
   updatedAt?: number;

@@ -119,8 +119,10 @@ export default function CadastroAplicadorScreen() {
     const id = editandoId ?? `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const anterior = editandoId ? aplicadores.find((a) => a.id === editandoId) : undefined;
     let senhaHash = anterior?.senhaHash;
+    let senhaPlano = anterior?.senha;
     if (senha.trim()) {
       senhaHash = await hashAplicadorSenha(senha);
+      senhaPlano = senha.trim();
     }
 
     const novo: AplicadorItemPersist = {
@@ -130,6 +132,7 @@ export default function CadastroAplicadorScreen() {
       categoria,
       oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
       praca: categoria === 'Praças' ? pracaSelecionada : undefined,
+      senha: senhaPlano,
       senhaHash,
       updatedAt: Date.now(),
     };
@@ -170,7 +173,7 @@ export default function CadastroAplicadorScreen() {
     }
     setNip(item.nip || '');
     setNome(item.nome || '');
-    setSenha('');
+    setSenha(item.senha || '');
   }
 
   async function handleConfirmarExcluir() {
@@ -488,10 +491,27 @@ export default function CadastroAplicadorScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator>
                   <View style={[styles.tabelaCard, { borderColor: theme.border }]}>
                     <View style={[styles.tabelaHeaderRow, { borderBottomColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
-                      {['Posto/Grad.', 'NIP', 'Nome', 'Categoria', 'Ações'].map((col) => (
+                      {(
+                        isBoss
+                          ? ['Posto/Grad.', 'NIP', 'Nome', 'Categoria', 'Senha', 'Ações']
+                          : ['Posto/Grad.', 'NIP', 'Nome', 'Categoria', 'Ações']
+                      ).map((col) => (
                         <Text
                           key={col}
-                          style={[styles.tabelaHeaderCell, { color: theme.textSecondary, width: col === 'Ações' ? 80 : col === 'Nome' ? 160 : 90 }]}
+                          style={[
+                            styles.tabelaHeaderCell,
+                            {
+                              color: theme.textSecondary,
+                              width:
+                                col === 'Ações'
+                                  ? 80
+                                  : col === 'Nome'
+                                    ? 160
+                                    : col === 'Senha'
+                                      ? 100
+                                      : 90,
+                            },
+                          ]}
                         >
                           {col}
                         </Text>
@@ -516,6 +536,11 @@ export default function CadastroAplicadorScreen() {
                           <Text style={[styles.tabelaCellText, { color: theme.text, width: 90 }]}>
                             {item.categoria}
                           </Text>
+                          {isBoss ? (
+                            <Text style={[styles.tabelaCellText, { color: theme.text, width: 100 }]}>
+                              {item.senha?.trim() || '—'}
+                            </Text>
+                          ) : null}
                           <View style={[styles.acoesRow, { width: 80 }]}>
                             {isBoss ? (
                               <>

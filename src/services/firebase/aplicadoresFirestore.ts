@@ -34,6 +34,7 @@ export async function addAplicadorFirestore(uid: string, item: AplicadorItemPers
       sexo: item.sexo,
       oficial: item.oficial,
       praca: item.praca,
+      senha: item.senha,
       senhaHash: item.senhaHash,
       updatedAt: item.updatedAt ?? Date.now(),
     }),

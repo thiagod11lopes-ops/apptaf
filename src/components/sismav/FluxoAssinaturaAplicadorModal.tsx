@@ -9,7 +9,9 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  type GestureResponderEvent,
 } from 'react-native';
+import Svg, { Path as SvgPath } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getAllAplicadores, type AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import { verificarSenhaAplicador } from '../../utils/aplicadorSenha';
@@ -17,6 +19,13 @@ import {
   postoGradAplicador,
   type AplicadorAssinaturaResumo,
 } from '../../types/aplicadorAssinatura';
+import {
+  buildRubricaSvgDataUrl,
+  buildStrokePath,
+  type RubricaStroke,
+} from '../../utils/rubricaSvgBuilder';
+import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../../utils/rubricaSvgNormalize';
+import { RUBRICA_NATIVA_ALTURA } from '../../utils/rubricaConstants';
 
 function labelAplicador(item: AplicadorItemPersist): string {
   const posto = postoGradAplicador(item);
@@ -25,6 +34,8 @@ function labelAplicador(item: AplicadorItemPersist): string {
   return nip ? `${nome} (${nip})` : nome;
 }
 
+type Etapa = 'senha' | 'rubrica';
+
 type Props = {
   visible: boolean;
   onConcluir: (assinatura: AplicadorAssinaturaResumo) => void;
@@ -32,12 +43,17 @@ type Props = {
 
 export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
   const { theme } = useTheme();
+  const [etapa, setEtapa] = useState<Etapa>('senha');
   const [senha, setSenha] = useState('');
   const [erroSenha, setErroSenha] = useState('');
   const [verificando, setVerificando] = useState(false);
   const [aplicadores, setAplicadores] = useState<AplicadorItemPersist[]>([]);
   const [carregandoAplicadores, setCarregandoAplicadores] = useState(false);
   const [aplicadorSelecionadoId, setAplicadorSelecionadoId] = useState('');
+  const [rubricaStrokes, setRubricaStrokes] = useState<RubricaStroke[]>([]);
+  const [rubricaStrokeAtual, setRubricaStrokeAtual] = useState<RubricaStroke>([]);
+  const [canvasWidth, setCanvasWidth] = useState(420);
+  const [erroRubrica, setErroRubrica] = useState('');
 
   const aplicadorSelecionado = useMemo(
     () => aplicadores.find((a) => a.id === aplicadorSelecionadoId) ?? null,
@@ -46,10 +62,14 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
 
   useEffect(() => {
     if (!visible) return;
+    setEtapa('senha');
     setSenha('');
     setErroSenha('');
+    setErroRubrica('');
     setVerificando(false);
     setAplicadorSelecionadoId('');
+    setRubricaStrokes([]);
+    setRubricaStrokeAtual([]);
 
     setCarregandoAplicadores(true);
     void getAllAplicadores()
@@ -61,17 +81,13 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
       .finally(() => setCarregandoAplicadores(false));
   }, [visible]);
 
-  const selecionarAplicador = useCallback(
-    (id: string) => {
-      setAplicadorSelecionadoId(id);
-      setErroSenha('');
-      const item = aplicadores.find((a) => a.id === id);
-      setSenha(item?.senha?.trim() ?? '');
-    },
-    [aplicadores],
-  );
+  const selecionarAplicador = useCallback((id: string) => {
+    setAplicadorSelecionadoId(id);
+    setErroSenha('');
+    setSenha('');
+  }, []);
 
-  const confirmarAssinatura = useCallback(async () => {
+  const confirmarSenha = useCallback(async () => {
     if (!aplicadorSelecionado) {
       setErroSenha('Selecione o aplicador.');
       return;
@@ -93,17 +109,63 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
         setErroSenha('Senha incorreta para o aplicador selecionado.');
         return;
       }
-      onConcluir({
-        aplicadorId: aplicadorSelecionado.id,
-        nome: aplicadorSelecionado.nome,
-        nip: aplicadorSelecionado.nip,
-        categoria: aplicadorSelecionado.categoria,
-        postoGrad: postoGradAplicador(aplicadorSelecionado),
-      });
+      setRubricaStrokes([]);
+      setRubricaStrokeAtual([]);
+      setErroRubrica('');
+      setEtapa('rubrica');
     } finally {
       setVerificando(false);
     }
-  }, [aplicadorSelecionado, onConcluir, senha]);
+  }, [aplicadorSelecionado, senha]);
+
+  const iniciarRubricaStroke = useCallback((event: GestureResponderEvent) => {
+    const { locationX, locationY } = event.nativeEvent;
+    setRubricaStrokeAtual([{ x: locationX, y: locationY }]);
+    setErroRubrica('');
+  }, []);
+
+  const moverRubricaStroke = useCallback((event: GestureResponderEvent) => {
+    const { locationX, locationY } = event.nativeEvent;
+    setRubricaStrokeAtual((prev) => [...prev, { x: locationX, y: locationY }]);
+  }, []);
+
+  const finalizarRubricaStroke = useCallback(() => {
+    if (rubricaStrokeAtual.length === 0) return;
+    setRubricaStrokes((prev) => [...prev, rubricaStrokeAtual]);
+    setRubricaStrokeAtual([]);
+  }, [rubricaStrokeAtual]);
+
+  const limparRubrica = useCallback(() => {
+    setRubricaStrokes([]);
+    setRubricaStrokeAtual([]);
+    setErroRubrica('');
+  }, []);
+
+  const temTracoRubrica =
+    rubricaStrokes.some((s) => s.length > 0) || rubricaStrokeAtual.length > 0;
+
+  const concluirAssinatura = useCallback(() => {
+    if (!aplicadorSelecionado) return;
+
+    const todos: RubricaStroke[] = [
+      ...rubricaStrokes.filter((s) => s.length > 0),
+      ...(rubricaStrokeAtual.length > 0 ? [rubricaStrokeAtual] : []),
+    ];
+    if (todos.length === 0) {
+      setErroRubrica('Desenhe a rúbrica do aplicador antes de concluir.');
+      return;
+    }
+
+    const rubricaSvg = buildRubricaSvgDataUrl(todos, canvasWidth, RUBRICA_NATIVA_ALTURA);
+    onConcluir({
+      aplicadorId: aplicadorSelecionado.id,
+      nome: aplicadorSelecionado.nome,
+      nip: aplicadorSelecionado.nip,
+      categoria: aplicadorSelecionado.categoria,
+      postoGrad: postoGradAplicador(aplicadorSelecionado),
+      rubricaSvg,
+    });
+  }, [aplicadorSelecionado, canvasWidth, onConcluir, rubricaStrokeAtual, rubricaStrokes]);
 
   const selectWebStyle = useMemo(
     () =>
@@ -126,113 +188,208 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => {}} accessibilityViewIsModal>
       <View style={styles.overlay}>
-        <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-          <Text style={[styles.titulo, { color: theme.text }]}>Assinatura do aplicador</Text>
-          <Text style={[styles.sub, { color: theme.textSecondary }]}>
-            Após as rúbricas dos militares, selecione o aplicador e confirme a senha cadastrada.
-          </Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+            <Text style={[styles.titulo, { color: theme.text }]}>Assinatura do aplicador</Text>
 
-          <Text style={[styles.label, { color: theme.textSecondary }]}>Aplicador</Text>
-          {carregandoAplicadores ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color={theme.primary} />
-              <Text style={[styles.sub, { color: theme.textSecondary, marginBottom: 0 }]}>
-                Carregando aplicadores…
-              </Text>
-            </View>
-          ) : aplicadores.length === 0 ? (
-            <Text style={[styles.erro, { color: theme.loss }]}>
-              Nenhum aplicador cadastrado. Cadastre no menu Aplicador.
-            </Text>
-          ) : Platform.OS === 'web' ? (
-            <select
-              value={aplicadorSelecionadoId}
-              onChange={(e) => selecionarAplicador(e.target.value)}
-              style={selectWebStyle}
-            >
-              <option value="">Selecione o aplicador</option>
-              {aplicadores.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {labelAplicador(item)}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <ScrollView
-              style={[
-                styles.selectList,
-                { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
-              ]}
-              nestedScrollEnabled
-            >
-              {aplicadores.map((item) => {
-                const active = item.id === aplicadorSelecionadoId;
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    onPress={() => selecionarAplicador(item.id)}
+            {etapa === 'senha' ? (
+              <>
+                <Text style={[styles.sub, { color: theme.textSecondary }]}>
+                  Selecione o aplicador e informe a senha cadastrada. Em seguida, ele fará a rúbrica.
+                </Text>
+
+                <Text style={[styles.label, { color: theme.textSecondary }]}>Aplicador</Text>
+                {carregandoAplicadores ? (
+                  <View style={styles.loadingRow}>
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={[styles.sub, { color: theme.textSecondary, marginBottom: 0 }]}>
+                      Carregando aplicadores…
+                    </Text>
+                  </View>
+                ) : aplicadores.length === 0 ? (
+                  <Text style={[styles.erro, { color: theme.loss }]}>
+                    Nenhum aplicador cadastrado. Cadastre no menu Aplicador.
+                  </Text>
+                ) : Platform.OS === 'web' ? (
+                  <select
+                    value={aplicadorSelecionadoId}
+                    onChange={(e) => selecionarAplicador(e.target.value)}
+                    style={selectWebStyle}
+                  >
+                    <option value="">Selecione o aplicador</option>
+                    {aplicadores.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {labelAplicador(item)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <ScrollView
                     style={[
-                      styles.selectOption,
-                      active
-                        ? { backgroundColor: theme.primary }
-                        : { backgroundColor: theme.backgroundSecondary },
+                      styles.selectList,
+                      { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
+                    ]}
+                    nestedScrollEnabled
+                  >
+                    {aplicadores.map((item) => {
+                      const active = item.id === aplicadorSelecionadoId;
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          onPress={() => selecionarAplicador(item.id)}
+                          style={[
+                            styles.selectOption,
+                            active
+                              ? { backgroundColor: theme.primary }
+                              : { backgroundColor: theme.backgroundSecondary },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.selectOptionText,
+                              { color: active ? theme.text : theme.textSecondary },
+                            ]}
+                          >
+                            {labelAplicador(item)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+
+                <Text style={[styles.label, { color: theme.textSecondary }]}>Senha</Text>
+                <TextInput
+                  value={senha}
+                  onChangeText={(t) => {
+                    setSenha(t);
+                    setErroSenha('');
+                  }}
+                  placeholder="Digite a senha do aplicador"
+                  placeholderTextColor={theme.textMuted}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!!aplicadorSelecionadoId}
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: theme.backgroundSecondary,
+                      color: theme.text,
+                      opacity: aplicadorSelecionadoId ? 1 : 0.6,
+                    },
+                    Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {},
+                  ]}
+                />
+                {erroSenha ? <Text style={[styles.erro, { color: theme.loss }]}>{erroSenha}</Text> : null}
+                <TouchableOpacity
+                  onPress={() => void confirmarSenha()}
+                  disabled={verificando || aplicadores.length === 0}
+                  style={[
+                    styles.btnPrimary,
+                    {
+                      backgroundColor: theme.primary,
+                      opacity: verificando || aplicadores.length === 0 ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.btnPrimaryText, { color: theme.text }]}>
+                    {verificando ? 'Verificando…' : 'Confirmar senha'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.sub, { color: theme.textSecondary }]}>
+                  {aplicadorSelecionado
+                    ? `${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome} — desenhe a rúbrica abaixo.`
+                    : 'Desenhe a rúbrica do aplicador.'}
+                </Text>
+
+                <Text style={[styles.label, { color: theme.textSecondary }]}>Rúbrica do aplicador</Text>
+                <View
+                  style={[
+                    styles.canvasWrap,
+                    { borderColor: theme.border, backgroundColor: RUBRICA_COR_FUNDO },
+                  ]}
+                  onLayout={(e) => {
+                    const w = e.nativeEvent.layout.width;
+                    if (w > 0) setCanvasWidth(w);
+                  }}
+                  onStartShouldSetResponder={() => true}
+                  onMoveShouldSetResponder={() => true}
+                  onResponderGrant={iniciarRubricaStroke}
+                  onResponderMove={moverRubricaStroke}
+                  onResponderRelease={finalizarRubricaStroke}
+                  onResponderTerminate={finalizarRubricaStroke}
+                >
+                  <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>
+                    {rubricaStrokes.map((stroke, idx) => (
+                      <SvgPath
+                        key={`stroke-${idx}`}
+                        d={buildStrokePath(stroke)}
+                        stroke={RUBRICA_COR_TRACO}
+                        strokeWidth={2.5}
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    ))}
+                    {rubricaStrokeAtual.length > 0 ? (
+                      <SvgPath
+                        d={buildStrokePath(rubricaStrokeAtual)}
+                        stroke={RUBRICA_COR_TRACO}
+                        strokeWidth={2.5}
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    ) : null}
+                  </Svg>
+                </View>
+
+                <TouchableOpacity
+                  onPress={limparRubrica}
+                  style={[styles.btnSecundario, { borderColor: theme.border }]}
+                >
+                  <Text style={{ color: theme.text, fontWeight: '700' }}>Limpar rúbrica</Text>
+                </TouchableOpacity>
+
+                {erroRubrica ? <Text style={[styles.erro, { color: theme.loss }]}>{erroRubrica}</Text> : null}
+
+                <View style={styles.footerBtns}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setEtapa('senha');
+                      setErroRubrica('');
+                    }}
+                    style={[styles.btnGhost, { borderColor: theme.border }]}
+                  >
+                    <Text style={{ color: theme.textSecondary, fontWeight: '700' }}>Voltar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={concluirAssinatura}
+                    disabled={!temTracoRubrica}
+                    style={[
+                      styles.btnPrimaryFlex,
+                      {
+                        backgroundColor: theme.primary,
+                        opacity: temTracoRubrica ? 1 : 0.55,
+                      },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.selectOptionText,
-                        { color: active ? theme.text : theme.textSecondary },
-                      ]}
-                    >
-                      {labelAplicador(item)}
-                    </Text>
+                    <Text style={[styles.btnPrimaryText, { color: theme.text }]}>Concluir assinatura</Text>
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          )}
-
-          <Text style={[styles.label, { color: theme.textSecondary }]}>Senha</Text>
-          <TextInput
-            value={senha}
-            onChangeText={(t) => {
-              setSenha(t);
-              setErroSenha('');
-            }}
-            placeholder="Senha do aplicador selecionado"
-            placeholderTextColor={theme.textMuted}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!!aplicadorSelecionadoId}
-            style={[
-              styles.input,
-              {
-                borderColor: theme.border,
-                backgroundColor: theme.backgroundSecondary,
-                color: theme.text,
-                opacity: aplicadorSelecionadoId ? 1 : 0.6,
-              },
-              Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {},
-            ]}
-          />
-          {erroSenha ? <Text style={[styles.erro, { color: theme.loss }]}>{erroSenha}</Text> : null}
-          <TouchableOpacity
-            onPress={() => void confirmarAssinatura()}
-            disabled={verificando || aplicadores.length === 0}
-            style={[
-              styles.btnPrimary,
-              {
-                backgroundColor: theme.primary,
-                opacity: verificando || aplicadores.length === 0 ? 0.7 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.btnPrimaryText, { color: theme.text }]}>
-              {verificando ? 'Verificando…' : 'Confirmar assinatura'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+                </View>
+              </>
+            )}
+          </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -242,13 +399,16 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
     padding: 16,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   card: {
     width: '100%',
     maxWidth: 480,
+    alignSelf: 'center',
     borderRadius: 16,
     borderWidth: 1,
     padding: 20,
@@ -276,6 +436,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
   },
+  canvasWrap: {
+    width: '100%',
+    height: RUBRICA_NATIVA_ALTURA,
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  btnSecundario: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
   erro: { fontSize: 13, fontWeight: '600', marginBottom: 10, textAlign: 'center' },
   btnPrimary: {
     marginTop: 8,
@@ -283,5 +459,22 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
+  btnPrimaryFlex: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
   btnPrimaryText: { fontWeight: '800', fontSize: 15 },
+  footerBtns: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  btnGhost: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
 });

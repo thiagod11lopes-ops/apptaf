@@ -41,7 +41,11 @@ export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[
 function blocoAplicadorAssinaturaHtml(assinatura?: AplicadorAssinaturaResumo): string {
   if (!assinatura?.nome?.trim()) return '';
   const postoGrad = escapeHtml(postoGradExibicaoAssinatura(assinatura));
+  const rubricaHtml = assinatura.rubricaSvg
+    ? `<div class="aplicador-rubrica">${celulaRubricaHtml(assinatura.rubricaSvg)}</div>`
+    : '';
   return `<div class="aplicador-assinatura">
+    ${rubricaHtml}
     <hr class="aplicador-linha"/>
     <p class="aplicador-identificacao">
       <span class="aplicador-posto-grad">${postoGrad}</span>
@@ -106,6 +110,11 @@ export function buildResumoAplicacaoHtml(
       margin-top: 28px;
       text-align: center;
       page-break-inside: avoid;
+    }
+    .aplicador-rubrica {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 8px;
     }
     .aplicador-linha {
       width: 72%;

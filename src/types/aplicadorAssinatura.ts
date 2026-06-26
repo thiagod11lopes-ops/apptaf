@@ -4,7 +4,7 @@ export type AplicadorAssinaturaResumo = {
   nip: string;
   categoria: 'Oficiais' | 'Praças';
   postoGrad: string;
-  /** Legado — assinatura do aplicador usa apenas a linha, sem rúbrica desenhada. */
+  /** Rúbrica desenhada pelo aplicador após confirmar a senha. */
   rubricaSvg?: string;
 };
 

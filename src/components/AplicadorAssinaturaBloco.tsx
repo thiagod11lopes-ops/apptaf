@@ -1,19 +1,25 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { RubricaCell } from './RubricaThumb';
 import { postoGradExibicaoAssinatura, type AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 
 type Props = {
   assinatura: AplicadorAssinaturaResumo;
 };
 
-/** Linha de assinatura do aplicador com posto/graduação à esquerda do nome. */
+/** Assinatura do aplicador: rúbrica (se houver), linha e identificação. */
 export function AplicadorAssinaturaBloco({ assinatura }: Props) {
   const { theme } = useTheme();
   const postoGrad = postoGradExibicaoAssinatura(assinatura);
 
   return (
     <View style={styles.wrap}>
+      {assinatura.rubricaSvg ? (
+        <View style={styles.rubricaWrap}>
+          <RubricaCell svgUri={assinatura.rubricaSvg} maxWidth={320} maxHeight={140} />
+        </View>
+      ) : null}
       <View style={[styles.linha, { backgroundColor: theme.border }]} />
       <View style={styles.identificacao}>
         <Text style={[styles.postoGrad, { color: theme.textSecondary }]}>{postoGrad}</Text>
@@ -31,6 +37,10 @@ const styles = StyleSheet.create({
     marginTop: 28,
     paddingTop: 8,
     paddingBottom: 8,
+  },
+  rubricaWrap: {
+    marginBottom: 12,
+    alignItems: 'center',
   },
   linha: {
     width: '72%',

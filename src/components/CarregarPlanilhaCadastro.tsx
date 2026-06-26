@@ -108,7 +108,7 @@ export function CarregarPlanilhaCadastro({ onImportComplete }: Props) {
         : null}
 
       <TouchableOpacity
-        accessibilityLabel="Carregar Planilha"
+        accessibilityLabel="Importar cadastros por PDF"
         activeOpacity={0.85}
         disabled={carregando}
         onPress={abrirSeletor}
@@ -126,7 +126,7 @@ export function CarregarPlanilhaCadastro({ onImportComplete }: Props) {
         ) : (
           <>
             <Upload size={18} color={theme.text} strokeWidth={2.2} />
-            <Text style={[ts.caption, styles.btnText, { color: theme.text }]}>Carregar Planilha</Text>
+            <Text style={[ts.caption, styles.btnText, { color: theme.text }]}>Importar cadastros (PDF)</Text>
           </>
         )}
       </TouchableOpacity>

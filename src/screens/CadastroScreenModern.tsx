@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -18,11 +17,7 @@ import { X } from 'lucide-react-native';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
-const CarregarPlanilhaCadastro = React.lazy(() =>
-  import('../components/CarregarPlanilhaCadastro').then((m) => ({
-    default: m.CarregarPlanilhaCadastro,
-  })),
-);
+import { CarregarPlanilhaCadastro } from '../components/CarregarPlanilhaCadastro';
 import { LabelNip } from '../components/LabelNip';
 import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
@@ -89,7 +84,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 export default function CadastroScreenModern() {
   const { theme, fontsLoaded } = useTheme();
-  const { isAuthorizedMember, isAuthenticated } = useAuth();
+  const { isAuthorizedMember, isBoss } = useAuth();
   const navigation = useNavigation();
   const ts = theme.textStyles;
   const regularFont = fontFamily('regular', fontsLoaded);
@@ -107,11 +102,14 @@ export default function CadastroScreenModern() {
   const [faltantes, setFaltantes] = useState<string[]>([]);
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [mostrarImportPdf, setMostrarImportPdf] = useState(false);
   const [mostrarTabela, setMostrarTabela] = useState(false);
+  const podeImportarPdf = isBoss || !isAuthorizedMember;
 
   useFocusEffect(
     useCallback(() => {
       setMostrarFormulario(false);
+      setMostrarImportPdf(false);
       setMostrarTabela(false);
     }, []),
   );
@@ -577,6 +575,41 @@ export default function CadastroScreenModern() {
             </Card>
           ) : null}
 
+          {podeImportarPdf ? (
+            <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+              <TouchableOpacity
+                accessibilityLabel="Importar cadastros por PDF"
+                onPress={() => setMostrarImportPdf((v) => !v)}
+                style={[
+                  styles.toggleBtn,
+                  mostrarImportPdf
+                    ? { backgroundColor: selectedBgColor, borderColor: selectedBgColor }
+                    : { backgroundColor: unselectedBgColor, borderColor: theme.borderSubtle },
+                ]}
+              >
+                <Text
+                  style={[
+                    ts.caption,
+                    mostrarImportPdf
+                      ? { color: selectedTextColor }
+                      : { color: unselectedTextColor },
+                    styles.toggleBtnText,
+                  ]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  Importar cadastros (PDF)
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {mostrarImportPdf && podeImportarPdf ? (
+            <Card elevated style={styles.formCard}>
+              <CarregarPlanilhaCadastro onImportComplete={recarregarCadastros} />
+            </Card>
+          ) : null}
+
           <View style={[styles.tableToggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <TouchableOpacity
               accessibilityLabel="Mostrar tabela"
@@ -603,18 +636,6 @@ export default function CadastroScreenModern() {
               </Text>
             </TouchableOpacity>
           </View>
-
-          {mostrarTabela && !isAuthorizedMember ? (
-            <Suspense
-              fallback={
-                <View style={{ width: '100%', paddingVertical: 12, alignItems: 'center' }}>
-                  <ActivityIndicator color={theme.primary} />
-                </View>
-              }
-            >
-              <CarregarPlanilhaCadastro onImportComplete={recarregarCadastros} />
-            </Suspense>
-          ) : null}
 
           {mostrarTabela ? <View style={{ height: 16 }} /> : null}
 

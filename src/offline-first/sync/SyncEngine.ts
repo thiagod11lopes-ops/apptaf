@@ -176,6 +176,9 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
 
   if (entry.operationType === 'DELETE') {
     await deleteSessaoFirestore(uid, entry.documentId);
+    const dbSess = await listSessoes(uid, true);
+    const row = dbSess.find((s) => s.id === entry.documentId);
+    if (row) await putSessaoRecord({ ...row, syncStatus: 'synced' });
     return;
   }
 
@@ -366,12 +369,14 @@ export class SyncEngine {
     });
   }
 
+  private currentProcessPromise: Promise<boolean> | null = null;
+
   async processQueue(options?: {
     uploadOnly?: boolean;
     bypassGap?: boolean;
     forceUpload?: boolean;
   }): Promise<boolean> {
-    if (!ownerUid || processing || !connectivityMonitor.canSync()) return false;
+    if (!ownerUid || !connectivityMonitor.canSync()) return false;
     if (systemState.isForcedOffline() && !options?.forceUpload) return false;
     if (
       !options?.bypassGap &&
@@ -381,52 +386,61 @@ export class SyncEngine {
       return false;
     }
 
-    processing = true;
-    connectivityMonitor.setSyncing(true);
-    beginCloudSync();
-    setSyncProgress(10);
-
-    try {
-      const pending = await syncQueue.listPending(ownerUid);
-      setSyncProgress(25);
-
-      for (let i = 0; i < pending.length; i++) {
-        const item = pending[i]!;
-        await syncQueue.markProcessing(item.operationId);
-        try {
-          await withCloudUpload(() => executeQueueItem(item));
-          await syncQueue.markDone(item.operationId);
-          setSyncProgress(25 + Math.round(((i + 1) / Math.max(pending.length, 1)) * 40));
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          await syncQueue.markFailed(item.operationId, msg, item.retries + 1);
-          await syncLogger.error('queue', msg, { operationId: item.operationId });
-          await new Promise((r) => setTimeout(r, backoffDelay(item.retries + 1)));
-        }
-      }
-
-      setSyncProgress(70);
-      if (!options?.uploadOnly && systemState.canUseFirebase()) {
-        const stillPending = await getPendingSyncItems(ownerUid);
-        const queueLeft = await syncQueue.listPending(ownerUid);
-        if (stillPending.total === 0 && queueLeft.length === 0) {
-          await this.pullFromRemote(false);
-        }
-      }
-      setSyncProgress(100);
-      setCloudSyncResult(true);
-      notify();
-      return true;
-    } catch (error) {
-      await syncLogger.error('sync', error instanceof Error ? error.message : String(error));
-      setCloudSyncResult(false);
-      return false;
-    } finally {
-      processing = false;
-      lastProcessFinishedAt = Date.now();
-      connectivityMonitor.setSyncing(false);
-      endCloudSync();
+    if (this.currentProcessPromise) {
+      return this.currentProcessPromise;
     }
+
+    this.currentProcessPromise = (async () => {
+      processing = true;
+      connectivityMonitor.setSyncing(true);
+      beginCloudSync();
+      setSyncProgress(10);
+
+      try {
+        const pending = await syncQueue.listPending(ownerUid!);
+        setSyncProgress(25);
+
+        for (let i = 0; i < pending.length; i++) {
+          const item = pending[i]!;
+          await syncQueue.markProcessing(item.operationId);
+          try {
+            await withCloudUpload(() => executeQueueItem(item));
+            await syncQueue.markDone(item.operationId);
+            setSyncProgress(25 + Math.round(((i + 1) / Math.max(pending.length, 1)) * 40));
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            await syncQueue.markFailed(item.operationId, msg, item.retries + 1);
+            await syncLogger.error('queue', msg, { operationId: item.operationId });
+            await new Promise((r) => setTimeout(r, backoffDelay(item.retries + 1)));
+          }
+        }
+
+        setSyncProgress(70);
+        if (!options?.uploadOnly && systemState.canUseFirebase()) {
+          const stillPending = await getPendingSyncItems(ownerUid!);
+          const queueLeft = await syncQueue.listPending(ownerUid!);
+          if (stillPending.total === 0 && queueLeft.length === 0) {
+            await this.pullFromRemote(false);
+          }
+        }
+        setSyncProgress(100);
+        setCloudSyncResult(true);
+        notify();
+        return true;
+      } catch (error) {
+        await syncLogger.error('sync', error instanceof Error ? error.message : String(error));
+        setCloudSyncResult(false);
+        return false;
+      } finally {
+        processing = false;
+        lastProcessFinishedAt = Date.now();
+        connectivityMonitor.setSyncing(false);
+        endCloudSync();
+        this.currentProcessPromise = null;
+      }
+    })();
+
+    return this.currentProcessPromise;
   }
 
   /** Após wipe local/nuvem — evita loop de sync e marca estado ocioso. */

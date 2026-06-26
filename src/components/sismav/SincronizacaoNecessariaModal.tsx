@@ -11,6 +11,7 @@ type Props = {
   visible: boolean;
   summary: PendingSyncSummary | null;
   loading?: boolean;
+  error?: string | null;
   onUpload: () => void;
   onContinueOffline: () => void;
 };
@@ -19,6 +20,7 @@ export function SincronizacaoNecessariaModal({
   visible,
   summary,
   loading = false,
+  error = null,
   onUpload,
   onContinueOffline,
 }: Props) {
@@ -97,6 +99,15 @@ export function SincronizacaoNecessariaModal({
             ) : null}
           </View>
         ) : null}
+        
+        {error ? (
+          <View style={[styles.errorBox, { backgroundColor: theme.lossMuted, borderColor: theme.loss }]}>
+            <Text style={[styles.errorText, { color: theme.loss }]}>
+              Falha ao enviar: {error === 'pending_remain' ? 'Alguns registros não puderam ser enviados. Tente novamente.' : error === 'upload_failed' ? 'Erro na comunicação com a nuvem.' : error}
+            </Text>
+          </View>
+        ) : null}
+
         <Text style={[styles.hint, { color: theme.textMuted }]}>
           Enquanto existirem alterações pendentes, este aviso será exibido ao iniciar, fazer login ou
           reconectar à internet. Nenhum dado será enviado sem sua confirmação.
@@ -127,6 +138,16 @@ const styles = StyleSheet.create({
   statsLine: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  errorBox: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
   hint: {
     fontSize: 12,

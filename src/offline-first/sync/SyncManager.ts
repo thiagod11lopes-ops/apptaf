@@ -127,7 +127,7 @@ async function evaluateSession(trigger: string): Promise<void> {
 
     if (systemState.isForcedOffline()) {
       mode = 'LOCAL_ONLY';
-      showPendingModal = hasPending && online;
+      showPendingModal = trigger !== 'session-start' && trigger !== 'reconnect' ? false : (hasPending && online);
       notifyListeners();
       return;
     }
@@ -247,7 +247,7 @@ export const syncManager = {
   async chooseContinueOffline(): Promise<void> {
     await enterLocalOnly(true);
     await refreshPendingSummary();
-    showPendingModal = pendingSummary.total > 0 && canReachFirebase();
+    showPendingModal = false;
     notifyListeners();
   },
 

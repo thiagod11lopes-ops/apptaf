@@ -6,13 +6,15 @@ import { systemState } from './SystemState';
 import { beginAwaitingCloudConfirmation, confirmCloudDisplayReady } from './cloudDisplayGate';
 import { syncLogger } from './SyncLogger';
 
-/** CLOUD_ACTIVE = Firebase é fonte de leitura; LOCAL_ONLY = só IndexedDB (sem rede). */
+/** CLOUD_ACTIVE = lê só dados synced da nuvem; LOCAL_ONLY = lê todo o IndexedDB. */
 export type SyncManagerMode = 'CLOUD_ACTIVE' | 'LOCAL_ONLY';
 
 export type SyncManagerState = {
   mode: SyncManagerMode;
   pendingSummary: PendingSyncSummary;
   uploading: boolean;
+  /** Modal de envio de alterações offline — exibido ao reconectar com pendências. */
+  syncModalVisible: boolean;
 };
 
 const EMPTY_SUMMARY: PendingSyncSummary = {
@@ -29,17 +31,22 @@ let ownerUid: string | null = null;
 let mode: SyncManagerMode = 'LOCAL_ONLY';
 let pendingSummary: PendingSyncSummary = EMPTY_SUMMARY;
 let uploading = false;
+let syncModalRequired = false;
 let sessionEvalInFlight = false;
 let uploadInFlight = false;
 const listeners = new Set<Listener>();
 
 function snapshot(): SyncManagerState {
-  return { mode, pendingSummary, uploading };
+  return {
+    mode,
+    pendingSummary,
+    uploading,
+    syncModalVisible: syncModalRequired && pendingSummary.total > 0,
+  };
 }
 
 function notifyListeners(): void {
-  const s = snapshot();
-  listeners.forEach((fn) => fn(s));
+  listeners.forEach((fn) => fn(snapshot()));
 }
 
 function canReachFirebase(): boolean {
@@ -57,12 +64,15 @@ async function refreshPendingSummary(): Promise<PendingSyncSummary> {
   }
   await syncEngine.preparePendingOwner(ownerUid);
   pendingSummary = await getPendingSyncItems(ownerUid);
+  if (pendingSummary.total === 0) {
+    syncModalRequired = false;
+  }
   return pendingSummary;
 }
 
-/** Leitura da nuvem quando logado e online (via cópia synced no IndexedDB). */
+/** Online + modo nuvem = exibir apenas registros synced (cópia da nuvem no IndexedDB). */
 export function isCloudReadActive(): boolean {
-  return canReachFirebase() && isLoggedIn();
+  return mode === 'CLOUD_ACTIVE' && canReachFirebase() && isLoggedIn();
 }
 
 export function getSyncManagerState(): SyncManagerState {
@@ -78,6 +88,7 @@ export function subscribeSyncManager(listener: Listener): () => void {
 async function enterCloudActive(): Promise<void> {
   if (!ownerUid) return;
   mode = 'CLOUD_ACTIVE';
+  syncModalRequired = false;
   notifyListeners();
 
   beginAwaitingCloudConfirmation();
@@ -90,11 +101,12 @@ async function enterCloudActive(): Promise<void> {
   }
 }
 
-async function syncPendingAndEnterCloud(): Promise<void> {
+async function uploadPendingAndEnterCloud(): Promise<void> {
   if (!ownerUid || uploadInFlight) return;
 
   uploadInFlight = true;
   uploading = true;
+  syncModalRequired = false;
   notifyListeners();
 
   try {
@@ -104,26 +116,25 @@ async function syncPendingAndEnterCloud(): Promise<void> {
     const result = await syncEngine.uploadPendingOnly();
     await refreshPendingSummary();
 
-    if (!result.success) {
-      await syncLogger.warn('sync-manager', result.error ?? 'upload_failed');
+    if (!result.success || pendingSummary.total > 0) {
+      await syncLogger.warn('sync-manager', result.error ?? 'upload_incomplete');
+      mode = 'LOCAL_ONLY';
+      syncEngine.deactivateOnlineMode();
+      syncModalRequired = pendingSummary.total > 0;
+      notifyListeners();
+      return;
     }
 
     await enterCloudActive();
-
-    if (pendingSummary.total > 0) {
-      void syncEngine.flushPendingOnChange();
-    }
   } catch (error) {
     await syncLogger.error(
       'sync-manager',
       error instanceof Error ? error.message : String(error),
     );
-    if (canReachFirebase()) {
-      await enterCloudActive();
-    } else {
-      mode = 'LOCAL_ONLY';
-      notifyListeners();
-    }
+    mode = 'LOCAL_ONLY';
+    syncEngine.deactivateOnlineMode();
+    syncModalRequired = pendingSummary.total > 0;
+    notifyListeners();
   } finally {
     uploading = false;
     uploadInFlight = false;
@@ -135,6 +146,7 @@ async function evaluateSession(trigger: string): Promise<void> {
   if (!ownerUid || !isLoggedIn()) {
     mode = 'LOCAL_ONLY';
     pendingSummary = EMPTY_SUMMARY;
+    syncModalRequired = false;
     notifyListeners();
     return;
   }
@@ -158,7 +170,10 @@ async function evaluateSession(trigger: string): Promise<void> {
     }
 
     if (hasPending) {
-      await syncPendingAndEnterCloud();
+      mode = 'LOCAL_ONLY';
+      syncEngine.deactivateOnlineMode();
+      syncModalRequired = true;
+      notifyListeners();
       return;
     }
 
@@ -176,6 +191,7 @@ export const syncManager = {
     await systemState.setOnlineActive();
     connectivityMonitor.start();
     syncEngine.deactivateOnlineMode();
+    mode = 'LOCAL_ONLY';
   },
 
   async evaluateOnSessionStart(): Promise<void> {
@@ -196,6 +212,27 @@ export const syncManager = {
     notifyListeners();
   },
 
+  /** Usuário confirmou envio das alterações offline para a nuvem. */
+  async confirmUploadToCloud(): Promise<void> {
+    await uploadPendingAndEnterCloud();
+  },
+
+  /** Usuário adiou o envio — continua exibindo dados locais. */
+  dismissSyncModal(): void {
+    syncModalRequired = false;
+    mode = 'LOCAL_ONLY';
+    syncEngine.deactivateOnlineMode();
+    notifyListeners();
+  },
+
+  /** Reabre o modal quando há pendências e ainda não está em modo nuvem. */
+  openSyncModal(): void {
+    if (pendingSummary.total > 0 && canReachFirebase()) {
+      syncModalRequired = true;
+      notifyListeners();
+    }
+  },
+
   scheduleOnlineWriteFlush(): void {
     if (mode !== 'CLOUD_ACTIVE' || !canReachFirebase() || !ownerUid) return;
     syncEngine.scheduleRealtimeFlush();
@@ -203,9 +240,6 @@ export const syncManager = {
 
   async refreshPending(): Promise<PendingSyncSummary> {
     const summary = await refreshPendingSummary();
-    if (summary.total > 0 && canReachFirebase()) {
-      void syncPendingAndEnterCloud();
-    }
     notifyListeners();
     return summary;
   },
@@ -216,6 +250,7 @@ export const syncManager = {
     mode = 'LOCAL_ONLY';
     pendingSummary = EMPTY_SUMMARY;
     uploading = false;
+    syncModalRequired = false;
     notifyListeners();
   },
 

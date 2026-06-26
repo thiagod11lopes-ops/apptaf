@@ -5,7 +5,7 @@ import { CloudUpload, Wifi } from 'lucide-react-native';
 import { ModernModal } from './ModernModal';
 import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
-import type { PendingSyncSummary } from '../../services/offline/pendingOps';
+import type { PendingSyncSummary } from '../../offline-first/sync/pendingSyncItems';
 
 type Props = {
   visible: boolean;
@@ -24,6 +24,9 @@ export function ConfirmacaoSincronizarNuvemModal({
 }: Props) {
   const { theme } = useTheme();
   const t = theme.tokens;
+
+  const exclusoes =
+    summary?.items.filter((item) => item.record.deleted === true).length ?? 0;
 
   const footer = (
     <View style={styles.footerRow}>
@@ -62,16 +65,16 @@ export function ConfirmacaoSincronizarNuvemModal({
   return (
     <ModernModal
       visible={visible}
-      onClose={onClose}
-      title="Sincronizar com a nuvem?"
+      onClose={loading ? () => {} : onClose}
+      title="Alterações locais encontradas"
       icon={<Wifi size={20} color="#FFFFFF" strokeWidth={2.2} />}
       footer={footer}
     >
       {summary ? (
         <View style={styles.body}>
           <Text style={[styles.message, { color: theme.text }]}>
-            Este dispositivo registrou alterações enquanto estava offline (ou sem conexão com a
-            nuvem). Deseja enviar essas atualizações para a sua conta na nuvem?
+            Este dispositivo possui dados atualizados no armazenamento local enquanto estava sem
+            conexão. Deseja enviar essas alterações para a nuvem?
           </Text>
 
           <View style={[styles.statsCard, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
@@ -89,16 +92,21 @@ export function ConfirmacaoSincronizarNuvemModal({
                 · {summary.sessoes} aplicação{summary.sessoes !== 1 ? 'ões' : ''} de TAF
               </Text>
             ) : null}
-            {summary.exclusoes > 0 ? (
+            {summary.aplicadores > 0 ? (
               <Text style={[styles.statsLine, { color: theme.text }]}>
-                · {summary.exclusoes} exclusão{summary.exclusoes !== 1 ? 'ões' : ''}
+                · {summary.aplicadores} aplicador{summary.aplicadores !== 1 ? 'es' : ''}
+              </Text>
+            ) : null}
+            {exclusoes > 0 ? (
+              <Text style={[styles.statsLine, { color: theme.text }]}>
+                · {exclusoes} exclusão{exclusoes !== 1 ? 'ões' : ''}
               </Text>
             ) : null}
           </View>
 
           <Text style={[styles.hint, { color: theme.textMuted }]}>
-            Se escolher &quot;Agora não&quot;, os dados permanecem salvos neste dispositivo e você
-            poderá sincronizar depois pelo aviso na tela inicial.
+            Enquanto não sincronizar, o app continuará exibindo os dados locais deste dispositivo.
+            Com conexão e após o envio, passará a usar somente os dados da nuvem.
           </Text>
         </View>
       ) : null}

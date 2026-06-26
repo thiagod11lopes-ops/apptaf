@@ -10,27 +10,31 @@ import React, {
 } from 'react';
 import { useAuth } from './AuthContext';
 import { connectivityMonitor, getConnectivityState } from '../offline-first/sync/ConnectivityMonitor';
-import { syncManager, subscribeSyncManager, getSyncManagerState, type SyncManagerState } from '../offline-first/sync/SyncManager';
+import {
+  syncManager,
+  subscribeSyncManager,
+  getSyncManagerState,
+  type SyncManagerState,
+} from '../offline-first/sync/SyncManager';
 import type { PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
 import type { ConnectivityState } from '../offline-first/types';
+import { ConfirmacaoSincronizarNuvemModal } from '../components/sismav/ConfirmacaoSincronizarNuvemModal';
 
 type OfflineSyncContextType = {
   online: boolean;
   connectivity: ConnectivityState;
+  /** true = UI lê só dados synced da nuvem; false = lê IndexedDB local. */
+  usingCloudData: boolean;
   pendingCount: number;
   pendingSummary: PendingSyncSummary;
   syncing: boolean;
+  syncModalVisible: boolean;
+  confirmSync: () => Promise<void>;
+  dismissSync: () => void;
+  openSyncModal: () => void;
 };
 
 const OfflineSyncContext = createContext<OfflineSyncContextType | null>(null);
-
-const EMPTY_SUMMARY: PendingSyncSummary = {
-  items: [],
-  total: 0,
-  cadastros: 0,
-  sessoes: 0,
-  aplicadores: 0,
-};
 
 function hasNetworkConnectivity(state: ConnectivityState = getConnectivityState()): boolean {
   return state === 'ONLINE' || state === 'DEGRADED' || state === 'SYNCING';
@@ -52,11 +56,24 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const online = hasNetworkConnectivity(connectivity) || (isAuthenticated && readBrowserOnline());
   const pendingSummary = managerState.pendingSummary;
   const pendingCount = pendingSummary.total;
+  const usingCloudData = managerState.mode === 'CLOUD_ACTIVE';
 
   const evaluateSession = useCallback(async () => {
     if (!authReady || !isAuthenticated) return;
     await syncManager.evaluateOnSessionStart();
   }, [authReady, isAuthenticated]);
+
+  const confirmSync = useCallback(async () => {
+    await syncManager.confirmUploadToCloud();
+  }, []);
+
+  const dismissSync = useCallback(() => {
+    syncManager.dismissSyncModal();
+  }, []);
+
+  const openSyncModal = useCallback(() => {
+    syncManager.openSyncModal();
+  }, []);
 
   useEffect(() => {
     return subscribeSyncManager(setManagerState);
@@ -89,14 +106,41 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     () => ({
       online,
       connectivity,
+      usingCloudData,
       pendingCount,
       pendingSummary,
       syncing: managerState.uploading || connectivity === 'SYNCING',
+      syncModalVisible: managerState.syncModalVisible,
+      confirmSync,
+      dismissSync,
+      openSyncModal,
     }),
-    [online, connectivity, pendingCount, pendingSummary, managerState.uploading],
+    [
+      online,
+      connectivity,
+      usingCloudData,
+      pendingCount,
+      pendingSummary,
+      managerState.uploading,
+      managerState.syncModalVisible,
+      confirmSync,
+      dismissSync,
+      openSyncModal,
+    ],
   );
 
-  return <OfflineSyncContext.Provider value={value}>{children}</OfflineSyncContext.Provider>;
+  return (
+    <OfflineSyncContext.Provider value={value}>
+      {children}
+      <ConfirmacaoSincronizarNuvemModal
+        visible={managerState.syncModalVisible}
+        summary={pendingCount > 0 ? pendingSummary : null}
+        loading={managerState.uploading}
+        onClose={dismissSync}
+        onConfirm={() => void confirmSync()}
+      />
+    </OfflineSyncContext.Provider>
+  );
 }
 
 export function useOfflineSyncState(): OfflineSyncContextType {

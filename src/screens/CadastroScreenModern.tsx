@@ -102,14 +102,12 @@ export default function CadastroScreenModern() {
   const [faltantes, setFaltantes] = useState<string[]>([]);
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [mostrarImportPdf, setMostrarImportPdf] = useState(false);
   const [mostrarTabela, setMostrarTabela] = useState(false);
   const podeImportarPdf = isBoss || !isAuthorizedMember;
 
   useFocusEffect(
     useCallback(() => {
       setMostrarFormulario(false);
-      setMostrarImportPdf(false);
       setMostrarTabela(false);
     }, []),
   );
@@ -575,41 +573,6 @@ export default function CadastroScreenModern() {
             </Card>
           ) : null}
 
-          {podeImportarPdf ? (
-            <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-              <TouchableOpacity
-                accessibilityLabel="Importar cadastros por PDF"
-                onPress={() => setMostrarImportPdf((v) => !v)}
-                style={[
-                  styles.toggleBtn,
-                  mostrarImportPdf
-                    ? { backgroundColor: selectedBgColor, borderColor: selectedBgColor }
-                    : { backgroundColor: unselectedBgColor, borderColor: theme.borderSubtle },
-                ]}
-              >
-                <Text
-                  style={[
-                    ts.caption,
-                    mostrarImportPdf
-                      ? { color: selectedTextColor }
-                      : { color: unselectedTextColor },
-                    styles.toggleBtnText,
-                  ]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  Importar cadastros (PDF)
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {mostrarImportPdf && podeImportarPdf ? (
-            <Card elevated style={styles.formCard}>
-              <CarregarPlanilhaCadastro onImportComplete={recarregarCadastros} />
-            </Card>
-          ) : null}
-
           <View style={[styles.tableToggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <TouchableOpacity
               accessibilityLabel="Mostrar tabela"
@@ -638,6 +601,14 @@ export default function CadastroScreenModern() {
           </View>
 
           {mostrarTabela ? <View style={{ height: 16 }} /> : null}
+
+          {mostrarTabela && podeImportarPdf ? (
+            <Card elevated style={styles.formCard}>
+              <CarregarPlanilhaCadastro onImportComplete={recarregarCadastros} />
+            </Card>
+          ) : null}
+
+          {mostrarTabela && podeImportarPdf ? <View style={{ height: 16 }} /> : null}
 
           {mostrarTabela ? (
             <CadastroPlanilhaBlock

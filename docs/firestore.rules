@@ -8,12 +8,23 @@ service cloud.firestore {
         : '';
     }
 
-    function isActiveMemberOf(bossUid) {
+    function isActiveMemberByEmail(bossUid) {
       let emailKey = normalizedEmail();
       return emailKey != ''
         && exists(/databases/$(database)/documents/member_lookup/$(emailKey))
         && get(/databases/$(database)/documents/member_lookup/$(emailKey)).data.bossUid == bossUid
         && get(/databases/$(database)/documents/member_lookup/$(emailKey)).data.ativo == true;
+    }
+
+    function isActiveMemberByUid(bossUid) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/member_uid_lookup/$(request.auth.uid))
+        && get(/databases/$(database)/documents/member_uid_lookup/$(request.auth.uid)).data.bossUid == bossUid
+        && get(/databases/$(database)/documents/member_uid_lookup/$(request.auth.uid)).data.ativo != false;
+    }
+
+    function isActiveMemberOf(bossUid) {
+      return isActiveMemberByEmail(bossUid) || isActiveMemberByUid(bossUid);
     }
 
     function isBoss(userId) {
@@ -31,8 +42,30 @@ service cloud.firestore {
         normalizedEmail() == emailKey
         || resource.data.bossUid == request.auth.uid
       );
-      allow create, update: if request.auth != null
+      allow create: if request.auth != null
         && request.resource.data.bossUid == request.auth.uid;
+      allow update: if request.auth != null && (
+        request.resource.data.bossUid == request.auth.uid
+        || (
+          normalizedEmail() == emailKey
+          && resource.data.ativo == true
+          && request.resource.data.bossUid == resource.data.bossUid
+          && request.resource.data.ativo == resource.data.ativo
+        )
+      );
+      allow delete: if request.auth != null && resource.data.bossUid == request.auth.uid;
+    }
+
+    match /member_uid_lookup/{memberUid} {
+      allow read: if request.auth != null && (
+        request.auth.uid == memberUid
+        || resource.data.bossUid == request.auth.uid
+      );
+      allow create, update: if request.auth != null
+        && request.auth.uid == memberUid
+        && request.resource.data.bossUid is string
+        && request.resource.data.ativo == true
+        && isActiveMemberByEmail(request.resource.data.bossUid);
       allow delete: if request.auth != null && resource.data.bossUid == request.auth.uid;
     }
 

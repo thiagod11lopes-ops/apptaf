@@ -161,16 +161,20 @@ function stripAplicadorRecord(row: AplicadorRecord): AplicadorItemPersist {
   return item;
 }
 
-/** Move cadastros/sessões/aplicadores criados sem login (Dexie `__local__`) para a conta logada. */
-export async function migrateAnonymousDexieToOwner(
+/** Move registros Dexie de um ownerUid para a conta do chefe (ex.: membro com dados no UID próprio). */
+export async function migrateDexieOwnerToOwner(
+  fromOwnerUid: string,
   targetOwnerUid: string,
 ): Promise<{ cadastros: number; sessoes: number; aplicadores: number }> {
+  if (!fromOwnerUid.trim() || fromOwnerUid === targetOwnerUid) {
+    return { cadastros: 0, sessoes: 0, aplicadores: 0 };
+  }
   if (!getTafDatabase()) return { cadastros: 0, sessoes: 0, aplicadores: 0 };
 
   const userId = getCachedLoginUid();
-  const cadRows = (await listCadastros(ANONYMOUS_OWNER)).filter((r) => !r.deleted);
-  const sessRows = (await listSessoes(ANONYMOUS_OWNER)).filter((r) => !r.deleted);
-  const appRows = (await listAplicadores(ANONYMOUS_OWNER)).filter((r) => !r.deleted);
+  const cadRows = (await listCadastros(fromOwnerUid)).filter((r) => !r.deleted);
+  const sessRows = (await listSessoes(fromOwnerUid)).filter((r) => !r.deleted);
+  const appRows = (await listAplicadores(fromOwnerUid)).filter((r) => !r.deleted);
 
   for (const row of cadRows) {
     await saveCadastro(stripCadastroRecord(row), targetOwnerUid, userId);
@@ -185,12 +189,19 @@ export async function migrateAnonymousDexieToOwner(
   if (cadRows.length > 0 || sessRows.length > 0 || appRows.length > 0) {
     await syncLogger.info(
       'sync',
-      `Anônimo → nuvem: ${cadRows.length} cad, ${sessRows.length} sess, ${appRows.length} app`,
+      `Owner ${fromOwnerUid} → ${targetOwnerUid}: ${cadRows.length} cad, ${sessRows.length} sess, ${appRows.length} app`,
     );
-    await wipeOwnerData(ANONYMOUS_OWNER);
+    await wipeOwnerData(fromOwnerUid);
   }
 
   return { cadastros: cadRows.length, sessoes: sessRows.length, aplicadores: appRows.length };
+}
+
+/** Move cadastros/sessões/aplicadores criados sem login (Dexie `__local__`) para a conta logada. */
+export async function migrateAnonymousDexieToOwner(
+  targetOwnerUid: string,
+): Promise<{ cadastros: number; sessoes: number; aplicadores: number }> {
+  return migrateDexieOwnerToOwner(ANONYMOUS_OWNER, targetOwnerUid);
 }
 
 /** Envia dados do IndexedDB legado (pré-Dexie) para a conta logada. */
@@ -235,8 +246,12 @@ export async function migrateLegacyLocalToOwner(
   return { cadastros: cadastros.length, sessoes: sessoes.length, aplicadores: aplicadores.length };
 }
 
-/** Após login: unifica dados locais (anônimo + legado) na conta do chefe/autorizado. */
+/** Após login: unifica dados locais (anônimo + legado + UID do membro) na conta do chefe/autorizado. */
 export async function migrateDeviceDataOnLogin(targetOwnerUid: string): Promise<void> {
   await migrateAnonymousDexieToOwner(targetOwnerUid);
   await migrateLegacyLocalToOwner(targetOwnerUid);
+  const loginUid = getCachedLoginUid();
+  if (loginUid && loginUid !== targetOwnerUid) {
+    await migrateDexieOwnerToOwner(loginUid, targetOwnerUid);
+  }
 }

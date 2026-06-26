@@ -48,7 +48,7 @@ import {
   withCloudUpload,
 } from '../../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from './cloudDisplayGate';
-import { migrateAnonymousDexieToOwner } from '../db/migration';
+import { migrateAnonymousDexieToOwner, migrateDexieOwnerToOwner } from '../db/migration';
 
 type StoreListener = () => void;
 
@@ -96,11 +96,19 @@ function resolveFirestoreWriteUid(entryOwnerUid: string): string {
   throw new Error('Sessão não autenticada para envio à nuvem.');
 }
 
-/** Unifica pendências locais (__local__ / fila órfã) na conta logada antes do upload. */
+/** Unifica pendências locais (__local__ / UID do membro / fila órfã) na conta do chefe antes do upload. */
 async function reconcileSessionPendingOwner(targetOwnerUid: string): Promise<void> {
   if (!targetOwnerUid.trim()) return;
+  const loginUid = getCachedLoginUid();
   await migrateAnonymousDexieToOwner(targetOwnerUid);
-  await syncQueue.reassignPendingOwner([ANONYMOUS_OWNER], targetOwnerUid);
+  if (loginUid && loginUid !== targetOwnerUid) {
+    await migrateDexieOwnerToOwner(loginUid, targetOwnerUid);
+  }
+  const fromOwners = [ANONYMOUS_OWNER];
+  if (loginUid && loginUid !== targetOwnerUid) {
+    fromOwners.push(loginUid);
+  }
+  await syncQueue.reassignPendingOwner(fromOwners, targetOwnerUid);
 }
 
 /** Envia aplicadores locais que ainda não existem na nuvem (ex.: cadastrados antes da sync). */

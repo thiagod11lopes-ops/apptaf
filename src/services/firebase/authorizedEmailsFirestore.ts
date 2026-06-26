@@ -26,36 +26,47 @@ export type MemberAccess = {
 };
 
 const MEMBER_LOOKUP_COLLECTION = 'member_lookup';
+const MEMBER_UID_LOOKUP_COLLECTION = 'member_uid_lookup';
 
 export async function resolveMemberAccess(
   loginUid: string,
   email: string | null | undefined,
 ): Promise<MemberAccess> {
-  if (!email?.trim()) {
-    return { dataOwnerUid: loginUid, isAuthorizedMember: false };
-  }
-
   const db = getFirestoreDb();
   if (!db) {
     return { dataOwnerUid: loginUid, isAuthorizedMember: false };
   }
 
-  const emailKey = normalizeAuthEmail(email);
-  const snap = await getDoc(doc(db, MEMBER_LOOKUP_COLLECTION, emailKey));
+  if (email?.trim()) {
+    const emailKey = normalizeAuthEmail(email);
+    const snap = await getDoc(doc(db, MEMBER_LOOKUP_COLLECTION, emailKey));
 
-  if (!snap.exists()) {
-    return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+    if (snap.exists()) {
+      const data = snap.data() as { bossUid?: string; ativo?: boolean };
+      if (data.ativo === true && data.bossUid && data.bossUid !== loginUid) {
+        return { dataOwnerUid: data.bossUid, isAuthorizedMember: true };
+      }
+    }
   }
 
-  const data = snap.data() as { bossUid?: string; ativo?: boolean };
-  if (data.ativo !== true || !data.bossUid || data.bossUid === loginUid) {
-    return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+  if (db && loginUid.trim()) {
+    try {
+      const uidSnap = await getDoc(doc(db, MEMBER_UID_LOOKUP_COLLECTION, loginUid));
+      if (uidSnap.exists()) {
+        const data = uidSnap.data() as { bossUid?: string; ativo?: boolean };
+        if (data.ativo !== false && data.bossUid && data.bossUid !== loginUid) {
+          return { dataOwnerUid: data.bossUid, isAuthorizedMember: true };
+        }
+      }
+    } catch {
+      // Offline ou regras indisponíveis — segue como chefe próprio.
+    }
   }
 
-  return { dataOwnerUid: data.bossUid, isAuthorizedMember: true };
+  return { dataOwnerUid: loginUid, isAuthorizedMember: false };
 }
 
-/** Registra o UID Firebase do membro autorizado (para limpeza total na nuvem). */
+/** Registra o UID Firebase do membro autorizado (acesso à nuvem do chefe). */
 export async function registerAuthorizedMemberLogin(
   bossUid: string,
   email: string,
@@ -69,6 +80,17 @@ export async function registerAuthorizedMemberLogin(
     doc(db, MEMBER_LOOKUP_COLLECTION, emailKey),
     {
       memberUid,
+      lastLoginAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  await setDoc(
+    doc(db, MEMBER_UID_LOOKUP_COLLECTION, memberUid),
+    {
+      bossUid,
+      ativo: true,
+      email: emailKey,
       lastLoginAt: serverTimestamp(),
     },
     { merge: true },
@@ -138,8 +160,16 @@ export async function removeAuthorizedEmail(bossUid: string, rawEmail: string): 
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
 
+  const lookupSnap = await getDoc(doc(db, MEMBER_LOOKUP_COLLECTION, email));
+  const memberUid = lookupSnap.exists()
+    ? (lookupSnap.data() as { memberUid?: string }).memberUid?.trim()
+    : undefined;
+
   const batch = writeBatch(db);
   batch.delete(doc(db, userAuthorizedEmailsPath(bossUid), email));
   batch.delete(doc(db, MEMBER_LOOKUP_COLLECTION, email));
+  if (memberUid) {
+    batch.delete(doc(db, MEMBER_UID_LOOKUP_COLLECTION, memberUid));
+  }
   await batch.commit();
 }

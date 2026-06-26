@@ -4,6 +4,13 @@ export { getTafDatabase } from './db/tafDatabase';
 export { dataStore } from './store/DataStore';
 export { DataStoreProvider, useDataStoreState } from './store/DataStoreContext';
 export { syncEngine, subscribeDataChanged, notifyDataChanged } from './sync/SyncEngine';
+export {
+  syncManager,
+  subscribeSyncManager,
+  getSyncManagerState,
+  isCloudReadActive,
+} from './sync/SyncManager';
+export type { SyncManagerMode, SyncManagerState } from './sync/SyncManager';
 export { syncQueue } from './sync/SyncQueue';
 export { syncLogger } from './sync/SyncLogger';
 export { systemState, SYSTEM_STATE } from './sync/SystemState';

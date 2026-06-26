@@ -21,7 +21,7 @@ import {
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { notifyDataChanged, subscribeDataChanged } from '../sync/SyncEngine';
 import { syncQueue } from '../sync/SyncQueue';
-import { isAwaitingCloudConfirmation } from '../sync/cloudDisplayGate';
+import { isCloudReadActive } from '../sync/SyncManager';
 
 export class DataStore {
   async getCadastros(ownerUid: string | null): Promise<CadastroItemPersist[]> {
@@ -85,7 +85,7 @@ export class DataStore {
   async getSessaoById(id: string, ownerUid: string | null): Promise<SessaoAplicacaoTaf | null> {
     const row = await getSessaoById(resolveOwnerUid(ownerUid), id);
     if (!row || row.deleted) return null;
-    if (getCachedLoginUid() && isAwaitingCloudConfirmation() && row.syncStatus !== 'synced') {
+    if (isCloudReadActive() && row.syncStatus !== 'synced') {
       return null;
     }
     return stripMeta(row);
@@ -94,7 +94,7 @@ export class DataStore {
   async getCadastroById(id: string, ownerUid: string | null): Promise<CadastroItemPersist | null> {
     const row = await getCadastroById(resolveOwnerUid(ownerUid), id);
     if (!row || row.deleted) return null;
-    if (getCachedLoginUid() && isAwaitingCloudConfirmation() && row.syncStatus !== 'synced') {
+    if (isCloudReadActive() && row.syncStatus !== 'synced') {
       return null;
     }
     return stripMeta(row);
@@ -111,7 +111,7 @@ export class DataStore {
 
 function filterRowsForDisplay<T extends { syncStatus?: string; deleted?: boolean }>(rows: T[]): T[] {
   const visible = rows.filter((row) => row.deleted !== true);
-  if (getCachedLoginUid() && isAwaitingCloudConfirmation()) {
+  if (isCloudReadActive()) {
     return visible.filter((row) => row.syncStatus === 'synced');
   }
   return visible;

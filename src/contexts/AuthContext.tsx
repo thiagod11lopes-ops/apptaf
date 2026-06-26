@@ -23,10 +23,9 @@ import { setAuthUidState } from '../services/firebase/authUid';
 import { clearMemoryCloudCache } from '../services/cloudDataCache';
 import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../offline-first/db/migration';
 import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
-import { connectivityMonitor } from '../offline-first/sync/ConnectivityMonitor';
 import { applyTeamWipeIfNeeded } from '../services/applyTeamWipeIfNeeded';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
-import { beginAwaitingCloudConfirmation, confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
+import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
 import { stopRealtimeSync } from '../offline-first/sync/RealtimeBridge';
 import { systemState } from '../offline-first/sync/SystemState';
 
@@ -79,7 +78,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const mapped = mapFirebaseUser(fbUser);
           const access = await resolveMemberAccess(mapped.uid, mapped.email);
           resetCloudSyncStatus();
-          beginAwaitingCloudConfirmation();
           if (access.isAuthorizedMember && mapped.email) {
             await registerAuthorizedMemberLogin(access.dataOwnerUid, mapped.email, mapped.uid);
           }
@@ -88,12 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await migrateDeviceDataOnLogin(access.dataOwnerUid);
             await migrateLegacyToDexie(access.dataOwnerUid);
             await systemState.hydrate();
-            if (connectivityMonitor.canSync()) {
-              await systemState.setOnlineActive();
-            }
             await syncEngine.init(access.dataOwnerUid);
           } catch {
-            // Login continua; OfflineSyncContext reconecta após authReady.
             confirmCloudDisplayReady();
           }
           setUser(mapped);

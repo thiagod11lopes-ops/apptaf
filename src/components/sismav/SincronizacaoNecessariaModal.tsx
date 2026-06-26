@@ -11,21 +11,16 @@ type Props = {
   visible: boolean;
   summary: PendingSyncSummary | null;
   loading?: boolean;
-  /** Somente o chefe pode continuar online sem enviar pendentes. */
-  allowSkipUploadOnline?: boolean;
   onUpload: () => void;
-  onContinueOnline?: () => void;
-  onWorkOffline?: () => void;
+  onContinueOffline: () => void;
 };
 
 export function SincronizacaoNecessariaModal({
   visible,
   summary,
   loading = false,
-  allowSkipUploadOnline = false,
   onUpload,
-  onContinueOnline,
-  onWorkOffline,
+  onContinueOffline,
 }: Props) {
   const { theme } = useTheme();
   const t = theme.tokens;
@@ -49,34 +44,19 @@ export function SincronizacaoNecessariaModal({
           ) : (
             <>
               <CloudUpload size={16} color="#FFFFFF" strokeWidth={2.4} />
-              <Text style={styles.btnPrimaryText}>Enviar para nuvem</Text>
+              <Text style={styles.btnPrimaryText}>Enviar para a nuvem</Text>
             </>
           )}
         </LinearGradient>
       </PressableScale>
-      {allowSkipUploadOnline && onContinueOnline ? (
-        <PressableScale
-          onPress={onContinueOnline}
-          disabled={loading}
-          style={[styles.btnGhost, { borderColor: theme.border, opacity: loading ? 0.5 : 1 }]}
-        >
-          <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>
-            Continuar online sem enviar
-          </Text>
-        </PressableScale>
-      ) : null}
-      {allowSkipUploadOnline && onWorkOffline ? (
-        <PressableScale
-          onPress={onWorkOffline}
-          disabled={loading}
-          style={[styles.btnGhost, { borderColor: theme.border, opacity: loading ? 0.5 : 1 }]}
-        >
-          <WifiOff size={16} color={theme.textSecondary} strokeWidth={2.2} />
-          <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>
-            Cancelar e trabalhar offline
-          </Text>
-        </PressableScale>
-      ) : null}
+      <PressableScale
+        onPress={onContinueOffline}
+        disabled={loading}
+        style={[styles.btnGhost, { borderColor: theme.border, opacity: loading ? 0.5 : 1 }]}
+      >
+        <WifiOff size={16} color={theme.textSecondary} strokeWidth={2.2} />
+        <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>Continuar offline</Text>
+      </PressableScale>
     </View>
   );
 
@@ -85,13 +65,14 @@ export function SincronizacaoNecessariaModal({
       visible={visible}
       onClose={() => undefined}
       dismissable={false}
-      title="Sincronização necessária"
+      title="Alterações locais encontradas"
       icon={<CloudUpload size={20} color="#FFFFFF" strokeWidth={2.2} />}
       footer={footer}
     >
       <View style={styles.body}>
         <Text style={[styles.message, { color: theme.text }]}>
-          Existem dados locais que precisam ser enviados para a nuvem antes de continuar.
+          Foram encontradas alterações realizadas enquanto o sistema estava offline. Deseja enviá-las
+          para a nuvem antes de continuar utilizando o sistema online?
         </Text>
         {summary && summary.total > 0 ? (
           <View style={[styles.statsCard, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
@@ -117,9 +98,8 @@ export function SincronizacaoNecessariaModal({
           </View>
         ) : null}
         <Text style={[styles.hint, { color: theme.textMuted }]}>
-          {allowSkipUploadOnline
-            ? 'Como chefe, você pode enviar agora ou continuar online e sincronizar depois. E-mails autorizados precisam enviar antes de continuar.'
-            : 'Envie os dados locais para a nuvem antes de continuar. Apenas o e-mail chefe pode pular este envio e permanecer online.'}
+          Enquanto existirem alterações pendentes, este aviso será exibido ao iniciar, fazer login ou
+          reconectar à internet. Nenhum dado será enviado sem sua confirmação.
         </Text>
       </View>
     </ModernModal>

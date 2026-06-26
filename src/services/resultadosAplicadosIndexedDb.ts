@@ -148,16 +148,7 @@ export async function addSessaoAplicacao(
 export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicacaoTaf | null> {
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
-    const local = await dataStore.getSessaoById(id, uid);
-    if (local) return local;
-    if (uid && canAttemptCloudSync() && systemState.canUseFirebase()) {
-      try {
-        return await getSessaoByIdFirestore(uid, id);
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    return dataStore.getSessaoById(id, uid);
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {

@@ -215,21 +215,7 @@ export class SyncEngine {
     connectivityUnsub?.();
     connectivityUnsub = null;
 
-    if (!connectivityMonitor.canSync()) {
-      notify();
-      return;
-    }
-
-    if (systemState.isForcedOffline()) {
-      await systemState.setOnlineActive();
-    }
-
-    const pending = await getPendingSyncItems(dataOwnerUid);
-    if (pending.total > 0) {
-      await this.uploadPendingOnly();
-    }
-
-    await this.connectOnlineFromCloud();
+    notify();
   }
 
   /** Envia pendentes, baixa snapshot da nuvem e liga tempo real. */
@@ -545,7 +531,9 @@ export const syncEngine = new SyncEngine();
 /** Compatibilidade: notifica ouvintes legados após mutação local. */
 export function notifyDataChanged(): void {
   notify();
-  syncEngine.scheduleRealtimeFlush();
+  void import('./SyncManager').then(({ syncManager }) => {
+    syncManager.scheduleOnlineWriteFlush();
+  });
 }
 
 export function subscribeDataChanged(listener: StoreListener): () => void {

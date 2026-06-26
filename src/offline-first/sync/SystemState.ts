@@ -33,7 +33,7 @@ export const systemState = {
     return cachedMode === SYSTEM_STATE.FORCED_OFFLINE;
   },
 
-  /** Firebase só é fonte de verdade quando ONLINE_ACTIVE (offline controlado é só sem login). */
+  /** Firebase é fonte de leitura quando ONLINE_ACTIVE (inclusive logado). */
   canUseFirebase(): boolean {
     return cachedMode === SYSTEM_STATE.ONLINE_ACTIVE;
   },

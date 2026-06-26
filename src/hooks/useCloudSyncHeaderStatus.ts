@@ -12,8 +12,7 @@ import type { CloudUserLoadProps } from '../components/sismav/AppHeader';
 export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const { isAuthenticated } = useAuth();
   const accountLabel = useAccountCloudLabel();
-  const { syncing: syncingContext, pendingCount, online, isForcedOffline, syncGateActive } =
-    useOfflineSyncState();
+  const { syncing: syncingContext, pendingCount, online, isForcedOffline } = useOfflineSyncState();
   const [activity, setActivity] = useState(getCloudActivityState);
   const [awaitingCloud, setAwaitingCloud] = useState(isAwaitingCloudConfirmation);
 
@@ -35,8 +34,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     isOnlineAccount &&
     effectiveOnline &&
     pendingCount > 0 &&
-    !syncingCloud &&
-    !syncGateActive;
+    !syncingCloud;
 
   const uploadingCloud =
     isOnlineAccount && effectiveOnline && (activity.uploading || pendingUploading) && !syncingCloud;
@@ -70,9 +68,6 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
 
   const statusHint = useMemo(() => {
     if (!isAuthenticated || accountLabel === 'Offline') return null;
-    if (syncGateActive && pendingCount > 0) {
-      return 'Alterações locais aguardando sua confirmação para envio';
-    }
     if (isForcedOffline && pendingCount > 0) {
       return 'Modo offline · alterações locais preservadas';
     }
@@ -94,7 +89,6 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   }, [
     isAuthenticated,
     accountLabel,
-    syncGateActive,
     isForcedOffline,
     effectiveOnline,
     syncingCloud,

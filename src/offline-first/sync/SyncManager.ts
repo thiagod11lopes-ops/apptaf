@@ -2,19 +2,17 @@ import { getCachedDataOwnerUid, getCachedLoginUid } from '../../services/firebas
 import { connectivityMonitor } from './ConnectivityMonitor';
 import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
 import { syncEngine } from './SyncEngine';
-import { systemState, SYSTEM_STATE } from './SystemState';
+import { systemState } from './SystemState';
 import { beginAwaitingCloudConfirmation, confirmCloudDisplayReady } from './cloudDisplayGate';
 import { syncLogger } from './SyncLogger';
 
-/** CLOUD_ACTIVE = Firebase é fonte de leitura; LOCAL_ONLY = só IndexedDB; GATED = pendências aguardando decisão. */
-export type SyncManagerMode = 'CLOUD_ACTIVE' | 'LOCAL_ONLY' | 'GATED';
+/** CLOUD_ACTIVE = Firebase é fonte de leitura; LOCAL_ONLY = só IndexedDB. */
+export type SyncManagerMode = 'CLOUD_ACTIVE' | 'LOCAL_ONLY';
 
 export type SyncManagerState = {
   mode: SyncManagerMode;
   pendingSummary: PendingSyncSummary;
-  showPendingModal: boolean;
   uploading: boolean;
-  lastError: string | null;
 };
 
 const EMPTY_SUMMARY: PendingSyncSummary = {
@@ -30,15 +28,13 @@ type Listener = (state: SyncManagerState) => void;
 let ownerUid: string | null = null;
 let mode: SyncManagerMode = 'LOCAL_ONLY';
 let pendingSummary: PendingSyncSummary = EMPTY_SUMMARY;
-let showPendingModal = false;
 let uploading = false;
-let lastError: string | null = null;
 let sessionEvalInFlight = false;
 let uploadInFlight = false;
 const listeners = new Set<Listener>();
 
 function snapshot(): SyncManagerState {
-  return { mode, pendingSummary, showPendingModal, uploading, lastError };
+  return { mode, pendingSummary, uploading };
 }
 
 function notifyListeners(): void {
@@ -82,8 +78,6 @@ export function subscribeSyncManager(listener: Listener): () => void {
 async function enterCloudActive(): Promise<void> {
   if (!ownerUid) return;
   mode = 'CLOUD_ACTIVE';
-  showPendingModal = false;
-  lastError = null;
   notifyListeners();
 
   beginAwaitingCloudConfirmation();
@@ -96,20 +90,51 @@ async function enterCloudActive(): Promise<void> {
   }
 }
 
-async function enterLocalOnly(forcedOffline: boolean): Promise<void> {
-  mode = 'LOCAL_ONLY';
-  showPendingModal = false;
-  if (forcedOffline) {
-    await systemState.setForcedOffline();
-    syncEngine.deactivateOnlineMode();
-  }
+async function syncPendingAndEnterCloud(): Promise<void> {
+  if (!ownerUid || uploadInFlight) return;
+
+  uploadInFlight = true;
+  uploading = true;
   notifyListeners();
+
+  try {
+    await systemState.setOnlineActive();
+    syncEngine.bindOwner(ownerUid);
+
+    const result = await syncEngine.uploadPendingOnly();
+    await refreshPendingSummary();
+
+    if (!result.success) {
+      await syncLogger.warn('sync-manager', result.error ?? 'upload_failed');
+      mode = 'LOCAL_ONLY';
+      notifyListeners();
+      return;
+    }
+
+    if (pendingSummary.total > 0) {
+      mode = 'LOCAL_ONLY';
+      notifyListeners();
+      return;
+    }
+
+    await enterCloudActive();
+  } catch (error) {
+    await syncLogger.error(
+      'sync-manager',
+      error instanceof Error ? error.message : String(error),
+    );
+    mode = 'LOCAL_ONLY';
+    notifyListeners();
+  } finally {
+    uploading = false;
+    uploadInFlight = false;
+    notifyListeners();
+  }
 }
 
 async function evaluateSession(trigger: string): Promise<void> {
   if (!ownerUid || !isLoggedIn()) {
     mode = 'LOCAL_ONLY';
-    showPendingModal = false;
     pendingSummary = EMPTY_SUMMARY;
     notifyListeners();
     return;
@@ -128,22 +153,19 @@ async function evaluateSession(trigger: string): Promise<void> {
 
     if (systemState.isForcedOffline()) {
       mode = 'LOCAL_ONLY';
-      showPendingModal = trigger !== 'session-start' && trigger !== 'reconnect' ? false : (hasPending && online);
-      notifyListeners();
-      return;
-    }
-
-    if (hasPending && online) {
-      mode = 'GATED';
-      showPendingModal = true;
       syncEngine.deactivateOnlineMode();
       notifyListeners();
       return;
     }
 
+    if (hasPending && online) {
+      await syncPendingAndEnterCloud();
+      return;
+    }
+
     if (hasPending && !online) {
       mode = 'LOCAL_ONLY';
-      showPendingModal = false;
+      syncEngine.deactivateOnlineMode();
       notifyListeners();
       return;
     }
@@ -154,7 +176,7 @@ async function evaluateSession(trigger: string): Promise<void> {
     }
 
     mode = 'LOCAL_ONLY';
-    showPendingModal = false;
+    syncEngine.deactivateOnlineMode();
     notifyListeners();
   } finally {
     sessionEvalInFlight = false;
@@ -162,7 +184,6 @@ async function evaluateSession(trigger: string): Promise<void> {
 }
 
 export const syncManager = {
-  /** Vincula owner e prepara motor (sem sync automático). */
   async bindSession(dataOwnerUid: string): Promise<void> {
     ownerUid = dataOwnerUid;
     syncEngine.bindOwner(dataOwnerUid);
@@ -171,7 +192,6 @@ export const syncManager = {
     syncEngine.deactivateOnlineMode();
   },
 
-  /** Chamado após login, reload, reconexão ou F5. */
   async evaluateOnSessionStart(): Promise<void> {
     ownerUid = getCachedDataOwnerUid();
     if (!ownerUid) return;
@@ -179,13 +199,11 @@ export const syncManager = {
     await evaluateSession('session-start');
   },
 
-  /** Chamado quando a internet volta. */
   async evaluateOnReconnect(): Promise<void> {
     await refreshPendingSummary();
     await evaluateSession('reconnect');
   },
 
-  /** Chamado quando conectividade cai. */
   onDisconnect(): void {
     syncEngine.deactivateOnlineMode();
     if (pendingSummary.total > 0) {
@@ -193,69 +211,9 @@ export const syncManager = {
     } else if (mode === 'CLOUD_ACTIVE') {
       mode = 'LOCAL_ONLY';
     }
-    showPendingModal = false;
     notifyListeners();
   },
 
-  /** Usuário confirmou "Enviar para a nuvem". */
-  async confirmUploadPending(): Promise<{ success: boolean; error?: string }> {
-    if (!ownerUid || uploadInFlight) {
-      return { success: false, error: 'busy' };
-    }
-
-    uploadInFlight = true;
-    uploading = true;
-    lastError = null;
-    notifyListeners();
-
-    try {
-      await systemState.setOnlineActive();
-      syncEngine.bindOwner(ownerUid);
-
-      const result = await syncEngine.uploadPendingOnly();
-      if (!result.success) {
-        lastError = result.error ?? 'upload_failed';
-        await refreshPendingSummary();
-        showPendingModal = pendingSummary.total > 0;
-        notifyListeners();
-        return result;
-      }
-
-      await refreshPendingSummary();
-      if (pendingSummary.total > 0) {
-        lastError = 'pending_remain';
-        showPendingModal = true;
-        notifyListeners();
-        return { success: false, error: 'pending_remain' };
-      }
-
-      await enterCloudActive();
-      return { success: true };
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-      await syncLogger.error('sync-manager', lastError);
-      showPendingModal = true;
-      notifyListeners();
-      return { success: false, error: lastError };
-    } finally {
-      uploading = false;
-      uploadInFlight = false;
-      notifyListeners();
-    }
-  },
-
-  /** Usuário escolheu "Continuar offline" — mantém pendências, não envia. */
-  async chooseContinueOffline(): Promise<void> {
-    await enterLocalOnly(true);
-    await refreshPendingSummary();
-    showPendingModal = false;
-    notifyListeners();
-  },
-
-  /**
-   * Após mutação local: envia imediatamente somente se já estiver em CLOUD_ACTIVE
-   * (sem pendências bloqueando o gate).
-   */
   scheduleOnlineWriteFlush(): void {
     if (mode !== 'CLOUD_ACTIVE' || !canReachFirebase() || !ownerUid) return;
     syncEngine.scheduleRealtimeFlush();
@@ -264,9 +222,7 @@ export const syncManager = {
   async refreshPending(): Promise<PendingSyncSummary> {
     const summary = await refreshPendingSummary();
     if (summary.total > 0 && canReachFirebase() && !systemState.isForcedOffline()) {
-      mode = 'GATED';
-      showPendingModal = true;
-      syncEngine.deactivateOnlineMode();
+      void syncPendingAndEnterCloud();
     }
     notifyListeners();
     return summary;
@@ -277,9 +233,7 @@ export const syncManager = {
     ownerUid = null;
     mode = 'LOCAL_ONLY';
     pendingSummary = EMPTY_SUMMARY;
-    showPendingModal = false;
     uploading = false;
-    lastError = null;
     notifyListeners();
   },
 

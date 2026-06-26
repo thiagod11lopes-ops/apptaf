@@ -30,8 +30,11 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
 
   const applyingRemote = isOnlineAccount && effectiveOnline && activity.realtimeApplying;
 
+  const pendingUploading =
+    isOnlineAccount && effectiveOnline && pendingCount > 0 && !syncingCloud;
+
   const uploadingCloud =
-    isOnlineAccount && effectiveOnline && activity.uploading && !syncingCloud;
+    isOnlineAccount && effectiveOnline && (activity.uploading || pendingUploading) && !syncingCloud;
 
   const realtimeActive = isOnlineAccount && effectiveOnline && activity.realtimeListening;
 
@@ -51,8 +54,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const statusSuffix = useMemo(() => {
     if (!isOnlineAccount) return null;
     if (syncingCloud) return 'sincronizando com a nuvem';
-    if (uploadingCloud) return 'enviando para a nuvem';
-    if (pendingCount > 0 && effectiveOnline) return `${pendingCount} na fila`;
+    if (uploadingCloud || (pendingCount > 0 && effectiveOnline)) return 'enviando para a nuvem';
     return null;
   }, [isOnlineAccount, effectiveOnline, pendingCount, syncingCloud, uploadingCloud]);
 
@@ -67,12 +69,14 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
     if (!effectiveOnline) return 'Sem conexão · dados da nuvem disponíveis localmente';
     if (syncingCloud || loadingInitial) return 'Baixando e reconciliando dados com a nuvem…';
     if (applyingRemote) return 'Atualizando dados recebidos da nuvem…';
-    if (uploadingCloud) return 'Dados sendo atualizados na nuvem em tempo real';
+    if (uploadingCloud || (pendingCount > 0 && effectiveOnline)) {
+      return 'Enviando alterações para a nuvem em tempo real…';
+    }
     if (awaitingCloud && pendingCount > 0) {
       return 'Enviando alterações locais para a nuvem…';
     }
     if (awaitingCloud) return 'Conectando com a nuvem…';
-    if (pendingCount > 0) return 'Alterações locais aguardando envio à nuvem';
+    if (pendingCount > 0) return 'Alterações locais aguardando conexão para envio';
     if (syncedWithCloud && realtimeActive) return 'Dados sincronizados em tempo real com a nuvem';
     if (syncedWithCloud) return 'Dados sincronizados de acordo com a nuvem';
     if (cloudConnected) return 'Conectado à nuvem em tempo real';
@@ -99,7 +103,9 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
       ? Math.max(activity.syncProgress, 12)
       : uploadingCloud
         ? 72
-        : 100;
+        : pendingUploading
+          ? 68
+          : 100;
 
   return {
     accountLabel,

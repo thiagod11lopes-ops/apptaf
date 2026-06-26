@@ -44,6 +44,7 @@ import {
   endCloudSync,
   setCloudSyncResult,
   setSyncProgress,
+  withCloudUpload,
 } from '../../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from './cloudDisplayGate';
 
@@ -61,8 +62,10 @@ let listeners = new Set<StoreListener>();
 let lastPullAt = 0;
 const MIN_PULL_MS = 45_000;
 const MIN_PROCESS_GAP_MS = 12_000;
+const REALTIME_FLUSH_MS = 60;
 const CLOUD_PULL_TIMEOUT_MS = 35_000;
 let lastProcessFinishedAt = 0;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -327,6 +330,8 @@ export class SyncEngine {
     onlineModeUid = null;
     if (processTimer) clearTimeout(processTimer);
     processTimer = null;
+    if (flushTimer) clearTimeout(flushTimer);
+    flushTimer = null;
   }
 
   subscribe(listener: StoreListener): () => void {
@@ -334,13 +339,44 @@ export class SyncEngine {
     return () => listeners.delete(listener);
   }
 
+  /** Enfileira upload imediato das alterações locais (conta logada + online). */
+  scheduleRealtimeFlush(): void {
+    if (!ownerUid || !getCachedLoginUid()) return;
+    if (!connectivityMonitor.canSync() || systemState.isForcedOffline()) return;
+
+    if (flushTimer) clearTimeout(flushTimer);
+    flushTimer = setTimeout(() => {
+      flushTimer = null;
+      void this.flushPendingOnChange();
+    }, REALTIME_FLUSH_MS);
+  }
+
+  /** Envia pendentes para a nuvem sem pull — uso após cada mutação local. */
+  async flushPendingOnChange(): Promise<void> {
+    if (!ownerUid || !getCachedLoginUid()) return;
+    if (!connectivityMonitor.canSync() || systemState.isForcedOffline()) return;
+
+    if (processing) {
+      this.scheduleRealtimeFlush();
+      return;
+    }
+
+    await enqueueDexiePendingIntoQueue(ownerUid);
+    const queuePending = await syncQueue.listPending(ownerUid);
+    if (queuePending.length === 0) return;
+
+    await this.processQueue({ uploadOnly: true, bypassGap: true, forceUpload: true });
+  }
+
   scheduleProcess(immediate = false): Promise<void> {
     if (!ownerUid || systemState.isForcedOffline()) return Promise.resolve();
     if (processTimer) clearTimeout(processTimer);
+    const delay =
+      immediate || this.isOnlineModeActive() || getCachedLoginUid() != null ? 50 : 800;
     return new Promise((resolve) => {
       processTimer = setTimeout(() => {
         void this.processQueue().finally(() => resolve());
-      }, immediate ? 50 : 800);
+      }, delay);
     });
   }
 
@@ -351,13 +387,12 @@ export class SyncEngine {
   }): Promise<boolean> {
     if (!ownerUid || processing || !connectivityMonitor.canSync()) return false;
     if (systemState.isForcedOffline() && !options?.forceUpload) return false;
-    if (!options?.bypassGap && Date.now() - lastProcessFinishedAt < MIN_PROCESS_GAP_MS) return false;
-
-    if (!options?.forceUpload && ownerUid) {
-      const blocked = await getPendingSyncItems(ownerUid);
-      if (blocked.total > 0) {
-        return false;
-      }
+    if (
+      !options?.bypassGap &&
+      !this.isOnlineModeActive() &&
+      Date.now() - lastProcessFinishedAt < MIN_PROCESS_GAP_MS
+    ) {
+      return false;
     }
 
     processing = true;
@@ -373,7 +408,7 @@ export class SyncEngine {
         const item = pending[i]!;
         await syncQueue.markProcessing(item.operationId);
         try {
-          await executeQueueItem(item);
+          await withCloudUpload(() => executeQueueItem(item));
           await syncQueue.markDone(item.operationId);
           setSyncProgress(25 + Math.round(((i + 1) / Math.max(pending.length, 1)) * 40));
         } catch (error) {
@@ -386,7 +421,11 @@ export class SyncEngine {
 
       setSyncProgress(70);
       if (!options?.uploadOnly && systemState.canUseFirebase()) {
-        await this.pullFromRemote(false);
+        const stillPending = await getPendingSyncItems(ownerUid);
+        const queueLeft = await syncQueue.listPending(ownerUid);
+        if (stillPending.total === 0 && queueLeft.length === 0) {
+          await this.pullFromRemote(false);
+        }
       }
       setSyncProgress(100);
       setCloudSyncResult(true);
@@ -506,6 +545,7 @@ export const syncEngine = new SyncEngine();
 /** Compatibilidade: notifica ouvintes legados após mutação local. */
 export function notifyDataChanged(): void {
   notify();
+  syncEngine.scheduleRealtimeFlush();
 }
 
 export function subscribeDataChanged(listener: StoreListener): () => void {

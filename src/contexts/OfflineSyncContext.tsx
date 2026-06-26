@@ -152,16 +152,17 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authReady || !isAuthenticated) return;
     void refreshPending();
-    return dataStore.subscribe(() => {
-      if (syncInFlight.current) return;
-      if (!connectivityMonitor.canSync()) return;
-      void refreshPending().then((summary) => {
-        if (summary.total > 0) {
-          void syncWhenOnline();
-        }
-      });
+    const unsubStore = dataStore.subscribe(() => {
+      void refreshPending();
     });
-  }, [authReady, isAuthenticated, refreshPending, syncWhenOnline]);
+    const unsubSync = syncEngine.subscribe(() => {
+      void refreshPending();
+    });
+    return () => {
+      unsubStore();
+      unsubSync();
+    };
+  }, [authReady, isAuthenticated, refreshPending]);
 
   const value = useMemo(
     () => ({

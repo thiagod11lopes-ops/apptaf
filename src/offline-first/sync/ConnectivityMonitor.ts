@@ -84,7 +84,7 @@ export class ConnectivityMonitor {
   }
 
   canSync(): boolean {
-    return state === 'ONLINE' || state === 'DEGRADED';
+    return state === 'ONLINE' || state === 'DEGRADED' || state === 'SYNCING';
   }
 
   setSyncing(active: boolean): void {
@@ -94,6 +94,13 @@ export class ConnectivityMonitor {
       notify();
       return;
     }
+    // Restaura imediatamente para não bloquear nova rodada de upload enquanto refresh() é assíncrono.
+    if (readNavigatorOnline()) {
+      state = 'DEGRADED';
+    } else {
+      state = 'OFFLINE';
+    }
+    notify();
     void this.refresh();
   }
 

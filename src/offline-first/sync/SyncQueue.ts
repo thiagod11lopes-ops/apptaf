@@ -114,6 +114,17 @@ export class SyncQueue {
       await db.syncQueue.bulkDelete(done.map((d) => d.operationId));
     }
   }
+
+  /** Última mensagem de erro da fila (para exibir no modal de sync). */
+  async getLatestError(ownerUid: string): Promise<string | null> {
+    const db = getTafDatabase();
+    if (!db) return null;
+    const rows = await db.syncQueue.where('ownerUid').equals(ownerUid).toArray();
+    const withError = rows
+      .filter((r) => r.error?.trim())
+      .sort((a, b) => b.timestamp - a.timestamp);
+    return withError[0]?.error ?? null;
+  }
 }
 
 export const syncQueue = new SyncQueue();

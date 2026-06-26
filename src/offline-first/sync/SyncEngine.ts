@@ -120,8 +120,13 @@ async function enqueueDexiePendingIntoQueue(ownerUid: string): Promise<void> {
   for (const item of summary.items) {
     const key = `${item.collection}:${item.id}`;
     if (queued.has(key)) continue;
+    const isDelete = item.record.deleted === true;
+    const isNew =
+      !isDelete &&
+      item.record.version === 1 &&
+      item.record.createdAt === item.record.updatedAt;
     await syncQueue.enqueue({
-      operationType: item.record.deleted ? 'DELETE' : 'UPDATE',
+      operationType: isDelete ? 'DELETE' : isNew ? 'CREATE' : 'UPDATE',
       collection: item.collection,
       documentId: item.id,
       payload: item.record,
@@ -169,14 +174,13 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       return;
     }
     
-    // Garantir que o payload tenha um ID válido
     const appPayload = payload as AplicadorItemPersist;
     if (!appPayload.id) {
       appPayload.id = entry.documentId || `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     }
-    
+
     await addAplicadorFirestore(uid, appPayload);
-    const savedApp = appPayload as AplicadorRecord;
+    const savedApp = payload as AplicadorRecord;
     await putAplicadorRecord({ ...savedApp, ownerUid: uid, syncStatus: 'synced' });
     return;
   }
@@ -293,15 +297,34 @@ export class SyncEngine {
    */
   async uploadPendingOnly(): Promise<{ success: boolean; error?: string }> {
     if (!ownerUid) return { success: false, error: 'no_owner' };
-    if (!connectivityMonitor.canSync()) return { success: false, error: 'offline' };
+
+    await connectivityMonitor.refresh();
+    const browserOnline =
+      typeof navigator === 'undefined' || navigator.onLine !== false;
+    if (!browserOnline && !connectivityMonitor.canSync()) {
+      return { success: false, error: 'offline' };
+    }
 
     lastProcessFinishedAt = 0;
     await syncQueue.resetFailedToPending(ownerUid);
 
     for (let round = 0; round < 4; round++) {
       await enqueueDexiePendingIntoQueue(ownerUid);
-      const uploaded = await this.processQueue({ uploadOnly: true, bypassGap: true, forceUpload: true });
-      if (!uploaded) return { success: false, error: 'upload_failed' };
+      const queuePending = await syncQueue.listPending(ownerUid);
+      if (queuePending.length === 0) {
+        const stillEmpty = await getPendingSyncItems(ownerUid);
+        if (stillEmpty.total === 0) {
+          await syncQueue.clearDone(ownerUid);
+          return { success: true };
+        }
+        continue;
+      }
+
+      const uploaded = await this.runForcedUpload();
+      if (!uploaded) {
+        const queueError = await syncQueue.getLatestError(ownerUid);
+        return { success: false, error: queueError ?? 'upload_failed' };
+      }
 
       const still = await getPendingSyncItems(ownerUid);
       if (still.total === 0) {
@@ -315,7 +338,15 @@ export class SyncEngine {
       await syncQueue.clearDone(ownerUid);
       return { success: true };
     }
-    return { success: false, error: 'pending_remain' };
+    const queueError = await syncQueue.getLatestError(ownerUid);
+    return { success: false, error: queueError ?? 'pending_remain' };
+  }
+
+  private async runForcedUpload(): Promise<boolean> {
+    const ok = await this.processQueue({ uploadOnly: true, bypassGap: true, forceUpload: true });
+    if (ok) return true;
+    await new Promise((r) => setTimeout(r, 250));
+    return this.processQueue({ uploadOnly: true, bypassGap: true, forceUpload: true });
   }
 
   shutdown(): void {
@@ -383,7 +414,14 @@ export class SyncEngine {
     bypassGap?: boolean;
     forceUpload?: boolean;
   }): Promise<boolean> {
-    if (!ownerUid || !connectivityMonitor.canSync()) return false;
+    if (!ownerUid) return false;
+    const browserOnline =
+      typeof navigator === 'undefined' || navigator.onLine !== false;
+    if (options?.forceUpload) {
+      if (!browserOnline) return false;
+    } else if (!connectivityMonitor.canSync()) {
+      return false;
+    }
     if (systemState.isForcedOffline() && !options?.forceUpload) return false;
     if (
       !options?.bypassGap &&

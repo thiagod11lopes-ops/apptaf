@@ -2,7 +2,7 @@ import { Platform, Alert } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
-import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import { postoGradExibicaoAssinatura, type AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
 
@@ -39,13 +39,14 @@ export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[
 }
 
 function blocoAplicadorAssinaturaHtml(assinatura?: AplicadorAssinaturaResumo): string {
-  if (!assinatura?.rubricaSvg) return '';
-  const rubrica = celulaRubricaHtml(assinatura.rubricaSvg);
+  if (!assinatura?.nome?.trim()) return '';
+  const postoGrad = escapeHtml(postoGradExibicaoAssinatura(assinatura));
   return `<div class="aplicador-assinatura">
-    <div class="aplicador-rubrica">${rubrica}</div>
     <hr class="aplicador-linha"/>
-    <p class="aplicador-categoria">${escapeHtml(assinatura.categoria)}</p>
-    <p class="aplicador-nome">${escapeHtml(assinatura.nome)}</p>
+    <p class="aplicador-identificacao">
+      <span class="aplicador-posto-grad">${postoGrad}</span>
+      <span class="aplicador-nome">${escapeHtml(assinatura.nome)}</span>
+    </p>
     <p class="aplicador-nip">NIP ${escapeHtml(assinatura.nip || '—')}</p>
   </div>`;
 }
@@ -106,15 +107,6 @@ export function buildResumoAplicacaoHtml(
       text-align: center;
       page-break-inside: avoid;
     }
-    .aplicador-rubrica {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 14px;
-    }
-    .aplicador-rubrica .rubrica-img {
-      width: 220px;
-      height: 90px;
-    }
     .aplicador-linha {
       width: 72%;
       max-width: 420px;
@@ -122,18 +114,22 @@ export function buildResumoAplicacaoHtml(
       border: none;
       border-top: 1px solid #374151;
     }
-    .aplicador-categoria {
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      color: #6B7280;
+    .aplicador-identificacao {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: center;
+      gap: 8px;
       margin: 0 0 4px;
+    }
+    .aplicador-posto-grad {
+      font-size: 14px;
+      font-weight: 700;
+      color: #6B7280;
     }
     .aplicador-nome {
       font-size: 16px;
       font-weight: 800;
-      margin: 0 0 4px;
       color: #111827;
     }
     .aplicador-nip {

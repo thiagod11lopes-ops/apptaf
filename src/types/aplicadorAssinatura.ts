@@ -4,7 +4,8 @@ export type AplicadorAssinaturaResumo = {
   nip: string;
   categoria: 'Oficiais' | 'Praças';
   postoGrad: string;
-  rubricaSvg: string;
+  /** Legado — assinatura do aplicador usa apenas a linha, sem rúbrica desenhada. */
+  rubricaSvg?: string;
 };
 
 export function postoGradAplicador(item: {
@@ -14,4 +15,11 @@ export function postoGradAplicador(item: {
 }): string {
   if (item.categoria === 'Oficiais') return (item.oficial || '').trim() || '—';
   return (item.praca || '').trim() || '—';
+}
+
+/** Posto ou graduação exibido na linha de assinatura (não "Oficiais"/"Praças"). */
+export function postoGradExibicaoAssinatura(assinatura: AplicadorAssinaturaResumo): string {
+  const posto = assinatura.postoGrad?.trim();
+  if (posto) return posto;
+  return '—';
 }

@@ -54,9 +54,9 @@ describe('systemState', () => {
     await systemState.setOnlineActive();
   });
 
-  it('FORCED_OFFLINE bloqueia Firebase', async () => {
-    await systemState.setForcedOffline();
-    expect(systemState.getMode()).toBe(SYSTEM_STATE.FORCED_OFFLINE);
-    expect(systemState.canUseFirebase()).toBe(false);
+  it('sempre permite Firebase após hydrate', async () => {
+    await systemState.hydrate();
+    expect(systemState.getMode()).toBe(SYSTEM_STATE.ONLINE_ACTIVE);
+    expect(systemState.canUseFirebase()).toBe(true);
   });
 });

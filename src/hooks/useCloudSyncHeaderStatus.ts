@@ -12,16 +12,15 @@ import type { CloudUserLoadProps } from '../components/sismav/AppHeader';
 export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   const { isAuthenticated } = useAuth();
   const accountLabel = useAccountCloudLabel();
-  const { syncing: syncingContext, pendingCount, online, isForcedOffline } = useOfflineSyncState();
+  const { syncing: syncingContext, pendingCount, online } = useOfflineSyncState();
   const [activity, setActivity] = useState(getCloudActivityState);
   const [awaitingCloud, setAwaitingCloud] = useState(isAwaitingCloudConfirmation);
 
   useEffect(() => subscribeCloudActivity(setActivity), []);
   useEffect(() => subscribeCloudDisplayGate(() => setAwaitingCloud(isAwaitingCloudConfirmation())), []);
 
-  const isOnlineAccount = isAuthenticated && accountLabel !== 'Offline' && !isForcedOffline;
-
-  const effectiveOnline = online && !isForcedOffline;
+  const isOnlineAccount = isAuthenticated && accountLabel !== 'Offline';
+  const effectiveOnline = online;
 
   const syncingCloud =
     isOnlineAccount &&
@@ -68,11 +67,7 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
 
   const statusHint = useMemo(() => {
     if (!isAuthenticated || accountLabel === 'Offline') return null;
-    if (isForcedOffline && pendingCount > 0) {
-      return 'Modo offline · alterações locais preservadas';
-    }
-    if (isForcedOffline) return 'Modo offline controlado · dados locais completos';
-    if (!effectiveOnline) return 'Sem conexão · dados da nuvem disponíveis localmente';
+    if (!effectiveOnline) return 'Sem conexão · dados locais disponíveis';
     if (syncingCloud || loadingInitial) return 'Baixando e reconciliando dados com a nuvem…';
     if (applyingRemote) return 'Atualizando dados recebidos da nuvem…';
     if (uploadingCloud || (pendingCount > 0 && effectiveOnline)) {
@@ -89,7 +84,6 @@ export function useCloudSyncHeaderStatus(cloudLoad?: CloudUserLoadProps) {
   }, [
     isAuthenticated,
     accountLabel,
-    isForcedOffline,
     effectiveOnline,
     syncingCloud,
     loadingInitial,

@@ -12,18 +12,14 @@ import { useAuth } from './AuthContext';
 import { connectivityMonitor, getConnectivityState } from '../offline-first/sync/ConnectivityMonitor';
 import { syncManager, subscribeSyncManager, getSyncManagerState, type SyncManagerState } from '../offline-first/sync/SyncManager';
 import type { PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
-import { systemState, SYSTEM_STATE, type SystemSyncMode } from '../offline-first/sync/SystemState';
 import type { ConnectivityState } from '../offline-first/types';
 
 type OfflineSyncContextType = {
   online: boolean;
   connectivity: ConnectivityState;
-  systemMode: SystemSyncMode;
-  isForcedOffline: boolean;
   pendingCount: number;
   pendingSummary: PendingSyncSummary;
   syncing: boolean;
-  tryReturnToOnline: () => Promise<void>;
 };
 
 const OfflineSyncContext = createContext<OfflineSyncContextType | null>(null);
@@ -50,12 +46,10 @@ function readBrowserOnline(): boolean {
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, authReady } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
-  const [systemMode, setSystemMode] = useState<SystemSyncMode>(systemState.getMode());
   const [managerState, setManagerState] = useState<SyncManagerState>(getSyncManagerState);
   const prevHasNetworkRef = useRef(false);
 
   const online = hasNetworkConnectivity(connectivity) || (isAuthenticated && readBrowserOnline());
-  const isForcedOffline = systemMode === SYSTEM_STATE.FORCED_OFFLINE;
   const pendingSummary = managerState.pendingSummary;
   const pendingCount = pendingSummary.total;
 
@@ -63,17 +57,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     if (!authReady || !isAuthenticated) return;
     await syncManager.evaluateOnSessionStart();
   }, [authReady, isAuthenticated]);
-
-  const tryReturnToOnline = useCallback(async () => {
-    await systemState.setOnlineActive();
-    setSystemMode(SYSTEM_STATE.ONLINE_ACTIVE);
-    await syncManager.evaluateOnReconnect();
-  }, []);
-
-  useEffect(() => {
-    void systemState.hydrate().then(setSystemMode);
-    return systemState.subscribe(setSystemMode);
-  }, []);
 
   useEffect(() => {
     return subscribeSyncManager(setManagerState);
@@ -106,23 +89,11 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     () => ({
       online,
       connectivity,
-      systemMode,
-      isForcedOffline,
       pendingCount,
       pendingSummary,
       syncing: managerState.uploading || connectivity === 'SYNCING',
-      tryReturnToOnline,
     }),
-    [
-      online,
-      connectivity,
-      systemMode,
-      isForcedOffline,
-      pendingCount,
-      pendingSummary,
-      managerState.uploading,
-      tryReturnToOnline,
-    ],
+    [online, connectivity, pendingCount, pendingSummary, managerState.uploading],
   );
 
   return <OfflineSyncContext.Provider value={value}>{children}</OfflineSyncContext.Provider>;

@@ -17,7 +17,6 @@ import {
   setCloudSyncResult,
   setRealtimeListening,
 } from '../../services/offline/cloudSyncActivity';
-import { systemState } from './SystemState';
 
 let activeUid: string | null = null;
 let unsubCadastros: (() => void) | null = null;
@@ -229,7 +228,6 @@ function scheduleAplicadoresApply(uid: string, aplicadores: AplicadorItemPersist
 }
 
 export function startRealtimeSync(uid: string, onUpdate: () => void): void {
-  if (systemState.isForcedOffline()) return;
   stopRealtimeSync();
   const db = getFirestoreDb();
   if (!db || !uid) return;

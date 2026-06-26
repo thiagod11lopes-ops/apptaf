@@ -6,7 +6,7 @@ import { systemState } from './SystemState';
 import { beginAwaitingCloudConfirmation, confirmCloudDisplayReady } from './cloudDisplayGate';
 import { syncLogger } from './SyncLogger';
 
-/** CLOUD_ACTIVE = Firebase é fonte de leitura; LOCAL_ONLY = só IndexedDB. */
+/** CLOUD_ACTIVE = Firebase é fonte de leitura; LOCAL_ONLY = só IndexedDB (sem rede). */
 export type SyncManagerMode = 'CLOUD_ACTIVE' | 'LOCAL_ONLY';
 
 export type SyncManagerState = {
@@ -60,9 +60,9 @@ async function refreshPendingSummary(): Promise<PendingSyncSummary> {
   return pendingSummary;
 }
 
-/** Leitura exclusiva da nuvem (via cópia synced no IndexedDB). */
+/** Leitura da nuvem quando logado e online (via cópia synced no IndexedDB). */
 export function isCloudReadActive(): boolean {
-  return mode === 'CLOUD_ACTIVE' && canReachFirebase() && isLoggedIn();
+  return canReachFirebase() && isLoggedIn();
 }
 
 export function getSyncManagerState(): SyncManagerState {
@@ -106,25 +106,24 @@ async function syncPendingAndEnterCloud(): Promise<void> {
 
     if (!result.success) {
       await syncLogger.warn('sync-manager', result.error ?? 'upload_failed');
-      mode = 'LOCAL_ONLY';
-      notifyListeners();
-      return;
-    }
-
-    if (pendingSummary.total > 0) {
-      mode = 'LOCAL_ONLY';
-      notifyListeners();
-      return;
     }
 
     await enterCloudActive();
+
+    if (pendingSummary.total > 0) {
+      void syncEngine.flushPendingOnChange();
+    }
   } catch (error) {
     await syncLogger.error(
       'sync-manager',
       error instanceof Error ? error.message : String(error),
     );
-    mode = 'LOCAL_ONLY';
-    notifyListeners();
+    if (canReachFirebase()) {
+      await enterCloudActive();
+    } else {
+      mode = 'LOCAL_ONLY';
+      notifyListeners();
+    }
   } finally {
     uploading = false;
     uploadInFlight = false;
@@ -151,33 +150,19 @@ async function evaluateSession(trigger: string): Promise<void> {
 
     await syncLogger.info('sync-manager', `${trigger}: pending=${summary.total}, online=${online}, mode=${mode}`);
 
-    if (systemState.isForcedOffline()) {
+    if (!online) {
       mode = 'LOCAL_ONLY';
       syncEngine.deactivateOnlineMode();
       notifyListeners();
       return;
     }
 
-    if (hasPending && online) {
+    if (hasPending) {
       await syncPendingAndEnterCloud();
       return;
     }
 
-    if (hasPending && !online) {
-      mode = 'LOCAL_ONLY';
-      syncEngine.deactivateOnlineMode();
-      notifyListeners();
-      return;
-    }
-
-    if (!hasPending && online) {
-      await enterCloudActive();
-      return;
-    }
-
-    mode = 'LOCAL_ONLY';
-    syncEngine.deactivateOnlineMode();
-    notifyListeners();
+    await enterCloudActive();
   } finally {
     sessionEvalInFlight = false;
   }
@@ -188,6 +173,7 @@ export const syncManager = {
     ownerUid = dataOwnerUid;
     syncEngine.bindOwner(dataOwnerUid);
     await systemState.hydrate();
+    await systemState.setOnlineActive();
     connectivityMonitor.start();
     syncEngine.deactivateOnlineMode();
   },
@@ -206,11 +192,7 @@ export const syncManager = {
 
   onDisconnect(): void {
     syncEngine.deactivateOnlineMode();
-    if (pendingSummary.total > 0) {
-      mode = 'LOCAL_ONLY';
-    } else if (mode === 'CLOUD_ACTIVE') {
-      mode = 'LOCAL_ONLY';
-    }
+    mode = 'LOCAL_ONLY';
     notifyListeners();
   },
 
@@ -221,7 +203,7 @@ export const syncManager = {
 
   async refreshPending(): Promise<PendingSyncSummary> {
     const summary = await refreshPendingSummary();
-    if (summary.total > 0 && canReachFirebase() && !systemState.isForcedOffline()) {
+    if (summary.total > 0 && canReachFirebase()) {
       void syncPendingAndEnterCloud();
     }
     notifyListeners();

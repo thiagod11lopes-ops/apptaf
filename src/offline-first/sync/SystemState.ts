@@ -1,12 +1,10 @@
-import { stopRealtimeSync } from './RealtimeBridge';
 import { setMeta, getMeta } from '../db/tafDatabase';
 
-/** Estado global de sincronização controlada pelo usuário. */
-export type SystemSyncMode = 'ONLINE_ACTIVE' | 'FORCED_OFFLINE';
+/** Estado de sincronização — sempre online quando logado (sem modo offline controlado). */
+export type SystemSyncMode = 'ONLINE_ACTIVE';
 
 export const SYSTEM_STATE = {
   ONLINE_ACTIVE: 'ONLINE_ACTIVE' as const,
-  FORCED_OFFLINE: 'FORCED_OFFLINE' as const,
 };
 
 const META_KEY = 'systemSyncMode';
@@ -16,12 +14,6 @@ function notify(mode: SystemSyncMode): void {
   listeners.forEach((fn) => fn(mode));
 }
 
-async function readMode(): Promise<SystemSyncMode> {
-  const stored = await getMeta(META_KEY);
-  if (stored === SYSTEM_STATE.FORCED_OFFLINE) return SYSTEM_STATE.FORCED_OFFLINE;
-  return SYSTEM_STATE.ONLINE_ACTIVE;
-}
-
 let cachedMode: SystemSyncMode = SYSTEM_STATE.ONLINE_ACTIVE;
 
 export const systemState = {
@@ -29,25 +21,18 @@ export const systemState = {
     return cachedMode;
   },
 
-  isForcedOffline(): boolean {
-    return cachedMode === SYSTEM_STATE.FORCED_OFFLINE;
-  },
-
-  /** Firebase é fonte de leitura quando ONLINE_ACTIVE (inclusive logado). */
+  /** Firebase é fonte de leitura quando o usuário está logado e com conectividade. */
   canUseFirebase(): boolean {
-    return cachedMode === SYSTEM_STATE.ONLINE_ACTIVE;
+    return true;
   },
 
   async hydrate(): Promise<SystemSyncMode> {
-    cachedMode = await readMode();
+    const stored = await getMeta(META_KEY);
+    if (stored === 'FORCED_OFFLINE') {
+      await setMeta(META_KEY, SYSTEM_STATE.ONLINE_ACTIVE);
+    }
+    cachedMode = SYSTEM_STATE.ONLINE_ACTIVE;
     return cachedMode;
-  },
-
-  async setForcedOffline(): Promise<void> {
-    cachedMode = SYSTEM_STATE.FORCED_OFFLINE;
-    await setMeta(META_KEY, SYSTEM_STATE.FORCED_OFFLINE);
-    stopRealtimeSync();
-    notify(cachedMode);
   },
 
   async setOnlineActive(): Promise<void> {

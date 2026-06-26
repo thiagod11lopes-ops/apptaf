@@ -227,8 +227,7 @@ export class SyncEngine {
     return (
       ownerUid != null &&
       onlineModeUid === ownerUid &&
-      systemState.canUseFirebase() &&
-      !systemState.isForcedOffline()
+      systemState.canUseFirebase()
     );
   }
 
@@ -253,7 +252,7 @@ export class SyncEngine {
 
   /** Envia pendentes, baixa snapshot da nuvem e liga tempo real. */
   async connectOnlineFromCloud(): Promise<void> {
-    if (!ownerUid || systemState.isForcedOffline()) {
+    if (!ownerUid) {
       confirmCloudDisplayReady();
       return;
     }
@@ -291,7 +290,7 @@ export class SyncEngine {
 
   /** Liga tempo real uma vez e garante cache local completo da nuvem. */
   async enableOnlineMode(skipPull = false): Promise<void> {
-    if (!ownerUid || systemState.isForcedOffline()) return;
+    if (!ownerUid) return;
 
     const alreadyListening = onlineModeUid === ownerUid;
     if (!skipPull && connectivityMonitor.canSync()) {
@@ -304,7 +303,7 @@ export class SyncEngine {
     onlineModeUid = ownerUid;
   }
 
-  /** Desliga tempo real (ex.: modo offline controlado). */
+  /** Desliga tempo real (ex.: perda de conexão ou logout). */
   deactivateOnlineMode(): void {
     stopRealtimeSync();
     onlineModeUid = null;
@@ -399,7 +398,7 @@ export class SyncEngine {
   /** Enfileira upload imediato das alterações locais (conta logada + online). */
   scheduleRealtimeFlush(): void {
     if (!ownerUid || !getCachedLoginUid()) return;
-    if (!connectivityMonitor.canSync() || systemState.isForcedOffline()) return;
+    if (!connectivityMonitor.canSync()) return;
 
     if (flushTimer) clearTimeout(flushTimer);
     flushTimer = setTimeout(() => {
@@ -411,7 +410,7 @@ export class SyncEngine {
   /** Envia pendentes para a nuvem sem pull — uso após cada mutação local. */
   async flushPendingOnChange(): Promise<void> {
     if (!ownerUid || !getCachedLoginUid()) return;
-    if (!connectivityMonitor.canSync() || systemState.isForcedOffline()) return;
+    if (!connectivityMonitor.canSync()) return;
 
     if (processing) {
       this.scheduleRealtimeFlush();
@@ -426,7 +425,7 @@ export class SyncEngine {
   }
 
   scheduleProcess(immediate = false): Promise<void> {
-    if (!ownerUid || systemState.isForcedOffline()) return Promise.resolve();
+    if (!ownerUid) return Promise.resolve();
     if (processTimer) clearTimeout(processTimer);
     const delay =
       immediate || this.isOnlineModeActive() || getCachedLoginUid() != null ? 50 : 800;
@@ -452,7 +451,6 @@ export class SyncEngine {
     } else if (!connectivityMonitor.canSync()) {
       return false;
     }
-    if (systemState.isForcedOffline() && !options?.forceUpload) return false;
     if (
       !options?.bypassGap &&
       !this.isOnlineModeActive() &&
@@ -603,7 +601,7 @@ export class SyncEngine {
   }
 
   async forceSync(): Promise<void> {
-    if (!ownerUid || systemState.isForcedOffline()) return;
+    if (!ownerUid) return;
     lastPullAt = 0;
     lastProcessFinishedAt = 0;
     await syncQueue.resetFailedToPending(ownerUid);

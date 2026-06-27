@@ -13,8 +13,8 @@ export function isTouchPrimaryWeb(opts: { pointerCoarse: boolean; hoverNone: boo
   return opts.pointerCoarse && opts.hoverNone;
 }
 
-/** Moldura iPhone só em desktop web com mouse; nunca em celular/PWA/tablet. */
-export function resolveUsePhoneFrame(params: {
+/** Moldura iPhone desativada — desktop usa layout com sidebar. */
+export function resolveUsePhoneFrame(_params: {
   isWeb: boolean;
   width: number;
   height: number;
@@ -22,25 +22,7 @@ export function resolveUsePhoneFrame(params: {
   pointerCoarse?: boolean;
   hoverNone?: boolean;
 }): boolean {
-  const { isWeb, width, height } = params;
-  if (!isWeb || width < DESKTOP_BREAKPOINT) return false;
-
-  const ua = params.userAgent ?? '';
-  if (isMobileOrTabletUserAgent(ua)) return false;
-
-  const longEdge = Math.max(width, height);
-  if (longEdge < COMPACT_MAX_LONG_EDGE) return false;
-
-  if (
-    isTouchPrimaryWeb({
-      pointerCoarse: params.pointerCoarse ?? false,
-      hoverNone: params.hoverNone ?? false,
-    })
-  ) {
-    return false;
-  }
-
-  return true;
+  return false;
 }
 
 function readTouchPrimaryWeb(): { pointerCoarse: boolean; hoverNone: boolean } {
@@ -86,8 +68,8 @@ export function useDeviceLayout() {
     isPortrait: !isLandscape,
     isCompactDevice,
     hideSidebarForLandscape,
-    /** Desktop web: moldura de celular; mobile usa layout nativo sem sidebar */
-    useSidebarShell: isDesktopWeb && !hideSidebarForLandscape && !usePhoneFrame,
+    /** Desktop web: sidebar lateral; mobile usa layout nativo */
+    useSidebarShell: isDesktopWeb && !hideSidebarForLandscape,
     usePhoneFrame,
   };
 }

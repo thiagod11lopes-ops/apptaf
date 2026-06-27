@@ -12,7 +12,7 @@ const ANDROID_UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
 describe('resolveUsePhoneFrame', () => {
-  it('ativa moldura em desktop web com tela grande', () => {
+  it('sempre desativada (desktop usa sidebar, sem moldura iPhone)', () => {
     expect(
       resolveUsePhoneFrame({
         isWeb: true,
@@ -22,7 +22,7 @@ describe('resolveUsePhoneFrame', () => {
         pointerCoarse: false,
         hoverNone: false,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('desativa moldura em celular em retrato', () => {

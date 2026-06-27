@@ -15,6 +15,11 @@ import type { SyncAuditEntry } from './syncAudit';
 import { buildSyncCounters, getLastSyncTimestamp } from './syncCounters';
 import type { SyncCountersState } from './syncUiState';
 import {
+  clearPendingSyncResume,
+  markPendingSyncResume,
+  SYNC_AUTH_REDIRECT,
+} from './syncResume';
+import {
   advanceStep,
   createInitialSyncSteps,
   markStepError,
@@ -303,10 +308,27 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     }
 
     setUiProgress(0, 'Autenticando com Google…');
+    const hasSession = Boolean(getFirebaseAuth()?.currentUser && getCachedLoginUid());
+    if (!hasSession) {
+      markPendingSyncResume();
+    }
+
     const authResult = await ensureAuth();
+    if (!authResult.ok && authResult.error === SYNC_AUTH_REDIRECT) {
+      setUiProgress(0, 'Redirecionando para login Google…');
+      syncMessage = 'Após o login, a sincronização continuará automaticamente.';
+      notifyListeners();
+      syncInFlight = false;
+      uploading = false;
+      stopEtaTimer();
+      return { ok: false };
+    }
     if (!authResult.ok) {
+      clearPendingSyncResume();
       throw new Error(authResult.error ?? 'Faça login com Google para sincronizar.');
     }
+
+    clearPendingSyncResume();
 
     const loginUid = getCachedLoginUid();
     if (!loginUid) {
@@ -314,7 +336,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     }
 
     completeStep('login_google');
-
+    setUiProgress(0, 'Login Google concluído ✓');
     setActiveStep('validate_permissions');
     setUiProgress(0, 'Confirmando sessão Google…');
     const authUser = getFirebaseAuth()?.currentUser;
@@ -440,11 +462,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     syncMessage = uploadError;
     mode = 'OFFLINE';
     await syncLogger.error('sync-manager', rawError);
-    try {
-      await signOutFirebase();
-    } catch {
-      // ignore
-    }
+    clearPendingSyncResume();
     await systemState.setOfflineMode();
     syncEngine.deactivateOnlineMode();
     await syncEngine.shutdownSession();

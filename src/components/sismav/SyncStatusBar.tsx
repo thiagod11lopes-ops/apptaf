@@ -143,6 +143,11 @@ export function SyncStatusBar() {
                   </Text>
                 </Text>
               ) : null}
+              {syncUi.isSyncing && syncUi.syncMessage ? (
+                <Text style={[ts.caption, { color: theme.primary, marginTop: 4, fontWeight: '600' }]}>
+                  {syncUi.syncMessage}
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.switchRow}>

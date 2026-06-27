@@ -28,8 +28,9 @@ import {
   putCadastroRecord,
   putSessaoRecord,
 } from '../db/localDb';
-import { decideLastWriteWins, type LwwAction, type SyncRecord } from './lastWriteWins';
+import { decideLastWriteWins, shouldSkipIdenticalRecords, type LwwAction, type SyncRecord } from './lastWriteWins';
 import { markRecordSynced } from './recordMeta';
+import { isUnsyncedLocalStatus } from './syncStatus';
 import { appendSyncAudit, type SyncAuditEntry } from './syncAudit';
 import { syncQueue } from './SyncQueue';
 import { pushPendingAuthorizedEmails } from './syncAuthorizedEmails';
@@ -146,6 +147,40 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
   }
 
   return { plan, ignored };
+}
+
+/** Alinha syncStatus local quando LWW ignora registro já idêntico ao remoto. */
+async function reconcileIdenticalUnsyncedLocals<TLocal extends SyncRecord, TRemote extends { id: string }>(
+  collection: CollectionName,
+  ownerUid: string,
+  localRows: TLocal[],
+  remoteRows: TRemote[],
+  toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
+): Promise<number> {
+  const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
+  const loginUid = getCachedLoginUid();
+  let reconciled = 0;
+
+  for (const local of localRows) {
+    if (!isUnsyncedLocalStatus(local.syncStatus)) continue;
+    const remote = remoteMap.get(local.id);
+    if (!remote) continue;
+    const decision = decideLastWriteWins(local, remote);
+    if (decision.action !== 'skip') continue;
+    if (!shouldSkipIdenticalRecords(local, remote) && decision.reason !== 'updatedAt_empate') continue;
+
+    const merged = markRecordSynced(local, loginUid);
+    if (collection === 'cadastros') {
+      await putCadastroRecord(merged as CadastroRecord);
+    } else if (collection === 'sessoes') {
+      await putSessaoRecord(merged as SessaoRecord);
+    } else {
+      await putAplicadorRecord(merged as AplicadorRecord);
+    }
+    reconciled += 1;
+  }
+
+  return reconciled;
 }
 
 async function uploadCadastro(uid: string, local: CadastroRecord, hasRemote: boolean): Promise<void> {
@@ -273,6 +308,10 @@ export async function executeLastWriteWinsSync(
   const cadPlan = buildSyncPlan('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
   const sessPlan = buildSyncPlan('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
   const appPlan = buildSyncPlan('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
+
+  await reconcileIdenticalUnsyncedLocals('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
+  await reconcileIdenticalUnsyncedLocals('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
+  await reconcileIdenticalUnsyncedLocals('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
 
   const fullPlan = [...cadPlan.plan, ...sessPlan.plan, ...appPlan.plan];
   const totalIgnored = cadPlan.ignored + sessPlan.ignored + appPlan.ignored;

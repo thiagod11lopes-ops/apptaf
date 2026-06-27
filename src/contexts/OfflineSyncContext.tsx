@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -22,6 +23,7 @@ import type { SyncUiState } from '../offline-first/sync/syncUiState';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import { waitForAuthenticatedUid } from '../services/firebase/authUid';
 import { getFirebaseAuth } from '../config/firebase';
+import { consumePendingSyncResume, hasPendingSyncResume, SYNC_AUTH_REDIRECT } from '../offline-first/sync/syncResume';
 import { subscribeDataChanged } from '../offline-first/sync/SyncEngine';
 
 type OfflineSyncContextType = {
@@ -75,7 +77,11 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       if (existing && getFirebaseAuth()?.currentUser) return { ok: true };
 
       const isRedirect = await signInWithGoogle();
-      const uid = await waitForAuthenticatedUid(isRedirect ? 25_000 : 20_000);
+      if (isRedirect) {
+        return { ok: false, error: SYNC_AUTH_REDIRECT };
+      }
+
+      const uid = await waitForAuthenticatedUid(20_000);
       const currentUser = getFirebaseAuth()?.currentUser;
 
       if (!uid || !currentUser) {
@@ -130,14 +136,32 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const autoResumeStarted = useRef(false);
+
   useEffect(() => {
-    if (!authReady) return;
-    const ownerUid = getCachedDataOwnerUid();
-    if (ownerUid) {
-      void syncManager.bindSession(ownerUid);
-    }
-    void syncManager.refreshPending();
-  }, [authReady]);
+    if (!authReady || !firebaseEnabled) return;
+
+    void (async () => {
+      const resumeAfterLogin = hasPendingSyncResume();
+      const ownerUid = getCachedDataOwnerUid();
+      if (ownerUid) {
+        await syncManager.bindSession(ownerUid);
+      } else {
+        await syncManager.refreshPending();
+      }
+
+      if (!resumeAfterLogin || autoResumeStarted.current) return;
+      autoResumeStarted.current = true;
+      consumePendingSyncResume();
+
+      await waitForAuthenticatedUid(20_000);
+      if (!getFirebaseAuth()?.currentUser) {
+        autoResumeStarted.current = false;
+        return;
+      }
+      await startSyncFromToggle();
+    })();
+  }, [authReady, firebaseEnabled, startSyncFromToggle]);
 
   const value = useMemo(
     () => ({

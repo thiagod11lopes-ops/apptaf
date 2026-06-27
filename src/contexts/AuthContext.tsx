@@ -21,7 +21,7 @@ import {
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
-import { setAuthUidState, waitForAuthenticatedUid, getCachedDataOwnerUid, getCachedLoginUid } from '../services/firebase/authUid';
+import { setAuthUidState, waitForAuthenticatedUid, getCachedDataOwnerUid, getCachedLoginUid, hydrateAuthUidFromIndexedDb } from '../services/firebase/authUid';
 import {
   clearPersistedAuthProfile,
   persistAuthProfile,
@@ -119,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     void (async () => {
+      await hydrateAuthUidFromIndexedDb();
       const redirectUser =
         Platform.OS === 'web' ? await startFirebaseRedirectSignIn() : null;
       await auth.authStateReady();
@@ -131,6 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else if (redirectUser) {
         applySignedInAppUserRef.current(redirectUser);
       } else if (isFirebaseAuthRedirectReturn()) {
+        setAuthReady(true);
+      } else if (getCachedDataOwnerUid()) {
         setAuthReady(true);
       } else {
         applySignedOut();

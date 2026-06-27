@@ -21,7 +21,7 @@ import {
 import type { PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
 import type { ConnectivityState } from '../offline-first/types';
 import type { SyncUiState } from '../offline-first/sync/syncUiState';
-import { getCachedDataOwnerUid } from '../services/firebase/authUid';
+import { getCachedDataOwnerUid, hydrateAuthUidFromIndexedDb } from '../services/firebase/authUid';
 import { getFirebaseAuth } from '../config/firebase';
 import { subscribeDataChanged } from '../offline-first/sync/SyncEngine';
 
@@ -78,15 +78,18 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authReady || !firebaseEnabled) return;
 
-    const hasFirebaseUser = Boolean(getFirebaseAuth()?.currentUser);
-    syncManager.setAuthAvailable(isAuthenticated && hasFirebaseUser);
+    void (async () => {
+      await hydrateAuthUidFromIndexedDb();
+      const hasFirebaseUser = Boolean(getFirebaseAuth()?.currentUser);
+      syncManager.setAuthAvailable(isAuthenticated && hasFirebaseUser);
 
-    const ownerUid = getCachedDataOwnerUid();
-    if (ownerUid) {
-      void syncManager.bindSession(ownerUid);
-    } else {
-      void syncManager.refreshPending();
-    }
+      const ownerUid = getCachedDataOwnerUid();
+      if (ownerUid) {
+        await syncManager.bindSession(ownerUid);
+      } else {
+        await syncManager.refreshPending();
+      }
+    })();
   }, [authReady, firebaseEnabled, isAuthenticated, user?.uid]);
 
   const hasValidSession =

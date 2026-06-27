@@ -1,5 +1,5 @@
 import './global.css';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Platform, StyleSheet, ActivityIndicator } from 'react-native';
 import { startFirebaseRedirectSignIn } from './src/services/firebase/googleAuth';
 
@@ -13,7 +13,7 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { OfflineSyncProvider } from './src/contexts/OfflineSyncContext';
 import { DataStoreProvider } from './src/offline-first/store/DataStoreContext';
-import { getCachedDataOwnerUid } from './src/services/firebase/authUid';
+import { getCachedDataOwnerUid, hydrateAuthUidFromIndexedDb } from './src/services/firebase/authUid';
 import { PhoneFrameShell } from './src/components/premium/PhoneFrameShell';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -73,8 +73,36 @@ function AppRoot() {
 }
 
 function AppWithDataStore({ children }: { children: React.ReactNode }) {
-  const { authReady } = useAuth();
-  const ownerUid = authReady ? getCachedDataOwnerUid() : null;
+  const { authReady, user } = useAuth();
+  const [sessionReady, setSessionReady] = useState(false);
+  const [ownerUid, setOwnerUid] = useState<string | null>(() => getCachedDataOwnerUid());
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await hydrateAuthUidFromIndexedDb();
+      if (cancelled) return;
+      setOwnerUid(getCachedDataOwnerUid());
+      setSessionReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authReady) return;
+    setOwnerUid(getCachedDataOwnerUid());
+  }, [authReady, user?.uid]);
+
+  if (!sessionReady && !ownerUid) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={PREMIUM.accentLight} />
+      </View>
+    );
+  }
+
   return <DataStoreProvider ownerUid={ownerUid}>{children}</DataStoreProvider>;
 }
 

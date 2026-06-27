@@ -76,7 +76,7 @@ function PhaseProgressBar({
   );
 }
 
-export function SyncStatusBar() {
+export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const { firebaseEnabled, isAuthenticated, authReady } = useAuth();
@@ -149,15 +149,18 @@ export function SyncStatusBar() {
       <View
         style={[
           styles.wrap,
-          {
+          embedded && styles.wrapEmbedded,
+          !embedded && {
             backgroundColor: theme.backgroundSecondary,
             borderColor: theme.border,
           },
         ]}
       >
-        <Text style={[ts.caption, { color: theme.textSecondary, fontWeight: '700', letterSpacing: 0.4 }]}>
-          SINCRONIZAÇÃO COM A NUVEM
-        </Text>
+        {!embedded ? (
+          <Text style={[ts.caption, { color: theme.textSecondary, fontWeight: '700', letterSpacing: 0.4 }]}>
+            SINCRONIZAÇÃO COM A NUVEM
+          </Text>
+        ) : null}
 
         <View style={styles.controlRow}>
           <View style={styles.controlLabels}>
@@ -326,6 +329,14 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web'
       ? ({ boxShadow: '0 4px 14px rgba(15,23,42,0.06)' } as object)
       : {}),
+  },
+  wrapEmbedded: {
+    borderWidth: 0,
+    marginTop: 0,
+    marginBottom: 0,
+    padding: 0,
+    maxWidth: undefined,
+    ...(Platform.OS === 'web' ? ({ boxShadow: 'none' } as object) : {}),
   },
   controlRow: {
     flexDirection: 'row',

@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, StyleSheet, Image, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
+import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { AppHeader } from '../components/sismav/AppHeader';
-import { SyncStatusBar } from '../components/sismav/SyncStatusBar';
+import { SyncCloudModal } from '../components/sismav/SyncCloudModal';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
@@ -26,8 +27,10 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
 
 export default function HomeScreen() {
   const { theme } = useTheme();
-  const { user, authReady, isAuthenticated } = useAuth();
+  const { user, authReady, isAuthenticated, firebaseEnabled } = useAuth();
+  const { pendingCount } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
 
   const recarregarResumo = useCallback(async () => {
     if (!authReady) return;
@@ -63,8 +66,12 @@ export default function HomeScreen() {
     <View style={styles.page}>
       <View style={styles.topSection}>
         <AppHeader title="TAF" subtitle="Teste de Aptidão Física" />
-        <SyncStatusBar />
-        <TopActionIcons activeRoute="Home" inline />
+        <TopActionIcons
+          activeRoute="Home"
+          inline
+          onSyncPress={firebaseEnabled ? () => setSyncModalOpen(true) : undefined}
+          syncPendingBadge={pendingCount}
+        />
 
         <View style={styles.statsGrid}>
           <StatCard
@@ -107,6 +114,8 @@ export default function HomeScreen() {
           accessibilityLabel="TAF"
         />
       </View>
+
+      <SyncCloudModal visible={syncModalOpen} onClose={() => setSyncModalOpen(false)} />
     </View>
   );
 }

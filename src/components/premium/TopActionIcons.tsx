@@ -1,6 +1,6 @@
 import React from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
-import { BookOpen, ClipboardList, Settings, User, UserRoundCheck } from 'lucide-react-native';
+import { Platform, StyleSheet, View, Text } from 'react-native';
+import { BookOpen, ClipboardList, Save, Settings, User, UserRoundCheck } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { navigateTab } from '../../navigation/navigationRef';
@@ -25,9 +25,17 @@ type Props = {
   activeRoute: keyof RootStackParamList;
   /** Layout da faixa abaixo do subtítulo na Home */
   inline?: boolean;
+  /** Abre modal de sincronização com a nuvem (ícone à esquerda de Normas). */
+  onSyncPress?: () => void;
+  syncPendingBadge?: number;
 };
 
-export function TopActionIcons({ activeRoute, inline = false }: Props) {
+export function TopActionIcons({
+  activeRoute,
+  inline = false,
+  onSyncPress,
+  syncPendingBadge = 0,
+}: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss } = useAuth();
   const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
@@ -50,6 +58,22 @@ export function TopActionIcons({ activeRoute, inline = false }: Props) {
 
   return (
     <View style={[styles.row, inline && styles.rowInline]}>
+      {onSyncPress ? (
+        <PressableScale
+          onPress={onSyncPress}
+          style={[btnStyle, syncPendingBadge > 0 && { borderColor: theme.primary }]}
+          accessibilityLabel="Sincronizar com a nuvem"
+        >
+          <Save size={iconSize} color={syncPendingBadge > 0 ? theme.primary : tabInk} strokeWidth={strokeWidth} />
+          {syncPendingBadge > 0 ? (
+            <View style={[styles.badge, { backgroundColor: theme.primary }]}>
+              <Text style={styles.badgeText}>
+                {syncPendingBadge > 99 ? '99+' : syncPendingBadge}
+              </Text>
+            </View>
+          ) : null}
+        </PressableScale>
+      ) : null}
       {TOP_LINKS.filter(
         (link) =>
           activeRoute !== link.route &&
@@ -116,5 +140,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    lineHeight: 12,
   },
 });

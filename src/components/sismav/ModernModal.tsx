@@ -23,9 +23,19 @@ type Props = {
   icon?: React.ReactNode;
   /** Quando false, overlay e botão X não fecham o modal. */
   dismissable?: boolean;
+  maxBodyHeight?: number;
 };
 
-export function ModernModal({ visible, onClose, title, children, footer, icon, dismissable = true }: Props) {
+export function ModernModal({
+  visible,
+  onClose,
+  title,
+  children,
+  footer,
+  icon,
+  dismissable = true,
+  maxBodyHeight = 420,
+}: Props) {
   const { theme, isDark } = useTheme();
   const t = theme.tokens;
 
@@ -79,7 +89,7 @@ export function ModernModal({ visible, onClose, title, children, footer, icon, d
             colors={[...t.gradientPanelBody]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
-            style={styles.body}
+            style={[styles.body, { maxHeight: maxBodyHeight }]}
           >
             <ScrollView showsVerticalScrollIndicator={false}>{children}</ScrollView>
           </LinearGradient>
@@ -108,7 +118,7 @@ const styles = StyleSheet.create({
   },
   shell: {
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 520,
     borderRadius: 20,
     overflow: 'hidden',
   },

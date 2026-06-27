@@ -157,14 +157,32 @@ function isPopupBlockedError(error: unknown): boolean {
   );
 }
 
-/** Em produção (GitHub Pages etc.) COOP bloqueia popup Firebase — usar redirect. */
-function shouldPreferGoogleRedirectOnWeb(): boolean {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
-  const host = window.location.hostname;
-  return host !== 'localhost' && host !== '127.0.0.1';
+function isMissingRedirectStateError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('missing initial state');
 }
 
-/** Login web no desktop (Chrome/Firefox) via popup Firebase. */
+/** Redirect Firebase grava estado no sessionStorage — exige armazenamento acessível. */
+function canUseSessionStorageForAuth(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const probe = '__taf_auth_session_probe__';
+    window.sessionStorage.setItem(probe, '1');
+    window.sessionStorage.removeItem(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function redirectUnavailableMessage(): string {
+  return (
+    'Não foi possível concluir o login por redirect. Permita cookies e armazenamento do site ' +
+    '(sessionStorage), evite modo anônimo e tente de novo — o app usará uma janela popup.'
+  );
+}
+
+/** Login web no desktop: popup primeiro (evita erro "missing initial state" do redirect). */
 export async function signInWithGoogleWeb(): Promise<GoogleWebSignInResult> {
   const auth = assertAuthConfigured();
   const provider = googleProvider();
@@ -173,16 +191,14 @@ export async function signInWithGoogleWeb(): Promise<GoogleWebSignInResult> {
     return { mode: 'popup', user: mapFirebaseUser(auth.currentUser) };
   }
 
-  if (shouldPreferGoogleRedirectOnWeb()) {
-    await signInWithRedirect(auth, provider);
-    return { mode: 'redirect' };
-  }
-
   try {
     const result = await signInWithPopup(auth, provider);
     return { mode: 'popup', user: mapFirebaseUser(result.user) };
   } catch (error) {
     if (!isPopupBlockedError(error)) throw error;
+    if (!canUseSessionStorageForAuth()) {
+      throw new Error(redirectUnavailableMessage());
+    }
     await signInWithRedirect(auth, provider);
     return { mode: 'redirect' };
   }
@@ -190,6 +206,14 @@ export async function signInWithGoogleWeb(): Promise<GoogleWebSignInResult> {
 
 /** Fallback: retorno do redirect Firebase (popup bloqueado no desktop). */
 let redirectSignInPromise: Promise<AppAuthUser | null> | null = null;
+let lastRedirectAuthError: string | null = null;
+
+/** Erro do último redirect Firebase (ex.: sessionStorage limpo) — consumido uma vez na UI. */
+export function consumeLastRedirectAuthError(): string | null {
+  const message = lastRedirectAuthError;
+  lastRedirectAuthError = null;
+  return message;
+}
 
 export function isFirebaseAuthRedirectReturn(): boolean {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
@@ -218,6 +242,21 @@ async function resolveGoogleRedirectSignIn(): Promise<AppAuthUser | null> {
     return mapFirebaseUser(result.user);
   } catch (error) {
     console.warn('[auth] getRedirectResult falhou:', error);
+    clearFirebaseAuthParamsFromWindow();
+    if (isMissingRedirectStateError(error)) {
+      lastRedirectAuthError = redirectUnavailableMessage();
+    } else {
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? String((error as { code: string }).code)
+          : '';
+      lastRedirectAuthError =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : code
+            ? `Erro ao concluir login (${code}).`
+            : 'Não foi possível concluir o login. Tente novamente.';
+    }
     return null;
   }
 }

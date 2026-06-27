@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { AppHeader } from '../components/sismav/AppHeader';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
+import { consumeLastRedirectAuthError } from '../services/firebase/googleAuth';
 import { PREMIUM } from '../theme/premium';
 
 function userLabel(name: string | null, email: string | null): string {
@@ -61,6 +62,11 @@ export default function LoginScreen() {
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    const redirectError = consumeLastRedirectAuthError();
+    if (redirectError) setErro(redirectError);
+  }, []);
 
   const aguardandoLogin = isSessionLoading;
 

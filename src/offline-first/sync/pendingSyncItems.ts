@@ -1,4 +1,5 @@
 import { getTafDatabase } from '../db/tafDatabase';
+import { ANONYMOUS_OWNER } from '../db/localDb';
 import type { AplicadorRecord, CadastroRecord, CollectionName, SessaoRecord, SyncStatus } from '../types';
 import { isUnsyncedLocalStatus } from './syncStatus';
 
@@ -37,36 +38,63 @@ function toPendingItem(
   };
 }
 
+function ownerUidsForQuery(ownerUid: string): string[] {
+  if (!ownerUid.trim()) return [];
+  if (ownerUid === ANONYMOUS_OWNER) return [ANONYMOUS_OWNER];
+  return [ownerUid, ANONYMOUS_OWNER];
+}
+
 /** Retorna registros locais ainda não sincronizados (local, updated, deleted, conflict, pending). */
 export async function getPendingSyncItems(ownerUid: string): Promise<PendingSyncSummary> {
   const db = getTafDatabase();
-  if (!db || !ownerUid.trim()) {
+  const owners = ownerUidsForQuery(ownerUid);
+  if (!db || owners.length === 0) {
     return { items: [], total: 0, cadastros: 0, sessoes: 0, aplicadores: 0 };
   }
 
-  const [cadRows, sessRows, appRows] = await Promise.all([
-    db.cadastros.where('ownerUid').equals(ownerUid).toArray(),
-    db.sessoes.where('ownerUid').equals(ownerUid).toArray(),
-    db.aplicadores.where('ownerUid').equals(ownerUid).toArray(),
-  ]);
+  const seen = new Set<string>();
+  const items: PendingSyncItem[] = [];
+  let cadastros = 0;
+  let sessoes = 0;
+  let aplicadores = 0;
 
-  const pendingCad = cadRows.filter((row) => isUnsyncedLocalStatus(row.syncStatus));
-  const pendingSess = sessRows.filter((row) => isUnsyncedLocalStatus(row.syncStatus));
-  const pendingApp = appRows.filter((row) => isUnsyncedLocalStatus(row.syncStatus));
+  for (const uid of owners) {
+    const [cadRows, sessRows, appRows] = await Promise.all([
+      db.cadastros.where('ownerUid').equals(uid).toArray(),
+      db.sessoes.where('ownerUid').equals(uid).toArray(),
+      db.aplicadores.where('ownerUid').equals(uid).toArray(),
+    ]);
 
-  const items: PendingSyncItem[] = [
-    ...pendingCad.map((row) => toPendingItem('cadastros', row)),
-    ...pendingSess.map((row) => toPendingItem('sessoes', row)),
-    ...pendingApp.map((row) => toPendingItem('aplicadores', row)),
-  ];
+    for (const row of cadRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
+      const key = `cadastros:${row.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push(toPendingItem('cadastros', row));
+      cadastros += 1;
+    }
+    for (const row of sessRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
+      const key = `sessoes:${row.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push(toPendingItem('sessoes', row));
+      sessoes += 1;
+    }
+    for (const row of appRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
+      const key = `aplicadores:${row.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push(toPendingItem('aplicadores', row));
+      aplicadores += 1;
+    }
+  }
 
   items.sort((a, b) => a.updatedAt - b.updatedAt);
 
   return {
     items,
     total: items.length,
-    cadastros: pendingCad.length,
-    sessoes: pendingSess.length,
-    aplicadores: pendingApp.length,
+    cadastros,
+    sessoes,
+    aplicadores,
   };
 }

@@ -3,7 +3,7 @@ import { getCachedDataOwnerUid, getCachedLoginUid } from '../../services/firebas
 import { getFirebaseAuth } from '../../config/firebase';
 import { connectivityMonitor } from './ConnectivityMonitor';
 import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
-import { syncEngine } from './SyncEngine';
+import { syncEngine, notifyDataChanged } from './SyncEngine';
 import { ANONYMOUS_OWNER } from '../db/localDb';
 import { systemState } from './SystemState';
 import { syncLogger } from './SyncLogger';
@@ -310,17 +310,19 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     setUiProgress(0, 'Autenticando com Google…');
     const hasSession = Boolean(getFirebaseAuth()?.currentUser && getCachedLoginUid());
     if (!hasSession) {
-      markPendingSyncResume();
+      markPendingSyncResume('Após o login, a sincronização continuará automaticamente.');
     }
 
     const authResult = await ensureAuth();
     if (!authResult.ok && authResult.error === SYNC_AUTH_REDIRECT) {
       setUiProgress(0, 'Redirecionando para login Google…');
       syncMessage = 'Após o login, a sincronização continuará automaticamente.';
-      notifyListeners();
+      uiPhase = 'offline';
+      mode = 'OFFLINE';
       syncInFlight = false;
       uploading = false;
       stopEtaTimer();
+      notifyListeners();
       return { ok: false };
     }
     if (!authResult.ok) {
@@ -418,6 +420,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
 
     completeStep('finalizing');
     await refreshPendingSummary();
+    notifyDataChanged();
 
     const durationMs = Date.now() - startedAt;
     const totalRecords = result.stats.uploads + result.stats.downloads;
@@ -509,6 +512,7 @@ export const syncManager = {
     syncEngine.deactivateOnlineMode();
     mode = 'OFFLINE';
     uiPhase = 'offline';
+    await syncEngine.preparePendingOwner(dataOwnerUid);
     await loadLastSyncFromAudit();
     await refreshPendingSummary();
     notifyListeners();

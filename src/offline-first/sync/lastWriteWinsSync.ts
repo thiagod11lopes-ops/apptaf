@@ -28,7 +28,7 @@ import {
   putCadastroRecord,
   putSessaoRecord,
 } from '../db/localDb';
-import { decideLastWriteWins, shouldSkipIdenticalRecords, type LwwAction, type SyncRecord } from './lastWriteWins';
+import { decideLastWriteWins, type LwwAction, type SyncRecord } from './lastWriteWins';
 import { markRecordSynced } from './recordMeta';
 import { isUnsyncedLocalStatus } from './syncStatus';
 import { appendSyncAudit, type SyncAuditEntry } from './syncAudit';
@@ -46,6 +46,7 @@ import {
   runDeletionGarbageCollection,
 } from './deletionGarbageCollection';
 import type { SyncStepId } from './syncSteps';
+import { getPendingSyncItems } from './pendingSyncItems';
 
 export type LwwSyncStats = {
   uploads: number;
@@ -167,7 +168,6 @@ async function reconcileIdenticalUnsyncedLocals<TLocal extends SyncRecord, TRemo
     if (!remote) continue;
     const decision = decideLastWriteWins(local, remote);
     if (decision.action !== 'skip') continue;
-    if (!shouldSkipIdenticalRecords(local, remote) && decision.reason !== 'updatedAt_empate') continue;
 
     const merged = markRecordSynced(local, loginUid);
     if (collection === 'cadastros') {
@@ -181,6 +181,101 @@ async function reconcileIdenticalUnsyncedLocals<TLocal extends SyncRecord, TRemo
   }
 
   return reconciled;
+}
+
+async function flushRemainingPendingRecords(
+  ownerUid: string,
+  remoteCad: CadastroItemPersist[],
+  remoteSess: SessaoAplicacaoTaf[],
+  remoteApp: AplicadorItemPersist[],
+  uploadFns: Record<CollectionName, UploadFn>,
+  stats: LwwSyncStats,
+  deletionAudits: DeletionAuditEntry[],
+  progressCb?: SyncProgressCallback,
+): Promise<void> {
+  const pending = await getPendingSyncItems(ownerUid);
+  if (pending.total === 0) return;
+
+  progressCb?.({
+    processed: 0,
+    total: pending.total,
+    message: 'Finalizando pendências locais',
+    stepId: 'finalizing',
+    phase: 'finalize',
+  });
+
+  const remoteMaps = {
+    cadastros: new Map(remoteCad.map((r) => [r.id, remoteToCadastroRecord(r, ownerUid)])),
+    sessoes: new Map(remoteSess.map((r) => [r.id, remoteToSessaoRecord(r, ownerUid)])),
+    aplicadores: new Map(remoteApp.map((r) => [r.id, remoteToAplicadorRecord(r, ownerUid)])),
+  };
+
+  let processed = 0;
+  for (const item of pending.items) {
+    const local = item.record as SyncRecord;
+    if (!isUnsyncedLocalStatus(local.syncStatus)) continue;
+
+    const remote = remoteMaps[item.collection].get(item.id);
+    const decision = decideLastWriteWins(local, remote);
+    const hasRemote = remoteMaps[item.collection].has(item.id);
+
+    try {
+      if (decision.action === 'upload' || (!remote && !local.deleted)) {
+        await executePlanItem(
+          ownerUid,
+          {
+            collection: item.collection,
+            id: item.id,
+            action: 'upload',
+            local,
+            remote,
+            hasRemote,
+          },
+          uploadFns,
+          stats,
+          deletionAudits,
+        );
+      } else if (decision.action === 'download' && remote) {
+        await executePlanItem(
+          ownerUid,
+          {
+            collection: item.collection,
+            id: item.id,
+            action: 'download',
+            local,
+            remote,
+            hasRemote,
+          },
+          uploadFns,
+          stats,
+          deletionAudits,
+        );
+      } else {
+        const loginUid = getCachedLoginUid();
+        const merged = markRecordSynced(local, loginUid);
+        if (item.collection === 'cadastros') {
+          await putCadastroRecord(merged as CadastroRecord);
+        } else if (item.collection === 'sessoes') {
+          await putSessaoRecord(merged as SessaoRecord);
+        } else {
+          await putAplicadorRecord(merged as AplicadorRecord);
+        }
+        stats.ignored += 1;
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      stats.errors.push(`${item.collection}/${item.id}: ${msg}`);
+    } finally {
+      processed += 1;
+      progressCb?.({
+        processed,
+        total: pending.total,
+        message: 'Finalizando pendências locais',
+        stepId: 'finalizing',
+        phase: 'finalize',
+      });
+    }
+  }
 }
 
 async function uploadCadastro(uid: string, local: CadastroRecord, hasRemote: boolean): Promise<void> {
@@ -305,16 +400,23 @@ export async function executeLastWriteWinsSync(
     getAllAplicadoresFirestore(ownerUid),
   ]);
 
-  const cadPlan = buildSyncPlan('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
-  const sessPlan = buildSyncPlan('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
-  const appPlan = buildSyncPlan('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
-
   await reconcileIdenticalUnsyncedLocals('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
   await reconcileIdenticalUnsyncedLocals('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
   await reconcileIdenticalUnsyncedLocals('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
 
-  const fullPlan = [...cadPlan.plan, ...sessPlan.plan, ...appPlan.plan];
-  const totalIgnored = cadPlan.ignored + sessPlan.ignored + appPlan.ignored;
+  const [localCadFresh, localSessFresh, localAppFresh] = await Promise.all([
+    listCadastros(ownerUid, true),
+    listSessoes(ownerUid, true),
+    listAplicadores(ownerUid, true),
+  ]);
+
+  const cadPlanFresh = buildSyncPlan('cadastros', ownerUid, localCadFresh, remoteCad, remoteToCadastroRecord);
+  const sessPlanFresh = buildSyncPlan('sessoes', ownerUid, localSessFresh, remoteSess, remoteToSessaoRecord);
+  const appPlanFresh = buildSyncPlan('aplicadores', ownerUid, localAppFresh, remoteApp, remoteToAplicadorRecord);
+
+  const fullPlan = [...cadPlanFresh.plan, ...sessPlanFresh.plan, ...appPlanFresh.plan];
+  const totalIgnored =
+    cadPlanFresh.ignored + sessPlanFresh.ignored + appPlanFresh.ignored;
   const plannedUploads = fullPlan.filter((p) => p.action === 'upload').length;
   const plannedDownloads = fullPlan.filter((p) => p.action === 'download').length;
   const workTotal = plannedUploads + plannedDownloads;
@@ -337,6 +439,16 @@ export async function executeLastWriteWinsSync(
 
   if (workTotal === 0) {
     stats.ignored = totalIgnored;
+    await flushRemainingPendingRecords(
+      ownerUid,
+      remoteCad,
+      remoteSess,
+      remoteApp,
+      uploadFns,
+      stats,
+      deletionAudits,
+      progressCb,
+    );
     const emailErrors = await pushPendingAuthorizedEmails(ownerUid);
     stats.errors.push(...emailErrors);
     await syncQueue.clearDone(ownerUid);
@@ -376,7 +488,7 @@ export async function executeLastWriteWinsSync(
       success: stats.errors.length === 0,
       stats,
       audit,
-      alreadyUpToDate: stats.errors.length === 0,
+      alreadyUpToDate: stats.errors.length === 0 && stats.uploads === 0 && stats.downloads === 0,
       plannedUploads: 0,
       plannedDownloads: 0,
     };
@@ -445,6 +557,17 @@ export async function executeLastWriteWinsSync(
   stats.errors.push(...emailErrors);
 
   await syncQueue.clearDone(ownerUid);
+
+  await flushRemainingPendingRecords(
+    ownerUid,
+    remoteCad,
+    remoteSess,
+    remoteApp,
+    uploadFns,
+    stats,
+    deletionAudits,
+    progressCb,
+  );
 
   if (stats.errors.length === 0) {
     await runDeletionGarbageCollection(ownerUid);

@@ -25,6 +25,7 @@ import { syncManager } from '../offline-first/sync/SyncManager';
 import { systemState } from '../offline-first/sync/SystemState';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
+import { markPendingSyncResume } from '../offline-first/sync/syncResume';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -64,7 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       if (Platform.OS === 'web') {
-        await completeGoogleRedirectSignIn();
+        const redirectedUser = await completeGoogleRedirectSignIn();
+        if (redirectedUser) {
+          markPendingSyncResume('Retomando sincronização após login Google…');
+        }
       }
 
       unsub = onAuthStateChanged(auth, (fbUser) => {

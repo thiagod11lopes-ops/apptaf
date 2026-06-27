@@ -169,6 +169,10 @@ export async function signInWithGoogleWeb(): Promise<GoogleWebSignInResult> {
   const auth = assertAuthConfigured();
   const provider = googleProvider();
 
+  if (auth.currentUser) {
+    return { mode: 'popup', user: mapFirebaseUser(auth.currentUser) };
+  }
+
   if (shouldPreferGoogleRedirectOnWeb()) {
     await signInWithRedirect(auth, provider);
     return { mode: 'redirect' };

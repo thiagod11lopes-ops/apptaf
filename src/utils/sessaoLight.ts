@@ -1,5 +1,6 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
+import type { FirestoreTombstoneFields } from '../offline-first/sync/tombstone';
 
 export type SessaoResultadoRubrica = {
   nip: string;
@@ -42,5 +43,28 @@ export function toSessaoLight(sessao: SessaoAplicacaoTaf): SessaoAplicacaoTaf {
       const { rubricaCandidatoSvg: _r, ...rest } = r;
       return rest as ResultadoCorridaItem;
     }),
+  };
+}
+
+/** Preserva metadados de tombstone/sync ao ler sessões do Firestore. */
+export function toSessaoFromFirestoreDoc(
+  raw: Partial<SessaoAplicacaoTaf> & FirestoreTombstoneFields & { id: string },
+): SessaoAplicacaoTaf & FirestoreTombstoneFields {
+  const light = toSessaoLight(raw as SessaoAplicacaoTaf);
+  if (raw.deleted !== true) {
+    return {
+      ...light,
+      ...(raw.updatedAt != null ? { updatedAt: raw.updatedAt } : {}),
+    };
+  }
+  return {
+    ...light,
+    deleted: true,
+    deletedAt: raw.deletedAt ?? raw.updatedAt,
+    deletedBy: raw.deletedBy,
+    updatedAt: raw.updatedAt ?? light.updatedAt,
+    syncVersion: raw.syncVersion,
+    updatedBy: raw.updatedBy,
+    deviceId: raw.deviceId,
   };
 }

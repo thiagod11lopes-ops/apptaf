@@ -427,14 +427,21 @@ async function downloadRecord(
       payload = mergeCadastroRubricas(payload as CadastroRecord, rubricas) as SyncRecord;
     }
   } else if (collection === 'sessoes') {
-    const rubDoc = await getSessaoRubricasFirestore(ownerUid, remote.id);
-    if (rubDoc) {
-      payload = applySessaoRubricasFromRemote(payload as SessaoRecord, rubDoc) as SyncRecord;
+    if (remote.deleted !== true) {
+      const rubDoc = await getSessaoRubricasFirestore(ownerUid, remote.id);
+      if (rubDoc) {
+        payload = applySessaoRubricasFromRemote(payload as SessaoRecord, rubDoc) as SyncRecord;
+      }
     }
   }
 
   const merged = markRecordSynced(
-    remoteDocToSyncRecord({ ...(local ?? {}), ...payload, ownerUid, id: remote.id }, ownerUid),
+    remoteDocToSyncRecord(
+      remote.deleted === true
+        ? { ...payload, ownerUid, id: remote.id }
+        : { ...(local ?? {}), ...payload, ownerUid, id: remote.id },
+      ownerUid,
+    ),
     getCachedLoginUid(),
   );
   if (collection === 'cadastros') {

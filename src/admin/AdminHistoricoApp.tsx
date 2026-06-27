@@ -12,9 +12,9 @@ import { Plus, Pencil, Trash2, ExternalLink, RefreshCw } from 'lucide-react-nati
 import { useTheme } from '../contexts/ThemeContext';
 import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoExcluirSessaoModal';
 import { SessaoHistoricoEditor, type SessaoDraft } from './SessaoHistoricoEditor';
+import { deleteSessaoFromHistorico } from '../services/deleteSessaoHistorico';
 import {
   addSessaoAplicacao,
-  deleteSessaoAplicacao,
   getAllSessoesAplicacao,
   tituloTipoProva,
   updateSessaoAplicacao,
@@ -70,7 +70,7 @@ export function AdminHistoricoApp() {
     setExcluindo(true);
     setErroExclusao(null);
     try {
-      await deleteSessaoAplicacao(sessaoParaExcluir.id);
+      await deleteSessaoFromHistorico(sessaoParaExcluir);
       setSessaoParaExcluir(null);
       await carregar();
     } catch (e) {

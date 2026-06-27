@@ -23,11 +23,13 @@ import { ResultadosGeralPanel } from '../components/ResultadosGeralPanel';
 import type { RootStackParamList } from '../navigation/types';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import {
-  deleteSessaoAplicacao,
   getAllSessoesAplicacao,
   tituloTipoProva,
   type SessaoAplicacaoTaf,
 } from '../services/resultadosAplicadosIndexedDb';
+import {
+  deleteSessaoFromHistorico,
+} from '../services/deleteSessaoHistorico';
 import {
   isSessaoApenasVirtualCadastro,
   isSessaoVirtualRegistrador,
@@ -78,7 +80,7 @@ export default function ResultadosScreen() {
     setExcluindo(true);
     setErroExclusao(null);
     try {
-      await deleteSessaoAplicacao(sessaoParaExcluir.id);
+      await deleteSessaoFromHistorico(sessaoParaExcluir);
       setSessaoParaExcluir(null);
       await carregar();
     } catch (e) {

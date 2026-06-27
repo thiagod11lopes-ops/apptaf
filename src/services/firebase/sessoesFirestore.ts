@@ -11,7 +11,7 @@ import { getFirestoreDb } from '../../config/firebase';
 import { userSessoesPath } from './firestorePaths';
 import { sanitizeForFirestore } from './sanitizeFirestoreData';
 import type { TombstonePayload } from '../../offline-first/sync/tombstone';
-import { extractSessaoRubricas, toSessaoLight } from '../../utils/sessaoLight';
+import { extractSessaoRubricas, toSessaoFromFirestoreDoc, toSessaoLight } from '../../utils/sessaoLight';
 import { stampSessao } from '../offline/recordTimestamps';
 import {
   deleteSessaoRubricasFirestore,
@@ -30,8 +30,14 @@ export async function getAllSessoesFirestoreLight(uid: string): Promise<SessaoAp
   const list: SessaoAplicacaoTaf[] = [];
 
   for (const docSnap of snap.docs) {
-    const raw = docSnap.data() as SessaoAplicacaoTaf & { deleted?: boolean; deletedAt?: number };
-    list.push(toSessaoLight({ ...raw, id: docSnap.id }));
+    const raw = docSnap.data() as SessaoAplicacaoTaf & {
+      deleted?: boolean;
+      deletedAt?: number;
+      syncVersion?: number;
+      updatedBy?: string;
+      deviceId?: string;
+    };
+    list.push(toSessaoFromFirestoreDoc({ ...raw, id: docSnap.id }));
   }
 
   list.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));

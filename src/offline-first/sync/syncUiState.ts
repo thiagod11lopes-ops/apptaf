@@ -37,6 +37,13 @@ export type SyncCountersState = {
 
 export type SyncDirectionPhase = 'preparing' | 'download' | 'upload' | 'finalize' | null;
 
+export type CloudDiffWatchState = {
+  /** Segundos restantes até a próxima comparação nuvem × local (null = inativo). */
+  countdownSec: number | null;
+  /** Mensagem temporária após a comparação (Ok sincronizado / clique em salvar…). */
+  flashMessage: string | null;
+};
+
 /** Estado global observado pela UI — sem acesso ao Firebase. */
 export type SyncUiState = {
   phase: SyncUiPhase;
@@ -51,6 +58,7 @@ export type SyncUiState = {
   uploadProgress: SyncProgressState;
   activeSyncDirection: SyncDirectionPhase;
   counters: SyncCountersState;
+  cloudDiffWatch: CloudDiffWatchState;
   syncMessage: string;
   lastSync: SyncResultSummary | null;
   lastSyncAt: number | null;
@@ -76,6 +84,11 @@ export const EMPTY_COUNTERS: SyncCountersState = {
   syncedTotal: 0,
 };
 
+export const EMPTY_CLOUD_DIFF_WATCH: CloudDiffWatchState = {
+  countdownSec: null,
+  flashMessage: null,
+};
+
 export function defaultSyncUiState(pendingUploads = 0): SyncUiState {
   return {
     phase: 'offline',
@@ -89,6 +102,7 @@ export function defaultSyncUiState(pendingUploads = 0): SyncUiState {
     uploadProgress: { ...EMPTY_SYNC_PROGRESS },
     activeSyncDirection: null,
     counters: { ...EMPTY_COUNTERS, pendingUploads },
+    cloudDiffWatch: { ...EMPTY_CLOUD_DIFF_WATCH },
     syncMessage: '',
     lastSync: null,
     lastSyncAt: null,

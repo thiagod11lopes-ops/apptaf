@@ -13,7 +13,10 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
     online,
     appMode,
     uploadError,
+    syncUi,
   } = useOfflineSyncState();
+
+  const { cloudDiffWatch } = syncUi;
 
   const isOfflineMode = appMode === 'OFFLINE';
 
@@ -62,6 +65,8 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
     syncedWithCloud,
     receivingFromCloudOnly: false,
     statusHint,
+    cloudDiffCountdownSec: cloudDiffWatch.countdownSec,
+    cloudDiffFlashMessage: cloudDiffWatch.flashMessage,
     isOnlineAccount: isAuthenticated,
     usingCloudData: false,
   };

@@ -128,8 +128,27 @@ let syncAuthAvailable = false;
 let queueEstimateInFlight = false;
 let queueEstimateTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudDiffWatchTimer: ReturnType<typeof setInterval> | null = null;
-const CLOUD_DIFF_INTERVAL_MS = 45_000;
+let cloudDiffFlashTimer: ReturnType<typeof setTimeout> | null = null;
+let cloudDiffCountdownSec = 45;
+let cloudDiffFlashMessage: string | null = null;
+let cloudDiffCompareInFlight = false;
+export const CLOUD_DIFF_COUNTDOWN_SEC = 45;
+const CLOUD_DIFF_FLASH_SYNCED_MS = 2000;
+const CLOUD_DIFF_FLASH_NEEDS_SYNC_MS = 10_000;
 const listeners = new Set<Listener>();
+
+function buildCloudDiffWatch(): { countdownSec: number | null; flashMessage: string | null } {
+  const active =
+    syncAuthAvailable &&
+    mode === 'OFFLINE' &&
+    !syncInFlight &&
+    connectivityMonitor.canSync();
+  return {
+    countdownSec:
+      active && !cloudDiffFlashMessage && !cloudDiffCompareInFlight ? cloudDiffCountdownSec : null,
+    flashMessage: active ? cloudDiffFlashMessage : null,
+  };
+}
 
 function buildSyncUi(): SyncUiState {
   const isAuthenticated = syncAuthAvailable;
@@ -158,6 +177,7 @@ function buildSyncUi(): SyncUiState {
     uploadProgress,
     activeSyncDirection,
     counters,
+    cloudDiffWatch: buildCloudDiffWatch(),
     syncMessage: syncMessage || syncProgress.message,
     lastSync: lastSyncResult,
     lastSyncAt,
@@ -351,17 +371,78 @@ function stopCloudDiffWatch(): void {
     clearInterval(cloudDiffWatchTimer);
     cloudDiffWatchTimer = null;
   }
+  if (cloudDiffFlashTimer) {
+    clearTimeout(cloudDiffFlashTimer);
+    cloudDiffFlashTimer = null;
+  }
+  cloudDiffFlashMessage = null;
+  cloudDiffCompareInFlight = false;
+  cloudDiffCountdownSec = CLOUD_DIFF_COUNTDOWN_SEC;
 }
 
-/** Compara IndexedDB × nuvem periodicamente enquanto logado e online. */
+function showCloudDiffFlash(message: string, durationMs: number): void {
+  cloudDiffFlashMessage = message;
+  notifyListeners();
+  if (cloudDiffFlashTimer) clearTimeout(cloudDiffFlashTimer);
+  cloudDiffFlashTimer = setTimeout(() => {
+    cloudDiffFlashMessage = null;
+    cloudDiffFlashTimer = null;
+    cloudDiffCountdownSec = CLOUD_DIFF_COUNTDOWN_SEC;
+    notifyListeners();
+  }, durationMs);
+}
+
+async function runCloudDiffCycle(): Promise<void> {
+  if (cloudDiffCompareInFlight || !syncAuthAvailable || syncInFlight) return;
+  cloudDiffCompareInFlight = true;
+  notifyListeners();
+  try {
+    await refreshCloudQueueEstimate(true);
+    const pending =
+      (counters.pendingUploads ?? 0) + (counters.pendingDownloads ?? 0);
+    if (pending === 0) {
+      showCloudDiffFlash('Ok sincronizado', CLOUD_DIFF_FLASH_SYNCED_MS);
+    } else {
+      showCloudDiffFlash('clique em salvar para sincronizar', CLOUD_DIFF_FLASH_NEEDS_SYNC_MS);
+    }
+  } catch {
+    showCloudDiffFlash('clique em salvar para sincronizar', CLOUD_DIFF_FLASH_NEEDS_SYNC_MS);
+  } finally {
+    cloudDiffCompareInFlight = false;
+    notifyListeners();
+  }
+}
+
+function tickCloudDiffCountdown(): void {
+  if (!syncAuthAvailable || syncInFlight || mode !== 'OFFLINE') return;
+  if (cloudDiffFlashMessage || cloudDiffCompareInFlight) return;
+
+  if (!connectivityMonitor.canSync()) {
+    if (cloudDiffCountdownSec !== CLOUD_DIFF_COUNTDOWN_SEC) {
+      cloudDiffCountdownSec = CLOUD_DIFF_COUNTDOWN_SEC;
+      notifyListeners();
+    }
+    return;
+  }
+
+  cloudDiffCountdownSec -= 1;
+  if (cloudDiffCountdownSec <= 0) {
+    cloudDiffCountdownSec = 0;
+    notifyListeners();
+    void runCloudDiffCycle();
+    return;
+  }
+  notifyListeners();
+}
+
+/** Cronômetro regressivo + comparação IndexedDB × nuvem enquanto logado e offline. */
 function startCloudDiffWatch(): void {
   stopCloudDiffWatch();
   if (!syncAuthAvailable) return;
+  cloudDiffCountdownSec = CLOUD_DIFF_COUNTDOWN_SEC;
   void refreshCloudQueueEstimate(true);
-  cloudDiffWatchTimer = setInterval(() => {
-    if (!syncAuthAvailable || syncInFlight) return;
-    void refreshCloudQueueEstimate();
-  }, CLOUD_DIFF_INTERVAL_MS);
+  cloudDiffWatchTimer = setInterval(tickCloudDiffCountdown, 1000);
+  notifyListeners();
 }
 
 async function refreshCounters(pendingDownloads: number | null = counters.pendingDownloads): Promise<void> {

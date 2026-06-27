@@ -35,6 +35,8 @@ export type SyncCountersState = {
   syncedTotal: number;
 };
 
+export type SyncDirectionPhase = 'preparing' | 'download' | 'upload' | 'finalize' | null;
+
 /** Estado global observado pela UI — sem acesso ao Firebase. */
 export type SyncUiState = {
   phase: SyncUiPhase;
@@ -43,7 +45,11 @@ export type SyncUiState = {
   isOffline: boolean;
   isOnline: boolean;
   isSyncing: boolean;
+  /** @deprecated use downloadProgress / uploadProgress */
   syncProgress: SyncProgressState;
+  downloadProgress: SyncProgressState;
+  uploadProgress: SyncProgressState;
+  activeSyncDirection: SyncDirectionPhase;
   counters: SyncCountersState;
   syncMessage: string;
   lastSync: SyncResultSummary | null;
@@ -79,6 +85,9 @@ export function defaultSyncUiState(pendingUploads = 0): SyncUiState {
     isOnline: false,
     isSyncing: false,
     syncProgress: { ...EMPTY_SYNC_PROGRESS },
+    downloadProgress: { ...EMPTY_SYNC_PROGRESS },
+    uploadProgress: { ...EMPTY_SYNC_PROGRESS },
+    activeSyncDirection: null,
     counters: { ...EMPTY_COUNTERS, pendingUploads },
     syncMessage: '',
     lastSync: null,

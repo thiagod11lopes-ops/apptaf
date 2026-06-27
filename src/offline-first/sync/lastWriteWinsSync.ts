@@ -200,9 +200,9 @@ async function flushRemainingPendingRecords(
   progressCb?.({
     processed: 0,
     total: pending.total,
-    message: 'Finalizando pendências locais',
-    stepId: 'finalizing',
-    phase: 'finalize',
+    message: 'Enviando alterações…',
+    stepId: 'uploading',
+    phase: 'upload',
   });
 
   const remoteMaps = {
@@ -271,9 +271,9 @@ async function flushRemainingPendingRecords(
       progressCb?.({
         processed,
         total: pending.total,
-        message: 'Finalizando pendências locais',
-        stepId: 'finalizing',
-        phase: 'finalize',
+        message: 'Enviando alterações…',
+        stepId: 'uploading',
+        phase: 'upload',
       });
     }
   }
@@ -384,6 +384,152 @@ async function ensureNoPendingRemain(ownerUid: string, stats: LwwSyncStats): Pro
   }
 }
 
+export type SyncPlanSnapshot = {
+  downloadItems: PlannedSyncItem[];
+  uploadItems: PlannedSyncItem[];
+  plannedUploads: number;
+  plannedDownloads: number;
+  totalIgnored: number;
+  localCad: CadastroRecord[];
+  localSess: SessaoRecord[];
+  localApp: AplicadorRecord[];
+  remoteCad: CadastroItemPersist[];
+  remoteSess: SessaoAplicacaoTaf[];
+  remoteApp: AplicadorItemPersist[];
+};
+
+async function buildSyncPlanSnapshot(ownerUid: string): Promise<SyncPlanSnapshot> {
+  await migrateDeviceDataOnLogin(ownerUid);
+
+  const [localCad, localSess, localApp, remoteCad, remoteSess, remoteApp] = await Promise.all([
+    listCadastrosForSync(ownerUid, true),
+    listSessoesForSync(ownerUid, true),
+    listAplicadoresForSync(ownerUid, true),
+    getAllCadastrosFirestoreLight(ownerUid),
+    getAllSessoesFirestoreLight(ownerUid),
+    getAllAplicadoresFirestore(ownerUid),
+  ]);
+
+  await reconcileIdenticalUnsyncedLocals('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
+  await reconcileIdenticalUnsyncedLocals('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
+  await reconcileIdenticalUnsyncedLocals('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
+
+  const [localCadFresh, localSessFresh, localAppFresh] = await Promise.all([
+    listCadastrosForSync(ownerUid, true),
+    listSessoesForSync(ownerUid, true),
+    listAplicadoresForSync(ownerUid, true),
+  ]);
+
+  const cadPlanFresh = buildSyncPlan('cadastros', ownerUid, localCadFresh, remoteCad, remoteToCadastroRecord);
+  const sessPlanFresh = buildSyncPlan('sessoes', ownerUid, localSessFresh, remoteSess, remoteToSessaoRecord);
+  const appPlanFresh = buildSyncPlan('aplicadores', ownerUid, localAppFresh, remoteApp, remoteToAplicadorRecord);
+
+  const fullPlan = [...cadPlanFresh.plan, ...sessPlanFresh.plan, ...appPlanFresh.plan];
+  const downloadItems = fullPlan.filter((p) => p.action === 'download');
+  const uploadItems = fullPlan.filter((p) => p.action === 'upload');
+
+  return {
+    downloadItems,
+    uploadItems,
+    plannedUploads: uploadItems.length,
+    plannedDownloads: downloadItems.length,
+    totalIgnored: cadPlanFresh.ignored + sessPlanFresh.ignored + appPlanFresh.ignored,
+    localCad,
+    localSess,
+    localApp,
+    remoteCad,
+    remoteSess,
+    remoteApp,
+  };
+}
+
+/** Estima filas de envio (local) e recebimento (nuvem) sem executar sync. */
+export async function estimateSyncQueueCounts(
+  ownerUid: string,
+): Promise<{ pendingUploads: number; pendingDownloads: number }> {
+  const [pending, plan] = await Promise.all([
+    getPendingSyncItems(ownerUid),
+    buildSyncPlanSnapshot(ownerUid),
+  ]);
+  return {
+    pendingUploads: pending.total,
+    pendingDownloads: plan.plannedDownloads,
+  };
+}
+
+async function runPlanPhase(
+  ownerUid: string,
+  items: PlannedSyncItem[],
+  phase: 'download' | 'upload',
+  uploadFns: Record<CollectionName, UploadFn>,
+  stats: LwwSyncStats,
+  deletionAudits: DeletionAuditEntry[],
+  progressCb: SyncProgressCallback | undefined,
+  plannedUploads: number,
+  plannedDownloads: number,
+): Promise<void> {
+  const total = items.length;
+  const stepId: SyncStepId = phase === 'download' ? 'downloading' : 'uploading';
+  const message = phase === 'download' ? 'Baixando da nuvem…' : 'Enviando alterações…';
+
+  if (total === 0) {
+    progressCb?.({
+      processed: 1,
+      total: 1,
+      message: phase === 'download' ? 'Nada para baixar da nuvem' : 'Nada para enviar',
+      stepId,
+      pendingUploads: plannedUploads,
+      pendingDownloads: plannedDownloads,
+      phase,
+    });
+    return;
+  }
+
+  let processed = 0;
+  for (const item of items) {
+    progressCb?.({
+      processed,
+      total,
+      message,
+      stepId,
+      pendingUploads: plannedUploads,
+      pendingDownloads: plannedDownloads,
+      phase,
+    });
+
+    try {
+      await executePlanItem(ownerUid, item, uploadFns, stats, deletionAudits);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      stats.errors.push(`${item.collection}/${item.id}: ${msg}`);
+      const failedRecord = item.local?.deleted ? item.local : item.remote?.deleted ? item.remote : null;
+      if (failedRecord?.deleted) {
+        deletionAudits.push(
+          buildDeletionAuditEntry(
+            item.collection,
+            failedRecord,
+            phase,
+            Date.now(),
+            true,
+          ),
+        );
+      }
+    } finally {
+      processed += 1;
+      progressCb?.({
+        processed,
+        total,
+        message:
+          phase === 'download' && processed === total ? 'Atualizando banco local…' : message,
+        stepId: phase === 'download' && processed === total ? 'updating_local' : stepId,
+        pendingUploads: plannedUploads,
+        pendingDownloads: plannedDownloads,
+        phase,
+      });
+    }
+  }
+}
+
 export async function executeLastWriteWinsSync(
   ownerUid: string,
   options?: {
@@ -414,8 +560,6 @@ export async function executeLastWriteWinsSync(
     phase: 'compare',
   });
 
-  await migrateDeviceDataOnLogin(ownerUid);
-
   progressCb?.({
     processed: 0,
     total: 0,
@@ -424,34 +568,20 @@ export async function executeLastWriteWinsSync(
     phase: 'compare',
   });
 
-  const [localCad, localSess, localApp, remoteCad, remoteSess, remoteApp] = await Promise.all([
-    listCadastrosForSync(ownerUid, true),
-    listSessoesForSync(ownerUid, true),
-    listAplicadoresForSync(ownerUid, true),
-    getAllCadastrosFirestoreLight(ownerUid),
-    getAllSessoesFirestoreLight(ownerUid),
-    getAllAplicadoresFirestore(ownerUid),
-  ]);
-
-  await reconcileIdenticalUnsyncedLocals('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
-  await reconcileIdenticalUnsyncedLocals('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
-  await reconcileIdenticalUnsyncedLocals('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
-
-  const [localCadFresh, localSessFresh, localAppFresh] = await Promise.all([
-    listCadastrosForSync(ownerUid, true),
-    listSessoesForSync(ownerUid, true),
-    listAplicadoresForSync(ownerUid, true),
-  ]);
-
-  const cadPlanFresh = buildSyncPlan('cadastros', ownerUid, localCadFresh, remoteCad, remoteToCadastroRecord);
-  const sessPlanFresh = buildSyncPlan('sessoes', ownerUid, localSessFresh, remoteSess, remoteToSessaoRecord);
-  const appPlanFresh = buildSyncPlan('aplicadores', ownerUid, localAppFresh, remoteApp, remoteToAplicadorRecord);
-
-  const fullPlan = [...cadPlanFresh.plan, ...sessPlanFresh.plan, ...appPlanFresh.plan];
-  const totalIgnored =
-    cadPlanFresh.ignored + sessPlanFresh.ignored + appPlanFresh.ignored;
-  const plannedUploads = fullPlan.filter((p) => p.action === 'upload').length;
-  const plannedDownloads = fullPlan.filter((p) => p.action === 'download').length;
+  const plan = await buildSyncPlanSnapshot(ownerUid);
+  const {
+    downloadItems,
+    uploadItems,
+    plannedUploads,
+    plannedDownloads,
+    totalIgnored,
+    localCad,
+    localSess,
+    localApp,
+    remoteCad,
+    remoteSess,
+    remoteApp,
+  } = plan;
   const workTotal = plannedUploads + plannedDownloads;
 
   progressCb?.({
@@ -472,6 +602,17 @@ export async function executeLastWriteWinsSync(
 
   if (workTotal === 0) {
     stats.ignored = totalIgnored;
+    await runPlanPhase(
+      ownerUid,
+      downloadItems,
+      'download',
+      uploadFns,
+      stats,
+      deletionAudits,
+      progressCb,
+      plannedUploads,
+      plannedDownloads,
+    );
     await flushRemainingPendingRecords(
       ownerUid,
       remoteCad,
@@ -533,52 +674,28 @@ export async function executeLastWriteWinsSync(
     };
   }
 
-  let processed = 0;
-  for (const item of fullPlan) {
-    const isUpload = item.action === 'upload';
-    const stepId: SyncStepId = isUpload ? 'uploading' : 'downloading';
-    const message = isUpload ? 'Enviando alterações' : 'Baixando alterações';
-
-    progressCb?.({
-      processed,
-      total: workTotal,
-      message,
-      stepId,
-      pendingUploads: plannedUploads,
-      pendingDownloads: plannedDownloads,
-      phase: isUpload ? 'upload' : 'download',
-    });
-
-    try {
-      await executePlanItem(ownerUid, item, uploadFns, stats, deletionAudits);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      stats.errors.push(`${item.collection}/${item.id}: ${msg}`);
-      const failedRecord = item.local?.deleted ? item.local : item.remote?.deleted ? item.remote : null;
-      if (failedRecord?.deleted) {
-        deletionAudits.push(
-          buildDeletionAuditEntry(
-            item.collection,
-            failedRecord,
-            item.action === 'upload' ? 'upload' : 'download',
-            Date.now(),
-            true,
-          ),
-        );
-      }
-    } finally {
-      processed += 1;
-      progressCb?.({
-        processed,
-        total: workTotal,
-        message: processed === workTotal && item.action === 'download' ? 'Atualizando banco local' : message,
-        stepId: item.action === 'download' ? 'updating_local' : stepId,
-        pendingUploads: plannedUploads,
-        pendingDownloads: plannedDownloads,
-        phase: item.action === 'upload' ? 'upload' : 'download',
-      });
-    }
-  }
+  await runPlanPhase(
+    ownerUid,
+    downloadItems,
+    'download',
+    uploadFns,
+    stats,
+    deletionAudits,
+    progressCb,
+    plannedUploads,
+    plannedDownloads,
+  );
+  await runPlanPhase(
+    ownerUid,
+    uploadItems,
+    'upload',
+    uploadFns,
+    stats,
+    deletionAudits,
+    progressCb,
+    plannedUploads,
+    plannedDownloads,
+  );
 
   stats.ignored = totalIgnored;
 

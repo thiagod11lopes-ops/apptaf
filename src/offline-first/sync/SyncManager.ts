@@ -26,8 +26,10 @@ import {
   type SyncResultSummary,
   type SyncUiPhase,
   type SyncUiState,
+  type SyncDirectionPhase,
   EMPTY_SYNC_PROGRESS,
 } from './syncUiState';
+import { estimateSyncQueueCounts } from './lastWriteWinsSync';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
@@ -107,6 +109,9 @@ let clockDriftResult: ClockDriftResult | null = null;
 let backupIdBeforeSync: number | null = null;
 let uiPhase: SyncUiPhase = 'offline';
 let syncProgress: SyncProgressState = { ...EMPTY_SYNC_PROGRESS };
+let downloadProgress: SyncProgressState = { ...EMPTY_SYNC_PROGRESS };
+let uploadProgress: SyncProgressState = { ...EMPTY_SYNC_PROGRESS };
+let activeSyncDirection: SyncDirectionPhase = null;
 let syncMessage = '';
 let lastSyncResult: SyncResultSummary | null = null;
 let lastSyncAt: number | null = null;
@@ -119,6 +124,8 @@ let syncStartedAt = 0;
 let recordSyncStartedAt = 0;
 let storedEnsureAuth: EnsureAuthenticatedFn | null = null;
 let syncAuthAvailable = false;
+let queueEstimateInFlight = false;
+let queueEstimateTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<Listener>();
 
 function buildSyncUi(): SyncUiState {
@@ -144,6 +151,9 @@ function buildSyncUi(): SyncUiState {
     isOnline,
     isSyncing,
     syncProgress,
+    downloadProgress,
+    uploadProgress,
+    activeSyncDirection,
     counters,
     syncMessage: syncMessage || syncProgress.message,
     lastSync: lastSyncResult,
@@ -213,13 +223,47 @@ function completeStep(stepId: SyncStepId): void {
   notifyListeners();
 }
 
+function setDirectionProgress(
+  direction: SyncDirectionPhase,
+  percent: number,
+  message: string,
+  processed = 0,
+  total = 0,
+): void {
+  activeSyncDirection = direction;
+  const next: SyncProgressState = {
+    percent: Math.min(100, Math.max(0, Math.round(percent))),
+    message,
+    processed,
+    total,
+    elapsedMs: syncStartedAt ? Date.now() - syncStartedAt : 0,
+    remainingSeconds: null,
+    recordsPerSecond: 0,
+  };
+  syncProgress = next;
+  if (direction === 'download') {
+    downloadProgress = next;
+  } else if (direction === 'upload') {
+    uploadProgress = next;
+  }
+  syncMessage = message;
+  notifyListeners();
+}
+
 function setUiProgress(
   percent: number,
   message: string,
   processed = 0,
   total = 0,
   opts?: Partial<Pick<SyncProgressState, 'remainingSeconds' | 'recordsPerSecond'>>,
+  direction: SyncDirectionPhase = activeSyncDirection,
 ): void {
+  if (direction === 'download' || direction === 'upload') {
+    setDirectionProgress(direction, percent, message, processed, total);
+    return;
+  }
+
+  activeSyncDirection = direction;
   syncProgress = {
     percent: Math.min(100, Math.max(0, Math.round(percent))),
     message,
@@ -236,6 +280,45 @@ function setUiProgress(
 function setPhase(phase: SyncUiPhase): void {
   uiPhase = phase;
   notifyListeners();
+}
+
+async function refreshCloudQueueEstimate(force = false): Promise<void> {
+  const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
+  if (uid === ANONYMOUS_OWNER || !syncAuthAvailable || syncInFlight) return;
+  if (!connectivityMonitor.canSync()) return;
+  if (queueEstimateInFlight && !force) return;
+
+  queueEstimateInFlight = true;
+  const wasOffline = systemState.isOffline();
+  try {
+    if (wasOffline) await systemState.setOnlineMode();
+    syncEngine.bindOwner(uid);
+    await syncEngine.init(uid);
+    const estimate = await estimateSyncQueueCounts(uid);
+    counters = {
+      ...counters,
+      pendingUploads: estimate.pendingUploads,
+      pendingDownloads: estimate.pendingDownloads,
+    };
+    notifyListeners();
+  } catch {
+    // Mantém contadores locais se a estimativa falhar.
+  } finally {
+    if (wasOffline) {
+      syncEngine.deactivateOnlineMode();
+      await syncEngine.shutdownSession();
+      await systemState.setOfflineMode();
+    }
+    queueEstimateInFlight = false;
+  }
+}
+
+function scheduleCloudQueueEstimate(): void {
+  if (queueEstimateTimer) clearTimeout(queueEstimateTimer);
+  queueEstimateTimer = setTimeout(() => {
+    queueEstimateTimer = null;
+    void refreshCloudQueueEstimate();
+  }, 1200);
 }
 
 async function refreshCounters(pendingDownloads: number | null = counters.pendingDownloads): Promise<void> {
@@ -275,6 +358,9 @@ async function returnToOfflineMode(): Promise<void> {
   backupIdBeforeSync = null;
   clockDriftResult = null;
   syncProgress = { ...EMPTY_SYNC_PROGRESS };
+  downloadProgress = { ...EMPTY_SYNC_PROGRESS };
+  uploadProgress = { ...EMPTY_SYNC_PROGRESS };
+  activeSyncDirection = null;
   syncMessage = '';
   syncSteps = createInitialSyncSteps();
   errorStepId = null;
@@ -303,6 +389,9 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
   syncStartedAt = Date.now();
   recordSyncStartedAt = 0;
   syncProgress = { ...EMPTY_SYNC_PROGRESS };
+  downloadProgress = { ...EMPTY_SYNC_PROGRESS };
+  uploadProgress = { ...EMPTY_SYNC_PROGRESS };
+  activeSyncDirection = 'preparing';
   startEtaTimer();
 
   const startedAt = Date.now();
@@ -392,13 +481,21 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
         }
         if (phase && phase !== lastProgressPhase) {
           if (phase === 'compare') completeStep('comparing');
-          if (phase === 'upload') completeStep('uploading');
           if (phase === 'download') completeStep('downloading');
+          if (phase === 'upload') completeStep('uploading');
           if (phase === 'finalize') completeStep('finalizing');
           lastProgressPhase = phase;
         }
-        const pct = total > 0 ? (processed / total) * 100 : 0;
-        setUiProgress(pct, message, processed, total);
+        const pct = total > 0 ? (processed / total) * 100 : 100;
+        if (phase === 'download') {
+          setDirectionProgress('download', pct, message, processed, total);
+        } else if (phase === 'upload') {
+          setDirectionProgress('upload', pct, message, processed, total);
+        } else if (phase === 'compare') {
+          setUiProgress(0, message, processed, total, undefined, 'preparing');
+        } else {
+          setUiProgress(pct, message, processed, total, undefined, 'finalize');
+        }
       },
     });
 
@@ -518,6 +615,7 @@ export const syncManager = {
 
   setAuthAvailable(authenticated: boolean): void {
     syncAuthAvailable = authenticated;
+    if (authenticated) scheduleCloudQueueEstimate();
     notifyListeners();
   },
 
@@ -533,6 +631,7 @@ export const syncManager = {
     await syncEngine.preparePendingOwner(dataOwnerUid);
     await loadLastSyncFromAudit();
     await refreshPendingSummary();
+    scheduleCloudQueueEstimate();
     notifyListeners();
   },
 
@@ -544,6 +643,7 @@ export const syncManager = {
 
   async evaluateOnReconnect(): Promise<void> {
     await refreshPendingSummary();
+    scheduleCloudQueueEstimate();
     notifyListeners();
   },
 
@@ -605,6 +705,7 @@ export const syncManager = {
 
   async refreshPending(): Promise<PendingSyncSummary> {
     const summary = await refreshPendingSummary();
+    scheduleCloudQueueEstimate();
     notifyListeners();
     return summary;
   },

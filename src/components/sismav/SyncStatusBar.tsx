@@ -10,74 +10,68 @@ import {
   formatDurationSeconds,
   formatLastSyncLabel,
   formatRecordsPerSecond,
-  formatRemainingSeconds,
 } from '../../offline-first/sync/syncFormatters';
 import { SYNC_AUTH_REQUIRED_MESSAGE } from '../../offline-first/sync/SyncManager';
-import { stepIcon, stepLabel, type SyncStepState } from '../../offline-first/sync/syncSteps';
-import type { SyncUiState } from '../../offline-first/sync/syncUiState';
+import { stepLabel } from '../../offline-first/sync/syncSteps';
+import type { SyncProgressState, SyncUiState } from '../../offline-first/sync/syncUiState';
 
-function statusLabel(
-  syncUi: SyncUiState,
-  loggedIn: boolean,
-): { emoji: string; label: string; color: string } {
-  if (!loggedIn) {
-    return { emoji: '🟡', label: 'Sem login', color: '#ca8a04' };
-  }
-  if (syncUi.phase === 'error') {
-    return { emoji: '⚠', label: 'Erro', color: '#dc2626' };
-  }
-  if (syncUi.phase === 'success') {
-    return { emoji: '✅', label: 'Concluído', color: '#16a34a' };
-  }
-  if (syncUi.phase === 'already_up_to_date') {
-    return { emoji: '✅', label: 'Atualizado', color: '#16a34a' };
-  }
-  if (syncUi.isSyncing) {
-    return { emoji: '🟡', label: 'Sincronizando', color: '#ca8a04' };
-  }
-  if (syncUi.isOnline && !syncUi.isOffline) {
-    return { emoji: '🟢', label: 'Online', color: '#16a34a' };
-  }
-  return { emoji: '🔴', label: 'Offline', color: '#64748b' };
+function formatQueueCount(value: number | null | undefined): string {
+  if (value == null) return '—';
+  return value.toLocaleString('pt-BR');
 }
 
-function CounterCell({
-  emoji,
-  label,
-  value,
+function cloudConnectionLabel(syncUi: SyncUiState, loggedIn: boolean): string {
+  if (!loggedIn) return 'Faça login para conectar';
+  if (syncUi.phase === 'error') return 'Erro na conexão';
+  if (syncUi.isSyncing) return 'Conectando à nuvem…';
+  if (syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date') return 'Sincronizado';
+  return 'Desconectado da nuvem';
+}
+
+function PhaseProgressBar({
+  title,
+  progress,
   theme,
+  active,
+  done,
 }: {
-  emoji: string;
-  label: string;
-  value: string;
+  title: string;
+  progress: SyncProgressState;
   theme: ReturnType<typeof useTheme>['theme'];
+  active: boolean;
+  done: boolean;
 }) {
-  return (
-    <View style={styles.counterCell}>
-      <Text style={[styles.counterEmoji]}>{emoji}</Text>
-      <Text style={[styles.counterLabel, { color: theme.textSecondary }]}>{label}</Text>
-      <Text style={[styles.counterValue, { color: theme.text }]}>{value}</Text>
-    </View>
-  );
-}
-
-function StepRow({ step, theme }: { step: SyncStepState; theme: ReturnType<typeof useTheme>['theme'] }) {
-  const icon = stepIcon(step.status);
-  const color =
-    step.status === 'done'
-      ? '#16a34a'
-      : step.status === 'running'
-        ? '#ca8a04'
-        : step.status === 'error'
-          ? '#dc2626'
-          : theme.textMuted;
+  const ts = theme.textStyles;
+  const percent = done ? 100 : progress.percent;
+  const showDetail = progress.total > 0;
 
   return (
-    <View style={styles.stepRow}>
-      <Text style={[styles.stepIcon, { color }]}>{icon}</Text>
-      <Text style={[styles.stepLabel, { color: step.status === 'pending' ? theme.textMuted : theme.text }]}>
-        {step.label}
-      </Text>
+    <View style={styles.phaseBlock}>
+      <View style={styles.phaseHeader}>
+        <Text style={[styles.phaseTitle, { color: active || done ? theme.text : theme.textMuted }]}>
+          {title}
+        </Text>
+        <Text style={[ts.caption, { color: theme.textSecondary, fontWeight: '700' }]}>{percent}%</Text>
+      </View>
+      <View style={[styles.track, { backgroundColor: theme.border }]}>
+        <View
+          style={[
+            styles.fill,
+            {
+              width: `${percent}%`,
+              backgroundColor: done ? theme.gain : active ? theme.primary : theme.border,
+            },
+          ]}
+        />
+      </View>
+      {active && progress.message ? (
+        <Text style={[ts.caption, { color: theme.textSecondary, marginTop: 4 }]}>{progress.message}</Text>
+      ) : null}
+      {active && showDetail ? (
+        <Text style={[ts.caption, { color: theme.textMuted, marginTop: 2 }]}>
+          {progress.processed} / {progress.total} registros
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -86,33 +80,44 @@ export function SyncStatusBar() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const { firebaseEnabled, isAuthenticated, authReady } = useAuth();
-  const { syncUi, startSyncFromToggle, retrySync } = useOfflineSyncState();
+  const { syncUi, startSyncFromToggle, retrySync, cancelOnlineMode } = useOfflineSyncState();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [authBlockedHint, setAuthBlockedHint] = useState(false);
 
   const loggedIn = authReady && isAuthenticated;
-  const sessionReady = loggedIn;
 
   useEffect(() => {
-    if (sessionReady) setAuthBlockedHint(false);
-  }, [sessionReady]);
-  const status = statusLabel(syncUi, loggedIn);
+    if (loggedIn) setAuthBlockedHint(false);
+  }, [loggedIn]);
+
   const switchOn =
     syncUi.isSyncing ||
     syncUi.phase === 'success' ||
     syncUi.phase === 'already_up_to_date' ||
     syncUi.isOnline;
-  const showPanel = syncUi.isSyncing && syncUi.phase !== 'success' && syncUi.phase !== 'already_up_to_date';
-  const showSuccess = syncUi.phase === 'success' && syncUi.lastSync;
-  const showUpToDate = syncUi.phase === 'already_up_to_date';
-  const showError = syncUi.phase === 'error';
-  const showIdleCounters = !showPanel && !showSuccess && !showUpToDate && !showError;
-  const showAuthBlocked = !loggedIn && !syncUi.isSyncing;
+
+  const pendingUploads = syncUi.counters.pendingUploads;
+  const pendingDownloads = syncUi.counters.pendingDownloads;
+
+  const preparing =
+    syncUi.isSyncing &&
+    (syncUi.activeSyncDirection === 'preparing' || syncUi.activeSyncDirection === null);
+  const downloadActive =
+    syncUi.isSyncing &&
+    (syncUi.activeSyncDirection === 'download' || preparing);
+  const downloadDone =
+    syncUi.isSyncing &&
+    (syncUi.activeSyncDirection === 'upload' || syncUi.activeSyncDirection === 'finalize');
+  const uploadActive = syncUi.isSyncing && syncUi.activeSyncDirection === 'upload';
+  const uploadDone = syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date';
 
   const handleToggle = useCallback(
     async (next: boolean) => {
-      if (!next) return;
-      if (!sessionReady) {
+      if (!next) {
+        if (!syncUi.isSyncing) cancelOnlineMode();
+        return;
+      }
+      if (!loggedIn) {
         setAuthBlockedHint(true);
         return;
       }
@@ -121,7 +126,7 @@ export function SyncStatusBar() {
       setAuthBlockedHint(false);
       await startSyncFromToggle();
     },
-    [firebaseEnabled, sessionReady, startSyncFromToggle, syncUi.toggleEnabled],
+    [cancelOnlineMode, firebaseEnabled, loggedIn, startSyncFromToggle, syncUi.isSyncing, syncUi.toggleEnabled],
   );
 
   const openHistory = useCallback(() => {
@@ -134,10 +139,10 @@ export function SyncStatusBar() {
 
   if (!firebaseEnabled) return null;
 
-  const downloadDisplay =
-    syncUi.counters.pendingDownloads != null
-      ? syncUi.counters.pendingDownloads.toLocaleString('pt-BR')
-      : '—';
+  const showProgress = syncUi.isSyncing && syncUi.phase !== 'success';
+  const showSuccess = syncUi.phase === 'success' && syncUi.lastSync;
+  const showUpToDate = syncUi.phase === 'already_up_to_date';
+  const showError = syncUi.phase === 'error';
 
   return (
     <>
@@ -150,223 +155,158 @@ export function SyncStatusBar() {
           },
         ]}
       >
-          <View style={styles.topRow}>
-            <View style={styles.statusCol}>
-              <View style={styles.statusRow}>
-                <Text style={styles.statusEmoji}>{status.emoji}</Text>
-                <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+        <Text style={[ts.caption, { color: theme.textSecondary, fontWeight: '700', letterSpacing: 0.4 }]}>
+          SINCRONIZAÇÃO COM A NUVEM
+        </Text>
+
+        <View style={styles.controlRow}>
+          <View style={styles.controlLabels}>
+            <Text style={[styles.connectionLabel, { color: theme.text }]}>
+              {cloudConnectionLabel(syncUi, loggedIn)}
+            </Text>
+            {!syncUi.isSyncing && syncUi.phase !== 'success' ? (
+              <Text style={[ts.caption, { color: theme.textSecondary, marginTop: 2 }]}>
+                Última sync: {formatLastSyncLabel(syncUi.lastSyncAt)}
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={styles.switchCluster}>
+            <View style={styles.queueBadges}>
+              <View style={[styles.queueBadge, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+                <Text style={[ts.caption, { color: theme.textSecondary }]}>⬇</Text>
+                <Text style={[styles.queueValue, { color: theme.text }]}>
+                  {formatQueueCount(pendingDownloads)}
+                </Text>
               </View>
-              {!syncUi.isSyncing && syncUi.phase !== 'success' ? (
-                <Text style={[ts.caption, { color: theme.textSecondary, marginTop: 2 }]}>
-                  Última sincronização:{' '}
-                  <Text style={{ color: theme.text, fontWeight: '600' }}>
-                    {formatLastSyncLabel(syncUi.lastSyncAt)}
-                  </Text>
+              <View style={[styles.queueBadge, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+                <Text style={[ts.caption, { color: theme.textSecondary }]}>⬆</Text>
+                <Text style={[styles.queueValue, { color: theme.text }]}>
+                  {formatQueueCount(pendingUploads)}
                 </Text>
-              ) : null}
-              {loggedIn && !syncUi.isSyncing && syncUi.phase !== 'success' ? (
-                <Text style={[ts.caption, { color: theme.gain, marginTop: 2, fontWeight: '600' }]}>
-                  Logado com Google · sync manual na chave
-                </Text>
-              ) : null}
-              {syncUi.isSyncing && syncUi.syncMessage ? (
-                <Text style={[ts.caption, { color: theme.primary, marginTop: 4, fontWeight: '600' }]}>
-                  {syncUi.syncMessage}
-                </Text>
-              ) : null}
+              </View>
             </View>
 
-            <View
-              style={styles.switchRow}
-              {...(Platform.OS === 'web'
-                ? ({
-                    title: sessionReady
-                      ? 'Ativar sincronização manual'
-                      : 'Faça login com Google antes de ativar sincronização',
-                  } as object)
-                : {})}
-            >
-              {syncUi.isSyncing ? (
-                <ActivityIndicator size="small" color={theme.primary} style={styles.spinner} />
-              ) : null}
+            {syncUi.isSyncing ? (
+              <ActivityIndicator size="small" color={theme.primary} />
+            ) : null}
+
+            <View style={styles.switchWithCaption}>
+              <Text
+                style={[
+                  ts.caption,
+                  { color: switchOn ? theme.gain : theme.textMuted, fontWeight: '700', fontSize: 10 },
+                ]}
+              >
+                {switchOn ? 'CONECTADO' : 'DESCONECTADO'}
+              </Text>
               <Switch
                 value={switchOn}
                 onValueChange={(v) => void handleToggle(v)}
-                disabled={!sessionReady || !syncUi.toggleEnabled}
+                disabled={!loggedIn || (!syncUi.toggleEnabled && !switchOn)}
                 trackColor={{ false: '#cbd5e1', true: theme.primary }}
                 thumbColor="#FFFFFF"
                 accessibilityLabel={
-                  sessionReady
-                    ? 'Chave de sincronização'
-                    : 'Chave bloqueada — faça login com Google antes de sincronizar'
+                  loggedIn
+                    ? 'Conectar ou desconectar da nuvem'
+                    : 'Conexão bloqueada — faça login com Google'
                 }
-                accessibilityState={{ disabled: !sessionReady || !syncUi.toggleEnabled }}
+                accessibilityState={{ disabled: !loggedIn }}
               />
             </View>
           </View>
+        </View>
 
-          {showAuthBlocked ? (
-            <View style={[styles.blockedBanner, { backgroundColor: '#fef3c7', borderColor: '#ca8a04' }]}>
-              <Text style={[ts.caption, { color: '#92400e', fontWeight: '700', lineHeight: 18 }]}>
-                ⚠ Você precisa estar logado com Google para ativar a sincronização
-              </Text>
-              <Text style={[ts.caption, { color: '#92400e', lineHeight: 18, marginTop: 4 }]}>
-                {SYNC_AUTH_REQUIRED_MESSAGE}
-              </Text>
-            </View>
-          ) : null}
+        <View style={styles.queueLegend}>
+          <Text style={[ts.caption, { color: theme.textMuted }]}>⬇ receber da nuvem</Text>
+          <Text style={[ts.caption, { color: theme.textMuted }]}>⬆ enviar para nuvem</Text>
+        </View>
 
-          {authBlockedHint && sessionReady === false ? (
-            <Text style={[ts.caption, { color: theme.loss, fontWeight: '600' }]}>
+        {!loggedIn ? (
+          <View style={[styles.blockedBanner, { backgroundColor: '#fef3c7', borderColor: '#ca8a04' }]}>
+            <Text style={[ts.caption, { color: '#92400e', fontWeight: '700', lineHeight: 18 }]}>
+              ⚠ Faça login com Google para conectar à nuvem
+            </Text>
+            <Text style={[ts.caption, { color: '#92400e', lineHeight: 18, marginTop: 4 }]}>
               {SYNC_AUTH_REQUIRED_MESSAGE}
             </Text>
-          ) : null}
+          </View>
+        ) : null}
 
-          {showIdleCounters ? (
-            <View style={styles.countersGrid}>
-              <CounterCell
-                emoji="⬆"
-                label="Upload"
-                value={syncUi.counters.pendingUploads.toLocaleString('pt-BR')}
-                theme={theme}
-              />
-              <CounterCell emoji="⬇" label="Download" value={downloadDisplay} theme={theme} />
-              <CounterCell
-                emoji="✓"
-                label="Sincronizados"
-                value={syncUi.counters.syncedTotal.toLocaleString('pt-BR')}
-                theme={theme}
-              />
-            </View>
-          ) : null}
+        {authBlockedHint && !loggedIn ? (
+          <Text style={[ts.caption, { color: theme.loss, fontWeight: '600' }]}>
+            {SYNC_AUTH_REQUIRED_MESSAGE}
+          </Text>
+        ) : null}
 
-          {showPanel ? (
-            <View style={styles.panel}>
-              <Text style={[styles.panelTitle, { color: theme.text }]}>Status atual</Text>
-              <View style={styles.stepsList}>
-                {syncUi.syncSteps.map((step) => (
-                  <StepRow key={step.id} step={step} theme={theme} />
-                ))}
-              </View>
+        {showProgress ? (
+          <View style={styles.progressPanel}>
+            <PhaseProgressBar
+              title="1. Baixando da nuvem"
+              progress={syncUi.downloadProgress}
+              theme={theme}
+              active={downloadActive}
+              done={downloadDone}
+            />
+            <PhaseProgressBar
+              title="2. Enviando alterações"
+              progress={syncUi.uploadProgress}
+              theme={theme}
+              active={uploadActive}
+              done={uploadDone}
+            />
+          </View>
+        ) : null}
 
-              {syncUi.syncProgress.total > 0 ? (
-                <View style={styles.progressBlock}>
-                  <View style={[styles.track, { backgroundColor: theme.border }]}>
-                    <View
-                      style={[
-                        styles.fill,
-                        {
-                          width: `${syncUi.syncProgress.percent}%`,
-                          backgroundColor: theme.primary,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.progressMeta}>
-                    <Text style={[ts.caption, { color: theme.text, fontWeight: '800' }]}>
-                      {syncUi.syncProgress.percent}%
-                    </Text>
-                    <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                      {syncUi.syncProgress.processed} / {syncUi.syncProgress.total} registros
-                    </Text>
-                  </View>
-                  <View style={styles.timingRow}>
-                    <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                      Tempo restante: {formatRemainingSeconds(syncUi.syncProgress.remainingSeconds ?? 0)}
-                    </Text>
-                    <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                      {formatRecordsPerSecond(syncUi.syncProgress.recordsPerSecond)}
-                    </Text>
-                  </View>
-                </View>
-              ) : (
-                <Text style={[ts.caption, { color: theme.textSecondary, fontStyle: 'italic' }]}>
-                  {syncUi.syncProgress.message || 'Preparando…'}
-                </Text>
-              )}
+        {showUpToDate ? (
+          <Text style={[styles.successTitle, { color: theme.gain }]}>
+            ✅ Seu banco de dados já está atualizado.
+          </Text>
+        ) : null}
 
-              <View style={styles.countersGridCompact}>
-                <Text style={[ts.caption, { color: theme.text }]}>
-                  ⬆ {syncUi.counters.pendingUploads.toLocaleString('pt-BR')}
-                </Text>
-                <Text style={[ts.caption, { color: theme.text }]}>
-                  ⬇{' '}
-                  {(syncUi.counters.pendingDownloads ?? 0).toLocaleString('pt-BR')}
-                </Text>
-                <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                  ✓ {syncUi.counters.syncedTotal.toLocaleString('pt-BR')}
-                </Text>
-              </View>
-            </View>
-          ) : null}
+        {showSuccess && syncUi.lastSync ? (
+          <View style={styles.resultBlock}>
+            <Text style={[styles.successTitle, { color: theme.gain }]}>✅ Sincronização concluída</Text>
+            <Text style={[ts.caption, { color: theme.textSecondary }]}>
+              ⬇ {syncUi.lastSync.downloads} recebidos · ⬆ {syncUi.lastSync.uploads} enviados ·{' '}
+              {formatDurationSeconds(syncUi.lastSync.durationMs)} ·{' '}
+              {formatRecordsPerSecond(syncUi.lastSync.avgRecordsPerSecond)}
+            </Text>
+          </View>
+        ) : null}
 
-          {showUpToDate ? (
-            <View style={styles.resultBlock}>
-              <Text style={[styles.successTitle, { color: theme.gain }]}>✅ Seu banco de dados já está atualizado.</Text>
-            </View>
-          ) : null}
-
-          {showSuccess && syncUi.lastSync ? (
-            <View style={styles.resultBlock}>
-              <Text style={[styles.successTitle, { color: theme.gain }]}>✅ Sincronização concluída</Text>
-              <View style={styles.summaryGrid}>
-                <View style={styles.summaryItem}>
-                  <Text style={[ts.caption, { color: theme.textSecondary }]}>⬆ Uploads</Text>
-                  <Text style={[styles.summaryValue, { color: theme.text }]}>{syncUi.lastSync.uploads}</Text>
-                </View>
-                <View style={styles.summaryItem}>
-                  <Text style={[ts.caption, { color: theme.textSecondary }]}>⬇ Downloads</Text>
-                  <Text style={[styles.summaryValue, { color: theme.text }]}>{syncUi.lastSync.downloads}</Text>
-                </View>
-                <View style={styles.summaryItem}>
-                  <Text style={[ts.caption, { color: theme.textSecondary }]}>Ignorados</Text>
-                  <Text style={[styles.summaryValue, { color: theme.text }]}>{syncUi.lastSync.ignored}</Text>
-                </View>
-              </View>
+        {showError ? (
+          <View style={styles.errorBlock}>
+            <Text style={[styles.errorTitle, { color: theme.loss }]}>⚠ Erro durante sincronização</Text>
+            {syncUi.errorStepId ? (
               <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                Tempo: {formatDurationSeconds(syncUi.lastSync.durationMs)}
+                Etapa: {stepLabel(syncUi.errorStepId)}
               </Text>
-              <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                Velocidade média: {formatRecordsPerSecond(syncUi.lastSync.avgRecordsPerSecond)}
-              </Text>
-              <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                Última sincronização: {formatLastSyncLabel(syncUi.lastSync.finishedAt)}
-              </Text>
-            </View>
-          ) : null}
-
-          {showError ? (
-            <View style={styles.errorBlock}>
-              <Text style={[styles.errorTitle, { color: theme.loss }]}>⚠ Erro durante sincronização</Text>
-              {syncUi.errorStepId ? (
-                <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                  Etapa: {stepLabel(syncUi.errorStepId)}
-                </Text>
-              ) : null}
-              <Text style={[ts.caption, { color: theme.textSecondary, lineHeight: 18 }]}>
-                {syncUi.syncError ?? 'Não foi possível sincronizar.'}
-              </Text>
-              <PressableScale
-                onPress={() => void retrySync()}
-                style={[styles.retryBtn, { borderColor: theme.primary }]}
-              >
-                <Text style={[styles.retryText, { color: theme.primary }]}>Tentar novamente</Text>
-              </PressableScale>
-            </View>
-          ) : null}
-
-          {!syncUi.isSyncing ? (
+            ) : null}
+            <Text style={[ts.caption, { color: theme.textSecondary, lineHeight: 18 }]}>
+              {syncUi.syncError ?? 'Não foi possível sincronizar.'}
+            </Text>
             <PressableScale
-              onPress={openHistory}
-              style={styles.historyBtn}
-              accessibilityLabel="Ver histórico de sincronizações"
+              onPress={() => void retrySync()}
+              style={[styles.retryBtn, { borderColor: theme.primary }]}
             >
-              <Text style={[ts.caption, styles.historyHint, { color: theme.primary }]}>
-                Ver histórico de sincronizações
-              </Text>
+              <Text style={[styles.retryText, { color: theme.primary }]}>Tentar novamente</Text>
             </PressableScale>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
+
+        {!syncUi.isSyncing ? (
+          <PressableScale
+            onPress={openHistory}
+            style={styles.historyBtn}
+            accessibilityLabel="Ver histórico de sincronizações"
+          >
+            <Text style={[ts.caption, styles.historyHint, { color: theme.primary }]}>
+              Ver histórico de sincronizações
+            </Text>
+          </PressableScale>
+        ) : null}
+      </View>
 
       <SyncHistoryModal visible={historyOpen} onClose={() => setHistoryOpen(false)} />
     </>
@@ -380,106 +320,79 @@ const styles = StyleSheet.create({
     padding: 14,
     marginTop: 12,
     marginBottom: 4,
-    gap: 12,
+    gap: 10,
     maxWidth: 720,
     alignSelf: 'stretch',
     ...(Platform.OS === 'web'
       ? ({ boxShadow: '0 4px 14px rgba(15,23,42,0.06)' } as object)
       : {}),
   },
-  topRow: {
+  controlRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
   },
-  statusCol: {
+  controlLabels: {
     flex: 1,
     minWidth: 0,
   },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusEmoji: {
-    fontSize: 14,
-  },
-  statusText: {
-    fontSize: 14,
+  connectionLabel: {
+    fontSize: 15,
     fontWeight: '800',
   },
-  switchRow: {
+  switchCluster: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     flexShrink: 0,
   },
-  spinner: {
-    marginRight: 2,
-  },
-  countersGrid: {
+  queueBadges: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    flexWrap: 'wrap',
+    gap: 6,
   },
-  countersGridCompact: {
+  queueBadge: {
     flexDirection: 'row',
-    gap: 16,
-    flexWrap: 'wrap',
-  },
-  counterCell: {
-    flex: 1,
-    minWidth: 88,
     alignItems: 'center',
-    gap: 2,
-    paddingVertical: 6,
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 44,
+    justifyContent: 'center',
   },
-  counterEmoji: {
-    fontSize: 16,
-  },
-  counterLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  counterValue: {
-    fontSize: 20,
+  queueValue: {
+    fontSize: 15,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
-  panel: {
-    gap: 10,
+  switchWithCaption: {
+    alignItems: 'center',
+    gap: 2,
   },
-  panelTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  queueLegend: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+    flexWrap: 'wrap',
   },
-  stepsList: {
+  progressPanel: {
+    gap: 12,
+    marginTop: 4,
+  },
+  phaseBlock: {
     gap: 4,
   },
-  stepRow: {
+  phaseHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
   },
-  stepIcon: {
-    width: 18,
+  phaseTitle: {
     fontSize: 13,
     fontWeight: '700',
-    textAlign: 'center',
-  },
-  stepLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    flex: 1,
-  },
-  progressBlock: {
-    gap: 6,
   },
   track: {
     height: 10,
@@ -490,39 +403,12 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 5,
   },
-  progressMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  timingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
   resultBlock: {
-    gap: 6,
+    gap: 4,
   },
   successTitle: {
     fontSize: 14,
     fontWeight: '800',
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    gap: 16,
-    flexWrap: 'wrap',
-    marginTop: 4,
-  },
-  summaryItem: {
-    gap: 2,
-    minWidth: 72,
-  },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    fontVariant: ['tabular-nums'],
   },
   errorBlock: {
     gap: 8,
@@ -551,12 +437,6 @@ const styles = StyleSheet.create({
   historyHint: {
     textAlign: 'center',
     fontWeight: '600',
-  },
-  resumeBanner: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
   },
   blockedBanner: {
     borderWidth: 1,

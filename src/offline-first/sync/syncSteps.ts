@@ -32,9 +32,9 @@ export const SYNC_STEP_ORDER: SyncStepId[] = [
   'validate_permissions',
   'local_backup',
   'comparing',
-  'uploading',
   'downloading',
   'updating_local',
+  'uploading',
   'finalizing',
 ];
 

@@ -42,6 +42,9 @@ export { getTeamWipeMarker } from '../../../services/firebase/teamWipeFirestore'
 
 export { wipeCloudTeamDataFirestore as wipeAllCloudDataForOwner } from '../../../services/firebase/wipeCloudDataFirestore';
 
+/** Doc de probe — ID sem `__` (reservado pelo Firestore). */
+const CONNECTIVITY_PROBE_DOC_ID = 'connectivity_probe';
+
 /** Verifica conectividade lendo um doc sob users/{uid} (permitido pelas rules mesmo inexistente). */
 export type FirestoreProbeResult = {
   ok: boolean;
@@ -72,7 +75,7 @@ export async function probeFirestoreConnectivityDetailed(
   for (const uid of uids) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        const ref = doc(db, 'users', uid, 'cadastros', '__connectivity_probe__');
+        const ref = doc(db, 'users', uid, 'cadastros', CONNECTIVITY_PROBE_DOC_ID);
         await getDoc(ref);
         return { ok: true };
       } catch (error) {

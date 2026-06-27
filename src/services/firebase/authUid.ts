@@ -151,12 +151,17 @@ export function getCachedLoginUid(): string | null {
 }
 
 export function getCachedDataOwnerUid(): string | null {
-  return (
-    dataOwnerUid ??
-    loginUid ??
-    resolveUidFromFirebase() ??
-    readPersistedDataOwnerUid()
-  );
+  if (dataOwnerUid) return dataOwnerUid;
+  const persistedOwner = readPersistedDataOwnerUid();
+  if (persistedOwner) return persistedOwner;
+  return loginUid ?? resolveUidFromFirebase() ?? null;
+}
+
+/** Membro autorizado: loginUid ≠ dataOwnerUid (chefe) persistido no Dexie meta. */
+export function isPersistedAuthorizedMemberSession(): boolean {
+  const persistedLogin = readPersistedLoginUid();
+  const persistedOwner = readPersistedDataOwnerUid();
+  return Boolean(persistedLogin && persistedOwner && persistedLogin !== persistedOwner);
 }
 
 /** Aguarda auth e devolve UID para leitura/gravação local (Dexie). */

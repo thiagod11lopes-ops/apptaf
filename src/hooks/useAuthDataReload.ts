@@ -7,7 +7,7 @@ const DATA_CHANGE_DEBOUNCE_MS = 800;
 
 /** Recarrega dados quando a tela ganha foco, login muda ou a nuvem atualiza o cache. */
 export function useAuthDataReload(reload: () => void | Promise<void>) {
-  const { user, authReady, isAuthenticated, isAuthorizedMember } = useAuth();
+  const { user, authReady, isAuthenticated, isAuthorizedMember, dataOwnerUid } = useAuth();
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
   const inFlightRef = useRef(false);
@@ -27,7 +27,7 @@ export function useAuthDataReload(reload: () => void | Promise<void>) {
     useCallback(() => {
       if (!authReady) return;
       void runReload();
-    }, [authReady, runReload, user?.uid, isAuthorizedMember]),
+    }, [authReady, runReload, user?.uid, isAuthorizedMember, dataOwnerUid]),
   );
 
   useEffect(() => {

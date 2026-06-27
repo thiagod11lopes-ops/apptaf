@@ -27,7 +27,7 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
 
 export default function HomeScreen() {
   const { theme } = useTheme();
-  const { user, authReady, isAuthenticated, firebaseEnabled } = useAuth();
+  const { user, authReady, isAuthenticated, firebaseEnabled, dataOwnerUid } = useAuth();
   const { syncUi } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
@@ -49,7 +49,7 @@ export default function HomeScreen() {
     } catch {
       // Mantém resumo anterior — falha de rede não zera a tela.
     }
-  }, [authReady, isAuthenticated, user?.uid]);
+  }, [authReady, isAuthenticated, user?.uid, dataOwnerUid]);
 
   useAuthDataReload(recarregarResumo);
 

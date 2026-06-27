@@ -290,14 +290,20 @@ async function ensureMemberCloudAccess(): Promise<void> {
   const ownerUid = getCachedDataOwnerUid();
   const email = getFirebaseAuth()?.currentUser?.email;
   if (!loginUid || !ownerUid || loginUid === ownerUid || !email?.trim()) return;
+  await getFirebaseAuth()?.currentUser?.getIdToken(true);
   await registerAuthorizedMemberLogin(ownerUid, email, loginUid);
 }
 
-async function refreshCloudQueueEstimate(force = false): Promise<void> {
+function isCloudPermissionError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return /permission|permiss[aã]o|denied|insufficient/i.test(msg);
+}
+
+async function refreshCloudQueueEstimate(force = false, attempt = 0): Promise<void> {
   const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
   if (uid === ANONYMOUS_OWNER || !syncAuthAvailable || syncInFlight) return;
   if (!connectivityMonitor.canSync()) return;
-  if (queueEstimateInFlight && !force) return;
+  if (queueEstimateInFlight && !force && attempt === 0) return;
   if (!getFirebaseAuth()?.currentUser) return;
 
   queueEstimateInFlight = true;
@@ -308,15 +314,25 @@ async function refreshCloudQueueEstimate(force = false): Promise<void> {
     if (syncInFlight) return;
     counters = {
       ...counters,
-      pendingUploads: estimate.pendingUploads,
+      pendingUploads: Math.max(estimate.pendingUploads, pendingSummary.total),
       pendingDownloads: estimate.pendingDownloads,
     };
     notifyListeners();
   } catch (error) {
+    if (attempt < 2 && isCloudPermissionError(error)) {
+      await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+      return refreshCloudQueueEstimate(force, attempt + 1);
+    }
     await syncLogger.warn(
       'sync-manager',
       `Estimativa nuvem falhou: ${error instanceof Error ? error.message : String(error)}`,
     );
+    counters = {
+      ...counters,
+      pendingUploads: Math.max(counters.pendingUploads, pendingSummary.total),
+    };
+    notifyListeners();
+    scheduleCloudQueueEstimate();
   } finally {
     queueEstimateInFlight = false;
   }

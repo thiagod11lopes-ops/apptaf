@@ -13,6 +13,7 @@ import {
 import { getFirestoreDb, getFirebaseAuth } from '../../config/firebase';
 import { isValidAuthEmail, normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
 import { userAuthorizedEmailsPath } from './firestorePaths';
+import { readAppMetaCache } from '../../offline-first/db/appMeta';
 
 export type AuthorizedEmailEntry = {
   email: string;
@@ -28,13 +29,28 @@ export type MemberAccess = {
 const MEMBER_LOOKUP_COLLECTION = 'member_lookup';
 const MEMBER_UID_LOOKUP_COLLECTION = 'member_uid_lookup';
 
+function readPersistedMemberSession(): { loginUid: string; dataOwnerUid: string } | null {
+  const loginUid = readAppMetaCache('session:loginUid');
+  const dataOwnerUid = readAppMetaCache('session:dataOwnerUid');
+  if (!loginUid || !dataOwnerUid || loginUid === dataOwnerUid) return null;
+  return { loginUid, dataOwnerUid };
+}
+
+function fallbackMemberAccessFromPersistedSession(loginUid: string): MemberAccess {
+  const persisted = readPersistedMemberSession();
+  if (persisted?.loginUid === loginUid) {
+    return { dataOwnerUid: persisted.dataOwnerUid, isAuthorizedMember: true };
+  }
+  return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+}
+
 export async function resolveMemberAccess(
   loginUid: string,
   email: string | null | undefined,
 ): Promise<MemberAccess> {
   const db = getFirestoreDb();
   if (!db) {
-    return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+    return fallbackMemberAccessFromPersistedSession(loginUid);
   }
 
   if (email?.trim()) {
@@ -63,11 +79,11 @@ export async function resolveMemberAccess(
         }
       }
     } catch {
-      // Offline ou regras indisponíveis — segue como chefe próprio.
+      // Offline ou regras indisponíveis — tenta sessão persistida.
     }
   }
 
-  return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+  return fallbackMemberAccessFromPersistedSession(loginUid);
 }
 
 /** Registra o UID Firebase do membro autorizado (acesso à nuvem do chefe). */

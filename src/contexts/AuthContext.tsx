@@ -76,17 +76,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const firebaseEnabled = isFirebaseConfigured();
   const authInitializedRef = useRef(false);
 
-  const applySignedInAppUserFallback = useCallback((mapped: AppAuthUser) => {
-    const persistedOwner = getCachedDataOwnerUid();
-    const ownerUid = persistedOwner ?? mapped.uid;
+  const applySignedInAppUserFallback = useCallback(async (mapped: AppAuthUser) => {
+    await hydrateAppStorageFromIndexedDb();
+    const access = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email).catch(() => null);
+    const ownerUid = access?.dataOwnerUid ?? getCachedDataOwnerUid() ?? mapped.uid;
+    const isMember = access?.isAuthorizedMember ?? ownerUid !== mapped.uid;
     setUser(mapped);
     setDataOwnerUid(ownerUid);
-    setIsAuthorizedMember(ownerUid !== mapped.uid);
+    setIsAuthorizedMember(isMember);
     setAuthUidState(mapped.uid, ownerUid, true);
     persistAuthProfile(mapped);
     clearPendingSyncResume();
     setAuthReady(true);
-  }, []);
+    notifyDataChanged();
+    if (firebaseEnabled && getFirebaseAuth()?.currentUser) {
+      await syncManager.bindSession(ownerUid);
+      syncManager.setAuthAvailable(true);
+      await syncManager.refreshCloudDiff();
+    }
+  }, [firebaseEnabled]);
 
   const finalizeAuthenticatedSession = useCallback(
     async (mapped: AppAuthUser) => {
@@ -109,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.warn('[auth] finalizeAuthenticatedSession falhou:', error);
-        applySignedInAppUserFallback(mapped);
+        await applySignedInAppUserFallback(mapped);
       } finally {
         setIsSessionLoading(false);
       }

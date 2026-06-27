@@ -27,8 +27,12 @@ export async function resolveLocalSessionAfterLogin(
       console.warn('[auth] registerAuthorizedMemberLogin no login:', registered.error);
     }
   }
-  await migrateDeviceDataOnLogin(access.dataOwnerUid);
-  await migrateLegacyToDexie(access.dataOwnerUid);
+  try {
+    await migrateDeviceDataOnLogin(access.dataOwnerUid);
+    await migrateLegacyToDexie(access.dataOwnerUid);
+  } catch (error) {
+    console.warn('[auth] migrateDeviceDataOnLogin falhou:', error);
+  }
   setAuthUidState(loginUid, access.dataOwnerUid, true);
   return access;
 }

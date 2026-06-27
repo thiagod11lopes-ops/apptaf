@@ -582,11 +582,21 @@ export class SyncEngine {
     clockDrift?: import('./clockDrift').ClockDriftResult;
     userEmail?: string | null;
     onProgress?: SyncProgressCallback;
-  }): Promise<{ success: boolean; stats: LwwSyncStats; audit: import('./syncAudit').SyncAuditEntry }> {
+  }): Promise<{
+    success: boolean;
+    stats: LwwSyncStats;
+    audit: import('./syncAudit').SyncAuditEntry;
+    alreadyUpToDate: boolean;
+    plannedUploads: number;
+    plannedDownloads: number;
+  }> {
     if (!ownerUid) {
       return {
         success: false,
         stats: { uploads: 0, downloads: 0, ignored: 0, errors: ['no_owner'] },
+        alreadyUpToDate: false,
+        plannedUploads: 0,
+        plannedDownloads: 0,
         audit: {
           ownerUid: '',
           userId: null,

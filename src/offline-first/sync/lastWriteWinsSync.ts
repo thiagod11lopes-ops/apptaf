@@ -28,7 +28,7 @@ import {
   putCadastroRecord,
   putSessaoRecord,
 } from '../db/localDb';
-import { decideLastWriteWins, type SyncRecord } from './lastWriteWins';
+import { decideLastWriteWins, type LwwAction, type SyncRecord } from './lastWriteWins';
 import { markRecordSynced } from './recordMeta';
 import { appendSyncAudit, type SyncAuditEntry } from './syncAudit';
 import { syncQueue } from './SyncQueue';
@@ -44,6 +44,7 @@ import {
   buildDeletionAuditEntry,
   runDeletionGarbageCollection,
 } from './deletionGarbageCollection';
+import type { SyncStepId } from './syncSteps';
 
 export type LwwSyncStats = {
   uploads: number;
@@ -56,7 +57,20 @@ export type SyncProgressCallback = (update: {
   processed: number;
   total: number;
   message: string;
+  stepId?: SyncStepId;
+  pendingUploads?: number;
+  pendingDownloads?: number;
+  phase?: 'compare' | 'upload' | 'download' | 'finalize';
 }) => void;
+
+type PlannedSyncItem = {
+  collection: CollectionName;
+  id: string;
+  action: LwwAction;
+  local?: SyncRecord;
+  remote?: SyncRecord;
+  hasRemote: boolean;
+};
 
 function stripForFirestore<T extends Record<string, unknown>>(row: T): T {
   const copy = { ...row } as Record<string, unknown>;
@@ -90,6 +104,48 @@ function remoteToSessaoRecord(remote: SessaoAplicacaoTaf, ownerUid: string): Ses
 
 function remoteToAplicadorRecord(remote: AplicadorItemPersist, ownerUid: string): AplicadorRecord {
   return remoteDocToSyncRecord<AplicadorRecord>(remote as Record<string, unknown> & { id: string }, ownerUid);
+}
+
+function countIds(local: SyncRecord[], remote: { id: string }[]): number {
+  const ids = new Set([...local.map((r) => r.id), ...remote.map((r) => r.id)]);
+  return ids.size;
+}
+
+function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }>(
+  collection: CollectionName,
+  ownerUid: string,
+  localRows: TLocal[],
+  remoteRows: TRemote[],
+  toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
+): { plan: PlannedSyncItem[]; ignored: number } {
+  const localMap = new Map(localRows.map((r) => [r.id, r]));
+  const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
+  const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
+  const plan: PlannedSyncItem[] = [];
+  let ignored = 0;
+
+  for (const id of allIds) {
+    const local = localMap.get(id);
+    const remote = remoteMap.get(id);
+    const hasRemote = remoteMap.has(id);
+    const decision = decideLastWriteWins(local, remote);
+
+    if (decision.action === 'skip') {
+      ignored += 1;
+      continue;
+    }
+
+    plan.push({
+      collection,
+      id,
+      action: decision.action,
+      local,
+      remote,
+      hasRemote,
+    });
+  }
+
+  return { plan, ignored };
 }
 
 async function uploadCadastro(uid: string, local: CadastroRecord, hasRemote: boolean): Promise<void> {
@@ -146,78 +202,31 @@ async function downloadRecord(
   }
 }
 
-async function syncCollection<TLocal extends SyncRecord, TRemote extends { id: string }>(
-  collection: CollectionName,
+type UploadFn = (uid: string, local: SyncRecord, hasRemote: boolean) => Promise<void>;
+
+async function executePlanItem(
   ownerUid: string,
-  localRows: TLocal[],
-  remoteRows: TRemote[],
-  toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
-  upload: (uid: string, local: TLocal, hasRemote: boolean) => Promise<void>,
+  item: PlannedSyncItem,
+  uploadFns: Record<CollectionName, UploadFn>,
   stats: LwwSyncStats,
   deletionAudits: DeletionAuditEntry[],
-  onProgress?: SyncProgressCallback,
-  progressOffset?: { base: number; count: number },
 ): Promise<void> {
-  const localMap = new Map(localRows.map((r) => [r.id, r]));
-  const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
-  const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
-  let localProcessed = 0;
+  const upload = uploadFns[item.collection];
 
-  for (const id of allIds) {
-    const local = localMap.get(id);
-    const remote = remoteMap.get(id);
-    const hasRemote = remoteMap.has(id);
-    const decision = decideLastWriteWins(local, remote);
+  if (item.action === 'upload' && item.local) {
+    await upload(ownerUid, item.local, item.hasRemote);
+    stats.uploads += 1;
+    if (item.local.deleted) {
+      deletionAudits.push(buildDeletionAuditEntry(item.collection, item.local, 'upload', Date.now()));
+    }
+    return;
+  }
 
-    try {
-      if (decision.action === 'skip') {
-        stats.ignored += 1;
-        continue;
-      }
-
-      if (decision.action === 'upload' && local) {
-        await upload(ownerUid, local, hasRemote);
-        stats.uploads += 1;
-        if (local.deleted) {
-          deletionAudits.push(buildDeletionAuditEntry(collection, local, 'upload', Date.now()));
-        }
-        continue;
-      }
-
-      if (decision.action === 'download' && remote) {
-        await downloadRecord(collection, remote, local, ownerUid);
-        stats.downloads += 1;
-        if (remote.deleted) {
-          deletionAudits.push(buildDeletionAuditEntry(collection, remote, 'download', Date.now()));
-        }
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      stats.errors.push(`${collection}/${id}: ${msg}`);
-      const failedRecord = local?.deleted ? local : remote?.deleted ? remote : null;
-      if (failedRecord?.deleted) {
-        deletionAudits.push(
-          buildDeletionAuditEntry(
-            collection,
-            failedRecord,
-            decision.action === 'upload' ? 'upload' : 'download',
-            Date.now(),
-            true,
-          ),
-        );
-      }
-    } finally {
-      localProcessed += 1;
-      if (onProgress && progressOffset) {
-        const processed = progressOffset.base + localProcessed;
-        const phaseMsg =
-          stats.uploads > stats.downloads ? 'Enviando alterações…' : 'Baixando alterações…';
-        onProgress({
-          processed,
-          total: progressOffset.count,
-          message: phaseMsg,
-        });
-      }
+  if (item.action === 'download' && item.remote) {
+    await downloadRecord(item.collection, item.remote, item.local, ownerUid);
+    stats.downloads += 1;
+    if (item.remote.deleted) {
+      deletionAudits.push(buildDeletionAuditEntry(item.collection, item.remote, 'download', Date.now()));
     }
   }
 }
@@ -234,11 +243,23 @@ export async function executeLastWriteWinsSync(
   success: boolean;
   stats: LwwSyncStats;
   audit: SyncAuditEntry;
+  alreadyUpToDate: boolean;
+  plannedUploads: number;
+  plannedDownloads: number;
 }> {
   const startedAt = Date.now();
   const stats: LwwSyncStats = { uploads: 0, downloads: 0, ignored: 0, errors: [] };
   const deletionAudits: DeletionAuditEntry[] = [];
   const deviceId = await getDeviceId();
+  const progressCb = options?.onProgress;
+
+  progressCb?.({
+    processed: 0,
+    total: 0,
+    message: 'Comparando registros',
+    stepId: 'comparing',
+    phase: 'compare',
+  });
 
   const [localCad, localSess, localApp, remoteCad, remoteSess, remoteApp] = await Promise.all([
     listCadastros(ownerUid, true),
@@ -249,45 +270,137 @@ export async function executeLastWriteWinsSync(
     getAllAplicadoresFirestore(ownerUid),
   ]);
 
-  const countIds = (local: SyncRecord[], remote: { id: string }[]) => {
-    const ids = new Set([...local.map((r) => r.id), ...remote.map((r) => r.id)]);
-    return ids.size;
+  const cadPlan = buildSyncPlan('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
+  const sessPlan = buildSyncPlan('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
+  const appPlan = buildSyncPlan('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
+
+  const fullPlan = [...cadPlan.plan, ...sessPlan.plan, ...appPlan.plan];
+  const totalIgnored = cadPlan.ignored + sessPlan.ignored + appPlan.ignored;
+  const plannedUploads = fullPlan.filter((p) => p.action === 'upload').length;
+  const plannedDownloads = fullPlan.filter((p) => p.action === 'download').length;
+  const workTotal = plannedUploads + plannedDownloads;
+
+  progressCb?.({
+    processed: 0,
+    total: workTotal || 1,
+    message: 'Comparando registros',
+    stepId: 'comparing',
+    pendingUploads: plannedUploads,
+    pendingDownloads: plannedDownloads,
+    phase: 'compare',
+  });
+
+  const uploadFns: Record<CollectionName, UploadFn> = {
+    cadastros: uploadCadastro as UploadFn,
+    sessoes: uploadSessao as UploadFn,
+    aplicadores: uploadAplicador as UploadFn,
   };
 
-  const totalRecords =
-    countIds(localCad, remoteCad) + countIds(localSess, remoteSess) + countIds(localApp, remoteApp);
+  if (workTotal === 0) {
+    stats.ignored = totalIgnored;
+    const emailErrors = await pushPendingAuthorizedEmails(ownerUid);
+    stats.errors.push(...emailErrors);
+    await syncQueue.clearDone(ownerUid);
 
-  let processedBefore = 0;
-  const progressCb = options?.onProgress;
+    const finishedAt = Date.now();
+    const activeRemote = (rows: Array<{ deleted?: boolean }>) => rows.filter((r) => r.deleted !== true).length;
+    const collectionCounts = {
+      cadastros: { local: localCad.filter((r) => !r.deleted).length, remote: activeRemote(remoteCad) },
+      sessoes: { local: localSess.filter((r) => !r.deleted).length, remote: activeRemote(remoteSess) },
+      aplicadores: { local: localApp.filter((r) => !r.deleted).length, remote: activeRemote(remoteApp) },
+    };
 
-  options?.onProgress?.({ processed: 0, total: totalRecords || 1, message: 'Aplicando atualizações…' });
-
-  const runColl = async <TLocal extends SyncRecord, TRemote extends { id: string }>(
-    collection: CollectionName,
-    localRows: TLocal[],
-    remoteRows: TRemote[],
-    toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
-    upload: (uid: string, local: TLocal, hasRemote: boolean) => Promise<void>,
-  ) => {
-    const base = processedBefore;
-    processedBefore += countIds(localRows, remoteRows);
-    await syncCollection(
-      collection,
+    const audit = await appendSyncAudit({
       ownerUid,
-      localRows,
-      remoteRows,
-      toRecord,
-      upload,
-      stats,
-      deletionAudits,
-      progressCb,
-      { base, count: totalRecords || 1 },
-    );
-  };
+      userId: getCachedLoginUid(),
+      userEmail: options?.userEmail ?? null,
+      deviceId,
+      appVersion: APP_VERSION,
+      startedAt,
+      finishedAt,
+      uploads: 0,
+      downloads: 0,
+      ignored: totalIgnored,
+      errors: stats.errors,
+      errorMessage: stats.errors[0] ?? null,
+      localTimeMs: options?.clockDrift?.localTimeMs,
+      serverTimeMs: options?.clockDrift?.serverTimeMs ?? null,
+      clockDriftMs: options?.clockDrift?.driftMs,
+      clockDriftWarning: options?.clockDrift?.warning,
+      backupId: options?.backupId ?? null,
+      collectionCounts,
+      failures: stats.errors.length,
+      deletions: deletionAudits,
+    });
 
-  await runColl('cadastros', localCad, remoteCad, remoteToCadastroRecord, uploadCadastro);
-  await runColl('sessoes', localSess, remoteSess, remoteToSessaoRecord, uploadSessao);
-  await runColl('aplicadores', localApp, remoteApp, remoteToAplicadorRecord, uploadAplicador);
+    return {
+      success: stats.errors.length === 0,
+      stats,
+      audit,
+      alreadyUpToDate: stats.errors.length === 0,
+      plannedUploads: 0,
+      plannedDownloads: 0,
+    };
+  }
+
+  let processed = 0;
+  for (const item of fullPlan) {
+    const isUpload = item.action === 'upload';
+    const stepId: SyncStepId = isUpload ? 'uploading' : 'downloading';
+    const message = isUpload ? 'Enviando alterações' : 'Baixando alterações';
+
+    progressCb?.({
+      processed,
+      total: workTotal,
+      message,
+      stepId,
+      pendingUploads: plannedUploads,
+      pendingDownloads: plannedDownloads,
+      phase: isUpload ? 'upload' : 'download',
+    });
+
+    try {
+      await executePlanItem(ownerUid, item, uploadFns, stats, deletionAudits);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      stats.errors.push(`${item.collection}/${item.id}: ${msg}`);
+      const failedRecord = item.local?.deleted ? item.local : item.remote?.deleted ? item.remote : null;
+      if (failedRecord?.deleted) {
+        deletionAudits.push(
+          buildDeletionAuditEntry(
+            item.collection,
+            failedRecord,
+            item.action === 'upload' ? 'upload' : 'download',
+            Date.now(),
+            true,
+          ),
+        );
+      }
+    } finally {
+      processed += 1;
+      progressCb?.({
+        processed,
+        total: workTotal,
+        message: processed === workTotal && item.action === 'download' ? 'Atualizando banco local' : message,
+        stepId: item.action === 'download' ? 'updating_local' : stepId,
+        pendingUploads: plannedUploads,
+        pendingDownloads: plannedDownloads,
+        phase: item.action === 'upload' ? 'upload' : 'download',
+      });
+    }
+  }
+
+  stats.ignored = totalIgnored;
+
+  progressCb?.({
+    processed: workTotal,
+    total: workTotal,
+    message: 'Finalizando',
+    stepId: 'finalizing',
+    pendingUploads: plannedUploads,
+    pendingDownloads: plannedDownloads,
+    phase: 'finalize',
+  });
 
   const emailErrors = await pushPendingAuthorizedEmails(ownerUid);
   stats.errors.push(...emailErrors);
@@ -333,5 +446,11 @@ export async function executeLastWriteWinsSync(
     success: stats.errors.length === 0,
     stats,
     audit,
+    alreadyUpToDate: false,
+    plannedUploads,
+    plannedDownloads,
   };
 }
+
+// Re-export for tests that may import countIds pattern
+export { countIds };

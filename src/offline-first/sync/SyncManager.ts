@@ -12,11 +12,22 @@ import { detectClockDrift, type ClockDriftResult } from './clockDrift';
 import { prepareSyncSession } from './syncSessionPrepare';
 import { probeFirestoreConnectivity } from './firebase/FirebaseGateway';
 import type { SyncAuditEntry } from './syncAudit';
+import { buildSyncCounters, getLastSyncTimestamp } from './syncCounters';
+import type { SyncCountersState } from './syncUiState';
+import {
+  advanceStep,
+  createInitialSyncSteps,
+  markStepError,
+  markStepsDoneThrough,
+  type SyncStepId,
+  type SyncStepState,
+} from './syncSteps';
 import {
   type SyncProgressState,
   type SyncResultSummary,
   type SyncUiPhase,
   type SyncUiState,
+  EMPTY_SYNC_PROGRESS,
 } from './syncUiState';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
@@ -65,9 +76,8 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
   aplicadores: 0,
 };
 
-const PREPARE_WEIGHT = 45;
-const SYNC_WEIGHT = 50;
-const FINAL_WEIGHT = 5;
+const SUCCESS_DISPLAY_MS = 3000;
+const ALREADY_UP_TO_DATE_MS = 2000;
 
 type Listener = (state: SyncManagerState) => void;
 
@@ -81,19 +91,30 @@ let lastAudit: SyncAuditEntry | null = null;
 let clockDriftResult: ClockDriftResult | null = null;
 let backupIdBeforeSync: number | null = null;
 let uiPhase: SyncUiPhase = 'offline';
-let syncProgress: SyncProgressState = { percent: 0, message: '', processed: 0, total: 0 };
+let syncProgress: SyncProgressState = { ...EMPTY_SYNC_PROGRESS };
 let syncMessage = '';
 let lastSyncResult: SyncResultSummary | null = null;
+let lastSyncAt: number | null = null;
+let syncSteps: SyncStepState[] = createInitialSyncSteps();
+let errorStepId: SyncStepId | null = null;
+let counters: SyncCountersState = { pendingUploads: 0, pendingDownloads: null, syncedTotal: 0 };
 let successTimer: ReturnType<typeof setTimeout> | null = null;
+let etaTimer: ReturnType<typeof setInterval> | null = null;
+let syncStartedAt = 0;
+let recordSyncStartedAt = 0;
 let storedEnsureAuth: EnsureAuthenticatedFn | null = null;
 const listeners = new Set<Listener>();
 
 function buildSyncUi(): SyncUiState {
-  const pending = pendingSummary.total;
   const isSyncing = uiPhase === 'preparing' || uiPhase === 'syncing' || uploading;
-  const isOffline = uiPhase === 'offline' && !isSyncing;
-  const isOnline = uiPhase === 'preparing' || uiPhase === 'syncing' || uiPhase === 'success';
-  const toggleEnabled = !isSyncing && uiPhase !== 'success';
+  const isOffline =
+    uiPhase === 'offline' || uiPhase === 'error' || (uiPhase === 'success' && !isSyncing);
+  const isOnline =
+    uiPhase === 'preparing' ||
+    uiPhase === 'syncing' ||
+    uiPhase === 'success' ||
+    uiPhase === 'already_up_to_date';
+  const toggleEnabled = !isSyncing && uiPhase !== 'success' && uiPhase !== 'already_up_to_date';
 
   return {
     phase: uiPhase,
@@ -101,10 +122,13 @@ function buildSyncUi(): SyncUiState {
     isOnline,
     isSyncing,
     syncProgress,
-    pendingChanges: pending,
+    counters,
     syncMessage: syncMessage || syncProgress.message,
     lastSync: lastSyncResult,
+    lastSyncAt,
     syncError: uiPhase === 'error' ? uploadError : null,
+    errorStepId,
+    syncSteps,
     toggleEnabled,
   };
 }
@@ -128,12 +152,60 @@ function notifyListeners(): void {
   listeners.forEach((fn) => fn(snapshot()));
 }
 
-function setUiProgress(percent: number, message: string, processed = 0, total = 0): void {
+function stopEtaTimer(): void {
+  if (etaTimer) {
+    clearInterval(etaTimer);
+    etaTimer = null;
+  }
+}
+
+function startEtaTimer(): void {
+  stopEtaTimer();
+  etaTimer = setInterval(() => {
+    if (!syncInFlight) return;
+    const elapsedMs = Date.now() - syncStartedAt;
+    const { processed, total } = syncProgress;
+    let recordsPerSecond = 0;
+    let remainingSeconds: number | null = null;
+
+    if (recordSyncStartedAt > 0 && processed > 0) {
+      const recordElapsedSec = (Date.now() - recordSyncStartedAt) / 1000;
+      recordsPerSecond = processed / Math.max(recordElapsedSec, 0.1);
+      if (total > processed && recordsPerSecond > 0) {
+        remainingSeconds = (total - processed) / recordsPerSecond;
+      }
+    }
+
+    syncProgress = { ...syncProgress, elapsedMs, remainingSeconds, recordsPerSecond };
+    notifyListeners();
+  }, 500);
+}
+
+function setActiveStep(stepId: SyncStepId): void {
+  syncSteps = advanceStep(syncSteps, stepId);
+  notifyListeners();
+}
+
+function completeStep(stepId: SyncStepId): void {
+  syncSteps = markStepsDoneThrough(syncSteps, stepId);
+  notifyListeners();
+}
+
+function setUiProgress(
+  percent: number,
+  message: string,
+  processed = 0,
+  total = 0,
+  opts?: Partial<Pick<SyncProgressState, 'remainingSeconds' | 'recordsPerSecond'>>,
+): void {
   syncProgress = {
     percent: Math.min(100, Math.max(0, Math.round(percent))),
     message,
     processed,
     total,
+    elapsedMs: syncStartedAt ? Date.now() - syncStartedAt : 0,
+    remainingSeconds: opts?.remainingSeconds ?? syncProgress.remainingSeconds,
+    recordsPerSecond: opts?.recordsPerSecond ?? syncProgress.recordsPerSecond,
   };
   syncMessage = message;
   notifyListeners();
@@ -144,12 +216,26 @@ function setPhase(phase: SyncUiPhase): void {
   notifyListeners();
 }
 
+async function refreshCounters(pendingDownloads: number | null = counters.pendingDownloads): Promise<void> {
+  const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
+  if (uid === ANONYMOUS_OWNER) return;
+  counters = await buildSyncCounters(uid, pendingSummary.total, pendingDownloads);
+  notifyListeners();
+}
+
 async function refreshPendingSummary(): Promise<PendingSyncSummary> {
   const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
   ownerUid = uid !== ANONYMOUS_OWNER ? uid : ownerUid;
   await syncEngine.preparePendingOwner(uid);
   pendingSummary = await getPendingSyncItems(uid);
+  await refreshCounters(counters.pendingDownloads);
   return pendingSummary;
+}
+
+async function loadLastSyncFromAudit(): Promise<void> {
+  const uid = ownerUid ?? getCachedDataOwnerUid();
+  if (!uid) return;
+  lastSyncAt = await getLastSyncTimestamp(uid);
 }
 
 async function returnToOfflineMode(): Promise<void> {
@@ -157,6 +243,7 @@ async function returnToOfflineMode(): Promise<void> {
     clearTimeout(successTimer);
     successTimer = null;
   }
+  stopEtaTimer();
   syncEngine.deactivateOnlineMode();
   await syncEngine.shutdownSession();
   await systemState.setOfflineMode();
@@ -165,16 +252,27 @@ async function returnToOfflineMode(): Promise<void> {
   uploadError = null;
   backupIdBeforeSync = null;
   clockDriftResult = null;
-  syncProgress = { percent: 0, message: '', processed: 0, total: 0 };
+  syncProgress = { ...EMPTY_SYNC_PROGRESS };
   syncMessage = '';
+  syncSteps = createInitialSyncSteps();
+  errorStepId = null;
+  counters = { ...counters, pendingDownloads: null };
   uiPhase = 'offline';
   await refreshPendingSummary();
   notifyListeners();
 }
 
-function mapLwwProgressToPercent(processed: number, total: number): number {
-  if (total <= 0) return PREPARE_WEIGHT + SYNC_WEIGHT;
-  return PREPARE_WEIGHT + (processed / total) * SYNC_WEIGHT;
+function scheduleReturnToOffline(delayMs: number): void {
+  successTimer = setTimeout(() => {
+    void (async () => {
+      try {
+        await signOutFirebase();
+      } catch {
+        // mantém sessão local
+      }
+      await returnToOfflineMode();
+    })();
+  }, delayMs);
 }
 
 async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
@@ -183,21 +281,28 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
   syncInFlight = true;
   uploading = true;
   uploadError = null;
+  errorStepId = null;
   mode = 'ONLINE_PREPARING';
   uiPhase = 'preparing';
-  setUiProgress(2, 'Verificando conexão…');
+  syncSteps = createInitialSyncSteps();
+  syncStartedAt = Date.now();
+  recordSyncStartedAt = 0;
+  syncProgress = { ...EMPTY_SYNC_PROGRESS };
+  startEtaTimer();
 
   const startedAt = Date.now();
+  let currentStep: SyncStepId = 'login_google';
 
   try {
-    setUiProgress(5, 'Verificando conexão com a internet…');
+    setActiveStep('login_google');
+    setUiProgress(0, 'Verificando conexão com a internet…');
     await connectivityMonitor.refresh();
     const browserOnline = typeof navigator === 'undefined' || navigator.onLine !== false;
     if (!browserOnline || !connectivityMonitor.canSync()) {
       throw new Error('offline');
     }
 
-    setUiProgress(10, 'Autenticando com Google…');
+    setUiProgress(0, 'Autenticando com Google…');
     const authResult = await ensureAuth();
     if (!authResult.ok) {
       throw new Error(authResult.error ?? 'Faça login com Google para sincronizar.');
@@ -208,7 +313,10 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
       throw new Error('Faça login com Google para sincronizar.');
     }
 
-    setUiProgress(15, 'Confirmando sessão Google…');
+    completeStep('login_google');
+
+    setActiveStep('validate_permissions');
+    setUiProgress(0, 'Confirmando sessão Google…');
     const authUser = getFirebaseAuth()?.currentUser;
     if (!authUser) {
       throw new Error('Faça login com Google para sincronizar.');
@@ -216,85 +324,119 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
 
     await systemState.setOnlineMode();
 
-    setUiProgress(22, 'Validando permissões…');
+    setUiProgress(0, 'Validando permissões…');
+    currentStep = 'validate_permissions';
     const session = await prepareSyncSession(loginUid, authUser.email);
     ownerUid = session.dataOwnerUid;
     syncEngine.bindOwner(ownerUid);
     await syncEngine.init(ownerUid);
 
-    setUiProgress(30, 'Conectando ao Firebase…');
     const firestoreOk = await probeFirestoreConnectivity();
     if (!firestoreOk) {
       throw new Error('Não foi possível conectar ao Firebase. Tente novamente.');
     }
+    completeStep('validate_permissions');
 
-    setUiProgress(35, 'Criando backup local…');
+    setActiveStep('local_backup');
+    currentStep = 'local_backup';
+    setUiProgress(0, 'Criando backup local…');
     backupIdBeforeSync = await createLocalBackup(ownerUid);
 
-    setUiProgress(40, 'Verificando horário do sistema…');
+    setUiProgress(0, 'Verificando horário do sistema…');
     clockDriftResult = await detectClockDrift();
+    completeStep('local_backup');
 
-    setUiProgress(PREPARE_WEIGHT, 'Iniciando sincronização…');
     mode = 'ONLINE_SYNCING';
     uiPhase = 'syncing';
-    setUiProgress(PREPARE_WEIGHT, 'Sincronizando…');
+    setActiveStep('comparing');
+    currentStep = 'comparing';
+    recordSyncStartedAt = Date.now();
+
+    let lastProgressPhase: string | undefined;
 
     const result = await syncEngine.runLastWriteWinsSync({
       backupId: backupIdBeforeSync,
       clockDrift: clockDriftResult ?? undefined,
       userEmail: authUser.email ?? null,
-      onProgress: ({ processed, total, message }) => {
-        const pct = mapLwwProgressToPercent(processed, total);
+      onProgress: ({ processed, total, message, stepId, pendingUploads, pendingDownloads, phase }) => {
+        if (stepId) {
+          currentStep = stepId;
+          setActiveStep(stepId);
+        }
+        if (pendingUploads != null || pendingDownloads != null) {
+          counters = {
+            ...counters,
+            pendingUploads: pendingUploads ?? counters.pendingUploads,
+            pendingDownloads: pendingDownloads ?? counters.pendingDownloads,
+          };
+        }
+        if (phase && phase !== lastProgressPhase) {
+          if (phase === 'compare') completeStep('comparing');
+          if (phase === 'upload') completeStep('uploading');
+          if (phase === 'download') completeStep('downloading');
+          if (phase === 'finalize') completeStep('finalizing');
+          lastProgressPhase = phase;
+        }
+        const pct = total > 0 ? (processed / total) * 100 : 0;
         setUiProgress(pct, message, processed, total);
       },
     });
 
     lastAudit = result.audit;
+    lastSyncAt = result.audit.finishedAt;
 
     if (!result.success) {
       if (backupIdBeforeSync != null) {
-        setUiProgress(50, 'Restaurando backup local…');
+        setActiveStep('finalizing');
+        setUiProgress(syncProgress.percent, 'Restaurando backup local…');
         await restoreLocalBackup(backupIdBeforeSync);
       }
       throw new Error(result.stats.errors[0] ?? 'upload_failed');
     }
 
-    setUiProgress(PREPARE_WEIGHT + SYNC_WEIGHT + 2, 'Finalizando…');
+    completeStep('finalizing');
     await refreshPendingSummary();
 
     const durationMs = Date.now() - startedAt;
+    const totalRecords = result.stats.uploads + result.stats.downloads;
+    const avgRecordsPerSecond = totalRecords > 0 ? totalRecords / (durationMs / 1000) : 0;
+
     lastSyncResult = {
       uploads: result.stats.uploads,
       downloads: result.stats.downloads,
       ignored: result.stats.ignored,
       durationMs,
       finishedAt: Date.now(),
+      avgRecordsPerSecond,
+      alreadyUpToDate: result.alreadyUpToDate,
     };
 
+    if (result.alreadyUpToDate) {
+      uiPhase = 'already_up_to_date';
+      syncMessage = 'Seu banco de dados já está atualizado.';
+      setUiProgress(100, syncMessage, 0, 0);
+      syncSteps = markStepsDoneThrough(syncSteps, 'finalizing');
+      await syncLogger.info('sync-manager', 'Sync: banco já atualizado');
+      scheduleReturnToOffline(ALREADY_UP_TO_DATE_MS);
+      return { ok: true };
+    }
+
     uiPhase = 'success';
-    setUiProgress(100, 'Sincronização concluída', result.stats.uploads + result.stats.downloads + result.stats.ignored, result.stats.uploads + result.stats.downloads + result.stats.ignored);
+    setUiProgress(100, 'Sincronização concluída', totalRecords, totalRecords);
 
     await syncLogger.info(
       'sync-manager',
       `Sync concluída em ${durationMs}ms: ↑${result.stats.uploads} ↓${result.stats.downloads} ⊘${result.stats.ignored}`,
     );
 
-    successTimer = setTimeout(() => {
-      void (async () => {
-        try {
-          await signOutFirebase();
-        } catch {
-          // mantém sessão local
-        }
-        await returnToOfflineMode();
-      })();
-    }, 2000);
-
+    scheduleReturnToOffline(SUCCESS_DISPLAY_MS);
     return { ok: true };
   } catch (error) {
     const rawError = error instanceof Error ? error.message : String(error);
     uploadError = formatSyncUploadError(rawError);
     uiPhase = 'error';
+    errorStepId = currentStep;
+    syncSteps = markStepError(syncSteps, currentStep);
     syncMessage = uploadError;
     mode = 'OFFLINE';
     await syncLogger.error('sync-manager', rawError);
@@ -306,6 +448,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     await systemState.setOfflineMode();
     syncEngine.deactivateOnlineMode();
     await syncEngine.shutdownSession();
+    stopEtaTimer();
     await refreshPendingSummary();
     notifyListeners();
     return { ok: false, error: uploadError };
@@ -348,6 +491,7 @@ export const syncManager = {
     syncEngine.deactivateOnlineMode();
     mode = 'OFFLINE';
     uiPhase = 'offline';
+    await loadLastSyncFromAudit();
     await refreshPendingSummary();
     notifyListeners();
   },
@@ -369,7 +513,6 @@ export const syncManager = {
     void returnToOfflineMode();
   },
 
-  /** Liga a chave na Home — fluxo completo sem modais. */
   async startSyncFromToggle(ensureAuth?: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
     const authFn = ensureAuth ?? storedEnsureAuth;
     if (!authFn) {
@@ -380,7 +523,9 @@ export const syncManager = {
 
   async retrySync(ensureAuth?: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
     uploadError = null;
+    errorStepId = null;
     uiPhase = 'offline';
+    syncSteps = createInitialSyncSteps();
     notifyListeners();
     return this.startSyncFromToggle(ensureAuth);
   },
@@ -406,6 +551,7 @@ export const syncManager = {
 
   clearUploadError(): void {
     uploadError = null;
+    errorStepId = null;
     if (uiPhase === 'error') uiPhase = 'offline';
     notifyListeners();
   },

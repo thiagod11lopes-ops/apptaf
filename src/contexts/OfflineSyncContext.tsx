@@ -144,6 +144,29 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  useEffect(() => {
+    if (!authReady || !firebaseEnabled || !isAuthenticated) return;
+
+    return connectivityMonitor.subscribe((state) => {
+      if (state !== 'ONLINE') return;
+      if (!getFirebaseAuth()?.currentUser) return;
+      void syncManager.evaluateOnReconnect();
+    });
+  }, [authReady, firebaseEnabled, isAuthenticated, user?.uid]);
+
+  useEffect(() => {
+    if (!isAuthenticated || typeof document === 'undefined') return;
+
+    const onVisibilityChange = (): void => {
+      if (document.visibilityState !== 'visible') return;
+      if (!getFirebaseAuth()?.currentUser) return;
+      void syncManager.refreshCloudDiff();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [isAuthenticated, user?.uid]);
+
   const value = useMemo(
     () => ({
       connectivity,

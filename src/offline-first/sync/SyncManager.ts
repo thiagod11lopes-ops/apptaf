@@ -126,6 +126,8 @@ let storedEnsureAuth: EnsureAuthenticatedFn | null = null;
 let syncAuthAvailable = false;
 let queueEstimateInFlight = false;
 let queueEstimateTimer: ReturnType<typeof setTimeout> | null = null;
+let cloudDiffWatchTimer: ReturnType<typeof setInterval> | null = null;
+const CLOUD_DIFF_INTERVAL_MS = 45_000;
 const listeners = new Set<Listener>();
 
 function buildSyncUi(): SyncUiState {
@@ -315,6 +317,24 @@ function scheduleCloudQueueEstimate(): void {
   }, 1200);
 }
 
+function stopCloudDiffWatch(): void {
+  if (cloudDiffWatchTimer) {
+    clearInterval(cloudDiffWatchTimer);
+    cloudDiffWatchTimer = null;
+  }
+}
+
+/** Compara IndexedDB × nuvem periodicamente enquanto logado e online. */
+function startCloudDiffWatch(): void {
+  stopCloudDiffWatch();
+  if (!syncAuthAvailable) return;
+  void refreshCloudQueueEstimate(true);
+  cloudDiffWatchTimer = setInterval(() => {
+    if (!syncAuthAvailable || syncInFlight) return;
+    void refreshCloudQueueEstimate();
+  }, CLOUD_DIFF_INTERVAL_MS);
+}
+
 async function refreshCounters(pendingDownloads: number | null = counters.pendingDownloads): Promise<void> {
   const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
   if (uid === ANONYMOUS_OWNER) return;
@@ -358,9 +378,13 @@ async function returnToOfflineMode(): Promise<void> {
   syncMessage = '';
   syncSteps = createInitialSyncSteps();
   errorStepId = null;
-  counters = { ...counters, pendingDownloads: null };
   uiPhase = 'offline';
   await refreshPendingSummary();
+  if (syncAuthAvailable) {
+    scheduleCloudQueueEstimate();
+  } else {
+    counters = { ...counters, pendingDownloads: null };
+  }
   notifyListeners();
 }
 
@@ -613,7 +637,13 @@ export const syncManager = {
 
   setAuthAvailable(authenticated: boolean): void {
     syncAuthAvailable = authenticated;
-    if (authenticated) scheduleCloudQueueEstimate();
+    if (authenticated) {
+      scheduleCloudQueueEstimate();
+      startCloudDiffWatch();
+    } else {
+      stopCloudDiffWatch();
+      counters = { ...counters, pendingDownloads: null };
+    }
     notifyListeners();
   },
 
@@ -641,7 +671,19 @@ export const syncManager = {
 
   async evaluateOnReconnect(): Promise<void> {
     await refreshPendingSummary();
-    scheduleCloudQueueEstimate();
+    await refreshCloudQueueEstimate(true);
+    notifyListeners();
+  },
+
+  /** Revalida diferenças locais × nuvem (ex.: PWA voltou ao foco). */
+  async refreshCloudDiff(): Promise<void> {
+    if (!syncAuthAvailable || syncInFlight) {
+      await refreshPendingSummary();
+      notifyListeners();
+      return;
+    }
+    await refreshPendingSummary();
+    await refreshCloudQueueEstimate(true);
     notifyListeners();
   },
 
@@ -709,6 +751,7 @@ export const syncManager = {
   },
 
   async shutdown(): Promise<void> {
+    stopCloudDiffWatch();
     await returnToOfflineMode();
     ownerUid = null;
     pendingSummary = EMPTY_SUMMARY;

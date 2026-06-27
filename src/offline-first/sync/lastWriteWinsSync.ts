@@ -443,16 +443,13 @@ async function buildSyncPlanSnapshot(ownerUid: string): Promise<SyncPlanSnapshot
   };
 }
 
-/** Estima filas de envio (local) e recebimento (nuvem) sem executar sync. */
+/** Estima filas de envio (local) e recebimento (nuvem) comparando IndexedDB × Firebase. */
 export async function estimateSyncQueueCounts(
   ownerUid: string,
 ): Promise<{ pendingUploads: number; pendingDownloads: number }> {
-  const [pending, plan] = await Promise.all([
-    getPendingSyncItems(ownerUid),
-    buildSyncPlanSnapshot(ownerUid),
-  ]);
+  const plan = await buildSyncPlanSnapshot(ownerUid);
   return {
-    pendingUploads: pending.total,
+    pendingUploads: plan.plannedUploads,
     pendingDownloads: plan.plannedDownloads,
   };
 }

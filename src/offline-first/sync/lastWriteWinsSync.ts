@@ -72,6 +72,11 @@ import {
   fetchRemoteCollectionsSnapshot,
   invalidateRemoteSnapshotCache,
 } from './remoteSnapshotCache';
+import {
+  countBusinessContentDrift,
+  resolveContentDriftAction,
+  syncBusinessContentEqual,
+} from './syncBusinessContent';
 
 const DOWNLOAD_CONCURRENCY = 8;
 
@@ -207,6 +212,21 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
     const decision = decideLastWriteWins(local, remote);
 
     if (decision.action === 'skip') {
+      if (
+        local &&
+        remote &&
+        !syncBusinessContentEqual(collection, local, remote)
+      ) {
+        plan.push({
+          collection,
+          id,
+          action: resolveContentDriftAction(local, remote),
+          local,
+          remote,
+          hasRemote,
+        });
+        continue;
+      }
       ignored += 1;
       continue;
     }
@@ -423,7 +443,6 @@ async function uploadPreCadastro(uid: string, local: PreCadastroRecord, hasRemot
 async function downloadRecord(
   collection: CollectionName,
   remote: SyncRecord,
-  local: SyncRecord | undefined,
   ownerUid: string,
   rubricCaches?: DownloadRubricCaches,
 ): Promise<void> {
@@ -445,12 +464,7 @@ async function downloadRecord(
   }
 
   const merged = markRecordSynced(
-    remoteDocToSyncRecord(
-      remote.deleted === true
-        ? { ...payload, ownerUid, id: remote.id }
-        : { ...(local ?? {}), ...payload, ownerUid, id: remote.id },
-      ownerUid,
-    ),
+    remoteDocToSyncRecord({ ...payload, ownerUid, id: remote.id }, ownerUid),
     getCachedLoginUid(),
   );
   if (collection === 'cadastros') {
@@ -486,7 +500,7 @@ async function executePlanItem(
   }
 
   if (item.action === 'download' && item.remote) {
-    await downloadRecord(item.collection, item.remote, item.local, ownerUid, rubricCaches);
+    await downloadRecord(item.collection, item.remote, ownerUid, rubricCaches);
     stats.downloads += 1;
     if (item.remote.deleted) {
       deletionAudits.push(buildDeletionAuditEntry(item.collection, item.remote, 'download', Date.now()));
@@ -590,8 +604,9 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
 /** Estima filas de envio (local) e recebimento (nuvem) comparando IndexedDB × Firebase. */
 export async function estimateSyncQueueCounts(
   ownerUid: string,
+  forceRemote = false,
 ): Promise<{ pendingUploads: number; pendingDownloads: number }> {
-  const plan = await buildSyncPlanSnapshot(ownerUid, false);
+  const plan = await buildSyncPlanSnapshot(ownerUid, forceRemote);
   let pendingUploads = plan.plannedUploads;
   let pendingDownloads = plan.plannedDownloads;
 
@@ -600,6 +615,8 @@ export async function estimateSyncQueueCounts(
     countActivePresenceDrift(plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),
     countActivePresenceDrift(plan.localApp, plan.remoteApp, remoteToAplicadorRecord, ownerUid),
     countActivePresenceDrift(plan.localPre, plan.remotePre, remoteToPreCadastroRecord, ownerUid),
+    countBusinessContentDrift('cadastros', plan.localCad, plan.remoteCad, remoteToCadastroRecord, ownerUid),
+    countBusinessContentDrift('sessoes', plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),
   ];
   for (const drift of drifts) {
     pendingDownloads = Math.max(pendingDownloads, drift.extraDownloads);
@@ -726,7 +743,7 @@ export async function executeLastWriteWinsSync(
     phase: 'compare',
   });
 
-  const plan = await buildSyncPlanSnapshot(ownerUid, false);
+  const plan = await buildSyncPlanSnapshot(ownerUid, true);
   const {
     downloadItems,
     uploadItems,

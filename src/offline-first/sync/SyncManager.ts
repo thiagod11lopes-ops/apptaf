@@ -336,7 +336,7 @@ async function refreshCloudQueueEstimate(force = false, attempt = 0): Promise<vo
   try {
     await ensureMemberCloudAccess();
     syncEngine.bindOwner(uid);
-    const estimate = await estimateSyncQueueCounts(uid);
+    const estimate = await estimateSyncQueueCounts(uid, force);
     if (syncInFlight) return;
     counters = {
       ...counters,

@@ -1,10 +1,11 @@
 import { setMeta, getMeta } from '../db/tafDatabase';
 
-/** Estado de sincronização — sempre online quando logado (sem modo offline controlado). */
-export type SystemSyncMode = 'ONLINE_ACTIVE';
+/** Modo global: offline (padrão) ou online (sync manual em andamento). */
+export type SystemSyncMode = 'OFFLINE' | 'ONLINE';
 
 export const SYSTEM_STATE = {
-  ONLINE_ACTIVE: 'ONLINE_ACTIVE' as const,
+  OFFLINE: 'OFFLINE' as const,
+  ONLINE: 'ONLINE' as const,
 };
 
 const META_KEY = 'systemSyncMode';
@@ -14,31 +15,46 @@ function notify(mode: SystemSyncMode): void {
   listeners.forEach((fn) => fn(mode));
 }
 
-let cachedMode: SystemSyncMode = SYSTEM_STATE.ONLINE_ACTIVE;
+let cachedMode: SystemSyncMode = SYSTEM_STATE.OFFLINE;
 
 export const systemState = {
   getMode(): SystemSyncMode {
     return cachedMode;
   },
 
-  /** Firebase é fonte de leitura quando o usuário está logado e com conectividade. */
+  isOffline(): boolean {
+    return cachedMode === SYSTEM_STATE.OFFLINE;
+  },
+
+  /** Firebase só é acessível durante sync manual explícita. */
   canUseFirebase(): boolean {
-    return true;
+    return cachedMode === SYSTEM_STATE.ONLINE;
   },
 
   async hydrate(): Promise<SystemSyncMode> {
     const stored = await getMeta(META_KEY);
-    if (stored === 'FORCED_OFFLINE') {
-      await setMeta(META_KEY, SYSTEM_STATE.ONLINE_ACTIVE);
+    if (stored === 'ONLINE_ACTIVE' || stored === 'ONLINE') {
+      await setMeta(META_KEY, SYSTEM_STATE.OFFLINE);
     }
-    cachedMode = SYSTEM_STATE.ONLINE_ACTIVE;
+    cachedMode = SYSTEM_STATE.OFFLINE;
     return cachedMode;
   },
 
-  async setOnlineActive(): Promise<void> {
-    cachedMode = SYSTEM_STATE.ONLINE_ACTIVE;
-    await setMeta(META_KEY, SYSTEM_STATE.ONLINE_ACTIVE);
+  async setOfflineMode(): Promise<void> {
+    cachedMode = SYSTEM_STATE.OFFLINE;
+    await setMeta(META_KEY, SYSTEM_STATE.OFFLINE);
     notify(cachedMode);
+  },
+
+  async setOnlineMode(): Promise<void> {
+    cachedMode = SYSTEM_STATE.ONLINE;
+    await setMeta(META_KEY, SYSTEM_STATE.ONLINE);
+    notify(cachedMode);
+  },
+
+  /** @deprecated use setOnlineMode */
+  async setOnlineActive(): Promise<void> {
+    await this.setOnlineMode();
   },
 
   subscribe(listener: (mode: SystemSyncMode) => void): () => void {

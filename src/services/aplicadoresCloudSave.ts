@@ -9,7 +9,7 @@ import {
   putAplicadorRecord,
   toAplicadorRecord,
 } from '../offline-first/db/localDb';
-import { bumpRecordMeta } from '../offline-first/sync/ConflictResolver';
+import { bumpRecordMeta } from '../offline-first/sync/recordMeta';
 import { getDeviceId } from '../offline-first/deviceId';
 import { syncQueue } from '../offline-first/sync/SyncQueue';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';

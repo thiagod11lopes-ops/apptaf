@@ -66,7 +66,7 @@ describe('fluxo offline — dados locais', () => {
     const rows = await listCadastros(ANONYMOUS_OWNER);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.nome).toBe('Soldado Teste');
-    expect(rows[0]?.syncStatus).toBe('pending');
+    expect(rows[0]?.syncStatus).toBe('local');
   });
 
   it('salva sessão sem login e enfileira sync', async () => {

@@ -1,40 +1,41 @@
+import { signOutFirebase } from '../../services/firebase/googleAuth';
 import { getCachedDataOwnerUid, getCachedLoginUid } from '../../services/firebase/authUid';
 import { connectivityMonitor } from './ConnectivityMonitor';
 import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
 import { syncEngine } from './SyncEngine';
 import { systemState } from './SystemState';
-import { beginAwaitingCloudConfirmation, confirmCloudDisplayReady } from './cloudDisplayGate';
 import { syncLogger } from './SyncLogger';
+import { buildSyncReport, type SyncReport } from './syncReport';
 
-/** CLOUD_ACTIVE = online, lê snapshot synced da nuvem; OFFLINE_SNAPSHOT = offline, último snapshot synced. */
-export type SyncManagerMode = 'CLOUD_ACTIVE' | 'OFFLINE_SNAPSHOT';
+/** App opera offline por padrão; online apenas durante sync manual. */
+export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
 export type SyncManagerState = {
   mode: SyncManagerMode;
   pendingSummary: PendingSyncSummary;
+  syncReport: SyncReport | null;
   uploading: boolean;
-  /** Modal de envio de alterações offline — exibido ao reconectar com pendências. */
+  /** Tela de confirmação antes de sincronizar. */
   syncModalVisible: boolean;
-  /** Mensagem amigável quando o envio para a nuvem falha. */
   uploadError: string | null;
 };
 
 export function formatSyncUploadError(raw?: string | null): string {
   if (!raw?.trim()) {
-    return 'Falha ao enviar alterações para a nuvem. Tente novamente.';
+    return 'Falha ao sincronizar com a nuvem. Tente novamente.';
   }
   const msg = raw.trim();
   if (msg === 'offline') {
     return 'Sem conexão com a internet. Verifique a rede e tente novamente.';
   }
   if (msg === 'upload_failed' || msg === 'upload_incomplete' || msg === 'pending_remain') {
-    return 'Não foi possível enviar as alterações para a nuvem. Tente novamente.';
+    return 'Não foi possível enviar os dados locais. Tente novamente.';
   }
   if (msg === 'no_owner') {
-    return 'Sessão inválida. Saia e entre novamente com Google.';
+    return 'Sessão inválida. Entre novamente com Google.';
   }
   if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
-    return 'Permissão negada ao enviar para a nuvem. Verifique sua conta.';
+    return 'Permissão negada na nuvem. Verifique sua conta.';
   }
   return msg;
 }
@@ -50,21 +51,22 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
 type Listener = (state: SyncManagerState) => void;
 
 let ownerUid: string | null = null;
-let mode: SyncManagerMode = 'OFFLINE_SNAPSHOT';
+let mode: SyncManagerMode = 'OFFLINE';
 let pendingSummary: PendingSyncSummary = EMPTY_SUMMARY;
+let syncReport: SyncReport | null = null;
 let uploading = false;
-let syncModalRequired = false;
+let syncModalVisible = false;
 let uploadError: string | null = null;
-let sessionEvalInFlight = false;
-let uploadInFlight = false;
+let syncInFlight = false;
 const listeners = new Set<Listener>();
 
 function snapshot(): SyncManagerState {
   return {
     mode,
     pendingSummary,
+    syncReport,
     uploading,
-    syncModalVisible: syncModalRequired && pendingSummary.total > 0,
+    syncModalVisible,
     uploadError,
   };
 }
@@ -73,37 +75,30 @@ function notifyListeners(): void {
   listeners.forEach((fn) => fn(snapshot()));
 }
 
-function canReachFirebase(): boolean {
-  return connectivityMonitor.canSync() && systemState.canUseFirebase();
-}
-
 function isLoggedIn(): boolean {
   return getCachedLoginUid() != null && ownerUid != null;
 }
 
 async function refreshPendingSummary(): Promise<PendingSyncSummary> {
-  if (!ownerUid || !isLoggedIn()) {
+  const uid = ownerUid ?? getCachedDataOwnerUid();
+  if (!uid) {
     pendingSummary = EMPTY_SUMMARY;
     return EMPTY_SUMMARY;
   }
-  await syncEngine.preparePendingOwner(ownerUid);
-  pendingSummary = await getPendingSyncItems(ownerUid);
-  if (pendingSummary.total === 0) {
-    syncModalRequired = false;
-    uploadError = null;
-  }
+  ownerUid = uid;
+  await syncEngine.preparePendingOwner(uid);
+  pendingSummary = await getPendingSyncItems(uid);
   return pendingSummary;
 }
 
-/** Online + logado = exibir snapshot synced baixado da nuvem. */
+/** UI lê sempre do IndexedDB — não há gate de snapshot synced. */
 export function isCloudReadActive(): boolean {
-  return mode === 'CLOUD_ACTIVE' && canReachFirebase() && isLoggedIn();
+  return false;
 }
 
-/** Logado: exibe só registros synced (nuvem online ou último snapshot offline). */
+/** @deprecated UI usa somente dados locais. */
 export function isSyncedDisplayActive(): boolean {
-  if (!isLoggedIn()) return false;
-  return mode === 'CLOUD_ACTIVE' || mode === 'OFFLINE_SNAPSHOT';
+  return false;
 }
 
 export function getSyncManagerState(): SyncManagerState {
@@ -116,106 +111,16 @@ export function subscribeSyncManager(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-async function enterCloudActive(): Promise<void> {
-  if (!ownerUid) return;
-  mode = 'CLOUD_ACTIVE';
+async function returnToOfflineMode(): Promise<void> {
+  syncEngine.deactivateOnlineMode();
+  await syncEngine.shutdownSession();
+  await systemState.setOfflineMode();
+  mode = 'OFFLINE';
+  syncReport = null;
+  syncModalVisible = false;
+  uploading = false;
   uploadError = null;
   notifyListeners();
-
-  beginAwaitingCloudConfirmation();
-  try {
-    await systemState.setOnlineActive();
-    await syncEngine.connectOnlineFromCloud();
-  } finally {
-    confirmCloudDisplayReady();
-    notifyListeners();
-  }
-}
-
-async function uploadPendingAndEnterCloud(): Promise<void> {
-  if (!ownerUid || uploadInFlight) return;
-
-  uploadInFlight = true;
-  uploading = true;
-  uploadError = null;
-  syncModalRequired = false;
-  notifyListeners();
-
-  try {
-    await systemState.setOnlineActive();
-    syncEngine.bindOwner(ownerUid);
-
-    const result = await syncEngine.uploadPendingOnly();
-    await refreshPendingSummary();
-
-    if (!result.success || pendingSummary.total > 0) {
-      const rawError = result.error ?? (pendingSummary.total > 0 ? 'pending_remain' : 'upload_failed');
-      uploadError = formatSyncUploadError(rawError);
-      await syncLogger.warn('sync-manager', rawError);
-      syncModalRequired = pendingSummary.total > 0;
-      if (canReachFirebase()) {
-        await enterCloudActive();
-      } else {
-        mode = 'OFFLINE_SNAPSHOT';
-        syncEngine.deactivateOnlineMode();
-      }
-      notifyListeners();
-      return;
-    }
-
-    await enterCloudActive();
-  } catch (error) {
-    const rawError = error instanceof Error ? error.message : String(error);
-    uploadError = formatSyncUploadError(rawError);
-    await syncLogger.error('sync-manager', rawError);
-    syncModalRequired = pendingSummary.total > 0;
-    if (canReachFirebase()) {
-      await enterCloudActive();
-    } else {
-      mode = 'OFFLINE_SNAPSHOT';
-      syncEngine.deactivateOnlineMode();
-    }
-    notifyListeners();
-  } finally {
-    uploading = false;
-    uploadInFlight = false;
-    notifyListeners();
-  }
-}
-
-async function evaluateSession(trigger: string): Promise<void> {
-  if (!ownerUid || !isLoggedIn()) {
-    mode = 'OFFLINE_SNAPSHOT';
-    pendingSummary = EMPTY_SUMMARY;
-    syncModalRequired = false;
-    notifyListeners();
-    return;
-  }
-
-  if (sessionEvalInFlight) return;
-  sessionEvalInFlight = true;
-
-  try {
-    syncEngine.bindOwner(ownerUid);
-    const summary = await refreshPendingSummary();
-    const hasPending = summary.total > 0;
-    const online = canReachFirebase();
-
-    await syncLogger.info('sync-manager', `${trigger}: pending=${summary.total}, online=${online}, mode=${mode}`);
-
-    if (!online) {
-      mode = 'OFFLINE_SNAPSHOT';
-      syncEngine.deactivateOnlineMode();
-      syncModalRequired = false;
-      notifyListeners();
-      return;
-    }
-
-    syncModalRequired = hasPending;
-    await enterCloudActive();
-  } finally {
-    sessionEvalInFlight = false;
-  }
 }
 
 export const syncManager = {
@@ -223,39 +128,135 @@ export const syncManager = {
     ownerUid = dataOwnerUid;
     syncEngine.bindOwner(dataOwnerUid);
     await systemState.hydrate();
-    await systemState.setOnlineActive();
+    await systemState.setOfflineMode();
     connectivityMonitor.start();
     syncEngine.deactivateOnlineMode();
-    mode = 'OFFLINE_SNAPSHOT';
+    mode = 'OFFLINE';
+    await refreshPendingSummary();
+    notifyListeners();
   },
 
   async evaluateOnSessionStart(): Promise<void> {
     ownerUid = getCachedDataOwnerUid();
     if (!ownerUid) return;
     await this.bindSession(ownerUid);
-    await evaluateSession('session-start');
   },
 
+  /** @deprecated reconexão não dispara sync automático */
   async evaluateOnReconnect(): Promise<void> {
     await refreshPendingSummary();
-    await evaluateSession('reconnect');
+    notifyListeners();
   },
 
   onDisconnect(): void {
-    syncEngine.deactivateOnlineMode();
-    mode = 'OFFLINE_SNAPSHOT';
+    if (mode === 'OFFLINE') return;
+    void returnToOfflineMode();
+  },
+
+  /**
+   * Entrar em modo online: conecta Firebase, compara dados e exibe relatório.
+   * Requer usuário autenticado (login Google feito antes).
+   */
+  async enterOnlineMode(): Promise<{ ok: boolean; error?: string }> {
+    if (syncInFlight) return { ok: false, error: 'sync_in_progress' };
+    ownerUid = getCachedDataOwnerUid();
+    if (!ownerUid || !isLoggedIn()) {
+      return { ok: false, error: 'Faça login com Google antes de sincronizar.' };
+    }
+
+    syncInFlight = true;
+    uploading = true;
+    uploadError = null;
+    mode = 'ONLINE_PREPARING';
     notifyListeners();
+
+    try {
+      await connectivityMonitor.refresh();
+      if (!connectivityMonitor.canSync()) {
+        const browserOnline =
+          typeof navigator === 'undefined' || navigator.onLine !== false;
+        if (!browserOnline) {
+          return { ok: false, error: 'offline' };
+        }
+      }
+
+      await systemState.setOnlineMode();
+      syncEngine.bindOwner(ownerUid);
+      await syncEngine.init(ownerUid);
+
+      syncReport = await buildSyncReport(ownerUid);
+      await refreshPendingSummary();
+      syncModalVisible = true;
+      mode = 'ONLINE_PREPARING';
+      notifyListeners();
+      return { ok: true };
+    } catch (error) {
+      const rawError = error instanceof Error ? error.message : String(error);
+      uploadError = formatSyncUploadError(rawError);
+      await syncLogger.error('sync-manager', rawError);
+      await returnToOfflineMode();
+      return { ok: false, error: uploadError };
+    } finally {
+      uploading = false;
+      syncInFlight = false;
+      notifyListeners();
+    }
   },
 
-  /** Usuário confirmou envio das alterações offline para a nuvem. */
-  async confirmUploadToCloud(): Promise<void> {
-    await uploadPendingAndEnterCloud();
+  /** Usuário confirmou sincronização após revisar o relatório. */
+  async confirmManualSync(): Promise<void> {
+    if (!ownerUid || syncInFlight) return;
+
+    syncInFlight = true;
+    uploading = true;
+    uploadError = null;
+    mode = 'ONLINE_SYNCING';
+    syncModalVisible = false;
+    notifyListeners();
+
+    try {
+      const result = await syncEngine.runLastWriteWinsSync();
+      if (!result.success) {
+        uploadError = formatSyncUploadError(result.stats.errors[0] ?? 'upload_failed');
+        syncModalVisible = true;
+        mode = 'ONLINE_PREPARING';
+        notifyListeners();
+        return;
+      }
+
+      await refreshPendingSummary();
+      await syncLogger.info(
+        'sync-manager',
+        `LWW concluída: ↑${result.stats.uploads} ↓${result.stats.downloads} ⊘${result.stats.ignored}`,
+      );
+    } catch (error) {
+      const rawError = error instanceof Error ? error.message : String(error);
+      uploadError = formatSyncUploadError(rawError);
+      syncModalVisible = true;
+      mode = 'ONLINE_PREPARING';
+      await syncLogger.error('sync-manager', rawError);
+      notifyListeners();
+      return;
+    } finally {
+      uploading = false;
+      syncInFlight = false;
+    }
+
+    try {
+      await signOutFirebase();
+    } catch {
+      // mantém sessão local se sign-out falhar
+    }
+    await returnToOfflineMode();
   },
 
-  /** Usuário adiou o envio — continua exibindo dados da nuvem. */
+  cancelOnlineMode(): void {
+    void returnToOfflineMode();
+  },
+
   dismissSyncModal(): void {
-    syncModalRequired = false;
-    notifyListeners();
+    syncModalVisible = false;
+    void returnToOfflineMode();
   },
 
   clearUploadError(): void {
@@ -263,18 +264,15 @@ export const syncManager = {
     notifyListeners();
   },
 
-  /** Reabre o modal quando há pendências e ainda não enviou. */
   openSyncModal(): void {
-    if (pendingSummary.total > 0 && canReachFirebase()) {
-      syncModalRequired = true;
+    if (pendingSummary.total > 0) {
+      syncModalVisible = true;
       notifyListeners();
     }
   },
 
-  scheduleOnlineWriteFlush(): void {
-    if (mode !== 'CLOUD_ACTIVE' || !canReachFirebase() || !ownerUid) return;
-    syncEngine.scheduleRealtimeFlush();
-  },
+  /** @deprecated sync é manual — mutações locais não disparam upload */
+  scheduleOnlineWriteFlush(): void {},
 
   async refreshPending(): Promise<PendingSyncSummary> {
     const summary = await refreshPendingSummary();
@@ -282,15 +280,10 @@ export const syncManager = {
     return summary;
   },
 
-  shutdown(): void {
-    syncEngine.shutdown();
+  async shutdown(): Promise<void> {
+    await returnToOfflineMode();
     ownerUid = null;
-    mode = 'OFFLINE_SNAPSHOT';
     pendingSummary = EMPTY_SUMMARY;
-    uploading = false;
-    syncModalRequired = false;
-    uploadError = null;
-    notifyListeners();
   },
 
   isCloudReadActive,

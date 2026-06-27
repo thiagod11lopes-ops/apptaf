@@ -37,9 +37,11 @@ import { getMeta, setMeta } from '../db/tafDatabase';
 import { syncQueue } from './SyncQueue';
 import { syncLogger } from './SyncLogger';
 import { connectivityMonitor } from './ConnectivityMonitor';
-import { startRealtimeSync, stopRealtimeSync } from './RealtimeBridge';
 import { systemState } from './SystemState';
 import { getPendingSyncItems } from './pendingSyncItems';
+import { isUnsyncedLocalStatus } from './syncStatus';
+import { markRecordSynced } from './recordMeta';
+import { executeLastWriteWinsSync, type LwwSyncStats } from './lastWriteWinsSync';
 import {
   beginCloudSync,
   endCloudSync,
@@ -64,10 +66,8 @@ let listeners = new Set<StoreListener>();
 let lastPullAt = 0;
 const MIN_PULL_MS = 45_000;
 const MIN_PROCESS_GAP_MS = 12_000;
-const REALTIME_FLUSH_MS = 60;
 const CLOUD_PULL_TIMEOUT_MS = 35_000;
 let lastProcessFinishedAt = 0;
-let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -123,8 +123,8 @@ async function enqueueLocalAplicadoresMissingFromRemote(ownerUid: string): Promi
   const remoteIds = new Set(remote.map((a) => a.id));
 
   for (const row of local) {
-    if (row.deleted || remoteIds.has(row.id) || row.syncStatus === 'pending') continue;
-    const pending = { ...row, syncStatus: 'pending' as const };
+    if (row.deleted || remoteIds.has(row.id) || isUnsyncedLocalStatus(row.syncStatus)) continue;
+    const pending = { ...row, syncStatus: 'updated' as const };
     await putAplicadorRecord(pending);
     await syncQueue.enqueue({
       operationType: 'CREATE',
@@ -175,7 +175,7 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       }
       for (const item of items) {
         const row = item as CadastroRecord;
-        await putCadastroRecord({ ...row, ownerUid: uid, syncStatus: 'synced' });
+        await putCadastroRecord(markRecordSynced({ ...row, ownerUid: uid } as CadastroRecord, getCachedLoginUid()));
       }
       return;
     }
@@ -183,12 +183,12 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       await deleteCadastroFirestore(uid, entry.documentId);
       const dbCad = await listCadastros(uid, true);
       const row = dbCad.find((c) => c.id === entry.documentId);
-      if (row) await putCadastroRecord({ ...row, syncStatus: 'synced' });
+      if (row) await putCadastroRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
       return;
     }
     await addCadastroFirestore(uid, payload as CadastroItemPersist);
     const saved = payload as CadastroRecord;
-    await putCadastroRecord({ ...saved, ownerUid: uid, syncStatus: 'synced' });
+    await putCadastroRecord(markRecordSynced({ ...saved, ownerUid: uid }, getCachedLoginUid()));
     return;
   }
 
@@ -197,7 +197,7 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       await deleteAplicadorFirestore(uid, entry.documentId);
       const dbApp = await listAplicadores(uid, true);
       const row = dbApp.find((a) => a.id === entry.documentId);
-      if (row) await putAplicadorRecord({ ...row, syncStatus: 'synced' });
+      if (row) await putAplicadorRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
       return;
     }
     
@@ -208,7 +208,7 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
 
     await addAplicadorFirestore(uid, appPayload);
     const savedApp = payload as AplicadorRecord;
-    await putAplicadorRecord({ ...savedApp, ownerUid: uid, syncStatus: 'synced' });
+    await putAplicadorRecord(markRecordSynced({ ...savedApp, ownerUid: uid }, getCachedLoginUid()));
     return;
   }
 
@@ -216,7 +216,7 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
     await deleteSessaoFirestore(uid, entry.documentId);
     const dbSess = await listSessoes(uid, true);
     const row = dbSess.find((s) => s.id === entry.documentId);
-    if (row) await putSessaoRecord({ ...row, syncStatus: 'synced' });
+    if (row) await putSessaoRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
     return;
   }
 
@@ -226,11 +226,11 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
   } else {
     await updateSessaoFirestore(uid, sessao);
   }
-  await putSessaoRecord({ ...(payload as SessaoRecord), ownerUid: uid, syncStatus: 'synced' });
+  await putSessaoRecord(markRecordSynced({ ...(payload as SessaoRecord), ownerUid: uid }, getCachedLoginUid()));
 }
 
 export class SyncEngine {
-  /** Modo online ativo: tempo real ligado, sem sync periódico. */
+  /** Modo online ativo apenas durante sync manual. */
   isOnlineModeActive(): boolean {
     return (
       ownerUid != null &&
@@ -249,8 +249,7 @@ export class SyncEngine {
     await systemState.hydrate();
     await getMeta(`migrated:${dataOwnerUid}`);
     connectivityMonitor.start();
-    stopRealtimeSync();
-    onlineModeUid = null;
+    onlineModeUid = dataOwnerUid;
 
     connectivityUnsub?.();
     connectivityUnsub = null;
@@ -258,32 +257,22 @@ export class SyncEngine {
     notify();
   }
 
-  /** Envia pendentes, baixa snapshot da nuvem e liga tempo real. */
-  async connectOnlineFromCloud(): Promise<void> {
-    if (!ownerUid) {
-      confirmCloudDisplayReady();
-      return;
-    }
-    if (!connectivityMonitor.canSync()) {
-      confirmCloudDisplayReady();
-      return;
-    }
+  /** Encerra sessão online sem apagar ownerUid local. */
+  async shutdownSession(): Promise<void> {
+    onlineModeUid = null;
+    if (processTimer) clearTimeout(processTimer);
+    processTimer = null;
+    notify();
+  }
 
+  /** @deprecated sync manual — use uploadPendingOnly + pullFromRemote */
+  async connectOnlineFromCloud(): Promise<void> {
+    if (!ownerUid || !connectivityMonitor.canSync() || !systemState.canUseFirebase()) {
+      confirmCloudDisplayReady();
+      return;
+    }
     try {
-      await systemState.setOnlineActive();
       await withTimeout(this.cacheCloudSnapshotLocally(), CLOUD_PULL_TIMEOUT_MS, 'pull');
-      await this.enableOnlineMode(true);
-    } catch (error) {
-      await syncLogger.error(
-        'sync',
-        error instanceof Error ? error.message : String(error),
-      );
-      try {
-        await this.enableOnlineMode(true);
-      } catch {
-        // Tempo real indisponível — libera UI mesmo assim.
-      }
-      setCloudSyncResult(false);
     } finally {
       confirmCloudDisplayReady();
       notify();
@@ -296,24 +285,16 @@ export class SyncEngine {
     await this.pullFromRemote(true);
   }
 
-  /** Liga tempo real uma vez e garante cache local completo da nuvem. */
+  /** @deprecated tempo real removido */
   async enableOnlineMode(skipPull = false): Promise<void> {
     if (!ownerUid) return;
-
-    const alreadyListening = onlineModeUid === ownerUid;
-    if (!skipPull && connectivityMonitor.canSync()) {
+    if (!skipPull && connectivityMonitor.canSync() && systemState.canUseFirebase()) {
       await this.cacheCloudSnapshotLocally();
     }
-    if (alreadyListening) return;
-
-    stopRealtimeSync();
-    startRealtimeSync(ownerUid, () => notify());
     onlineModeUid = ownerUid;
   }
 
-  /** Desliga tempo real (ex.: perda de conexão ou logout). */
   deactivateOnlineMode(): void {
-    stopRealtimeSync();
     onlineModeUid = null;
   }
 
@@ -387,15 +368,12 @@ export class SyncEngine {
   }
 
   shutdown(): void {
-    stopRealtimeSync();
     connectivityUnsub?.();
     connectivityUnsub = null;
     ownerUid = null;
     onlineModeUid = null;
     if (processTimer) clearTimeout(processTimer);
     processTimer = null;
-    if (flushTimer) clearTimeout(flushTimer);
-    flushTimer = null;
   }
 
   subscribe(listener: StoreListener): () => void {
@@ -403,33 +381,12 @@ export class SyncEngine {
     return () => listeners.delete(listener);
   }
 
-  /** Enfileira upload imediato das alterações locais (conta logada + online). */
-  scheduleRealtimeFlush(): void {
-    if (!ownerUid || !getCachedLoginUid()) return;
-    if (!connectivityMonitor.canSync()) return;
+  /** @deprecated sync manual — mutações locais não disparam upload automático */
+  scheduleRealtimeFlush(): void {}
 
-    if (flushTimer) clearTimeout(flushTimer);
-    flushTimer = setTimeout(() => {
-      flushTimer = null;
-      void this.flushPendingOnChange();
-    }, REALTIME_FLUSH_MS);
-  }
-
-  /** Envia pendentes para a nuvem sem pull — uso após cada mutação local. */
+  /** @deprecated sync manual */
   async flushPendingOnChange(): Promise<void> {
-    if (!ownerUid || !getCachedLoginUid()) return;
-    if (!connectivityMonitor.canSync()) return;
-
-    if (processing) {
-      this.scheduleRealtimeFlush();
-      return;
-    }
-
-    await enqueueDexiePendingIntoQueue(ownerUid);
-    const queuePending = await syncQueue.listPending(ownerUid);
-    if (queuePending.length === 0) return;
-
-    await this.processQueue({ uploadOnly: true, bypassGap: true, forceUpload: true });
+    return;
   }
 
   scheduleProcess(immediate = false): Promise<void> {
@@ -616,6 +573,14 @@ export class SyncEngine {
     await this.processQueue({ bypassGap: true });
   }
 
+  async runLastWriteWinsSync(): Promise<{ success: boolean; stats: LwwSyncStats }> {
+    if (!ownerUid) return { success: false, stats: { uploads: 0, downloads: 0, ignored: 0, errors: ['no_owner'] } };
+    await reconcileSessionPendingOwner(ownerUid);
+    const result = await executeLastWriteWinsSync(ownerUid);
+    notify();
+    return { success: result.success, stats: result.stats };
+  }
+
   async getPendingCount(): Promise<number> {
     if (!ownerUid) return 0;
     return syncQueue.countPending(ownerUid);
@@ -624,12 +589,9 @@ export class SyncEngine {
 
 export const syncEngine = new SyncEngine();
 
-/** Compatibilidade: notifica ouvintes legados após mutação local. */
+/** Notifica ouvintes após mutação local (sem sync automático). */
 export function notifyDataChanged(): void {
   notify();
-  void import('./SyncManager').then(({ syncManager }) => {
-    syncManager.scheduleOnlineWriteFlush();
-  });
 }
 
 export function subscribeDataChanged(listener: StoreListener): () => void {

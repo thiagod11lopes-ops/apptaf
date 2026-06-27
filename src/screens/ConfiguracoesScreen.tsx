@@ -8,6 +8,7 @@ import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
 import { ExcluirTodosDadosBlock } from '../components/ExcluirTodosDadosBlock';
 import { AuthorizedEmailsBlock } from '../components/AuthorizedEmailsBlock';
 import { useAuth } from '../contexts/AuthContext';
+import { OnlineModeBlock } from '../components/OnlineModeBlock';
 
 export default function ConfiguracoesScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
@@ -35,6 +36,13 @@ export default function ConfiguracoesScreen() {
             />
           </View>
         </Card>
+
+        {firebaseEnabled ? (
+          <Card elevated>
+            <Text style={ts.h2}>Sincronização com a nuvem</Text>
+            <OnlineModeBlock />
+          </Card>
+        ) : null}
 
         {isAuthenticated && firebaseEnabled && isBoss ? (
           <Card elevated>

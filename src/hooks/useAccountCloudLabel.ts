@@ -1,13 +1,16 @@
 import { useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { emailCloudLabel } from '../utils/emailCloudLabel';
 
-/** Rótulo de conta: e-mail logado ou "Offline" (sem login Google). */
+/** Rótulo de conta: offline por padrão; e-mail só quando logado. */
 export function useAccountCloudLabel(): string {
   const { isAuthenticated, user } = useAuth();
+  const { appMode } = useOfflineSyncState();
 
   return useMemo(() => {
-    if (!isAuthenticated) return 'Offline';
-    return emailCloudLabel(user?.email ?? null) ?? 'Offline';
-  }, [isAuthenticated, user?.email]);
+    if (appMode !== 'OFFLINE') return 'Sincronizando…';
+    if (!isAuthenticated) return 'Modo offline';
+    return emailCloudLabel(user?.email ?? null) ?? 'Modo offline';
+  }, [appMode, isAuthenticated, user?.email]);
 }

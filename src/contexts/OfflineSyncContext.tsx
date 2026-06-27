@@ -4,7 +4,6 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -18,20 +17,28 @@ import {
 } from '../offline-first/sync/SyncManager';
 import type { PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
 import type { ConnectivityState } from '../offline-first/types';
-import { ConfirmacaoSincronizarNuvemModal } from '../components/sismav/ConfirmacaoSincronizarNuvemModal';
+import type { SyncReport } from '../offline-first/sync/syncReport';
+import { RelatorioSincronizacaoModal } from '../components/sismav/RelatorioSincronizacaoModal';
+import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 
 type OfflineSyncContextType = {
   online: boolean;
   connectivity: ConnectivityState;
-  /** true = online e lendo snapshot da nuvem; false = offline (último snapshot synced). */
+  appMode: SyncManagerState['mode'];
+  /** @deprecated sempre false — UI usa IndexedDB */
   usingCloudData: boolean;
-  /** true = exibe só registros synced (nuvem ou snapshot offline). */
+  /** @deprecated sempre false */
   usingSyncedSnapshot: boolean;
   pendingCount: number;
   pendingSummary: PendingSyncSummary;
+  syncReport: SyncReport | null;
   syncing: boolean;
   syncModalVisible: boolean;
   uploadError: string | null;
+  enterOnlineMode: () => Promise<{ ok: boolean; error?: string }>;
+  confirmManualSync: () => Promise<void>;
+  cancelOnlineMode: () => void;
+  /** @deprecated use confirmManualSync */
   confirmSync: () => Promise<void>;
   dismissSync: () => void;
   openSyncModal: () => void;
@@ -43,33 +50,25 @@ function hasNetworkConnectivity(state: ConnectivityState = getConnectivityState(
   return state === 'ONLINE' || state === 'DEGRADED' || state === 'SYNCING';
 }
 
-function readBrowserOnline(): boolean {
-  if (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean') {
-    return navigator.onLine;
-  }
-  return true;
-}
-
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, authReady } = useAuth();
+  const { authReady } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
   const [managerState, setManagerState] = useState<SyncManagerState>(getSyncManagerState);
-  const prevHasNetworkRef = useRef(false);
 
-  const online = hasNetworkConnectivity(connectivity) || (isAuthenticated && readBrowserOnline());
+  const online = hasNetworkConnectivity(connectivity);
   const pendingSummary = managerState.pendingSummary;
   const pendingCount = pendingSummary.total;
-  const usingCloudData = managerState.mode === 'CLOUD_ACTIVE';
-  const usingSyncedSnapshot =
-    managerState.mode === 'CLOUD_ACTIVE' || managerState.mode === 'OFFLINE_SNAPSHOT';
 
-  const evaluateSession = useCallback(async () => {
-    if (!authReady || !isAuthenticated) return;
-    await syncManager.evaluateOnSessionStart();
-  }, [authReady, isAuthenticated]);
+  const enterOnlineMode = useCallback(async () => {
+    return syncManager.enterOnlineMode();
+  }, []);
 
-  const confirmSync = useCallback(async () => {
-    await syncManager.confirmUploadToCloud();
+  const confirmManualSync = useCallback(async () => {
+    await syncManager.confirmManualSync();
+  }, []);
+
+  const cancelOnlineMode = useCallback(() => {
+    syncManager.cancelOnlineMode();
   }, []);
 
   const dismissSync = useCallback(() => {
@@ -86,53 +85,50 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     connectivityMonitor.start();
-    prevHasNetworkRef.current = hasNetworkConnectivity();
-    return connectivityMonitor.subscribe((state) => {
-      setConnectivity(state);
-      const hasNetwork = hasNetworkConnectivity(state);
-      const hadNetwork = prevHasNetworkRef.current;
-      prevHasNetworkRef.current = hasNetwork;
-
-      if (hadNetwork && !hasNetwork && authReady && isAuthenticated) {
-        syncManager.onDisconnect();
-      }
-      if (!hadNetwork && hasNetwork && authReady && isAuthenticated) {
-        void syncManager.evaluateOnReconnect();
-      }
-    });
-  }, [authReady, isAuthenticated]);
+    return connectivityMonitor.subscribe(setConnectivity);
+  }, []);
 
   useEffect(() => {
-    if (!authReady || !isAuthenticated) return;
-    void evaluateSession();
-  }, [authReady, isAuthenticated, evaluateSession]);
+    if (!authReady) return;
+    const ownerUid = getCachedDataOwnerUid();
+    if (ownerUid) {
+      void syncManager.bindSession(ownerUid);
+    }
+  }, [authReady]);
 
   const value = useMemo(
     () => ({
       online,
       connectivity,
-      usingCloudData,
-      usingSyncedSnapshot,
+      appMode: managerState.mode,
+      usingCloudData: false,
+      usingSyncedSnapshot: false,
       pendingCount,
       pendingSummary,
+      syncReport: managerState.syncReport,
       syncing: managerState.uploading || connectivity === 'SYNCING',
       syncModalVisible: managerState.syncModalVisible,
       uploadError: managerState.uploadError,
-      confirmSync,
+      enterOnlineMode,
+      confirmManualSync,
+      cancelOnlineMode,
+      confirmSync: confirmManualSync,
       dismissSync,
       openSyncModal,
     }),
     [
       online,
       connectivity,
-      usingCloudData,
-      usingSyncedSnapshot,
-      pendingCount,
-      pendingSummary,
+      managerState.mode,
+      managerState.syncReport,
       managerState.uploading,
       managerState.syncModalVisible,
       managerState.uploadError,
-      confirmSync,
+      pendingCount,
+      pendingSummary,
+      enterOnlineMode,
+      confirmManualSync,
+      cancelOnlineMode,
       dismissSync,
       openSyncModal,
     ],
@@ -141,13 +137,13 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   return (
     <OfflineSyncContext.Provider value={value}>
       {children}
-      <ConfirmacaoSincronizarNuvemModal
+      <RelatorioSincronizacaoModal
         visible={managerState.syncModalVisible}
-        summary={pendingCount > 0 ? pendingSummary : null}
+        report={managerState.syncReport}
         loading={managerState.uploading}
         errorMessage={managerState.uploadError}
         onClose={dismissSync}
-        onConfirm={() => void confirmSync()}
+        onConfirm={() => void confirmManualSync()}
       />
     </OfflineSyncContext.Provider>
   );

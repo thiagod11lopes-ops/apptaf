@@ -32,32 +32,18 @@ export default function LoginScreen() {
   const ts = theme.textStyles;
   const navigation = useNavigation();
   const { user, isAuthenticated, isSessionLoading, firebaseEnabled, logout } = useAuth();
-  const { usingCloudData, online, syncing } = useOfflineSyncState();
-  const { statusHint, syncedWithCloud } = useCloudSyncHeaderStatus();
-  const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  const conectandoNuvem =
-    isAuthenticated && !isSessionLoading && online && (syncing || !usingCloudData);
+  const { appMode, pendingCount } = useOfflineSyncState();
+  const { statusHint } = useCloudSyncHeaderStatus();
 
   const statusConta = useMemo(() => {
-    if (isSessionLoading) return 'Preparando sua conta…';
-    if (!isAuthenticated) return null;
-    if (conectandoNuvem) return statusHint ?? 'Conectando com a nuvem…';
-    if (syncedWithCloud || usingCloudData) {
-      return 'Conectado · dados sincronizados com a nuvem';
+    if (isSessionLoading) return 'Preparando conta…';
+    if (!isAuthenticated) return 'Modo offline · dados locais';
+    if (appMode !== 'OFFLINE') return statusHint ?? 'Sincronizando com a nuvem…';
+    if (pendingCount > 0) {
+      return `Conectado · ${pendingCount} alteração(ões) local(is) aguardando sync`;
     }
-    if (!online) return 'Conectado · exibindo último snapshot (sem internet)';
-    return statusHint ?? 'Conectado · finalizando sincronização…';
-  }, [
-    conectandoNuvem,
-    isAuthenticated,
-    isSessionLoading,
-    online,
-    statusHint,
-    syncedWithCloud,
-    usingCloudData,
-  ]);
+    return statusHint ?? 'Conectado · operação offline (sincronize em Configurações)';
+  }, [appMode, isAuthenticated, isSessionLoading, pendingCount, statusHint]);
 
   const handleLogout = useCallback(async () => {
     setLoading(true);
@@ -73,7 +59,10 @@ export default function LoginScreen() {
     setErro(null);
   }, []);
 
-  const aguardandoLogin = isSessionLoading || conectandoNuvem;
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const aguardandoLogin = isSessionLoading || appMode !== 'OFFLINE';
 
   return (
     <KeyboardAvoidingView
@@ -124,7 +113,7 @@ export default function LoginScreen() {
                   Offline
                 </Text>
                 <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
-                  Use sua conta Google para acessar os dados na nuvem
+                  Dados locais no dispositivo · sincronize em Configurações
                 </Text>
               </View>
             )}
@@ -134,7 +123,7 @@ export default function LoginScreen() {
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={theme.primary} />
               <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                {isSessionLoading ? 'Concluindo login…' : 'Conectando à nuvem…'}
+                {isSessionLoading ? 'Concluindo login…' : 'Sincronizando…'}
               </Text>
             </View>
           ) : null}

@@ -6,6 +6,7 @@ import type {
   SyncQueueEntry,
   ChangeLogEntry,
   SyncLogEntry,
+  SyncAuditEntry,
 } from '../types';
 
 export type MetaEntry = { key: string; value: string };
@@ -17,6 +18,7 @@ export class TafDatabase extends Dexie {
   syncQueue!: Table<SyncQueueEntry, string>;
   changeLog!: Table<ChangeLogEntry, number>;
   syncLogs!: Table<SyncLogEntry, number>;
+  syncAuditHistory!: Table<SyncAuditEntry, number>;
   meta!: Table<MetaEntry, string>;
 
   constructor() {
@@ -38,6 +40,9 @@ export class TafDatabase extends Dexie {
     this.version(4).stores({
       aplicadores:
         'id, ownerUid, nip, updatedAt, syncStatus, deleted, [ownerUid+deleted], [ownerUid+syncStatus]',
+    });
+    this.version(5).stores({
+      syncAuditHistory: '++id, ownerUid, startedAt, [ownerUid+startedAt]',
     });
   }
 }

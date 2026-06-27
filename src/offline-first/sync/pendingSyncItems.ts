@@ -1,5 +1,6 @@
 import { getTafDatabase } from '../db/tafDatabase';
-import type { AplicadorRecord, CadastroRecord, CollectionName, SessaoRecord } from '../types';
+import type { AplicadorRecord, CadastroRecord, CollectionName, SessaoRecord, SyncStatus } from '../types';
+import { isUnsyncedLocalStatus } from './syncStatus';
 
 export type PendingSyncItem = {
   collection: CollectionName;
@@ -8,7 +9,7 @@ export type PendingSyncItem = {
   updatedAt: number;
   version: number;
   deviceId: string;
-  syncStatus: 'pending';
+  syncStatus: SyncStatus;
   record: CadastroRecord | SessaoRecord | AplicadorRecord;
 };
 
@@ -20,7 +21,23 @@ export type PendingSyncSummary = {
   aplicadores: number;
 };
 
-/** Retorna todos os registros locais com syncStatus === "pending". */
+function toPendingItem(
+  collection: CollectionName,
+  row: CadastroRecord | SessaoRecord | AplicadorRecord,
+): PendingSyncItem {
+  return {
+    collection,
+    id: row.id,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deviceId: row.deviceId,
+    syncStatus: row.syncStatus,
+    record: row,
+  };
+}
+
+/** Retorna registros locais ainda não sincronizados (local, updated, deleted, conflict, pending). */
 export async function getPendingSyncItems(ownerUid: string): Promise<PendingSyncSummary> {
   const db = getTafDatabase();
   if (!db || !ownerUid.trim()) {
@@ -28,59 +45,28 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
   }
 
   const [cadRows, sessRows, appRows] = await Promise.all([
-    db.cadastros.where('[ownerUid+syncStatus]').equals([ownerUid, 'pending']).toArray(),
-    db.sessoes.where('[ownerUid+syncStatus]').equals([ownerUid, 'pending']).toArray(),
-    db.aplicadores.where('[ownerUid+syncStatus]').equals([ownerUid, 'pending']).toArray(),
+    db.cadastros.where('ownerUid').equals(ownerUid).toArray(),
+    db.sessoes.where('ownerUid').equals(ownerUid).toArray(),
+    db.aplicadores.where('ownerUid').equals(ownerUid).toArray(),
   ]);
 
-  const items: PendingSyncItem[] = [];
+  const pendingCad = cadRows.filter((row) => isUnsyncedLocalStatus(row.syncStatus));
+  const pendingSess = sessRows.filter((row) => isUnsyncedLocalStatus(row.syncStatus));
+  const pendingApp = appRows.filter((row) => isUnsyncedLocalStatus(row.syncStatus));
 
-  for (const row of cadRows) {
-    items.push({
-      collection: 'cadastros',
-      id: row.id,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      version: row.version,
-      deviceId: row.deviceId,
-      syncStatus: 'pending',
-      record: row,
-    });
-  }
-
-  for (const row of sessRows) {
-    items.push({
-      collection: 'sessoes',
-      id: row.id,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      version: row.version,
-      deviceId: row.deviceId,
-      syncStatus: 'pending',
-      record: row,
-    });
-  }
-
-  for (const row of appRows) {
-    items.push({
-      collection: 'aplicadores',
-      id: row.id,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      version: row.version,
-      deviceId: row.deviceId,
-      syncStatus: 'pending',
-      record: row,
-    });
-  }
+  const items: PendingSyncItem[] = [
+    ...pendingCad.map((row) => toPendingItem('cadastros', row)),
+    ...pendingSess.map((row) => toPendingItem('sessoes', row)),
+    ...pendingApp.map((row) => toPendingItem('aplicadores', row)),
+  ];
 
   items.sort((a, b) => a.updatedAt - b.updatedAt);
 
   return {
     items,
     total: items.length,
-    cadastros: cadRows.length,
-    sessoes: sessRows.length,
-    aplicadores: appRows.length,
+    cadastros: pendingCad.length,
+    sessoes: pendingSess.length,
+    aplicadores: pendingApp.length,
   };
 }

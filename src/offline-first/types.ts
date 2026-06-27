@@ -2,7 +2,16 @@ import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { AplicadorItemPersist } from '../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 
-export type SyncStatus = 'pending' | 'synced' | 'conflict' | 'failed';
+export type SyncStatus =
+  | 'local'
+  | 'synced'
+  | 'updated'
+  | 'deleted'
+  | 'conflict'
+  /** @deprecated use updated/local/deleted */
+  | 'pending'
+  /** falha de envio na fila */
+  | 'failed';
 export type OperationType = 'CREATE' | 'UPDATE' | 'DELETE';
 export type QueueStatus = 'pending' | 'processing' | 'done' | 'failed';
 export type ConnectivityState = 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'SYNCING';
@@ -15,10 +24,13 @@ export interface SyncableMeta {
   deviceId: string;
   userId: string | null;
   syncStatus: SyncStatus;
+  syncVersion?: number;
   deleted: boolean;
   deletedAt?: number;
   deletedBy?: string;
   lastModifiedBy: string;
+  lastSync?: number;
+  updatedBy?: string;
 }
 
 export interface CadastroRecord extends CadastroItemPersist, SyncableMeta {
@@ -63,15 +75,31 @@ export interface ChangeLogEntry {
 export interface SyncLogEntry {
   id?: number;
   level: 'info' | 'warn' | 'error';
-  category: 'sync' | 'conflict' | 'connectivity' | 'queue' | 'realtime';
+  category: 'sync' | 'connectivity' | 'queue' | 'audit';
   message: string;
   timestamp: number;
   meta?: Record<string, unknown>;
 }
 
+export interface SyncAuditEntry {
+  id?: number;
+  ownerUid: string;
+  userId: string | null;
+  deviceId: string;
+  startedAt: number;
+  finishedAt: number;
+  durationMs: number;
+  uploads: number;
+  downloads: number;
+  ignored: number;
+  errors: string[];
+  strategy: 'last_write_wins';
+}
+
+/** @deprecated LWW substitui resolução manual de conflitos */
 export type ConflictResolution = {
-  winner: 'local' | 'remote' | 'merged';
+  winner: 'local' | 'remote' | 'equal';
   record: CadastroRecord | SessaoRecord | AplicadorRecord;
-  hadConflict: boolean;
+  action: 'upload' | 'download' | 'skip';
   reason: string;
 };

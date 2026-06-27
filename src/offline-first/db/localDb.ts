@@ -4,9 +4,12 @@ import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndex
 import type { AplicadorRecord, CadastroRecord, SessaoRecord } from '../types';
 import { getTafDatabase } from './tafDatabase';
 import { getDeviceId } from '../deviceId';
-import { bumpRecordMeta } from '../sync/ConflictResolver';
+import { getCachedLoginUid } from '../../services/firebase/authUid';
+import { bumpRecordMeta, markRecordSynced, ensureRecordMeta } from '../sync/recordMeta';
+import { decideLastWriteWins } from '../sync/lastWriteWins';
 import { syncQueue } from '../sync/SyncQueue';
 import { syncLogger } from '../sync/SyncLogger';
+import { syncStatusForOperation } from '../sync/syncStatus';
 
 const ANONYMOUS_OWNER = '__local__';
 
@@ -27,9 +30,10 @@ export async function toCadastroRecord(
     createdAt: Date.now(),
     updatedAt: item.updatedAt ?? Date.now(),
     version: 1,
+    syncVersion: 1,
     deviceId,
     userId,
-    syncStatus: 'pending',
+    syncStatus: syncStatusForOperation(operation),
     deleted: false,
     lastModifiedBy: deviceId,
   };
@@ -49,9 +53,10 @@ export async function toSessaoRecord(
     createdAt: Date.parse(item.criadoEm) || Date.now(),
     updatedAt: item.updatedAt ?? Date.now(),
     version: 1,
+    syncVersion: 1,
     deviceId,
     userId,
-    syncStatus: 'pending',
+    syncStatus: syncStatusForOperation(operation),
     deleted: false,
     lastModifiedBy: deviceId,
   };
@@ -71,9 +76,10 @@ export async function toAplicadorRecord(
     createdAt: Date.now(),
     updatedAt: item.updatedAt ?? Date.now(),
     version: 1,
+    syncVersion: 1,
     deviceId,
     userId,
-    syncStatus: 'pending',
+    syncStatus: syncStatusForOperation(operation),
     deleted: false,
     lastModifiedBy: deviceId,
   };
@@ -365,73 +371,64 @@ export async function softDeleteSessao(
 export async function applyRemoteCadastro(
   remote: Partial<CadastroRecord> & { id: string },
   ownerUid: string,
-): Promise<void> {
+): Promise<'upload' | 'download' | 'skip'> {
   const db = getTafDatabase();
-  if (!db) return;
+  if (!db) return 'skip';
   const local = await db.cadastros.get(remote.id);
+  const remoteRecord = ensureRecordMeta({ ...remote, ownerUid } as CadastroRecord, ownerUid);
+
   if (local && local.ownerUid === ownerUid) {
-    const { resolveRecordConflict } = await import('../sync/ConflictResolver');
-    const resolved = resolveRecordConflict(local, { ...local, ...remote, ownerUid } as CadastroRecord);
-    if (resolved.hadConflict) {
-      await syncLogger.warn('conflict', resolved.reason, { id: remote.id, collection: 'cadastros' });
-    }
-    await db.cadastros.put({ ...resolved.record, syncStatus: 'synced' });
-    return;
+    const decision = decideLastWriteWins(local, remoteRecord);
+    if (decision.action === 'skip') return 'skip';
+    if (decision.action === 'upload') return 'upload';
+    await db.cadastros.put(markRecordSynced({ ...local, ...remoteRecord, ownerUid }, getCachedLoginUid()));
+    return 'download';
   }
-  await db.cadastros.put({
-    ...(remote as CadastroRecord),
-    ownerUid,
-    syncStatus: 'synced',
-    deleted: remote.deleted ?? false,
-  });
+
+  await db.cadastros.put(markRecordSynced(remoteRecord, null));
+  return 'download';
 }
 
 export async function applyRemoteSessao(
   remote: Partial<SessaoRecord> & { id: string },
   ownerUid: string,
-): Promise<void> {
+): Promise<'upload' | 'download' | 'skip'> {
   const db = getTafDatabase();
-  if (!db) return;
+  if (!db) return 'skip';
   const local = await db.sessoes.get(remote.id);
+  const remoteRecord = ensureRecordMeta({ ...remote, ownerUid } as SessaoRecord, ownerUid);
+
   if (local && local.ownerUid === ownerUid) {
-    const { resolveRecordConflict } = await import('../sync/ConflictResolver');
-    const resolved = resolveRecordConflict(local, { ...local, ...remote, ownerUid } as SessaoRecord);
-    if (resolved.hadConflict) {
-      await syncLogger.warn('conflict', resolved.reason, { id: remote.id, collection: 'sessoes' });
-    }
-    await db.sessoes.put({ ...resolved.record, syncStatus: 'synced' });
-    return;
+    const decision = decideLastWriteWins(local, remoteRecord);
+    if (decision.action === 'skip') return 'skip';
+    if (decision.action === 'upload') return 'upload';
+    await db.sessoes.put(markRecordSynced({ ...local, ...remoteRecord, ownerUid }, null));
+    return 'download';
   }
-  await db.sessoes.put({
-    ...(remote as SessaoRecord),
-    ownerUid,
-    syncStatus: 'synced',
-    deleted: remote.deleted ?? false,
-  });
+
+  await db.sessoes.put(markRecordSynced(remoteRecord, null));
+  return 'download';
 }
 
 export async function applyRemoteAplicador(
   remote: Partial<AplicadorRecord> & { id: string },
   ownerUid: string,
-): Promise<void> {
+): Promise<'upload' | 'download' | 'skip'> {
   const db = getTafDatabase();
-  if (!db) return;
+  if (!db) return 'skip';
   const local = await db.aplicadores.get(remote.id);
+  const remoteRecord = ensureRecordMeta({ ...remote, ownerUid } as AplicadorRecord, ownerUid);
+
   if (local && local.ownerUid === ownerUid) {
-    const { resolveRecordConflict } = await import('../sync/ConflictResolver');
-    const resolved = resolveRecordConflict(local, { ...local, ...remote, ownerUid } as AplicadorRecord);
-    if (resolved.hadConflict) {
-      await syncLogger.warn('conflict', resolved.reason, { id: remote.id, collection: 'aplicadores' });
-    }
-    await db.aplicadores.put({ ...resolved.record, syncStatus: 'synced' });
-    return;
+    const decision = decideLastWriteWins(local, remoteRecord);
+    if (decision.action === 'skip') return 'skip';
+    if (decision.action === 'upload') return 'upload';
+    await db.aplicadores.put(markRecordSynced({ ...local, ...remoteRecord, ownerUid }, null));
+    return 'download';
   }
-  await db.aplicadores.put({
-    ...(remote as AplicadorRecord),
-    ownerUid,
-    syncStatus: 'synced',
-    deleted: remote.deleted ?? false,
-  });
+
+  await db.aplicadores.put(markRecordSynced(remoteRecord, null));
+  return 'download';
 }
 
 export async function wipeOwnerData(ownerUid: string): Promise<void> {

@@ -18,16 +18,13 @@ import {
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
-import { resolveMemberAccess, registerAuthorizedMemberLogin } from '../services/firebase/authorizedEmailsFirestore';
-import { setAuthUidState, waitForAuthenticatedUid } from '../services/firebase/authUid';
+import { setAuthUidState, waitForAuthenticatedUid, getCachedDataOwnerUid, getCachedLoginUid } from '../services/firebase/authUid';
 import { clearMemoryCloudCache } from '../services/cloudDataCache';
-import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../offline-first/db/migration';
 import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
-import { applyTeamWipeIfNeeded } from '../services/applyTeamWipeIfNeeded';
+import { syncManager } from '../offline-first/sync/SyncManager';
+import { systemState } from '../offline-first/sync/SystemState';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
-import { stopRealtimeSync } from '../offline-first/sync/RealtimeBridge';
-import { systemState } from '../offline-first/sync/SystemState';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -42,6 +39,8 @@ type AuthContextType = {
   isAuthorizedMember: boolean;
   signInWithGoogle: (idToken?: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  /** Atualiza flags chefe/membro a partir do ownerUid persistido localmente. */
+  syncLocalSessionFlags: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -76,39 +75,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsAuthorizedMember(false);
             setAuthUidState(null, null, true);
             setAuthReady(true);
+            void systemState.setOfflineMode();
             return;
           }
 
           setIsSessionLoading(true);
           try {
             const mapped = mapFirebaseUser(fbUser);
-            let access = { dataOwnerUid: mapped.uid, isAuthorizedMember: false };
-
-            try {
-              access = await resolveMemberAccess(mapped.uid, mapped.email);
-            } catch {
-              // Nuvem indisponível — usa a própria conta Firebase.
-            }
-
-            resetCloudSyncStatus();
-
-            if (access.isAuthorizedMember && mapped.email) {
-              await registerAuthorizedMemberLogin(access.dataOwnerUid, mapped.email, mapped.uid);
-            }
-
-            try {
-              await applyTeamWipeIfNeeded(access.dataOwnerUid, mapped.uid);
-              await migrateDeviceDataOnLogin(access.dataOwnerUid);
-              await migrateLegacyToDexie(access.dataOwnerUid);
-              await systemState.hydrate();
-              await syncEngine.init(access.dataOwnerUid);
-            } catch {
-              confirmCloudDisplayReady();
-            }
-
+            const persistedOwner = getCachedDataOwnerUid();
+            const dataOwnerUid = persistedOwner ?? mapped.uid;
+            const isMember = persistedOwner != null && persistedOwner !== mapped.uid;
             setUser(mapped);
-            setIsAuthorizedMember(access.isAuthorizedMember);
-            setAuthUidState(mapped.uid, access.dataOwnerUid, true);
+            setIsAuthorizedMember(isMember);
+            setAuthUidState(mapped.uid, dataOwnerUid, true);
             setAuthReady(true);
           } finally {
             setIsSessionLoading(false);
@@ -140,6 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   }, [firebaseEnabled]);
 
+  const syncLocalSessionFlags = useCallback(() => {
+    const loginUid = getCachedLoginUid();
+    const ownerUid = getCachedDataOwnerUid();
+    if (!loginUid || !ownerUid) return;
+    setIsAuthorizedMember(ownerUid !== loginUid);
+  }, []);
+
   const logout = useCallback(async () => {
     await signOutFirebase();
     setUser(null);
@@ -149,8 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetCloudSyncStatus();
     confirmCloudDisplayReady();
     syncEngine.shutdown();
-    stopRealtimeSync();
-    void systemState.setOnlineActive();
+    await syncManager.shutdown();
+    await systemState.setOfflineMode();
     notifyDataChanged();
   }, []);
 
@@ -167,8 +153,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthorizedMember,
       signInWithGoogle,
       logout,
+      syncLocalSessionFlags,
     }),
-    [user, authReady, isSessionLoading, firebaseEnabled, isBoss, isAuthorizedMember, signInWithGoogle, logout],
+    [user, authReady, isSessionLoading, firebaseEnabled, isBoss, isAuthorizedMember, signInWithGoogle, logout, syncLocalSessionFlags],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

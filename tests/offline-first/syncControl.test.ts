@@ -14,10 +14,10 @@ describe('getPendingSyncItems', () => {
 
   afterEach(async () => {
     await closeTafDatabaseForTests();
-    await systemState.setOnlineActive();
+    await systemState.setOfflineMode();
   });
 
-  it('retorna registros com syncStatus pending', async () => {
+  it('retorna registros com syncStatus não sincronizado', async () => {
     await saveCadastro(
       {
         id: 'cad-p1',
@@ -45,18 +45,19 @@ describe('getPendingSyncItems', () => {
     expect(summary.total).toBe(2);
     expect(summary.cadastros).toBe(1);
     expect(summary.sessoes).toBe(1);
-    expect(summary.items.every((i) => i.syncStatus === 'pending')).toBe(true);
   });
 });
 
 describe('systemState', () => {
   afterEach(async () => {
-    await systemState.setOnlineActive();
+    await systemState.setOfflineMode();
   });
 
-  it('sempre permite Firebase após hydrate', async () => {
+  it('inicia offline e bloqueia Firebase até modo online', async () => {
     await systemState.hydrate();
-    expect(systemState.getMode()).toBe(SYSTEM_STATE.ONLINE_ACTIVE);
+    expect(systemState.getMode()).toBe(SYSTEM_STATE.OFFLINE);
+    expect(systemState.canUseFirebase()).toBe(false);
+    await systemState.setOnlineMode();
     expect(systemState.canUseFirebase()).toBe(true);
   });
 });

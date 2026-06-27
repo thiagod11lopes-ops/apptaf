@@ -442,16 +442,21 @@ export class SyncEngine {
         const pending = await syncQueue.listPending(ownerUid!);
         setSyncProgress(25);
 
+        let succeeded = 0;
+        let failed = 0;
+
         for (let i = 0; i < pending.length; i++) {
           const item = pending[i]!;
           await syncQueue.markProcessing(item.operationId);
           try {
             await withCloudUpload(() => executeQueueItem(item));
             await syncQueue.markDone(item.operationId);
+            succeeded += 1;
             setSyncProgress(25 + Math.round(((i + 1) / Math.max(pending.length, 1)) * 40));
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
             await syncQueue.markFailed(item.operationId, msg, item.retries + 1);
+            failed += 1;
             await syncLogger.error('queue', msg, { operationId: item.operationId });
             // Pequeno delay para não travar a CPU em caso de loop de erros, mas sem fazer o usuário esperar minutos
             await new Promise((r) => setTimeout(r, 500));
@@ -467,9 +472,10 @@ export class SyncEngine {
           }
         }
         setSyncProgress(100);
-        setCloudSyncResult(true);
+        const queueOk = failed === 0 && (succeeded > 0 || pending.length === 0);
+        setCloudSyncResult(queueOk);
         notify();
-        return true;
+        return queueOk;
       } catch (error) {
         await syncLogger.error('sync', error instanceof Error ? error.message : String(error));
         setCloudSyncResult(false);

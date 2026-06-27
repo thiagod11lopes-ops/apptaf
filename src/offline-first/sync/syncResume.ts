@@ -88,3 +88,11 @@ export function consumeSyncResumeMessage(): string | null {
 export function peekSyncResumeMessage(): string | null {
   return readStorage(PENDING_SYNC_MSG_KEY);
 }
+
+export const SYNC_RESUME_EVENT = 'taf:resume-sync-after-auth';
+
+/** Dispara retomada de sync após login por redirect (AuthContext → OfflineSyncContext). */
+export function dispatchSyncResumeEvent(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(SYNC_RESUME_EVENT));
+}

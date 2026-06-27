@@ -21,13 +21,14 @@ import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { getDeviceId } from '../deviceId';
 import type { AplicadorRecord, CadastroRecord, CollectionName, SessaoRecord } from '../types';
 import {
-  listAplicadores,
-  listCadastros,
-  listSessoes,
+  listAplicadoresForSync,
+  listCadastrosForSync,
+  listSessoesForSync,
   putAplicadorRecord,
   putCadastroRecord,
   putSessaoRecord,
 } from '../db/localDb';
+import { migrateDeviceDataOnLogin } from '../db/migration';
 import { decideLastWriteWins, type LwwAction, type SyncRecord } from './lastWriteWins';
 import { markRecordSynced } from './recordMeta';
 import { isUnsyncedLocalStatus } from './syncStatus';
@@ -169,7 +170,7 @@ async function reconcileIdenticalUnsyncedLocals<TLocal extends SyncRecord, TRemo
     const decision = decideLastWriteWins(local, remote);
     if (decision.action !== 'skip') continue;
 
-    const merged = markRecordSynced(local, loginUid);
+    const merged = markRecordSynced({ ...local, ownerUid }, loginUid);
     if (collection === 'cadastros') {
       await putCadastroRecord(merged as CadastroRecord);
     } else if (collection === 'sessoes') {
@@ -252,7 +253,7 @@ async function flushRemainingPendingRecords(
         );
       } else {
         const loginUid = getCachedLoginUid();
-        const merged = markRecordSynced(local, loginUid);
+        const merged = markRecordSynced({ ...local, ownerUid }, loginUid);
         if (item.collection === 'cadastros') {
           await putCadastroRecord(merged as CadastroRecord);
         } else if (item.collection === 'sessoes') {
@@ -278,21 +279,36 @@ async function flushRemainingPendingRecords(
   }
 }
 
+async function persistSyncedLocal<T extends SyncRecord>(
+  ownerUid: string,
+  local: T,
+  collection: CollectionName,
+): Promise<void> {
+  const synced = markRecordSynced({ ...local, ownerUid }, getCachedLoginUid());
+  if (collection === 'cadastros') {
+    await putCadastroRecord(synced as CadastroRecord);
+  } else if (collection === 'sessoes') {
+    await putSessaoRecord(synced as SessaoRecord);
+  } else {
+    await putAplicadorRecord(synced as AplicadorRecord);
+  }
+}
+
 async function uploadCadastro(uid: string, local: CadastroRecord, hasRemote: boolean): Promise<void> {
   if (local.deleted) {
-    await deleteCadastroFirestore(uid, local.id, buildFirestoreTombstone(local));
-    await putCadastroRecord(markRecordSynced(local, getCachedLoginUid()));
+    await deleteCadastroFirestore(uid, local.id, buildFirestoreTombstone({ ...local, ownerUid: uid }));
+    await persistSyncedLocal(uid, local, 'cadastros');
     return;
   }
-  await addCadastroFirestore(uid, stripForFirestore(local) as CadastroItemPersist);
-  await putCadastroRecord(markRecordSynced(local, getCachedLoginUid()));
+  await addCadastroFirestore(uid, stripForFirestore({ ...local, ownerUid: uid }) as CadastroItemPersist);
+  await persistSyncedLocal(uid, local, 'cadastros');
 }
 
 async function uploadSessao(uid: string, local: SessaoRecord, hasRemote: boolean): Promise<void> {
-  const payload = stripForFirestore(local) as SessaoAplicacaoTaf;
+  const payload = stripForFirestore({ ...local, ownerUid: uid }) as SessaoAplicacaoTaf;
   if (local.deleted) {
-    await deleteSessaoFirestore(uid, local.id, buildFirestoreTombstone(local));
-    await putSessaoRecord(markRecordSynced(local, getCachedLoginUid()));
+    await deleteSessaoFirestore(uid, local.id, buildFirestoreTombstone({ ...local, ownerUid: uid }));
+    await persistSyncedLocal(uid, local, 'sessoes');
     return;
   }
   if (hasRemote) {
@@ -300,17 +316,17 @@ async function uploadSessao(uid: string, local: SessaoRecord, hasRemote: boolean
   } else {
     await addSessaoFirestore(uid, payload);
   }
-  await putSessaoRecord(markRecordSynced(local, getCachedLoginUid()));
+  await persistSyncedLocal(uid, local, 'sessoes');
 }
 
 async function uploadAplicador(uid: string, local: AplicadorRecord, hasRemote: boolean): Promise<void> {
   if (local.deleted) {
-    await deleteAplicadorFirestore(uid, local.id, buildFirestoreTombstone(local));
-    await putAplicadorRecord(markRecordSynced(local, getCachedLoginUid()));
+    await deleteAplicadorFirestore(uid, local.id, buildFirestoreTombstone({ ...local, ownerUid: uid }));
+    await persistSyncedLocal(uid, local, 'aplicadores');
     return;
   }
-  await addAplicadorFirestore(uid, stripForFirestore(local) as AplicadorItemPersist);
-  await putAplicadorRecord(markRecordSynced(local, getCachedLoginUid()));
+  await addAplicadorFirestore(uid, stripForFirestore({ ...local, ownerUid: uid }) as AplicadorItemPersist);
+  await persistSyncedLocal(uid, local, 'aplicadores');
 }
 
 async function downloadRecord(
@@ -361,6 +377,13 @@ async function executePlanItem(
   }
 }
 
+async function ensureNoPendingRemain(ownerUid: string, stats: LwwSyncStats): Promise<void> {
+  const remaining = await getPendingSyncItems(ownerUid);
+  if (remaining.total > 0) {
+    stats.errors.push(`pending_remain:${remaining.total}`);
+  }
+}
+
 export async function executeLastWriteWinsSync(
   ownerUid: string,
   options?: {
@@ -386,15 +409,25 @@ export async function executeLastWriteWinsSync(
   progressCb?.({
     processed: 0,
     total: 0,
+    message: 'Preparando dados locais',
+    stepId: 'comparing',
+    phase: 'compare',
+  });
+
+  await migrateDeviceDataOnLogin(ownerUid);
+
+  progressCb?.({
+    processed: 0,
+    total: 0,
     message: 'Comparando registros',
     stepId: 'comparing',
     phase: 'compare',
   });
 
   const [localCad, localSess, localApp, remoteCad, remoteSess, remoteApp] = await Promise.all([
-    listCadastros(ownerUid, true),
-    listSessoes(ownerUid, true),
-    listAplicadores(ownerUid, true),
+    listCadastrosForSync(ownerUid, true),
+    listSessoesForSync(ownerUid, true),
+    listAplicadoresForSync(ownerUid, true),
     getAllCadastrosFirestoreLight(ownerUid),
     getAllSessoesFirestoreLight(ownerUid),
     getAllAplicadoresFirestore(ownerUid),
@@ -405,9 +438,9 @@ export async function executeLastWriteWinsSync(
   await reconcileIdenticalUnsyncedLocals('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
 
   const [localCadFresh, localSessFresh, localAppFresh] = await Promise.all([
-    listCadastros(ownerUid, true),
-    listSessoes(ownerUid, true),
-    listAplicadores(ownerUid, true),
+    listCadastrosForSync(ownerUid, true),
+    listSessoesForSync(ownerUid, true),
+    listAplicadoresForSync(ownerUid, true),
   ]);
 
   const cadPlanFresh = buildSyncPlan('cadastros', ownerUid, localCadFresh, remoteCad, remoteToCadastroRecord);
@@ -453,6 +486,8 @@ export async function executeLastWriteWinsSync(
     stats.errors.push(...emailErrors);
     await syncQueue.clearDone(ownerUid);
 
+    await ensureNoPendingRemain(ownerUid, stats);
+
     const finishedAt = Date.now();
     const activeRemote = (rows: Array<{ deleted?: boolean }>) => rows.filter((r) => r.deleted !== true).length;
     const collectionCounts = {
@@ -469,9 +504,9 @@ export async function executeLastWriteWinsSync(
       appVersion: APP_VERSION,
       startedAt,
       finishedAt,
-      uploads: 0,
-      downloads: 0,
-      ignored: totalIgnored,
+      uploads: stats.uploads,
+      downloads: stats.downloads,
+      ignored: stats.ignored,
       errors: stats.errors,
       errorMessage: stats.errors[0] ?? null,
       localTimeMs: options?.clockDrift?.localTimeMs,
@@ -488,7 +523,11 @@ export async function executeLastWriteWinsSync(
       success: stats.errors.length === 0,
       stats,
       audit,
-      alreadyUpToDate: stats.errors.length === 0 && stats.uploads === 0 && stats.downloads === 0,
+      alreadyUpToDate:
+        stats.errors.length === 0 &&
+        stats.uploads === 0 &&
+        stats.downloads === 0 &&
+        totalIgnored > 0,
       plannedUploads: 0,
       plannedDownloads: 0,
     };
@@ -572,6 +611,8 @@ export async function executeLastWriteWinsSync(
   if (stats.errors.length === 0) {
     await runDeletionGarbageCollection(ownerUid);
   }
+
+  await ensureNoPendingRemain(ownerUid, stats);
 
   const finishedAt = Date.now();
   const activeRemote = (rows: Array<{ deleted?: boolean }>) => rows.filter((r) => r.deleted !== true).length;

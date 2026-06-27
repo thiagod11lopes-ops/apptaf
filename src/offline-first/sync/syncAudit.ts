@@ -43,6 +43,14 @@ export async function getLastSyncAudit(ownerUid: string): Promise<SyncAuditEntry
   return db.syncAuditHistory.where('ownerUid').equals(ownerUid).reverse().first();
 }
 
+/** Última sync bem-sucedida — ignora tentativas FAILED exibidas como "última sync". */
+export async function getLastSuccessfulSyncAudit(ownerUid: string): Promise<SyncAuditEntry | undefined> {
+  const db = getTafDatabase();
+  if (!db || !ownerUid.trim()) return undefined;
+  const recent = await db.syncAuditHistory.where('ownerUid').equals(ownerUid).reverse().limit(30).toArray();
+  return recent.find((entry) => entry.result === 'SUCCESS' || entry.result === 'PARTIAL_SUCCESS');
+}
+
 export async function listSyncAuditHistory(ownerUid: string, limit = 50): Promise<SyncAuditEntry[]> {
   const db = getTafDatabase();
   if (!db || !ownerUid.trim()) return [];

@@ -12,6 +12,7 @@ import {
   formatRecordsPerSecond,
   formatRemainingSeconds,
 } from '../../offline-first/sync/syncFormatters';
+import { hasPendingSyncResume, peekSyncResumeMessage } from '../../offline-first/sync/syncResume';
 import { stepIcon, stepLabel, type SyncStepState } from '../../offline-first/sync/syncSteps';
 import type { SyncUiState } from '../../offline-first/sync/syncUiState';
 
@@ -93,12 +94,17 @@ export function SyncStatusBar() {
   const showUpToDate = syncUi.phase === 'already_up_to_date';
   const showError = syncUi.phase === 'error';
   const showIdleCounters = !showPanel && !showSuccess && !showUpToDate && !showError;
+  const pendingResume = !syncUi.isSyncing && hasPendingSyncResume();
+  const resumeMessage = pendingResume ? peekSyncResumeMessage() : null;
 
   const handleToggle = useCallback(
     async (next: boolean) => {
       if (!next || !syncUi.toggleEnabled) return;
       if (!firebaseEnabled) return;
-      await startSyncFromToggle();
+      const result = await startSyncFromToggle();
+      if (!result.ok && result.error) {
+        // Estado de erro já refletido em syncUi; evita falha silenciosa.
+      }
     },
     [firebaseEnabled, startSyncFromToggle, syncUi.toggleEnabled],
   );
@@ -164,6 +170,14 @@ export function SyncStatusBar() {
               />
             </View>
           </View>
+
+          {pendingResume ? (
+            <View style={[styles.resumeBanner, { backgroundColor: theme.primary + '18', borderColor: theme.primary }]}>
+              <Text style={[ts.caption, { color: theme.primary, fontWeight: '700', lineHeight: 18 }]}>
+                {resumeMessage ?? 'Login concluído. Retomando sincronização…'}
+              </Text>
+            </View>
+          ) : null}
 
           {showIdleCounters ? (
             <View style={styles.countersGrid}>
@@ -494,5 +508,11 @@ const styles = StyleSheet.create({
   historyHint: {
     textAlign: 'center',
     fontWeight: '600',
+  },
+  resumeBanner: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
   },
 });

@@ -106,6 +106,63 @@ export async function listAplicadores(ownerUid: string, includeDeleted = false):
   return includeDeleted ? rows : rows.filter((r) => !r.deleted);
 }
 
+function mergeRecordsById<T extends { id: string; updatedAt: number; ownerUid: string }>(
+  targetOwnerUid: string,
+  batches: T[][],
+): T[] {
+  const byId = new Map<string, T>();
+  for (const batch of batches) {
+    for (const row of batch) {
+      const existing = byId.get(row.id);
+      if (!existing || row.updatedAt >= existing.updatedAt) {
+        byId.set(row.id, { ...row, ownerUid: targetOwnerUid });
+      }
+    }
+  }
+  return [...byId.values()];
+}
+
+/** Lista registros locais para sync — inclui __local__ e UID de login antes da migração. */
+export async function listCadastrosForSync(
+  ownerUid: string,
+  includeDeleted = false,
+): Promise<CadastroRecord[]> {
+  const loginUid = getCachedLoginUid();
+  const sources = [ownerUid, ANONYMOUS_OWNER];
+  if (loginUid && loginUid !== ownerUid && !sources.includes(loginUid)) {
+    sources.push(loginUid);
+  }
+  const batches = await Promise.all(sources.map((uid) => listCadastros(uid, includeDeleted)));
+  return mergeRecordsById(ownerUid, batches);
+}
+
+export async function listSessoesForSync(
+  ownerUid: string,
+  includeDeleted = false,
+): Promise<SessaoRecord[]> {
+  const loginUid = getCachedLoginUid();
+  const sources = [ownerUid, ANONYMOUS_OWNER];
+  if (loginUid && loginUid !== ownerUid && !sources.includes(loginUid)) {
+    sources.push(loginUid);
+  }
+  const batches = await Promise.all(sources.map((uid) => listSessoes(uid, includeDeleted)));
+  const merged = mergeRecordsById(ownerUid, batches);
+  return merged.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+}
+
+export async function listAplicadoresForSync(
+  ownerUid: string,
+  includeDeleted = false,
+): Promise<AplicadorRecord[]> {
+  const loginUid = getCachedLoginUid();
+  const sources = [ownerUid, ANONYMOUS_OWNER];
+  if (loginUid && loginUid !== ownerUid && !sources.includes(loginUid)) {
+    sources.push(loginUid);
+  }
+  const batches = await Promise.all(sources.map((uid) => listAplicadores(uid, includeDeleted)));
+  return mergeRecordsById(ownerUid, batches);
+}
+
 export async function listSessoes(ownerUid: string, includeDeleted = false): Promise<SessaoRecord[]> {
   const db = getTafDatabase();
   if (!db) return [];

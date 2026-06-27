@@ -1,6 +1,6 @@
 import { getTafDatabase } from '../db/tafDatabase';
 import { STATUS_SYNCED } from './syncStatus';
-import { getLastSyncAudit } from './syncAudit';
+import { getLastSuccessfulSyncAudit } from './syncAudit';
 
 export type SyncCounters = {
   pendingUploads: number;
@@ -34,7 +34,7 @@ export async function getSyncedRecordCount(ownerUid: string): Promise<number> {
 }
 
 export async function getLastSyncTimestamp(ownerUid: string): Promise<number | null> {
-  const last = await getLastSyncAudit(ownerUid);
+  const last = await getLastSuccessfulSyncAudit(ownerUid);
   return last?.finishedAt ?? null;
 }
 

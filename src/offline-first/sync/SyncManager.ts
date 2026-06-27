@@ -64,6 +64,10 @@ export function formatSyncUploadError(raw?: string | null): string {
   if (msg === 'upload_failed' || msg === 'upload_incomplete' || msg === 'pending_remain') {
     return 'Não foi possível enviar os dados locais. Tente novamente.';
   }
+  if (/^pending_remain:\d+/.test(msg)) {
+    const count = msg.split(':')[1] ?? '0';
+    return `${count} alteração(ões) local(is) não foram sincronizadas. Verifique o login e tente novamente.`;
+  }
   if (msg === 'no_owner') {
     return 'Sessão inválida. Entre novamente com Google.';
   }
@@ -407,7 +411,22 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     });
 
     lastAudit = result.audit;
-    lastSyncAt = result.audit.finishedAt;
+
+    await refreshPendingSummary();
+    if (pendingSummary.total > 0) {
+      setActiveStep('uploading');
+      currentStep = 'uploading';
+      setUiProgress(0, `Enviando ${pendingSummary.total} pendência(s)…`, 0, pendingSummary.total);
+      const uploadResult = await syncEngine.uploadPendingOnly();
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error ?? 'upload_failed');
+      }
+      await refreshPendingSummary();
+    }
+
+    if (pendingSummary.total > 0) {
+      throw new Error(`pending_remain:${pendingSummary.total}`);
+    }
 
     if (!result.success) {
       if (backupIdBeforeSync != null) {
@@ -417,6 +436,9 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
       }
       throw new Error(result.stats.errors[0] ?? 'upload_failed');
     }
+
+    lastSyncAt = result.audit.finishedAt;
+    await loadLastSyncFromAudit();
 
     completeStep('finalizing');
     await refreshPendingSummary();
@@ -436,7 +458,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
       alreadyUpToDate: result.alreadyUpToDate,
     };
 
-    if (result.alreadyUpToDate) {
+    if (result.alreadyUpToDate && pendingSummary.total === 0) {
       uiPhase = 'already_up_to_date';
       syncMessage = 'Seu banco de dados já está atualizado.';
       setUiProgress(100, syncMessage, 0, 0);

@@ -20,10 +20,9 @@ import {
 import type { PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
 import type { ConnectivityState } from '../offline-first/types';
 import type { SyncUiState } from '../offline-first/sync/syncUiState';
-import { getCachedDataOwnerUid } from '../services/firebase/authUid';
-import { waitForAuthenticatedUid } from '../services/firebase/authUid';
+import { getCachedDataOwnerUid, waitForAuthenticatedUid, waitForAuthUid } from '../services/firebase/authUid';
 import { getFirebaseAuth } from '../config/firebase';
-import { consumePendingSyncResume, hasPendingSyncResume, SYNC_AUTH_REDIRECT } from '../offline-first/sync/syncResume';
+import { consumePendingSyncResume, hasPendingSyncResume, SYNC_RESUME_EVENT } from '../offline-first/sync/syncResume';
 import { subscribeDataChanged } from '../offline-first/sync/SyncEngine';
 
 type OfflineSyncContextType = {
@@ -60,7 +59,7 @@ type OfflineSyncContextType = {
 const OfflineSyncContext = createContext<OfflineSyncContextType | null>(null);
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { authReady, signInWithGoogle, firebaseEnabled } = useAuth();
+  const { authReady, signInWithGoogle, firebaseEnabled, isAuthenticated } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
   const [managerState, setManagerState] = useState<SyncManagerState>(getSyncManagerState);
 
@@ -72,19 +71,19 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     if (!firebaseEnabled) {
       return { ok: false, error: 'Configure o Firebase para sincronizar.' };
     }
+    if (!getFirebaseAuth()?.currentUser) {
+      // Não confiar em UID persistido sem sessão Firebase ativa.
+    } else {
+      return { ok: true };
+    }
     try {
-      const existing = await waitForAuthenticatedUid(800);
-      if (existing && getFirebaseAuth()?.currentUser) return { ok: true };
-
       const isRedirect = await signInWithGoogle();
       if (isRedirect) {
         return { ok: false, error: SYNC_AUTH_REDIRECT };
       }
 
-      const uid = await waitForAuthenticatedUid(20_000);
-      const currentUser = getFirebaseAuth()?.currentUser;
-
-      if (!uid || !currentUser) {
+      await waitForAuthenticatedUid(20_000);
+      if (!getFirebaseAuth()?.currentUser) {
         return { ok: false, error: 'Faça login com Google para sincronizar.' };
       }
       return { ok: true };
@@ -136,13 +135,22 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const autoResumeStarted = useRef(false);
+  const autoResumeInFlight = useRef(false);
 
-  useEffect(() => {
-    if (!authReady || !firebaseEnabled) return;
+  const tryAutoResumeSync = useCallback(async (): Promise<void> => {
+    if (!firebaseEnabled) return;
+    if (!hasPendingSyncResume()) return;
+    if (autoResumeInFlight.current) return;
+    if (syncManager.getSyncUi().isSyncing) return;
 
-    void (async () => {
-      const resumeAfterLogin = hasPendingSyncResume();
+    autoResumeInFlight.current = true;
+    try {
+      if (!authReady) {
+        await waitForAuthUid();
+      }
+      await waitForAuthenticatedUid(20_000);
+      if (!getFirebaseAuth()?.currentUser) return;
+
       const ownerUid = getCachedDataOwnerUid();
       if (ownerUid) {
         await syncManager.bindSession(ownerUid);
@@ -150,18 +158,39 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         await syncManager.refreshPending();
       }
 
-      if (!resumeAfterLogin || autoResumeStarted.current) return;
-      autoResumeStarted.current = true;
-      consumePendingSyncResume();
-
-      await waitForAuthenticatedUid(20_000);
-      if (!getFirebaseAuth()?.currentUser) {
-        autoResumeStarted.current = false;
-        return;
+      const result = await startSyncFromToggle();
+      if (result.ok) {
+        consumePendingSyncResume();
       }
-      await startSyncFromToggle();
-    })();
+    } finally {
+      autoResumeInFlight.current = false;
+    }
   }, [authReady, firebaseEnabled, startSyncFromToggle]);
+
+  useEffect(() => {
+    if (!authReady || !firebaseEnabled) return;
+    const ownerUid = getCachedDataOwnerUid();
+    if (ownerUid) {
+      void syncManager.bindSession(ownerUid);
+    } else {
+      void syncManager.refreshPending();
+    }
+  }, [authReady, firebaseEnabled]);
+
+  useEffect(() => {
+    if (!authReady || !firebaseEnabled) return;
+    if (!hasPendingSyncResume()) return;
+    void tryAutoResumeSync();
+  }, [authReady, firebaseEnabled, isAuthenticated, tryAutoResumeSync]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResume = () => {
+      void tryAutoResumeSync();
+    };
+    window.addEventListener(SYNC_RESUME_EVENT, onResume);
+    return () => window.removeEventListener(SYNC_RESUME_EVENT, onResume);
+  }, [tryAutoResumeSync]);
 
   const value = useMemo(
     () => ({

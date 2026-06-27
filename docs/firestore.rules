@@ -103,6 +103,10 @@ service cloud.firestore {
       allow read, write: if canAccessUserData(userId);
     }
 
+    match /users/{userId}/pre_cadastros/{docId} {
+      allow read, write: if canAccessUserData(userId);
+    }
+
     match /users/{userId}/system/{docId} {
       allow read: if canAccessUserData(userId);
       allow write: if isBoss(userId);

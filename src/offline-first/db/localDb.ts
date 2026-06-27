@@ -522,6 +522,7 @@ export async function wipeOwnerData(ownerUid: string): Promise<void> {
   await db.cadastros.where('ownerUid').equals(ownerUid).delete();
   await db.aplicadores.where('ownerUid').equals(ownerUid).delete();
   await db.sessoes.where('ownerUid').equals(ownerUid).delete();
+  await db.preCadastros.where('ownerUid').equals(ownerUid).delete();
   await db.syncQueue.where('ownerUid').equals(ownerUid).delete();
 }
 

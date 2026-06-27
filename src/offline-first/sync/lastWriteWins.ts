@@ -1,8 +1,8 @@
-import type { CadastroRecord, SessaoRecord, AplicadorRecord } from '../types';
+import type { CadastroRecord, SessaoRecord, AplicadorRecord, PreCadastroRecord } from '../types';
 import { isUnsyncedLocalStatus } from './syncStatus';
 import { readSyncVersion, readUpdatedAt } from './recordMeta';
 
-export type SyncRecord = CadastroRecord | SessaoRecord | AplicadorRecord;
+export type SyncRecord = CadastroRecord | SessaoRecord | AplicadorRecord | PreCadastroRecord;
 
 export type LwwAction = 'upload' | 'download' | 'skip';
 
@@ -36,10 +36,15 @@ export function decideLastWriteWins(
   }
 
   if (!remote) {
-    if (local && (isUnsyncedLocalStatus(local.syncStatus) || local.deleted)) {
-      return { action: 'upload', reason: 'somente_local' };
+    if (!local) {
+      return { action: 'skip', reason: 'registro_inexistente' };
     }
-    return { action: 'skip', reason: 'local_ja_sincronizado' };
+    if (local.deleted) {
+      return isUnsyncedLocalStatus(local.syncStatus)
+        ? { action: 'upload', reason: 'somente_local' }
+        : { action: 'skip', reason: 'local_ja_sincronizado' };
+    }
+    return { action: 'upload', reason: 'somente_local' };
   }
 
   if (!local) {

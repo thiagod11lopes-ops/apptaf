@@ -15,7 +15,7 @@ export type SyncStatus =
 export type OperationType = 'CREATE' | 'UPDATE' | 'DELETE';
 export type QueueStatus = 'pending' | 'processing' | 'done' | 'failed';
 export type ConnectivityState = 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'SYNCING';
-export type CollectionName = 'cadastros' | 'sessoes' | 'aplicadores';
+export type CollectionName = 'cadastros' | 'sessoes' | 'aplicadores' | 'pre_cadastros';
 
 export interface SyncableMeta {
   createdAt: number;
@@ -43,6 +43,21 @@ export interface SessaoRecord extends SessaoAplicacaoTaf, SyncableMeta {
 
 export interface AplicadorRecord extends AplicadorItemPersist, SyncableMeta {
   ownerUid: string;
+}
+
+export type PreCadastroParticipante = {
+  nip: string;
+  nomeMilitar: string;
+  dataNascimento: string;
+  sexo?: 'M' | 'F';
+};
+
+export interface PreCadastroRecord extends SyncableMeta {
+  id: string;
+  ownerUid: string;
+  criadoEm: number;
+  tipoProva: 'corrida' | 'natacao' | 'permanencia';
+  participantes: PreCadastroParticipante[];
 }
 
 export interface SyncQueueEntry {
@@ -108,6 +123,7 @@ export interface SyncAuditEntry {
     cadastros: { local: number; remote: number };
     sessoes: { local: number; remote: number };
     aplicadores: { local: number; remote: number };
+    pre_cadastros?: { local: number; remote: number };
   };
   deletions?: import('./tombstone').DeletionAuditEntry[];
 }

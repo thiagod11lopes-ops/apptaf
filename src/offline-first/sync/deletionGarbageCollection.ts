@@ -4,6 +4,7 @@ import {
   listCadastros,
   listSessoes,
 } from '../db/localDb';
+import { listPreCadastros } from '../db/preCadastroLocalDb';
 import { syncQueue } from './SyncQueue';
 import {
   isEligibleForLocalGarbageCollection,
@@ -42,13 +43,16 @@ async function purgeLocalCollection(
       ? await listCadastros(ownerUid, includeDeleted)
       : collection === 'sessoes'
         ? await listSessoes(ownerUid, includeDeleted)
-        : await listAplicadores(ownerUid, includeDeleted);
+        : collection === 'pre_cadastros'
+          ? await listPreCadastros(ownerUid, includeDeleted)
+          : await listAplicadores(ownerUid, includeDeleted);
 
   let purged = 0;
   for (const row of rows) {
     if (!isEligibleForLocalGarbageCollection(row as SyncRecord, pendingKeys, collection)) continue;
     if (collection === 'cadastros') await db.cadastros.delete(row.id);
     else if (collection === 'sessoes') await db.sessoes.delete(row.id);
+    else if (collection === 'pre_cadastros') await db.preCadastros.delete(row.id);
     else await db.aplicadores.delete(row.id);
     purged += 1;
   }
@@ -95,10 +99,11 @@ export async function runDeletionGarbageCollection(ownerUid: string): Promise<{
   localPurged: number;
   remotePurged: number;
 }> {
-  const [localCad, localSess, localApp] = await Promise.all([
+  const [localCad, localSess, localApp, localPre] = await Promise.all([
     purgeLocalCollection(ownerUid, 'cadastros', true),
     purgeLocalCollection(ownerUid, 'sessoes', true),
     purgeLocalCollection(ownerUid, 'aplicadores', true),
+    purgeLocalCollection(ownerUid, 'pre_cadastros', true),
   ]);
 
   let remotePurged = 0;
@@ -109,7 +114,7 @@ export async function runDeletionGarbageCollection(ownerUid: string): Promise<{
   }
 
   return {
-    localPurged: localCad + localSess + localApp,
+    localPurged: localCad + localSess + localApp + localPre,
     remotePurged,
   };
 }

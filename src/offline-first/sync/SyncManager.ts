@@ -92,6 +92,7 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
   cadastros: 0,
   sessoes: 0,
   aplicadores: 0,
+  pre_cadastros: 0,
 };
 
 const SUCCESS_DISPLAY_MS = 3000;

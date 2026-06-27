@@ -29,6 +29,12 @@ export {
 } from '../../../services/firebase/aplicadoresFirestore';
 
 export {
+  getAllPreCadastrosFirestore,
+  addPreCadastroFirestore,
+  deletePreCadastroFirestore,
+} from '../../../services/firebase/preCadastrosFirestore';
+
+export {
   resolveMemberAccess,
   registerAuthorizedMemberLogin,
   listAuthorizedEmails,

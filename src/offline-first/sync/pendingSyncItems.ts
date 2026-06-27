@@ -1,6 +1,13 @@
 import { getTafDatabase } from '../db/tafDatabase';
 import { ANONYMOUS_OWNER } from '../db/localDb';
-import type { AplicadorRecord, CadastroRecord, CollectionName, SessaoRecord, SyncStatus } from '../types';
+import type {
+  AplicadorRecord,
+  CadastroRecord,
+  CollectionName,
+  PreCadastroRecord,
+  SessaoRecord,
+  SyncStatus,
+} from '../types';
 import { isUnsyncedLocalStatus } from './syncStatus';
 
 export type PendingSyncItem = {
@@ -11,7 +18,7 @@ export type PendingSyncItem = {
   version: number;
   deviceId: string;
   syncStatus: SyncStatus;
-  record: CadastroRecord | SessaoRecord | AplicadorRecord;
+  record: CadastroRecord | SessaoRecord | AplicadorRecord | PreCadastroRecord;
 };
 
 export type PendingSyncSummary = {
@@ -20,11 +27,12 @@ export type PendingSyncSummary = {
   cadastros: number;
   sessoes: number;
   aplicadores: number;
+  pre_cadastros: number;
 };
 
 function toPendingItem(
   collection: CollectionName,
-  row: CadastroRecord | SessaoRecord | AplicadorRecord,
+  row: CadastroRecord | SessaoRecord | AplicadorRecord | PreCadastroRecord,
 ): PendingSyncItem {
   return {
     collection,
@@ -49,7 +57,7 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
   const db = getTafDatabase();
   const owners = ownerUidsForQuery(ownerUid);
   if (!db || owners.length === 0) {
-    return { items: [], total: 0, cadastros: 0, sessoes: 0, aplicadores: 0 };
+    return { items: [], total: 0, cadastros: 0, sessoes: 0, aplicadores: 0, pre_cadastros: 0 };
   }
 
   const seen = new Set<string>();
@@ -57,12 +65,14 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
   let cadastros = 0;
   let sessoes = 0;
   let aplicadores = 0;
+  let pre_cadastros = 0;
 
   for (const uid of owners) {
-    const [cadRows, sessRows, appRows] = await Promise.all([
+    const [cadRows, sessRows, appRows, preRows] = await Promise.all([
       db.cadastros.where('ownerUid').equals(uid).toArray(),
       db.sessoes.where('ownerUid').equals(uid).toArray(),
       db.aplicadores.where('ownerUid').equals(uid).toArray(),
+      db.preCadastros.where('ownerUid').equals(uid).toArray(),
     ]);
 
     for (const row of cadRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
@@ -86,6 +96,13 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
       items.push(toPendingItem('aplicadores', row));
       aplicadores += 1;
     }
+    for (const row of preRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
+      const key = `pre_cadastros:${row.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push(toPendingItem('pre_cadastros', row));
+      pre_cadastros += 1;
+    }
   }
 
   items.sort((a, b) => a.updatedAt - b.updatedAt);
@@ -96,5 +113,6 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
     cadastros,
     sessoes,
     aplicadores,
+    pre_cadastros,
   };
 }

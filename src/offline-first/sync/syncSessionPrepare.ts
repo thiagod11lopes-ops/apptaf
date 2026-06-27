@@ -4,6 +4,7 @@ import {
 } from './firebase/FirebaseGateway';
 import { setAuthUidState } from '../../services/firebase/authUid';
 import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../db/migration';
+import { migratePreCadastrosFromAppMeta } from '../db/preCadastroLocalDb';
 import { applyTeamWipeIfNeeded } from './syncTeamWipe';
 import { pullAuthorizedEmailsToLocal } from './syncAuthorizedEmails';
 
@@ -30,6 +31,7 @@ export async function resolveLocalSessionAfterLogin(
   try {
     await migrateDeviceDataOnLogin(access.dataOwnerUid);
     await migrateLegacyToDexie(access.dataOwnerUid);
+    await migratePreCadastrosFromAppMeta(access.dataOwnerUid);
   } catch (error) {
     console.warn('[auth] migrateDeviceDataOnLogin falhou:', error);
   }

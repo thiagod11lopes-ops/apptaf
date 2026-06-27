@@ -1,11 +1,13 @@
-import { getCachedDataOwnerUid, waitForAuthenticatedUid } from './firebase/authUid';
+import { getCachedDataOwnerUid, getCachedLoginUid, waitForAuthenticatedUid } from './firebase/authUid';
 import {
-  hydrateAppMetaFromIndexedDb,
-  preCadastroMetaKey,
-  readAppMeta,
-  removeAppMeta,
-  writeAppMeta,
-} from '../offline-first/db/appMeta';
+  listPreCadastros,
+  migratePreCadastrosFromAppMeta,
+  preCadastroRecordToTaf,
+  savePreCadastroRecord,
+  softDeletePreCadastroRecord,
+  wipePreCadastrosForOwner,
+} from '../offline-first/db/preCadastroLocalDb';
+import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 
 export const MAX_PRE_CADASTRO_PARTICIPANTES = 15;
 
@@ -23,58 +25,41 @@ export type PreCadastroTaf = {
   participantes: PreCadastroParticipante[];
 };
 
-async function ownerStorageKey(): Promise<string> {
+async function resolveOwnerUid(): Promise<string> {
   const uid = getCachedDataOwnerUid() ?? (await waitForAuthenticatedUid());
-  return uid ?? 'local';
-}
-
-function parsePreCadastros(raw: string | null): PreCadastroTaf[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as PreCadastroTaf[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-async function readPreCadastrosForOwner(ownerKey: string): Promise<PreCadastroTaf[]> {
-  await hydrateAppMetaFromIndexedDb();
-  const raw = await readAppMeta(preCadastroMetaKey(ownerKey));
-  return parsePreCadastros(raw);
-}
-
-async function writePreCadastrosForOwner(ownerKey: string, list: PreCadastroTaf[]): Promise<void> {
-  await writeAppMeta(preCadastroMetaKey(ownerKey), JSON.stringify(list));
+  return uid ?? '__local__';
 }
 
 export async function getAllPreCadastrosTaf(): Promise<PreCadastroTaf[]> {
-  const ownerKey = await ownerStorageKey();
-  return readPreCadastrosForOwner(ownerKey);
+  const ownerUid = await resolveOwnerUid();
+  await migratePreCadastrosFromAppMeta(ownerUid);
+  const rows = await listPreCadastros(ownerUid);
+  return rows.map(preCadastroRecordToTaf);
 }
 
 export async function addPreCadastroTaf(item: PreCadastroTaf): Promise<void> {
-  const ownerKey = await ownerStorageKey();
-  const list = await readPreCadastrosForOwner(ownerKey);
-  list.unshift(item);
-  await writePreCadastrosForOwner(ownerKey, list);
+  const ownerUid = await resolveOwnerUid();
+  const userId = getCachedLoginUid();
+  await savePreCadastroRecord(item, ownerUid, userId);
+  notifyDataChanged();
 }
 
 export async function removePreCadastroTaf(id: string): Promise<boolean> {
-  const ownerKey = await ownerStorageKey();
-  const list = await readPreCadastrosForOwner(ownerKey);
-  const filtered = list.filter((x) => x.id !== id);
-  if (filtered.length === list.length) return false;
-  await writePreCadastrosForOwner(ownerKey, filtered);
+  const ownerUid = await resolveOwnerUid();
+  const userId = getCachedLoginUid();
+  const rows = await listPreCadastros(ownerUid, true);
+  if (!rows.some((r) => r.id === id)) return false;
+  await softDeletePreCadastroRecord(id, ownerUid, userId);
+  notifyDataChanged();
   return true;
 }
 
 export async function clearAllPreCadastrosTaf(): Promise<void> {
   try {
     const uid = getCachedDataOwnerUid();
-    const keys = new Set(['local']);
+    const keys = new Set(['__local__']);
     if (uid) keys.add(uid);
-    await Promise.all([...keys].map((ownerKey) => removeAppMeta(preCadastroMetaKey(ownerKey))));
+    await Promise.all([...keys].map((ownerKey) => wipePreCadastrosForOwner(ownerKey)));
   } catch {
     // silencioso
   }

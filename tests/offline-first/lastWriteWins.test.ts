@@ -75,4 +75,9 @@ describe('Last Write Wins', () => {
   it('somente remoto → download', () => {
     expect(decideLastWriteWins(undefined, cad({ syncStatus: 'synced' })).action).toBe('download');
   });
+
+  it('local synced sem remoto e não deletado → upload', () => {
+    const local = cad({ syncStatus: 'synced' });
+    expect(decideLastWriteWins(local, undefined).action).toBe('upload');
+  });
 });

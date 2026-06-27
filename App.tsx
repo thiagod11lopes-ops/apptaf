@@ -68,8 +68,8 @@ function AppRoot() {
 }
 
 function AppWithDataStore({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
-  const ownerUid = isAuthenticated ? getCachedDataOwnerUid() : null;
+  const { authReady } = useAuth();
+  const ownerUid = authReady ? getCachedDataOwnerUid() : null;
   return <DataStoreProvider ownerUid={ownerUid}>{children}</DataStoreProvider>;
 }
 

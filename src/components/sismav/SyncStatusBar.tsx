@@ -18,10 +18,10 @@ import type { SyncUiState } from '../../offline-first/sync/syncUiState';
 
 function statusLabel(
   syncUi: SyncUiState,
-  isAuthenticated: boolean,
+  loggedIn: boolean,
 ): { emoji: string; label: string; color: string } {
-  if (syncUi.isBlocked || !isAuthenticated) {
-    return { emoji: '🟡', label: 'Bloqueado', color: '#ca8a04' };
+  if (!loggedIn) {
+    return { emoji: '🟡', label: 'Sem login', color: '#ca8a04' };
   }
   if (syncUi.phase === 'error') {
     return { emoji: '⚠', label: 'Erro', color: '#dc2626' };
@@ -90,12 +90,13 @@ export function SyncStatusBar() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [authBlockedHint, setAuthBlockedHint] = useState(false);
 
-  const sessionReady = authReady && isAuthenticated && syncUi.isAuthenticated;
+  const loggedIn = authReady && isAuthenticated;
+  const sessionReady = loggedIn;
 
   useEffect(() => {
     if (sessionReady) setAuthBlockedHint(false);
   }, [sessionReady]);
-  const status = statusLabel(syncUi, sessionReady);
+  const status = statusLabel(syncUi, loggedIn);
   const switchOn =
     syncUi.isSyncing ||
     syncUi.phase === 'success' ||
@@ -106,7 +107,7 @@ export function SyncStatusBar() {
   const showUpToDate = syncUi.phase === 'already_up_to_date';
   const showError = syncUi.phase === 'error';
   const showIdleCounters = !showPanel && !showSuccess && !showUpToDate && !showError;
-  const showAuthBlocked = !sessionReady && !syncUi.isSyncing;
+  const showAuthBlocked = !loggedIn && !syncUi.isSyncing;
 
   const handleToggle = useCallback(
     async (next: boolean) => {
@@ -161,6 +162,11 @@ export function SyncStatusBar() {
                   <Text style={{ color: theme.text, fontWeight: '600' }}>
                     {formatLastSyncLabel(syncUi.lastSyncAt)}
                   </Text>
+                </Text>
+              ) : null}
+              {loggedIn && !syncUi.isSyncing && syncUi.phase !== 'success' ? (
+                <Text style={[ts.caption, { color: theme.gain, marginTop: 2, fontWeight: '600' }]}>
+                  Logado com Google · sync manual na chave
                 </Text>
               ) : null}
               {syncUi.isSyncing && syncUi.syncMessage ? (

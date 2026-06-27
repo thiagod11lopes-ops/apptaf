@@ -42,7 +42,7 @@ export default function LoginScreen() {
     if (pendingCount > 0) {
       return `Conectado · ${pendingCount} alteração(ões) local(is) aguardando sync`;
     }
-    return statusHint ?? 'Conectado · operação offline (sincronize na tela inicial)';
+    return 'Conectado com Google · use a chave na tela inicial para sincronizar';
   }, [appMode, isAuthenticated, isSessionLoading, pendingCount, statusHint]);
 
   const handleLogout = useCallback(async () => {
@@ -62,7 +62,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const aguardandoLogin = isSessionLoading || appMode !== 'OFFLINE';
+  const aguardandoLogin = isSessionLoading;
 
   return (
     <KeyboardAvoidingView
@@ -142,7 +142,7 @@ export default function LoginScreen() {
 
         <Text style={[ts.caption, styles.footer]}>
           {firebaseEnabled
-            ? 'Após entrar com Google, permaneça nesta tela até a conexão com a nuvem ser concluída.'
+            ? 'Após entrar com Google, sua sessão permanece ativa. A sincronização é feita manualmente na tela inicial.'
             : 'Adicione as chaves do Firebase em .env para habilitar login Google e banco na nuvem.'}
         </Text>
       </ScrollView>

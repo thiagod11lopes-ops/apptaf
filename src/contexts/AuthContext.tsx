@@ -25,6 +25,7 @@ import { syncManager } from '../offline-first/sync/SyncManager';
 import { systemState } from '../offline-first/sync/SystemState';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
+import { clearPendingSyncResume } from '../offline-first/sync/syncResume';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -61,11 +62,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let unsub = () => {};
+    let disposed = false;
 
     void (async () => {
       if (Platform.OS === 'web') {
         await completeGoogleRedirectSignIn();
       }
+
+      await auth.authStateReady();
+      if (disposed) return;
 
       unsub = onAuthStateChanged(auth, (fbUser) => {
         void (async () => {
@@ -88,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(mapped);
             setIsAuthorizedMember(isMember);
             setAuthUidState(mapped.uid, dataOwnerUid, true);
+            clearPendingSyncResume();
             setAuthReady(true);
           } finally {
             setIsSessionLoading(false);
@@ -96,7 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     })();
 
-    return () => unsub();
+    return () => {
+      disposed = true;
+      unsub();
+    };
   }, []);
 
   const signInWithGoogle = useCallback(async (idToken?: string): Promise<boolean> => {

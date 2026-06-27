@@ -67,7 +67,7 @@ const verifyAuthenticatedOnly: EnsureAuthenticatedFn = async () => {
 };
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { authReady, firebaseEnabled, isAuthenticated } = useAuth();
+  const { authReady, firebaseEnabled, isAuthenticated, user } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
   const [managerState, setManagerState] = useState<SyncManagerState>(getSyncManagerState);
 
@@ -75,15 +75,26 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const pendingCount = pendingSummary.total;
   const syncUi = managerState.syncUi;
 
-  const hasValidSession = authReady && isAuthenticated && Boolean(getFirebaseAuth()?.currentUser);
+  useEffect(() => {
+    if (!authReady || !firebaseEnabled) return;
+
+    const hasFirebaseUser = Boolean(getFirebaseAuth()?.currentUser);
+    syncManager.setAuthAvailable(isAuthenticated && hasFirebaseUser);
+
+    const ownerUid = getCachedDataOwnerUid();
+    if (ownerUid) {
+      void syncManager.bindSession(ownerUid);
+    } else {
+      void syncManager.refreshPending();
+    }
+  }, [authReady, firebaseEnabled, isAuthenticated, user?.uid]);
+
+  const hasValidSession =
+    authReady && isAuthenticated && Boolean(getFirebaseAuth()?.currentUser);
 
   useEffect(() => {
     syncManager.registerAuthHandler(verifyAuthenticatedOnly);
   }, []);
-
-  useEffect(() => {
-    syncManager.setAuthAvailable(hasValidSession);
-  }, [hasValidSession]);
 
   const startSyncFromToggle = useCallback(async () => {
     if (!hasValidSession) {
@@ -129,16 +140,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       void syncManager.refreshPending();
     });
   }, []);
-
-  useEffect(() => {
-    if (!authReady || !firebaseEnabled) return;
-    const ownerUid = getCachedDataOwnerUid();
-    if (ownerUid) {
-      void syncManager.bindSession(ownerUid);
-    } else {
-      void syncManager.refreshPending();
-    }
-  }, [authReady, firebaseEnabled]);
 
   const value = useMemo(
     () => ({

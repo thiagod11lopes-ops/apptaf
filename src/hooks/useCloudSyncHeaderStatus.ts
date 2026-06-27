@@ -38,7 +38,7 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
       return `${pendingCount} alteração(ões) local(is) · use a chave na tela inicial`;
     }
     if (isAuthenticated && isOfflineMode) {
-      return 'Modo offline · dados locais (IndexedDB)';
+      return 'Modo offline';
     }
     if (!online) return 'Sem internet · operação 100% local';
     return 'Modo offline · use a chave na tela inicial para sincronizar';

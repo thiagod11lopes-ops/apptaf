@@ -1,8 +1,11 @@
 import { getFirebaseAuth } from '../../config/firebase';
-import { getMeta, setMeta, getTafDatabase } from '../../offline-first/db/tafDatabase';
+import { getTafDatabase } from '../../offline-first/db/tafDatabase';
+import {
+  readAppMetaCache,
+  removeAppMetaSync,
+  writeAppMetaSync,
+} from '../../offline-first/db/appMeta';
 
-const PERSISTED_OWNER_KEY = 'taf:lastDataOwnerUid';
-const PERSISTED_LOGIN_KEY = 'taf:lastLoginUid';
 const META_DATA_OWNER_KEY = 'session:dataOwnerUid';
 const META_LOGIN_UID_KEY = 'session:loginUid';
 const LOCAL_OWNER_PLACEHOLDER = '__local__';
@@ -16,51 +19,27 @@ let dataOwnerUid: string | null = null;
 const waiters = new Set<(ownerUid: string | null) => void>();
 
 function readPersistedDataOwnerUid(): string | null {
-  if (typeof localStorage === 'undefined') return null;
-  const v = localStorage.getItem(PERSISTED_OWNER_KEY);
-  return v?.trim() || null;
+  return readAppMetaCache(META_DATA_OWNER_KEY);
 }
 
 function persistDataOwnerUid(uid: string): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(PERSISTED_OWNER_KEY, uid);
-  } catch {
-    // quota / modo privado
-  }
+  writeAppMetaSync(META_DATA_OWNER_KEY, uid);
 }
 
 function clearPersistedDataOwnerUid(): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.removeItem(PERSISTED_OWNER_KEY);
-  } catch {
-    // silencioso
-  }
+  removeAppMetaSync(META_DATA_OWNER_KEY);
 }
 
 function persistLoginUid(uid: string): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(PERSISTED_LOGIN_KEY, uid);
-  } catch {
-    // quota / modo privado
-  }
+  writeAppMetaSync(META_LOGIN_UID_KEY, uid);
 }
 
 function readPersistedLoginUid(): string | null {
-  if (typeof localStorage === 'undefined') return null;
-  const v = localStorage.getItem(PERSISTED_LOGIN_KEY);
-  return v?.trim() || null;
+  return readAppMetaCache(META_LOGIN_UID_KEY);
 }
 
 function clearPersistedLoginUid(): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.removeItem(PERSISTED_LOGIN_KEY);
-  } catch {
-    // silencioso
-  }
+  removeAppMetaSync(META_LOGIN_UID_KEY);
 }
 
 function notifyWaiters() {
@@ -69,54 +48,7 @@ function notifyWaiters() {
   }
 }
 
-async function writeSessionMetaToIndexedDb(
-  ownerUid: string | null | undefined,
-  nextLoginUid: string | null | undefined,
-): Promise<void> {
-  if (!getTafDatabase()) return;
-  try {
-    if (ownerUid?.trim()) {
-      await setMeta(META_DATA_OWNER_KEY, ownerUid.trim());
-    }
-    if (nextLoginUid?.trim()) {
-      await setMeta(META_LOGIN_UID_KEY, nextLoginUid.trim());
-    }
-  } catch {
-    // IndexedDB indisponível — localStorage continua como fallback.
-  }
-}
-
-async function clearSessionMetaFromIndexedDb(): Promise<void> {
-  if (!getTafDatabase()) return;
-  try {
-    await setMeta(META_DATA_OWNER_KEY, '');
-    await setMeta(META_LOGIN_UID_KEY, '');
-  } catch {
-    // silencioso
-  }
-}
-
-async function readPersistedDataOwnerUidFromIndexedDb(): Promise<string | null> {
-  if (!getTafDatabase()) return null;
-  try {
-    const value = await getMeta(META_DATA_OWNER_KEY);
-    return value?.trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-async function readPersistedLoginUidFromIndexedDb(): Promise<string | null> {
-  if (!getTafDatabase()) return null;
-  try {
-    const value = await getMeta(META_LOGIN_UID_KEY);
-    return value?.trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-/** Infere o ownerUid dominante quando localStorage foi apagado (comum em PWA iOS). */
+/** Infere o ownerUid dominante a partir dos registros no Dexie. */
 async function inferPrimaryOwnerUidFromIndexedDb(): Promise<string | null> {
   const db = getTafDatabase();
   if (!db) return null;
@@ -146,24 +78,20 @@ async function inferPrimaryOwnerUidFromIndexedDb(): Promise<string | null> {
 
 let indexedDbSessionHydrated = false;
 
-/** Restaura owner/login do IndexedDB — sobrevive ao PWA limpar localStorage. */
+/** Restaura owner/login do IndexedDB (Dexie meta). */
 export async function hydrateAuthUidFromIndexedDb(): Promise<void> {
   if (indexedDbSessionHydrated) return;
   indexedDbSessionHydrated = true;
 
-  const [ownerFromMeta, loginFromMeta] = await Promise.all([
-    readPersistedDataOwnerUidFromIndexedDb(),
-    readPersistedLoginUidFromIndexedDb(),
-  ]);
+  const ownerFromMeta = readPersistedDataOwnerUid();
+  const loginFromMeta = readPersistedLoginUid();
 
   if (!dataOwnerUid && ownerFromMeta) {
     dataOwnerUid = ownerFromMeta;
-    persistDataOwnerUid(ownerFromMeta);
   }
 
   if (!loginUid && loginFromMeta) {
     loginUid = loginFromMeta;
-    persistLoginUid(loginFromMeta);
   }
 
   if (!dataOwnerUid) {
@@ -171,7 +99,6 @@ export async function hydrateAuthUidFromIndexedDb(): Promise<void> {
     if (inferred) {
       dataOwnerUid = inferred;
       persistDataOwnerUid(inferred);
-      void writeSessionMetaToIndexedDb(inferred, loginUid);
     }
   }
 
@@ -202,7 +129,6 @@ export function setAuthUidState(
     dataOwnerUid = nextDataOwnerUid ?? nextLoginUid;
     persistDataOwnerUid(dataOwnerUid);
     persistLoginUid(nextLoginUid);
-    void writeSessionMetaToIndexedDb(dataOwnerUid, nextLoginUid);
   } else {
     loginUid = null;
     clearPersistedLoginUid();
@@ -215,7 +141,6 @@ export function setAuthUidState(
 /** Limpa vínculo persistido (ex.: após "Excluir todos os dados"). */
 export function clearPersistedStorageOwner(): void {
   clearPersistedDataOwnerUid();
-  void clearSessionMetaFromIndexedDb();
   if (!loginUid) {
     dataOwnerUid = null;
   }
@@ -236,6 +161,8 @@ export function getCachedDataOwnerUid(): string | null {
 
 /** Aguarda auth e devolve UID para leitura/gravação local (Dexie). */
 export async function resolveStorageOwnerUid(): Promise<string | null> {
+  const { hydrateAppMetaFromIndexedDb } = await import('../../offline-first/db/appMeta');
+  await hydrateAppMetaFromIndexedDb();
   await hydrateAuthUidFromIndexedDb();
   if (!authReady) {
     await waitForAuthUid();

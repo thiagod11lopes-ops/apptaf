@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { readAppMetaCache, writeAppMetaSync } from '../offline-first/db/appMeta';
 
-const STORAGE_KEY = 'taf:deviceId';
+const DEVICE_ID_META_KEY = 'device:id';
 
 function randomId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -15,29 +16,29 @@ let cachedDeviceId: string | null = null;
 export async function getDeviceId(): Promise<string> {
   if (cachedDeviceId) return cachedDeviceId;
 
-  try {
-    const stored = await AsyncStorage.getItem(STORAGE_KEY);
-    if (stored?.trim()) {
-      cachedDeviceId = stored.trim();
-      return cachedDeviceId;
-    }
-  } catch {
-    // continua
+  const fromMeta = readAppMetaCache(DEVICE_ID_META_KEY);
+  if (fromMeta) {
+    cachedDeviceId = fromMeta;
+    return cachedDeviceId;
   }
 
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    const ls = localStorage.getItem(STORAGE_KEY);
-    if (ls?.trim()) {
-      cachedDeviceId = ls.trim();
-      await AsyncStorage.setItem(STORAGE_KEY, cachedDeviceId).catch(() => undefined);
-      return cachedDeviceId;
+  if (Platform.OS !== 'web') {
+    try {
+      const stored = await AsyncStorage.getItem(DEVICE_ID_META_KEY);
+      if (stored?.trim()) {
+        cachedDeviceId = stored.trim();
+        writeAppMetaSync(DEVICE_ID_META_KEY, cachedDeviceId);
+        return cachedDeviceId;
+      }
+    } catch {
+      // continua
     }
   }
 
   cachedDeviceId = randomId();
-  await AsyncStorage.setItem(STORAGE_KEY, cachedDeviceId).catch(() => undefined);
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, cachedDeviceId);
+  writeAppMetaSync(DEVICE_ID_META_KEY, cachedDeviceId);
+  if (Platform.OS !== 'web') {
+    await AsyncStorage.setItem(DEVICE_ID_META_KEY, cachedDeviceId).catch(() => undefined);
   }
   return cachedDeviceId;
 }

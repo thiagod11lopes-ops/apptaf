@@ -21,12 +21,12 @@ import {
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
+import { hydrateAppStorageFromIndexedDb } from '../offline-first/db/appMeta';
 import {
   setAuthUidState,
   waitForAuthenticatedUid,
   getCachedDataOwnerUid,
   getCachedLoginUid,
-  hydrateAuthUidFromIndexedDb,
 } from '../services/firebase/authUid';
 import {
   clearPersistedAuthProfile,
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (mapped: AppAuthUser) => {
       setIsSessionLoading(true);
       try {
-        await hydrateAuthUidFromIndexedDb();
+        await hydrateAppStorageFromIndexedDb();
         const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
         setUser(mapped);
         setDataOwnerUid(session.dataOwnerUid);
@@ -155,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     void (async () => {
-      await hydrateAuthUidFromIndexedDb();
+      await hydrateAppStorageFromIndexedDb();
       setDataOwnerUid(getCachedDataOwnerUid());
       const redirectUser =
         Platform.OS === 'web' ? await startFirebaseRedirectSignIn() : null;

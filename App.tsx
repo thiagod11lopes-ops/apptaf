@@ -13,7 +13,8 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { OfflineSyncProvider } from './src/contexts/OfflineSyncContext';
 import { DataStoreProvider } from './src/offline-first/store/DataStoreContext';
-import { getCachedDataOwnerUid, hydrateAuthUidFromIndexedDb } from './src/services/firebase/authUid';
+import { hydrateAppStorageFromIndexedDb } from './src/offline-first/db/appMeta';
+import { getCachedDataOwnerUid } from './src/services/firebase/authUid';
 import { PhoneFrameShell } from './src/components/premium/PhoneFrameShell';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -80,7 +81,7 @@ function AppWithDataStore({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      await hydrateAuthUidFromIndexedDb();
+      await hydrateAppStorageFromIndexedDb();
       if (cancelled) return;
       setOwnerUid(getCachedDataOwnerUid());
       setSessionReady(true);

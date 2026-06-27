@@ -3,6 +3,12 @@ import { closeTafDatabaseForTests, setMeta } from '../../src/offline-first/db/ta
 import { importCadastroRecord } from '../../src/offline-first/db/localDb';
 import type { CadastroRecord } from '../../src/offline-first/types';
 import {
+  resetAppMetaCacheForTests,
+  readAppMetaCache,
+  migrateLegacyLocalStorageToAppMeta,
+  hydrateAppMetaFromIndexedDb,
+} from '../../src/offline-first/db/appMeta';
+import {
   getCachedDataOwnerUid,
   hydrateAuthUidFromIndexedDb,
   resetAuthUidStateForTests,
@@ -34,6 +40,37 @@ function cadastroRecord(id: string): CadastroRecord {
 
 describe('hydrateAuthUidFromIndexedDb', () => {
   beforeEach(() => {
+    resetAppMetaCacheForTests();
+    resetAuthUidStateForTests();
+    setAuthUidState(null, null, true);
+  });
+
+  afterEach(async () => {
+    await closeTafDatabaseForTests();
+    resetAppMetaCacheForTests();
+    resetAuthUidStateForTests();
+  });
+
+  it('restaura ownerUid do Dexie meta', async () => {
+    await setMeta('session:dataOwnerUid', BOSS_UID);
+
+    await hydrateAppMetaFromIndexedDb();
+    await hydrateAuthUidFromIndexedDb();
+
+    expect(getCachedDataOwnerUid()).toBe(BOSS_UID);
+    expect(readAppMetaCache('session:dataOwnerUid')).toBe(BOSS_UID);
+  });
+
+  it('infere ownerUid dos registros locais quando meta está vazio', async () => {
+    await importCadastroRecord(cadastroRecord('cad-1'));
+
+    await hydrateAppMetaFromIndexedDb();
+    await hydrateAuthUidFromIndexedDb();
+
+    expect(getCachedDataOwnerUid()).toBe(BOSS_UID);
+  });
+
+  it('migra ownerUid legado do localStorage para Dexie meta', async () => {
     if (typeof globalThis.localStorage === 'undefined') {
       const store = new Map<string, string>();
       globalThis.localStorage = {
@@ -51,32 +88,11 @@ describe('hydrateAuthUidFromIndexedDb', () => {
         length: 0,
       } as Storage;
     }
-    localStorage.clear();
-    resetAuthUidStateForTests();
-    setAuthUidState(null, null, true);
-  });
 
-  afterEach(async () => {
-    await closeTafDatabaseForTests();
-    resetAuthUidStateForTests();
-    localStorage.clear();
-  });
+    localStorage.setItem('taf:lastDataOwnerUid', BOSS_UID);
+    await migrateLegacyLocalStorageToAppMeta();
 
-  it('restaura ownerUid do meta IndexedDB quando localStorage foi apagado', async () => {
-    await setMeta('session:dataOwnerUid', BOSS_UID);
-    localStorage.removeItem('taf:lastDataOwnerUid');
-
-    await hydrateAuthUidFromIndexedDb();
-
-    expect(getCachedDataOwnerUid()).toBe(BOSS_UID);
-    expect(localStorage.getItem('taf:lastDataOwnerUid')).toBe(BOSS_UID);
-  });
-
-  it('infere ownerUid dos registros locais quando meta e localStorage estão vazios', async () => {
-    await importCadastroRecord(cadastroRecord('cad-1'));
-
-    await hydrateAuthUidFromIndexedDb();
-
-    expect(getCachedDataOwnerUid()).toBe(BOSS_UID);
+    expect(readAppMetaCache('session:dataOwnerUid')).toBe(BOSS_UID);
+    expect(localStorage.getItem('taf:lastDataOwnerUid')).toBeNull();
   });
 });

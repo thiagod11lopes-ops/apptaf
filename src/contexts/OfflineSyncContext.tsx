@@ -21,7 +21,8 @@ import {
 import type { PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
 import type { ConnectivityState } from '../offline-first/types';
 import type { SyncUiState } from '../offline-first/sync/syncUiState';
-import { getCachedDataOwnerUid, hydrateAuthUidFromIndexedDb } from '../services/firebase/authUid';
+import { hydrateAppStorageFromIndexedDb } from '../offline-first/db/appMeta';
+import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import { getFirebaseAuth } from '../config/firebase';
 import { subscribeDataChanged } from '../offline-first/sync/SyncEngine';
 
@@ -79,7 +80,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     if (!authReady || !firebaseEnabled) return;
 
     void (async () => {
-      await hydrateAuthUidFromIndexedDb();
+      await hydrateAppStorageFromIndexedDb();
       const hasFirebaseUser = Boolean(getFirebaseAuth()?.currentUser);
       syncManager.setAuthAvailable(isAuthenticated && hasFirebaseUser);
 

@@ -28,15 +28,16 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { user, authReady, isAuthenticated, firebaseEnabled, dataOwnerUid } = useAuth();
-  const { syncUi } = useOfflineSyncState();
+  const { syncUi, pendingCount } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
 
-  const syncQueueBadge = useMemo(() => {
-    const uploads = syncUi.counters.pendingUploads ?? 0;
-    const downloads = syncUi.counters.pendingDownloads ?? 0;
-    return uploads + downloads;
-  }, [syncUi.counters.pendingUploads, syncUi.counters.pendingDownloads]);
+  const syncSaveIconState = useMemo((): 'idle' | 'pending' | 'success' => {
+    if (syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date') return 'success';
+    if (syncUi.isSyncing) return 'idle';
+    if (pendingCount > 0) return 'pending';
+    return 'idle';
+  }, [syncUi.phase, syncUi.isSyncing, pendingCount]);
 
   const recarregarResumo = useCallback(async () => {
     if (!authReady) return;
@@ -76,7 +77,8 @@ export default function HomeScreen() {
           activeRoute="Home"
           inline
           onSyncPress={firebaseEnabled ? () => setSyncModalOpen(true) : undefined}
-          syncPendingBadge={syncQueueBadge}
+          syncPendingBadge={syncSaveIconState === 'pending' ? pendingCount : 0}
+          syncSaveIconState={syncSaveIconState}
         />
 
         <View style={styles.statsGrid}>

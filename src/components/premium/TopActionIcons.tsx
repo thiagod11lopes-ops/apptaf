@@ -1,6 +1,6 @@
 import React from 'react';
 import { Platform, StyleSheet, View, Text } from 'react-native';
-import { BookOpen, ClipboardList, Save, Settings, User, UserRoundCheck } from 'lucide-react-native';
+import { BookOpen, Check, ClipboardList, Save, Settings, User, UserRoundCheck } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { navigateTab } from '../../navigation/navigationRef';
@@ -28,6 +28,7 @@ type Props = {
   /** Abre modal de sincronização com a nuvem (ícone à esquerda de Normas). */
   onSyncPress?: () => void;
   syncPendingBadge?: number;
+  syncSaveIconState?: 'idle' | 'pending' | 'success';
 };
 
 export function TopActionIcons({
@@ -35,6 +36,7 @@ export function TopActionIcons({
   inline = false,
   onSyncPress,
   syncPendingBadge = 0,
+  syncSaveIconState = 'idle',
 }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss } = useAuth();
@@ -56,20 +58,51 @@ export function TopActionIcons({
       : { elevation: 8 },
   ];
 
+  const syncBorderColor =
+    syncSaveIconState === 'success'
+      ? theme.gain
+      : syncPendingBadge > 0
+        ? theme.primary
+        : theme.border;
+  const syncIconColor =
+    syncSaveIconState === 'success'
+      ? theme.gain
+      : syncPendingBadge > 0
+        ? theme.primary
+        : tabInk;
+
   return (
     <View style={[styles.row, inline && styles.rowInline]}>
       {onSyncPress ? (
         <PressableScale
           onPress={onSyncPress}
-          style={[btnStyle, syncPendingBadge > 0 && { borderColor: theme.primary }]}
+          style={[btnStyle, { borderColor: syncBorderColor }]}
           accessibilityLabel={
-            syncPendingBadge > 0
-              ? `Sincronizar com a nuvem, ${syncPendingBadge} item(ns) na fila`
-              : 'Sincronizar com a nuvem'
+            syncSaveIconState === 'success'
+              ? 'Sincronização concluída com sucesso'
+              : syncPendingBadge > 0
+                ? `Sincronizar com a nuvem, ${syncPendingBadge} alteração(ões) local(is) pendente(s)`
+                : 'Sincronizar com a nuvem'
           }
         >
-          <Save size={iconSize} color={syncPendingBadge > 0 ? theme.primary : tabInk} strokeWidth={strokeWidth} />
-          {syncPendingBadge > 0 ? (
+          <Save size={iconSize} color={syncIconColor} strokeWidth={strokeWidth} />
+          {syncSaveIconState === 'success' ? (
+            <View
+              style={[
+                styles.badge,
+                styles.successBadge,
+                {
+                  backgroundColor: theme.gain,
+                  borderColor: theme.cardBg,
+                },
+                Platform.OS === 'web'
+                  ? ({ boxShadow: '0 2px 8px rgba(22,163,74,0.45)' } as object)
+                  : { elevation: 4 },
+              ]}
+            >
+              <Check size={11} color="#FFFFFF" strokeWidth={3} />
+            </View>
+          ) : syncPendingBadge > 0 ? (
             <View
               style={[
                 styles.badge,
@@ -168,6 +201,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  successBadge: {
+    minWidth: 20,
+    width: 20,
+    paddingHorizontal: 0,
   },
   badgeText: {
     color: '#FFFFFF',

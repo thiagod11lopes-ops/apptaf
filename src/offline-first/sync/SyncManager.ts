@@ -340,7 +340,7 @@ async function refreshCloudQueueEstimate(force = false, attempt = 0): Promise<vo
     if (syncInFlight) return;
     counters = {
       ...counters,
-      pendingUploads: Math.max(estimate.pendingUploads, pendingSummary.total),
+      pendingUploads: pendingSummary.total,
       pendingDownloads: estimate.pendingDownloads,
     };
     notifyListeners();
@@ -458,6 +458,18 @@ async function refreshCounters(pendingDownloads: number | null = counters.pendin
   notifyListeners();
 }
 
+async function applyCountersAfterSuccessfulSync(): Promise<void> {
+  const uid = ownerUid ?? getCachedDataOwnerUid();
+  if (!uid) return;
+  await refreshPendingSummary();
+  counters = await buildSyncCounters(
+    uid,
+    pendingSummary.total,
+    pendingSummary.total === 0 ? 0 : counters.pendingDownloads,
+  );
+  notifyListeners();
+}
+
 async function refreshPendingSummary(): Promise<PendingSyncSummary> {
   const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
   ownerUid = uid !== ANONYMOUS_OWNER ? uid : ownerUid;
@@ -496,6 +508,12 @@ async function returnToOfflineMode(): Promise<void> {
   errorStepId = null;
   uiPhase = 'offline';
   await refreshPendingSummary();
+  if (pendingSummary.total === 0) {
+    const uid = ownerUid ?? getCachedDataOwnerUid();
+    if (uid) {
+      counters = await buildSyncCounters(uid, 0, 0);
+    }
+  }
   if (syncAuthAvailable) {
     scheduleCloudQueueEstimate();
   } else {
@@ -668,7 +686,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     await loadLastSyncFromAudit();
 
     completeStep('finalizing');
-    await refreshPendingSummary();
+    await applyCountersAfterSuccessfulSync();
     notifyDataChanged();
 
     const durationMs = Date.now() - startedAt;
@@ -690,6 +708,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
       syncMessage = 'Seu banco de dados já está atualizado.';
       setUiProgress(100, syncMessage, 0, 0);
       syncSteps = markStepsDoneThrough(syncSteps, 'finalizing');
+      await applyCountersAfterSuccessfulSync();
       await syncLogger.info('sync-manager', 'Sync: banco já atualizado');
       scheduleReturnToOffline(ALREADY_UP_TO_DATE_MS);
       return { ok: true };

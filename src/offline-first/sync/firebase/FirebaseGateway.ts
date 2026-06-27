@@ -107,26 +107,36 @@ export async function probeFirestoreConnectivityDetailed(
   let lastReason = 'Não foi possível conectar ao Firebase.';
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    let probeFailed = false;
-    for (const collection of SYNC_PROBE_COLLECTIONS) {
-      try {
-        const ref = doc(db, 'users', targetUid, collection, CONNECTIVITY_PROBE_DOC_ID);
-        await getDoc(ref);
-      } catch (error) {
-        probeFailed = true;
-        const msg = error instanceof Error ? error.message : String(error);
-        if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
-          lastReason = permissionDeniedReason(collection, targetUid, authUser.uid);
-        } else if (/offline|unavailable|network|failed/i.test(msg)) {
-          lastReason = 'Sem conexão com o Firebase. Verifique a internet e tente novamente.';
-        } else if (msg.trim()) {
-          lastReason = msg;
+    try {
+      await Promise.all(
+        SYNC_PROBE_COLLECTIONS.map(async (collection) => {
+          const ref = doc(db, 'users', targetUid, collection, CONNECTIVITY_PROBE_DOC_ID);
+          await getDoc(ref);
+        }),
+      );
+      return { ok: true };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
+        for (const collection of SYNC_PROBE_COLLECTIONS) {
+          try {
+            const ref = doc(db, 'users', targetUid, collection, CONNECTIVITY_PROBE_DOC_ID);
+            await getDoc(ref);
+          } catch (inner) {
+            const innerMsg = inner instanceof Error ? inner.message : String(inner);
+            if (/permission|permiss[aã]o|denied|insufficient/i.test(innerMsg)) {
+              lastReason = permissionDeniedReason(collection, targetUid, authUser.uid);
+              break;
+            }
+          }
         }
-        break;
+      } else if (/offline|unavailable|network|failed/i.test(msg)) {
+        lastReason = 'Sem conexão com o Firebase. Verifique a internet e tente novamente.';
+      } else if (msg.trim()) {
+        lastReason = msg;
       }
+      if (attempt < 2) await sleep(400 * (attempt + 1));
     }
-    if (!probeFailed) return { ok: true };
-    if (attempt < 2) await sleep(400 * (attempt + 1));
   }
 
   return { ok: false, reason: lastReason };

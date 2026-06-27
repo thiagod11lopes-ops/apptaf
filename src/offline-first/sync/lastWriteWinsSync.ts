@@ -2,29 +2,25 @@ import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
 import {
-  getAllCadastrosFirestoreLight,
   addCadastroFirestore,
   deleteCadastroFirestore,
 } from './firebase/FirebaseGateway';
 import {
-  getAllAplicadoresFirestore,
   addAplicadorFirestore,
   deleteAplicadorFirestore,
 } from './firebase/FirebaseGateway';
 import {
-  getAllSessoesFirestoreLight,
   addSessaoFirestore,
   updateSessaoFirestore,
   deleteSessaoFirestore,
 } from './firebase/FirebaseGateway';
 import {
-  getAllPreCadastrosFirestore,
   addPreCadastroFirestore,
   deletePreCadastroFirestore,
 } from './firebase/FirebaseGateway';
+import { mergeCadastroRubricas } from '../../utils/cadastroLight';
 import { getCadastroRubricasFirestore } from '../../services/firebase/cadastroRubricasFirestore';
 import { getSessaoRubricasFirestore } from '../../services/firebase/sessaoRubricasFirestore';
-import { mergeCadastroRubricas } from '../../utils/cadastroLight';
 import { normalizeSessaoShape, type SessaoResultadoRubrica } from '../../utils/sessaoLight';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { getDeviceId } from '../deviceId';
@@ -68,6 +64,16 @@ import {
 } from './deletionGarbageCollection';
 import type { SyncStepId } from './syncSteps';
 import { getPendingSyncItems } from './pendingSyncItems';
+import {
+  buildDownloadRubricCaches,
+  type DownloadRubricCaches,
+} from './downloadRubricCache';
+import {
+  fetchRemoteCollectionsSnapshot,
+  invalidateRemoteSnapshotCache,
+} from './remoteSnapshotCache';
+
+const DOWNLOAD_CONCURRENCY = 8;
 
 export type LwwSyncStats = {
   uploads: number;
@@ -419,19 +425,22 @@ async function downloadRecord(
   remote: SyncRecord,
   local: SyncRecord | undefined,
   ownerUid: string,
+  rubricCaches?: DownloadRubricCaches,
 ): Promise<void> {
   let payload: SyncRecord = remote;
-  if (collection === 'cadastros') {
-    const rubricas = await getCadastroRubricasFirestore(ownerUid, remote.id);
+  if (collection === 'cadastros' && remote.deleted !== true) {
+    const rubricas =
+      rubricCaches?.cadastros.get(remote.id) ??
+      (await getCadastroRubricasFirestore(ownerUid, remote.id));
     if (rubricas) {
       payload = mergeCadastroRubricas(payload as CadastroRecord, rubricas) as SyncRecord;
     }
-  } else if (collection === 'sessoes') {
-    if (remote.deleted !== true) {
-      const rubDoc = await getSessaoRubricasFirestore(ownerUid, remote.id);
-      if (rubDoc) {
-        payload = applySessaoRubricasFromRemote(payload as SessaoRecord, rubDoc) as SyncRecord;
-      }
+  } else if (collection === 'sessoes' && remote.deleted !== true) {
+    const rubDoc =
+      rubricCaches?.sessoes.get(remote.id) ??
+      (await getSessaoRubricasFirestore(ownerUid, remote.id));
+    if (rubDoc) {
+      payload = applySessaoRubricasFromRemote(payload as SessaoRecord, rubDoc) as SyncRecord;
     }
   }
 
@@ -463,6 +472,7 @@ async function executePlanItem(
   uploadFns: Record<CollectionName, UploadFn>,
   stats: LwwSyncStats,
   deletionAudits: DeletionAuditEntry[],
+  rubricCaches?: DownloadRubricCaches,
 ): Promise<void> {
   const upload = uploadFns[item.collection];
 
@@ -476,7 +486,7 @@ async function executePlanItem(
   }
 
   if (item.action === 'download' && item.remote) {
-    await downloadRecord(item.collection, item.remote, item.local, ownerUid);
+    await downloadRecord(item.collection, item.remote, item.local, ownerUid, rubricCaches);
     stats.downloads += 1;
     if (item.remote.deleted) {
       deletionAudits.push(buildDeletionAuditEntry(item.collection, item.remote, 'download', Date.now()));
@@ -507,34 +517,7 @@ export type SyncPlanSnapshot = {
   remotePre: PreCadastroRecord[];
 };
 
-function remotePermissionMessage(collection: CollectionName, ownerUid: string): string {
-  if (collection === 'pre_cadastros') {
-    return 'Permissão negada na coleção pre_cadastros. Publique as regras completas do Firestore no Console Firebase (incluindo pre_cadastros).';
-  }
-  const loginUid = getCachedLoginUid();
-  if (loginUid && loginUid !== ownerUid) {
-    return `Permissão negada ao ler ${collection} do chefe. Confirme que seu e-mail está autorizado.`;
-  }
-  return `Permissão negada ao ler ${collection} na nuvem. Verifique as regras do Firestore.`;
-}
-
-async function fetchRemoteCollection<T>(
-  collection: CollectionName,
-  ownerUid: string,
-  fetcher: () => Promise<T>,
-): Promise<T> {
-  try {
-    return await fetcher();
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
-      throw new Error(remotePermissionMessage(collection, ownerUid));
-    }
-    throw error;
-  }
-}
-
-async function buildSyncPlanSnapshot(ownerUid: string): Promise<SyncPlanSnapshot> {
+async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Promise<SyncPlanSnapshot> {
   await migrateDeviceDataOnLogin(ownerUid);
   await migratePreCadastrosFromAppMeta(ownerUid);
 
@@ -545,12 +528,8 @@ async function buildSyncPlanSnapshot(ownerUid: string): Promise<SyncPlanSnapshot
     listPreCadastrosForSync(ownerUid, true),
   ]);
 
-  const [remoteCad, remoteSess, remoteApp, remotePre] = await Promise.all([
-    fetchRemoteCollection('cadastros', ownerUid, () => getAllCadastrosFirestoreLight(ownerUid)),
-    fetchRemoteCollection('sessoes', ownerUid, () => getAllSessoesFirestoreLight(ownerUid)),
-    fetchRemoteCollection('aplicadores', ownerUid, () => getAllAplicadoresFirestore(ownerUid)),
-    fetchRemoteCollection('pre_cadastros', ownerUid, () => getAllPreCadastrosFirestore(ownerUid)),
-  ]);
+  const remoteSnapshot = await fetchRemoteCollectionsSnapshot(ownerUid, forceRemote);
+  const { remoteCad, remoteSess, remoteApp, remotePre } = remoteSnapshot;
 
   await reconcileIdenticalUnsyncedLocals('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
   await reconcileIdenticalUnsyncedLocals('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
@@ -612,7 +591,7 @@ async function buildSyncPlanSnapshot(ownerUid: string): Promise<SyncPlanSnapshot
 export async function estimateSyncQueueCounts(
   ownerUid: string,
 ): Promise<{ pendingUploads: number; pendingDownloads: number }> {
-  const plan = await buildSyncPlanSnapshot(ownerUid);
+  const plan = await buildSyncPlanSnapshot(ownerUid, false);
   let pendingUploads = plan.plannedUploads;
   let pendingDownloads = plan.plannedDownloads;
 
@@ -640,6 +619,7 @@ async function runPlanPhase(
   progressCb: SyncProgressCallback | undefined,
   plannedUploads: number,
   plannedDownloads: number,
+  rubricCaches?: DownloadRubricCaches,
 ): Promise<void> {
   const total = items.length;
   const stepId: SyncStepId = phase === 'download' ? 'downloading' : 'uploading';
@@ -658,8 +638,11 @@ async function runPlanPhase(
     return;
   }
 
+  const concurrency = phase === 'download' ? DOWNLOAD_CONCURRENCY : 1;
   let processed = 0;
-  for (const item of items) {
+
+  for (let offset = 0; offset < items.length; offset += concurrency) {
+    const batch = items.slice(offset, offset + concurrency);
     progressCb?.({
       processed,
       total,
@@ -670,36 +653,38 @@ async function runPlanPhase(
       phase,
     });
 
-    try {
-      await executePlanItem(ownerUid, item, uploadFns, stats, deletionAudits);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      stats.errors.push(`${item.collection}/${item.id}: ${msg}`);
-      const failedRecord = item.local?.deleted ? item.local : item.remote?.deleted ? item.remote : null;
-      if (failedRecord?.deleted) {
-        deletionAudits.push(
-          buildDeletionAuditEntry(
-            item.collection,
-            failedRecord,
-            phase,
-            Date.now(),
-            true,
-          ),
-        );
-      }
-    } finally {
-      processed += 1;
-      progressCb?.({
-        processed,
-        total,
-        message:
-          phase === 'download' && processed === total ? 'Atualizando banco local…' : message,
-        stepId: phase === 'download' && processed === total ? 'updating_local' : stepId,
-        pendingUploads: plannedUploads,
-        pendingDownloads: plannedDownloads,
-        phase,
-      });
-    }
+    await Promise.all(
+      batch.map(async (item) => {
+        try {
+          await executePlanItem(ownerUid, item, uploadFns, stats, deletionAudits, rubricCaches);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          stats.errors.push(`${item.collection}/${item.id}: ${msg}`);
+          const failedRecord = item.local?.deleted
+            ? item.local
+            : item.remote?.deleted
+              ? item.remote
+              : null;
+          if (failedRecord?.deleted) {
+            deletionAudits.push(
+              buildDeletionAuditEntry(item.collection, failedRecord, phase, Date.now(), true),
+            );
+          }
+        }
+      }),
+    );
+
+    processed += batch.length;
+    progressCb?.({
+      processed,
+      total,
+      message:
+        phase === 'download' && processed === total ? 'Atualizando banco local…' : message,
+      stepId: phase === 'download' && processed === total ? 'updating_local' : stepId,
+      pendingUploads: plannedUploads,
+      pendingDownloads: plannedDownloads,
+      phase,
+    });
   }
 }
 
@@ -741,7 +726,7 @@ export async function executeLastWriteWinsSync(
     phase: 'compare',
   });
 
-  const plan = await buildSyncPlanSnapshot(ownerUid);
+  const plan = await buildSyncPlanSnapshot(ownerUid, false);
   const {
     downloadItems,
     uploadItems,
@@ -852,6 +837,11 @@ export async function executeLastWriteWinsSync(
     };
   }
 
+  const rubricCaches =
+    downloadItems.length > 0
+      ? await buildDownloadRubricCaches(ownerUid, downloadItems)
+      : undefined;
+
   await runPlanPhase(
     ownerUid,
     downloadItems,
@@ -862,6 +852,7 @@ export async function executeLastWriteWinsSync(
     progressCb,
     plannedUploads,
     plannedDownloads,
+    rubricCaches,
   );
   await runPlanPhase(
     ownerUid,
@@ -874,6 +865,10 @@ export async function executeLastWriteWinsSync(
     plannedUploads,
     plannedDownloads,
   );
+
+  if (uploadItems.length > 0) {
+    invalidateRemoteSnapshotCache();
+  }
 
   stats.ignored = totalIgnored;
 
@@ -905,7 +900,11 @@ export async function executeLastWriteWinsSync(
   );
 
   if (stats.errors.length === 0) {
-    await runDeletionGarbageCollection(ownerUid);
+    await runDeletionGarbageCollection(ownerUid, {
+      remoteCad,
+      remoteSess,
+      remoteApp,
+    });
   }
 
   await ensureNoPendingRemain(ownerUid, stats);

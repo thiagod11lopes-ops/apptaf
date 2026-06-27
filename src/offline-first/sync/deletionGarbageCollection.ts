@@ -13,12 +13,15 @@ import {
 } from './tombstone';
 import type { CollectionName } from '../types';
 import type { SyncRecord } from './lastWriteWins';
+import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
+import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
+import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
 import {
   purgeAplicadorFirestore,
   purgeCadastroFirestore,
   purgeSessaoFirestore,
 } from './firebase/FirebaseGateway';
-import { getAllCadastrosFirestoreLight, getAllSessoesFirestoreLight, getAllAplicadoresFirestore } from './firebase/FirebaseGateway';
+import { fetchRemoteCollectionsSnapshot } from './remoteSnapshotCache';
 
 async function pendingDocumentKeys(ownerUid: string): Promise<Set<string>> {
   const pending = await syncQueue.listPending(ownerUid);
@@ -59,12 +62,26 @@ async function purgeLocalCollection(
   return purged;
 }
 
-async function purgeRemoteTombstones(ownerUid: string): Promise<number> {
-  const [remoteCad, remoteSess, remoteApp] = await Promise.all([
-    getAllCadastrosFirestoreLight(ownerUid),
-    getAllSessoesFirestoreLight(ownerUid),
-    getAllAplicadoresFirestore(ownerUid),
-  ]);
+async function purgeRemoteTombstones(
+  ownerUid: string,
+  remote?: {
+    remoteCad: CadastroItemPersist[];
+    remoteSess: SessaoAplicacaoTaf[];
+    remoteApp: AplicadorItemPersist[];
+  },
+): Promise<number> {
+  let remoteCad: CadastroItemPersist[];
+  let remoteSess: SessaoAplicacaoTaf[];
+  let remoteApp: AplicadorItemPersist[];
+
+  if (remote) {
+    ({ remoteCad, remoteSess, remoteApp } = remote);
+  } else {
+    const snapshot = await fetchRemoteCollectionsSnapshot(ownerUid, false);
+    remoteCad = snapshot.remoteCad;
+    remoteSess = snapshot.remoteSess;
+    remoteApp = snapshot.remoteApp;
+  }
 
   let purged = 0;
   const now = Date.now();
@@ -95,7 +112,14 @@ async function purgeRemoteTombstones(ownerUid: string): Promise<number> {
 }
 
 /** Garbage collection — remove fisicamente tombstones sincronizados após retenção. */
-export async function runDeletionGarbageCollection(ownerUid: string): Promise<{
+export async function runDeletionGarbageCollection(
+  ownerUid: string,
+  remoteSnapshot?: {
+    remoteCad: CadastroItemPersist[];
+    remoteSess: SessaoAplicacaoTaf[];
+    remoteApp: AplicadorItemPersist[];
+  },
+): Promise<{
   localPurged: number;
   remotePurged: number;
 }> {
@@ -108,7 +132,7 @@ export async function runDeletionGarbageCollection(ownerUid: string): Promise<{
 
   let remotePurged = 0;
   try {
-    remotePurged = await purgeRemoteTombstones(ownerUid);
+    remotePurged = await purgeRemoteTombstones(ownerUid, remoteSnapshot);
   } catch {
     // GC remoto é best-effort — não falha a sync
   }

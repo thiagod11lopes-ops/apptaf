@@ -531,8 +531,11 @@ function scheduleReturnToOffline(delayMs: number): void {
 async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
   if (syncInFlight) return { ok: false, error: 'sync_in_progress' };
 
+  let queueEstimateWaitMs = 0;
   while (queueEstimateInFlight) {
     await new Promise((resolve) => setTimeout(resolve, 100));
+    queueEstimateWaitMs += 100;
+    if (queueEstimateWaitMs >= 90_000) break;
   }
 
   syncInFlight = true;

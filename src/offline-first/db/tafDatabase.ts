@@ -7,7 +7,9 @@ import type {
   ChangeLogEntry,
   SyncLogEntry,
   SyncAuditEntry,
+  LocalBackupSnapshot,
 } from '../types';
+import type { LocalAuthorizedEmail } from '../repositories/AuthorizedEmailRepository';
 
 export type MetaEntry = { key: string; value: string };
 
@@ -19,6 +21,8 @@ export class TafDatabase extends Dexie {
   changeLog!: Table<ChangeLogEntry, number>;
   syncLogs!: Table<SyncLogEntry, number>;
   syncAuditHistory!: Table<SyncAuditEntry, number>;
+  localBackups!: Table<LocalBackupSnapshot, number>;
+  authorizedEmails!: Table<LocalAuthorizedEmail, string>;
   meta!: Table<MetaEntry, string>;
 
   constructor() {
@@ -43,6 +47,10 @@ export class TafDatabase extends Dexie {
     });
     this.version(5).stores({
       syncAuditHistory: '++id, ownerUid, startedAt, [ownerUid+startedAt]',
+    });
+    this.version(6).stores({
+      localBackups: '++id, ownerUid, createdAt, [ownerUid+createdAt]',
+      authorizedEmails: 'id, ownerUid, email, syncStatus, [ownerUid+syncStatus]',
     });
   }
 }

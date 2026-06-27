@@ -85,15 +85,40 @@ export interface SyncAuditEntry {
   id?: number;
   ownerUid: string;
   userId: string | null;
+  userEmail?: string | null;
   deviceId: string;
+  appVersion?: string;
   startedAt: number;
   finishedAt: number;
   durationMs: number;
   uploads: number;
   downloads: number;
   ignored: number;
+  failures: number;
   errors: string[];
+  errorMessage?: string | null;
+  localTimeMs?: number;
+  serverTimeMs?: number | null;
+  clockDriftMs?: number;
+  clockDriftWarning?: boolean;
+  backupId?: number | null;
+  result: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED';
   strategy: 'last_write_wins';
+  collectionCounts?: {
+    cadastros: { local: number; remote: number };
+    sessoes: { local: number; remote: number };
+    aplicadores: { local: number; remote: number };
+  };
+  deletions?: import('./tombstone').DeletionAuditEntry[];
+}
+
+export interface LocalBackupSnapshot {
+  id?: number;
+  ownerUid: string;
+  createdAt: number;
+  cadastros: CadastroRecord[];
+  sessoes: SessaoRecord[];
+  aplicadores: AplicadorRecord[];
 }
 
 /** @deprecated LWW substitui resolução manual de conflitos */

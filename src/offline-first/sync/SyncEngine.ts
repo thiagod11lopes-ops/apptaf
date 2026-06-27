@@ -6,20 +6,17 @@ import {
   addCadastrosEmLoteFirestore,
   deleteCadastroFirestore,
   getAllCadastrosFirestoreLight,
-} from '../../services/firebase/cadastrosFirestore';
-import {
   addAplicadorFirestore,
   deleteAplicadorFirestore,
   getAllAplicadoresFirestore,
-} from '../../services/firebase/aplicadoresFirestore';
-import {
   addSessaoFirestore,
   deleteSessaoFirestore,
   getAllSessoesFirestoreLight,
   updateSessaoFirestore,
-} from '../../services/firebase/sessoesFirestore';
+  wipeAllCloudDataForOwner,
+} from './firebase/FirebaseGateway';
 import { getCachedLoginUid, getCachedDataOwnerUid, waitForAuthenticatedUid } from '../../services/firebase/authUid';
-import { applyTeamWipeIfNeeded } from '../../services/applyTeamWipeIfNeeded';
+import { applyTeamWipeIfNeeded } from './syncTeamWipe';
 import type { AplicadorRecord, CadastroRecord, SessaoRecord, SyncQueueEntry } from '../types';
 import {
   applyRemoteAplicador,
@@ -32,6 +29,9 @@ import {
   putAplicadorRecord,
   putCadastroRecord,
   putSessaoRecord,
+  getCadastroRaw,
+  getAplicadorRaw,
+  getSessaoRaw,
 } from '../db/localDb';
 import { getMeta, setMeta } from '../db/tafDatabase';
 import { syncQueue } from './SyncQueue';
@@ -41,6 +41,7 @@ import { systemState } from './SystemState';
 import { getPendingSyncItems } from './pendingSyncItems';
 import { isUnsyncedLocalStatus } from './syncStatus';
 import { markRecordSynced } from './recordMeta';
+import { buildFirestoreTombstone } from './tombstone';
 import { executeLastWriteWinsSync, type LwwSyncStats } from './lastWriteWinsSync';
 import {
   beginCloudSync,
@@ -180,9 +181,10 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       return;
     }
     if (entry.operationType === 'DELETE') {
-      await deleteCadastroFirestore(uid, entry.documentId);
-      const dbCad = await listCadastros(uid, true);
-      const row = dbCad.find((c) => c.id === entry.documentId);
+      const row = await getCadastroRaw(entry.documentId);
+      if (row && row.deleted) {
+        await deleteCadastroFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
+      }
       if (row) await putCadastroRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
       return;
     }
@@ -194,9 +196,10 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
 
   if (entry.collection === 'aplicadores') {
     if (entry.operationType === 'DELETE') {
-      await deleteAplicadorFirestore(uid, entry.documentId);
-      const dbApp = await listAplicadores(uid, true);
-      const row = dbApp.find((a) => a.id === entry.documentId);
+      const row = await getAplicadorRaw(entry.documentId);
+      if (row && row.deleted) {
+        await deleteAplicadorFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
+      }
       if (row) await putAplicadorRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
       return;
     }
@@ -213,9 +216,10 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
   }
 
   if (entry.operationType === 'DELETE') {
-    await deleteSessaoFirestore(uid, entry.documentId);
-    const dbSess = await listSessoes(uid, true);
-    const row = dbSess.find((s) => s.id === entry.documentId);
+    const row = await getSessaoRaw(entry.documentId);
+    if (row && row.deleted) {
+      await deleteSessaoFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
+    }
     if (row) await putSessaoRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
     return;
   }
@@ -573,17 +577,49 @@ export class SyncEngine {
     await this.processQueue({ bypassGap: true });
   }
 
-  async runLastWriteWinsSync(): Promise<{ success: boolean; stats: LwwSyncStats }> {
-    if (!ownerUid) return { success: false, stats: { uploads: 0, downloads: 0, ignored: 0, errors: ['no_owner'] } };
+  async runLastWriteWinsSync(options?: {
+    backupId?: number | null;
+    clockDrift?: import('./clockDrift').ClockDriftResult;
+    userEmail?: string | null;
+  }): Promise<{ success: boolean; stats: LwwSyncStats; audit: import('./syncAudit').SyncAuditEntry }> {
+    if (!ownerUid) {
+      return {
+        success: false,
+        stats: { uploads: 0, downloads: 0, ignored: 0, errors: ['no_owner'] },
+        audit: {
+          ownerUid: '',
+          userId: null,
+          deviceId: 'unknown',
+          startedAt: Date.now(),
+          finishedAt: Date.now(),
+          durationMs: 0,
+          uploads: 0,
+          downloads: 0,
+          ignored: 0,
+          failures: 1,
+          errors: ['no_owner'],
+          result: 'FAILED',
+          strategy: 'last_write_wins',
+        },
+      };
+    }
     await reconcileSessionPendingOwner(ownerUid);
-    const result = await executeLastWriteWinsSync(ownerUid);
+    const result = await executeLastWriteWinsSync(ownerUid, options);
     notify();
-    return { success: result.success, stats: result.stats };
+    return result;
   }
 
   async getPendingCount(): Promise<number> {
     if (!ownerUid) return 0;
     return syncQueue.countPending(ownerUid);
+  }
+
+  /** Wipe na nuvem — somente via Sync Engine (FirebaseGateway). */
+  async wipeCloudTeam(uid: string) {
+    if (!systemState.canUseFirebase()) {
+      throw new Error('Ative o modo de sincronização para apagar dados na nuvem.');
+    }
+    return wipeAllCloudDataForOwner(uid);
   }
 }
 

@@ -270,8 +270,17 @@ export async function softDeleteCadastro(
     operationType: 'DELETE',
     collection: 'cadastros',
     documentId: id,
-    payload: { id, deleted: true },
+    payload: record,
     ownerUid,
+  });
+  await syncLogger.appendChangeLog({
+    documentId: id,
+    collection: 'cadastros',
+    action: 'DELETE',
+    deviceId: record.deviceId,
+    userId,
+    previousVersion: existing.version,
+    newVersion: record.version,
   });
 }
 
@@ -315,8 +324,17 @@ export async function softDeleteAplicador(
     operationType: 'DELETE',
     collection: 'aplicadores',
     documentId: id,
-    payload: { id, deleted: true },
+    payload: record,
     ownerUid,
+  });
+  await syncLogger.appendChangeLog({
+    documentId: id,
+    collection: 'aplicadores',
+    action: 'DELETE',
+    deviceId: record.deviceId,
+    userId,
+    previousVersion: existing.version,
+    newVersion: record.version,
   });
 }
 
@@ -356,15 +374,24 @@ export async function softDeleteSessao(
   const db = getTafDatabase();
   if (!db) return;
   const existing = await db.sessoes.get(id);
-  if (!existing || existing.ownerUid !== ownerUid) return;
+  if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
   const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');
   await putSessaoRecord(record);
   await syncQueue.enqueue({
     operationType: 'DELETE',
     collection: 'sessoes',
     documentId: id,
-    payload: { id, deleted: true },
+    payload: record,
     ownerUid,
+  });
+  await syncLogger.appendChangeLog({
+    documentId: id,
+    collection: 'sessoes',
+    action: 'DELETE',
+    deviceId: record.deviceId,
+    userId,
+    previousVersion: existing.version,
+    newVersion: record.version,
   });
 }
 

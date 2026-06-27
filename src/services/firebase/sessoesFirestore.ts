@@ -10,6 +10,7 @@ import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
 import { getFirestoreDb } from '../../config/firebase';
 import { userSessoesPath } from './firestorePaths';
 import { sanitizeForFirestore } from './sanitizeFirestoreData';
+import type { TombstonePayload } from '../../offline-first/sync/tombstone';
 import { extractSessaoRubricas, toSessaoLight } from '../../utils/sessaoLight';
 import { stampSessao } from '../offline/recordTimestamps';
 import {
@@ -29,7 +30,7 @@ export async function getAllSessoesFirestoreLight(uid: string): Promise<SessaoAp
   const list: SessaoAplicacaoTaf[] = [];
 
   for (const docSnap of snap.docs) {
-    const raw = docSnap.data() as SessaoAplicacaoTaf;
+    const raw = docSnap.data() as SessaoAplicacaoTaf & { deleted?: boolean; deletedAt?: number };
     list.push(toSessaoLight({ ...raw, id: docSnap.id }));
   }
 
@@ -69,7 +70,34 @@ export async function updateSessaoFirestore(uid: string, sessao: SessaoAplicacao
   await persistSessao(uid, sessao);
 }
 
-export async function deleteSessaoFirestore(uid: string, id: string): Promise<void> {
+export async function deleteSessaoFirestore(uid: string, id: string, tombstone?: TombstonePayload): Promise<void> {
+  const db = getFirestoreDb();
+  if (!db) throw new Error('Firestore indisponível.');
+
+  if (tombstone) {
+    await setDoc(
+      doc(db, userSessoesPath(uid), id),
+      sanitizeForFirestore({
+        id,
+        updatedAt: tombstone.updatedAt,
+        deleted: true,
+        deletedAt: tombstone.deletedAt ?? tombstone.updatedAt,
+        deletedBy: tombstone.deletedBy,
+        syncVersion: tombstone.syncVersion,
+        updatedBy: tombstone.updatedBy,
+        deviceId: tombstone.deviceId,
+      }),
+      { merge: true },
+    );
+    await deleteSessaoRubricasFirestore(uid, id);
+    return;
+  }
+
+  await deleteDoc(doc(db, userSessoesPath(uid), id));
+  await deleteSessaoRubricasFirestore(uid, id);
+}
+
+export async function purgeSessaoFirestore(uid: string, id: string): Promise<void> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
   await deleteDoc(doc(db, userSessoesPath(uid), id));

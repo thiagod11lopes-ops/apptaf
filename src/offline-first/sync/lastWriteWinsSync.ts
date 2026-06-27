@@ -2,21 +2,21 @@ import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
 import {
+  getAllCadastrosFirestoreLight,
   addCadastroFirestore,
   deleteCadastroFirestore,
-  getAllCadastrosFirestoreLight,
-} from '../../services/firebase/cadastrosFirestore';
+} from './firebase/FirebaseGateway';
 import {
+  getAllAplicadoresFirestore,
   addAplicadorFirestore,
   deleteAplicadorFirestore,
-  getAllAplicadoresFirestore,
-} from '../../services/firebase/aplicadoresFirestore';
+} from './firebase/FirebaseGateway';
 import {
-  addSessaoFirestore,
-  deleteSessaoFirestore,
   getAllSessoesFirestoreLight,
+  addSessaoFirestore,
   updateSessaoFirestore,
-} from '../../services/firebase/sessoesFirestore';
+  deleteSessaoFirestore,
+} from './firebase/FirebaseGateway';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { getDeviceId } from '../deviceId';
 import type { AplicadorRecord, CadastroRecord, CollectionName, SessaoRecord } from '../types';
@@ -29,9 +29,21 @@ import {
   putSessaoRecord,
 } from '../db/localDb';
 import { decideLastWriteWins, type SyncRecord } from './lastWriteWins';
-import { ensureRecordMeta, markRecordSynced, readUpdatedAt } from './recordMeta';
+import { markRecordSynced } from './recordMeta';
 import { appendSyncAudit, type SyncAuditEntry } from './syncAudit';
 import { syncQueue } from './SyncQueue';
+import { pushPendingAuthorizedEmails } from './syncAuthorizedEmails';
+import { APP_VERSION } from '../appVersion';
+import type { ClockDriftResult } from './clockDrift';
+import {
+  buildFirestoreTombstone,
+  remoteDocToSyncRecord,
+  type DeletionAuditEntry,
+} from './tombstone';
+import {
+  buildDeletionAuditEntry,
+  runDeletionGarbageCollection,
+} from './deletionGarbageCollection';
 
 export type LwwSyncStats = {
   uploads: number;
@@ -63,62 +75,20 @@ function stripForFirestore<T extends Record<string, unknown>>(row: T): T {
 }
 
 function remoteToCadastroRecord(remote: CadastroItemPersist, ownerUid: string): CadastroRecord {
-  const at = readUpdatedAt(remote) || Date.now();
-  return ensureRecordMeta(
-    {
-      ...remote,
-      ownerUid,
-      createdAt: at,
-      updatedAt: at,
-      syncStatus: 'synced',
-      deleted: false,
-      deviceId: 'remote',
-      userId: getCachedLoginUid(),
-      lastModifiedBy: 'remote',
-    } as CadastroRecord,
-    ownerUid,
-  );
+  return remoteDocToSyncRecord<CadastroRecord>(remote as Record<string, unknown> & { id: string }, ownerUid);
 }
 
 function remoteToSessaoRecord(remote: SessaoAplicacaoTaf, ownerUid: string): SessaoRecord {
-  const at = readUpdatedAt(remote) || Date.parse(remote.criadoEm) || Date.now();
-  return ensureRecordMeta(
-    {
-      ...remote,
-      ownerUid,
-      createdAt: at,
-      updatedAt: at,
-      syncStatus: 'synced',
-      deleted: false,
-      deviceId: 'remote',
-      userId: getCachedLoginUid(),
-      lastModifiedBy: 'remote',
-    } as SessaoRecord,
-    ownerUid,
-  );
+  return remoteDocToSyncRecord<SessaoRecord>(remote as Record<string, unknown> & { id: string }, ownerUid);
 }
 
 function remoteToAplicadorRecord(remote: AplicadorItemPersist, ownerUid: string): AplicadorRecord {
-  const at = readUpdatedAt(remote) || Date.now();
-  return ensureRecordMeta(
-    {
-      ...remote,
-      ownerUid,
-      createdAt: at,
-      updatedAt: at,
-      syncStatus: 'synced',
-      deleted: false,
-      deviceId: 'remote',
-      userId: getCachedLoginUid(),
-      lastModifiedBy: 'remote',
-    } as AplicadorRecord,
-    ownerUid,
-  );
+  return remoteDocToSyncRecord<AplicadorRecord>(remote as Record<string, unknown> & { id: string }, ownerUid);
 }
 
 async function uploadCadastro(uid: string, local: CadastroRecord, hasRemote: boolean): Promise<void> {
   if (local.deleted) {
-    if (hasRemote) await deleteCadastroFirestore(uid, local.id);
+    await deleteCadastroFirestore(uid, local.id, buildFirestoreTombstone(local));
     await putCadastroRecord(markRecordSynced(local, getCachedLoginUid()));
     return;
   }
@@ -129,7 +99,7 @@ async function uploadCadastro(uid: string, local: CadastroRecord, hasRemote: boo
 async function uploadSessao(uid: string, local: SessaoRecord, hasRemote: boolean): Promise<void> {
   const payload = stripForFirestore(local) as SessaoAplicacaoTaf;
   if (local.deleted) {
-    if (hasRemote) await deleteSessaoFirestore(uid, local.id);
+    await deleteSessaoFirestore(uid, local.id, buildFirestoreTombstone(local));
     await putSessaoRecord(markRecordSynced(local, getCachedLoginUid()));
     return;
   }
@@ -143,7 +113,7 @@ async function uploadSessao(uid: string, local: SessaoRecord, hasRemote: boolean
 
 async function uploadAplicador(uid: string, local: AplicadorRecord, hasRemote: boolean): Promise<void> {
   if (local.deleted) {
-    if (hasRemote) await deleteAplicadorFirestore(uid, local.id);
+    await deleteAplicadorFirestore(uid, local.id, buildFirestoreTombstone(local));
     await putAplicadorRecord(markRecordSynced(local, getCachedLoginUid()));
     return;
   }
@@ -158,7 +128,7 @@ async function downloadRecord(
   ownerUid: string,
 ): Promise<void> {
   const merged = markRecordSynced(
-    ensureRecordMeta({ ...(local ?? {}), ...remote, ownerUid } as SyncRecord, ownerUid),
+    remoteDocToSyncRecord({ ...(local ?? {}), ...remote, ownerUid, id: remote.id }, ownerUid),
     getCachedLoginUid(),
   );
   if (collection === 'cadastros') {
@@ -178,6 +148,7 @@ async function syncCollection<TLocal extends SyncRecord, TRemote extends { id: s
   toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
   upload: (uid: string, local: TLocal, hasRemote: boolean) => Promise<void>,
   stats: LwwSyncStats,
+  deletionAudits: DeletionAuditEntry[],
 ): Promise<void> {
   const localMap = new Map(localRows.map((r) => [r.id, r]));
   const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
@@ -198,27 +169,53 @@ async function syncCollection<TLocal extends SyncRecord, TRemote extends { id: s
       if (decision.action === 'upload' && local) {
         await upload(ownerUid, local, hasRemote);
         stats.uploads += 1;
+        if (local.deleted) {
+          deletionAudits.push(buildDeletionAuditEntry(collection, local, 'upload', Date.now()));
+        }
         continue;
       }
 
       if (decision.action === 'download' && remote) {
         await downloadRecord(collection, remote, local, ownerUid);
         stats.downloads += 1;
+        if (remote.deleted) {
+          deletionAudits.push(buildDeletionAuditEntry(collection, remote, 'download', Date.now()));
+        }
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       stats.errors.push(`${collection}/${id}: ${msg}`);
+      const failedRecord = local?.deleted ? local : remote?.deleted ? remote : null;
+      if (failedRecord?.deleted) {
+        deletionAudits.push(
+          buildDeletionAuditEntry(
+            collection,
+            failedRecord,
+            decision.action === 'upload' ? 'upload' : 'download',
+            Date.now(),
+            true,
+          ),
+        );
+      }
     }
   }
 }
 
-export async function executeLastWriteWinsSync(ownerUid: string): Promise<{
+export async function executeLastWriteWinsSync(
+  ownerUid: string,
+  options?: {
+    backupId?: number | null;
+    clockDrift?: ClockDriftResult;
+    userEmail?: string | null;
+  },
+): Promise<{
   success: boolean;
   stats: LwwSyncStats;
   audit: SyncAuditEntry;
 }> {
   const startedAt = Date.now();
   const stats: LwwSyncStats = { uploads: 0, downloads: 0, ignored: 0, errors: [] };
+  const deletionAudits: DeletionAuditEntry[] = [];
   const deviceId = await getDeviceId();
 
   const [localCad, localSess, localApp, remoteCad, remoteSess, remoteApp] = await Promise.all([
@@ -230,22 +227,48 @@ export async function executeLastWriteWinsSync(ownerUid: string): Promise<{
     getAllAplicadoresFirestore(ownerUid),
   ]);
 
-  await syncCollection('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord, uploadCadastro, stats);
-  await syncCollection('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord, uploadSessao, stats);
-  await syncCollection('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord, uploadAplicador, stats);
+  await syncCollection('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord, uploadCadastro, stats, deletionAudits);
+  await syncCollection('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord, uploadSessao, stats, deletionAudits);
+  await syncCollection('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord, uploadAplicador, stats, deletionAudits);
+
+  const emailErrors = await pushPendingAuthorizedEmails(ownerUid);
+  stats.errors.push(...emailErrors);
 
   await syncQueue.clearDone(ownerUid);
+
+  if (stats.errors.length === 0) {
+    await runDeletionGarbageCollection(ownerUid);
+  }
+
+  const finishedAt = Date.now();
+  const activeRemote = (rows: Array<{ deleted?: boolean }>) => rows.filter((r) => r.deleted !== true).length;
+  const collectionCounts = {
+    cadastros: { local: localCad.filter((r) => !r.deleted).length, remote: activeRemote(remoteCad) },
+    sessoes: { local: localSess.filter((r) => !r.deleted).length, remote: activeRemote(remoteSess) },
+    aplicadores: { local: localApp.filter((r) => !r.deleted).length, remote: activeRemote(remoteApp) },
+  };
 
   const audit = await appendSyncAudit({
     ownerUid,
     userId: getCachedLoginUid(),
+    userEmail: options?.userEmail ?? null,
     deviceId,
+    appVersion: APP_VERSION,
     startedAt,
-    finishedAt: Date.now(),
+    finishedAt,
     uploads: stats.uploads,
     downloads: stats.downloads,
     ignored: stats.ignored,
     errors: stats.errors,
+    errorMessage: stats.errors[0] ?? null,
+    localTimeMs: options?.clockDrift?.localTimeMs,
+    serverTimeMs: options?.clockDrift?.serverTimeMs ?? null,
+    clockDriftMs: options?.clockDrift?.driftMs,
+    clockDriftWarning: options?.clockDrift?.warning,
+    backupId: options?.backupId ?? null,
+    collectionCounts,
+    failures: stats.errors.length,
+    deletions: deletionAudits,
   });
 
   return {

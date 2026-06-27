@@ -23,13 +23,7 @@ import {
   getAllAplicadores,
   type AplicadorItemPersist,
 } from '../services/aplicadoresIndexedDb';
-import {
-  aplicadorCloudRequiredMessage,
-  canSaveAplicadorOnCloud,
-  deleteAplicadorDirectFromCloud,
-  saveAplicadorDirectToCloud,
-} from '../services/aplicadoresCloudSave';
-import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
+import { aplicadorRepository } from '../offline-first/repositories/AplicadorRepository';
 import { hashAplicadorSenha } from '../utils/aplicadorSenha';
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
@@ -60,11 +54,9 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 export default function CadastroAplicadorScreen() {
   const { theme, fontsLoaded } = useTheme();
   const { isBoss } = useAuth();
-  const { usingCloudData, online } = useOfflineSyncState();
   const navigation = useNavigation();
   const ts = theme.textStyles;
   const regularFont = fontFamily('regular', fontsLoaded);
-  const podeCadastrarNuvem = online && usingCloudData && canSaveAplicadorOnCloud();
 
   const [categoria, setCategoria] = useState<Categoria | ''>('');
   const [oficialSelecionado, setOficialSelecionado] = useState('');
@@ -98,11 +90,6 @@ export default function CadastroAplicadorScreen() {
 
   async function handleCadastrar() {
     if (!categoria) return;
-
-    if (!canSaveAplicadorOnCloud()) {
-      setErroNuvem(aplicadorCloudRequiredMessage());
-      return;
-    }
 
     const faltantesAgora: string[] = [];
     if (!nip.trim()) faltantesAgora.push('NIP');
@@ -154,7 +141,7 @@ export default function CadastroAplicadorScreen() {
     setSalvando(true);
     setErroNuvem(null);
     try {
-      await saveAplicadorDirectToCloud(novo);
+      await aplicadorRepository.save(novo);
       setAplicadores((prev) => {
         if (editandoId) return prev.map((a) => (a.id === id ? novo : a));
         return [...prev, novo];
@@ -173,7 +160,7 @@ export default function CadastroAplicadorScreen() {
         setFaltantes([]);
       }
     } catch (err) {
-      setErroNuvem(err instanceof Error ? err.message : 'Falha ao salvar aplicador na nuvem.');
+      setErroNuvem(err instanceof Error ? err.message : 'Falha ao salvar aplicador.');
     } finally {
       setSalvando(false);
     }
@@ -200,23 +187,18 @@ export default function CadastroAplicadorScreen() {
 
   async function handleConfirmarExcluir() {
     if (!excluirId) return;
-    if (!canSaveAplicadorOnCloud()) {
-      setErroNuvem(aplicadorCloudRequiredMessage());
-      setExcluirId(null);
-      return;
-    }
 
     const id = excluirId;
     setExcluirId(null);
     setSalvando(true);
     setErroNuvem(null);
     try {
-      await deleteAplicadorDirectFromCloud(id);
+      await aplicadorRepository.remove(id);
       setAplicadores((prev) => prev.filter((a) => a.id !== id));
       if (editandoId === id) setEditandoId(null);
     } catch (err) {
       recarregarAplicadores();
-      setErroNuvem(err instanceof Error ? err.message : 'Falha ao excluir aplicador na nuvem.');
+      setErroNuvem(err instanceof Error ? err.message : 'Falha ao excluir aplicador.');
     } finally {
       setSalvando(false);
     }
@@ -259,19 +241,6 @@ export default function CadastroAplicadorScreen() {
             subtitle="Cadastro de aplicador de teste físico"
             onBack={() => navigation.navigate('Home' as never)}
           />
-
-          {isBoss && !podeCadastrarNuvem ? (
-            <View
-              style={[
-                styles.cloudHint,
-                { backgroundColor: theme.backgroundSecondary, borderColor: theme.border },
-              ]}
-            >
-              <Text style={[ts.caption, { color: theme.textSecondary, textAlign: 'center' }]}>
-                {aplicadorCloudRequiredMessage()}
-              </Text>
-            </View>
-          ) : null}
 
           {isBoss && erroNuvem ? (
             <Text style={[ts.caption, styles.warnText, { color: dangerColor, marginBottom: 12 }]}>
@@ -496,12 +465,12 @@ export default function CadastroAplicadorScreen() {
                 <TouchableOpacity
                   accessibilityLabel="cadastrar aplicador"
                   onPress={handleCadastrar}
-                  disabled={!podeCadastrarNuvem || salvando}
+                  disabled={salvando}
                   style={[
                     styles.btn,
                     {
                       backgroundColor: theme.primary,
-                      opacity: !podeCadastrarNuvem || salvando ? 0.55 : 1,
+                      opacity: salvando ? 0.55 : 1,
                     },
                   ]}
                 >

@@ -117,11 +117,41 @@ export function RelatorioSincronizacaoModal({
             <Text style={[styles.totalLine, { color: theme.textMuted }]}>
               Total local: {report.totalLocal} · Total na nuvem: {report.totalRemoto}
             </Text>
-            {summary ? (
+            {report.meta ? (
+              <>
+                <Text style={[styles.totalLine, { color: theme.textMuted }]}>
+                  Usuário: {report.meta.userEmail ?? '—'} · Device: {report.meta.deviceId.slice(0, 12)}…
+                </Text>
+                <Text style={[styles.totalLine, { color: theme.textMuted }]}>
+                  Cadastros {report.meta.collectionCounts.cadastros.local}/
+                  {report.meta.collectionCounts.cadastros.remote} · Sessões{' '}
+                  {report.meta.collectionCounts.sessoes.local}/{report.meta.collectionCounts.sessoes.remote} ·
+                  Aplicadores {report.meta.collectionCounts.aplicadores.local}/
+                  {report.meta.collectionCounts.aplicadores.remote}
+                </Text>
+                {report.meta.lastSyncAt ? (
+                  <Text style={[styles.totalLine, { color: theme.textMuted }]}>
+                    Última sync: {new Date(report.meta.lastSyncAt).toLocaleString('pt-BR')}
+                  </Text>
+                ) : null}
+                {report.meta.clockDriftWarning ? (
+                  <Text style={[styles.totalLine, { color: theme.loss, fontWeight: '600' }]}>
+                    {report.meta.clockDriftWarning}
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+          {summary ? (
+            <>
+              <Text style={[styles.totalLine, { color: theme.textSecondary, fontWeight: '700' }]}>
+                Uploads: {summary.uploadCount} · Downloads: {summary.downloadCount} · Ignorados:{' '}
+                {summary.ignoredCount}
+              </Text>
               <Text style={[styles.totalLine, { color: theme.textSecondary, fontWeight: '700' }]}>
                 {summary.totalChanges} alteração(ões) detectada(s)
               </Text>
-            ) : null}
+            </>
+          ) : null}
           </View>
 
           <Text style={[styles.hint, { color: theme.textMuted }]}>

@@ -1,12 +1,12 @@
 import {
   getAllCadastrosFirestoreLight,
-} from '../../services/firebase/cadastrosFirestore';
+} from './firebase/FirebaseGateway';
 import {
   getAllAplicadoresFirestore,
-} from '../../services/firebase/aplicadoresFirestore';
+} from './firebase/FirebaseGateway';
 import {
   getAllSessoesFirestoreLight,
-} from '../../services/firebase/sessoesFirestore';
+} from './firebase/FirebaseGateway';
 import {
   listAplicadores,
   listCadastros,
@@ -14,8 +14,13 @@ import {
 } from '../db/localDb';
 import type { CollectionName } from '../types';
 import { getPendingSyncItems, type PendingSyncItem } from './pendingSyncItems';
+import { getCachedLoginUid } from '../../services/firebase/authUid';
+import { getDeviceId } from '../deviceId';
+import { getLastSyncAudit } from './syncAudit';
+import { getFirebaseAuth } from '../../config/firebase';
 import { decideLastWriteWins } from './lastWriteWins';
 import { ensureRecordMeta, readUpdatedAt } from './recordMeta';
+import { remoteDocToSyncRecord, readRemoteDeleted } from './tombstone';
 
 export type SyncReportItem = {
   collection: CollectionName;
@@ -34,6 +39,19 @@ export type SyncReport = {
   totalRemoto: number;
   totalPendentes: number;
   pendingSummary: Awaited<ReturnType<typeof getPendingSyncItems>>;
+  meta: {
+    deviceId: string;
+    userEmail: string | null;
+    userId: string | null;
+    lastSyncAt: number | null;
+    generatedAt: number;
+    collectionCounts: {
+      cadastros: { local: number; remote: number };
+      sessoes: { local: number; remote: number };
+      aplicadores: { local: number; remote: number };
+    };
+    clockDriftWarning: string | null;
+  };
 };
 
 function labelFor(collection: CollectionName, record: Record<string, unknown>): string {
@@ -52,7 +70,10 @@ function mapById<T extends { id: string }>(rows: T[]): Map<string, T> {
   return new Map(rows.map((row) => [row.id, row]));
 }
 
-export async function buildSyncReport(ownerUid: string): Promise<SyncReport> {
+export async function buildSyncReport(
+  ownerUid: string,
+  clockDriftWarning: string | null = null,
+): Promise<SyncReport> {
   const pendingSummary = await getPendingSyncItems(ownerUid);
 
   const [localCad, localSess, localApp, remoteCad, remoteSess, remoteApp] = await Promise.all([
@@ -87,18 +108,8 @@ export async function buildSyncReport(ownerUid: string): Promise<SyncReport> {
       const local = localMap.get(id);
       const remoteRaw = remoteMap.get(id);
       const remote = remoteRaw
-        ? ensureRecordMeta(
-            {
-              ...remoteRaw,
-              ownerUid,
-              updatedAt: readUpdatedAt(remoteRaw),
-              createdAt: readUpdatedAt(remoteRaw),
-              syncStatus: 'synced',
-              deleted: false,
-              deviceId: 'remote',
-              userId: null,
-              lastModifiedBy: 'remote',
-            } as typeof localCad[0],
+        ? remoteDocToSyncRecord(
+            { ...remoteRaw, id } as Record<string, unknown> & { id: string },
             ownerUid,
           )
         : undefined;
@@ -122,6 +133,8 @@ export async function buildSyncReport(ownerUid: string): Promise<SyncReport> {
       if (decision.action === 'upload') {
         if (local?.deleted) {
           excluidos.push(item);
+        } else if (remoteRaw && readRemoteDeleted(remoteRaw)) {
+          alterados.push(item);
         } else if (!remoteRaw) {
           novos.push(item);
         } else {
@@ -131,7 +144,9 @@ export async function buildSyncReport(ownerUid: string): Promise<SyncReport> {
       }
 
       if (decision.action === 'download') {
-        if (!local) {
+        if (remoteRaw && readRemoteDeleted(remoteRaw)) {
+          baixarAlterados.push(item);
+        } else if (!local) {
           baixarNovos.push(item);
         } else {
           baixarAlterados.push(item);
@@ -140,11 +155,17 @@ export async function buildSyncReport(ownerUid: string): Promise<SyncReport> {
     }
   }
 
-  const totalRemoto = remoteCad.length + remoteSess.length + remoteApp.length;
+  const totalRemoto =
+    remoteCad.filter((r) => !readRemoteDeleted(r)).length +
+    remoteSess.filter((r) => !readRemoteDeleted(r)).length +
+    remoteApp.filter((r) => !readRemoteDeleted(r)).length;
   const totalLocal =
     localCad.filter((r) => !r.deleted).length +
     localSess.filter((r) => !r.deleted).length +
     localApp.filter((r) => !r.deleted).length;
+
+  const [deviceId, lastAudit] = await Promise.all([getDeviceId(), getLastSyncAudit(ownerUid)]);
+  const authUser = getFirebaseAuth()?.currentUser;
 
   return {
     novos,
@@ -157,6 +178,28 @@ export async function buildSyncReport(ownerUid: string): Promise<SyncReport> {
     totalRemoto,
     totalPendentes: pendingSummary.total,
     pendingSummary,
+    meta: {
+      deviceId,
+      userEmail: authUser?.email ?? null,
+      userId: getCachedLoginUid(),
+      lastSyncAt: lastAudit?.finishedAt ?? null,
+      generatedAt: Date.now(),
+      collectionCounts: {
+        cadastros: {
+          local: localCad.filter((r) => !r.deleted).length,
+          remote: remoteCad.filter((r) => !readRemoteDeleted(r)).length,
+        },
+        sessoes: {
+          local: localSess.filter((r) => !r.deleted).length,
+          remote: remoteSess.filter((r) => !readRemoteDeleted(r)).length,
+        },
+        aplicadores: {
+          local: localApp.filter((r) => !r.deleted).length,
+          remote: remoteApp.filter((r) => !readRemoteDeleted(r)).length,
+        },
+      },
+      clockDriftWarning,
+    },
   };
 }
 

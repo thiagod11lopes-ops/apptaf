@@ -19,6 +19,7 @@ import type { PendingSyncSummary } from '../offline-first/sync/pendingSyncItems'
 import type { ConnectivityState } from '../offline-first/types';
 import type { SyncReport } from '../offline-first/sync/syncReport';
 import { RelatorioSincronizacaoModal } from '../components/sismav/RelatorioSincronizacaoModal';
+import { AssistenteSincronizacaoModal } from '../components/sismav/AssistenteSincronizacaoModal';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 
 type OfflineSyncContextType = {
@@ -35,6 +36,9 @@ type OfflineSyncContextType = {
   syncing: boolean;
   syncModalVisible: boolean;
   uploadError: string | null;
+  assistantProgress: SyncManagerState['assistantProgress'];
+  clockDriftWarning: string | null;
+  lastAudit: SyncManagerState['lastAudit'];
   enterOnlineMode: () => Promise<{ ok: boolean; error?: string }>;
   confirmManualSync: () => Promise<void>;
   cancelOnlineMode: () => void;
@@ -109,6 +113,9 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       syncing: managerState.uploading || connectivity === 'SYNCING',
       syncModalVisible: managerState.syncModalVisible,
       uploadError: managerState.uploadError,
+      assistantProgress: managerState.assistantProgress,
+      clockDriftWarning: managerState.clockDriftWarning,
+      lastAudit: managerState.lastAudit,
       enterOnlineMode,
       confirmManualSync,
       cancelOnlineMode,
@@ -124,6 +131,9 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       managerState.uploading,
       managerState.syncModalVisible,
       managerState.uploadError,
+      managerState.assistantProgress,
+      managerState.clockDriftWarning,
+      managerState.lastAudit,
       pendingCount,
       pendingSummary,
       enterOnlineMode,
@@ -137,6 +147,11 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   return (
     <OfflineSyncContext.Provider value={value}>
       {children}
+      <AssistenteSincronizacaoModal
+        visible={managerState.uploading && !managerState.syncModalVisible && managerState.mode !== 'OFFLINE'}
+        progress={managerState.assistantProgress}
+        clockDriftWarning={managerState.clockDriftWarning}
+      />
       <RelatorioSincronizacaoModal
         visible={managerState.syncModalVisible}
         report={managerState.syncReport}

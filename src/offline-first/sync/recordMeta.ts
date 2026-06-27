@@ -57,7 +57,7 @@ export function bumpRecordMeta<T extends SyncRecord>(
       ...record,
       deleted: true,
       deletedAt: now,
-      deletedBy: deviceId,
+      deletedBy: userId ?? deviceId,
       updatedAt: now,
       syncVersion: nextSyncVersion,
       version: nextSyncVersion,

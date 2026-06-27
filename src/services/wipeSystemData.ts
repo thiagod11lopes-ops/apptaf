@@ -6,18 +6,16 @@ import {
   clearMemoryCloudCache,
   resetCloudDataCache,
 } from './cloudDataCache';
-import {
-  wipeCloudTeamDataFirestore,
-  type WipeCloudTeamResult,
-} from './firebase/wipeCloudDataFirestore';
 import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHistorico';
 import { isFirebaseConfigured } from '../config/firebase';
 import { wipeOwnerData } from '../offline-first/db/localDb';
 import { getTafDatabase, setMeta } from '../offline-first/db/tafDatabase';
 import { resetCloudSyncStatus, setCloudSyncResult } from './offline/cloudSyncActivity';
 import { syncEngine } from '../offline-first/sync/SyncEngine';
+import { systemState } from '../offline-first/sync/SystemState';
 import { clearPersistedStorageOwner } from './firebase/authUid';
 import { setLocalTeamWipeAck } from './applyTeamWipeIfNeeded';
+import type { WipeCloudTeamResult } from './firebase/wipeCloudDataFirestore';
 
 export type WipeSystemDataOptions = {
   uid: string | null;
@@ -61,7 +59,10 @@ export async function wipeSystemData(options: WipeSystemDataOptions): Promise<Wi
     return { localCleared: true, cloudCleared: false };
   }
 
-  const cloudCounts = await wipeCloudTeamDataFirestore(uid);
+  await systemState.setOnlineMode();
+  syncEngine.bindOwner(uid);
+  const cloudCounts = await syncEngine.wipeCloudTeam(uid);
+  await systemState.setOfflineMode();
   await setLocalTeamWipeAck(uid, cloudCounts.teamWipeAt);
   return {
     localCleared: true,

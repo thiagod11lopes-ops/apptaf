@@ -1,23 +1,23 @@
-import { waitForAuthUid } from '../services/firebase/authUid';
-import { getCadastroRubricasFirestore } from '../services/firebase/cadastroRubricasFirestore';
+import { resolveStorageOwnerUid } from '../services/firebase/authUid';
+import { dataStore } from '../offline-first/store/DataStore';
 import type { RubricasPorNip } from './rubricasDasSessoes';
 import { rubricasDoCadastro } from './rubricasDasSessoes';
 
-/** Baixa rúbricas SVG só dos cadastros solicitados. */
+/** Carrega rúbricas SVG dos cadastros solicitados — somente IndexedDB. */
 export async function carregarRubricasCadastrosPorIds(
   cadastroIds: string[],
 ): Promise<Map<string, RubricasPorNip>> {
   const map = new Map<string, RubricasPorNip>();
-  const uid = await waitForAuthUid();
-  if (!uid || cadastroIds.length === 0) return map;
+  if (cadastroIds.length === 0) return map;
 
-  const unique = [...new Set(cadastroIds)];
-  await Promise.all(
-    unique.map(async (id) => {
-      const rub = await getCadastroRubricasFirestore(uid, id);
-      if (rub) map.set(id, rubricasDoCadastro(rub));
-    }),
-  );
+  const uid = await resolveStorageOwnerUid();
+  const cadastros = await dataStore.getCadastros(uid);
+  const byId = new Map(cadastros.map((c) => [c.id, c]));
+
+  for (const id of [...new Set(cadastroIds)]) {
+    const cad = byId.get(id);
+    if (cad) map.set(id, rubricasDoCadastro(cad));
+  }
 
   return map;
 }

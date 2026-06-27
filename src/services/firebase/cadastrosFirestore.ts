@@ -10,6 +10,7 @@ import type { CadastroItemPersist } from '../cadastrosIndexedDb';
 import { getFirestoreDb } from '../../config/firebase';
 import { userCadastrosPath } from './firestorePaths';
 import { sanitizeForFirestore } from './sanitizeFirestoreData';
+import type { TombstonePayload } from '../../offline-first/sync/tombstone';
 import { dedupeCadastrosPorNip } from '../../utils/dedupeCadastrosPorNip';
 import { stampCadastro } from '../offline/recordTimestamps';
 import {
@@ -34,7 +35,7 @@ export async function getAllCadastrosFirestoreLight(uid: string): Promise<Cadast
   const items: CadastroItemPersist[] = [];
 
   for (const docSnap of snap.docs) {
-    const raw = docSnap.data() as CadastroItemPersist;
+    const raw = docSnap.data() as CadastroItemPersist & { deleted?: boolean; deletedAt?: number };
     items.push(toCadastroLight({ ...raw, id: docSnap.id }));
   }
 
@@ -98,7 +99,35 @@ export async function addCadastrosEmLoteFirestore(
   }
 }
 
-export async function deleteCadastroFirestore(uid: string, id: string): Promise<void> {
+export async function deleteCadastroFirestore(uid: string, id: string, tombstone?: TombstonePayload): Promise<void> {
+  const db = getFirestoreDb();
+  if (!db) throw new Error('Firestore indisponível.');
+
+  if (tombstone) {
+    await setDoc(
+      doc(db, userCadastrosPath(uid), id),
+      sanitizeForFirestore({
+        id,
+        updatedAt: tombstone.updatedAt,
+        deleted: true,
+        deletedAt: tombstone.deletedAt ?? tombstone.updatedAt,
+        deletedBy: tombstone.deletedBy,
+        syncVersion: tombstone.syncVersion,
+        updatedBy: tombstone.updatedBy,
+        deviceId: tombstone.deviceId,
+      }),
+      { merge: true },
+    );
+    await deleteCadastroRubricasFirestore(uid, id);
+    return;
+  }
+
+  await deleteDoc(doc(db, userCadastrosPath(uid), id));
+  await deleteCadastroRubricasFirestore(uid, id);
+}
+
+/** Remove fisicamente após garbage collection (tombstone já sincronizado). */
+export async function purgeCadastroFirestore(uid: string, id: string): Promise<void> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
   await deleteDoc(doc(db, userCadastrosPath(uid), id));

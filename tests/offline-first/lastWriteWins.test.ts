@@ -60,6 +60,18 @@ describe('Last Write Wins', () => {
     expect(decideLastWriteWins(local, remote).action).toBe('upload');
   });
 
+  it('exclusão remota mais recente → download', () => {
+    const local = cad({ updatedAt: 2000, nome: 'Ativo' });
+    const remote = cad({
+      updatedAt: 9000,
+      deleted: true,
+      deletedAt: 9000,
+      syncStatus: 'synced',
+      syncVersion: 4,
+    });
+    expect(decideLastWriteWins(local, remote).action).toBe('download');
+  });
+
   it('somente remoto → download', () => {
     expect(decideLastWriteWins(undefined, cad({ syncStatus: 'synced' })).action).toBe('download');
   });

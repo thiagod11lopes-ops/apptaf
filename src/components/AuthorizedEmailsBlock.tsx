@@ -11,12 +11,8 @@ import {
 import { Trash2, UserPlus } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import {
-  addAuthorizedEmail,
-  listAuthorizedEmails,
-  removeAuthorizedEmail,
-  type AuthorizedEmailEntry,
-} from '../services/firebase/authorizedEmailsFirestore';
+import type { AuthorizedEmailEntry } from '../offline-first/sync/firebase/FirebaseGateway';
+import { authorizedEmailRepository } from '../offline-first/repositories/AuthorizedEmailRepository';
 import { isValidAuthEmail, normalizeAuthEmail } from '../utils/normalizeAuthEmail';
 import { PREMIUM } from '../theme/premium';
 
@@ -40,7 +36,7 @@ export function AuthorizedEmailsBlock() {
     setLoading(true);
     setErro(null);
     try {
-      setEmails(await listAuthorizedEmails(user.uid));
+      setEmails(await authorizedEmailRepository.listLocal(user.uid));
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível carregar os e-mails.');
     } finally {
@@ -67,9 +63,9 @@ export function AuthorizedEmailsBlock() {
     setErro(null);
     setMsg(null);
     try {
-      await addAuthorizedEmail(user.uid, email);
+      await authorizedEmailRepository.addLocal(user.uid, email);
       setInput('');
-      setMsg(`E-mail ${email} autorizado.`);
+      setMsg(`E-mail ${email} autorizado localmente. Será enviado na próxima sincronização.`);
       await recarregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível autorizar o e-mail.');
@@ -85,8 +81,8 @@ export function AuthorizedEmailsBlock() {
       setErro(null);
       setMsg(null);
       try {
-        await removeAuthorizedEmail(user.uid, email);
-        setMsg(`Acesso de ${email} removido.`);
+        await authorizedEmailRepository.removeLocal(user.uid, email);
+        setMsg(`Acesso de ${email} removido localmente. Será aplicado na próxima sincronização.`);
         await recarregar();
       } catch (e) {
         setErro(e instanceof Error ? e.message : 'Não foi possível remover o e-mail.');

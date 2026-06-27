@@ -14,7 +14,7 @@ export type SessaoAplicacaoTaf = {
   updatedAt?: number;
 };
 
-import { waitForAuthenticatedUid, resolveStorageOwnerUid } from './firebase/authUid';
+import { resolveStorageOwnerUid } from './firebase/authUid';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { dataStore } from '../offline-first/store/DataStore';
 import {
@@ -22,9 +22,6 @@ import {
   upsertSessaoOffline,
   deleteSessaoOffline,
 } from './offline/offlineCloudEngine';
-import { getSessaoByIdFirestore } from './firebase/sessoesFirestore';
-import { canAttemptCloudSync } from './offline/networkStatus';
-import { systemState } from '../offline-first/sync/SystemState';
 
 function useOfflineFirstDb(): boolean {
   return getTafDatabase() != null;
@@ -149,20 +146,6 @@ export async function getSessaoAplicacaoById(id: string): Promise<SessaoAplicaca
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
     return dataStore.getSessaoById(id, uid);
-  }
-  const uid = await waitForAuthenticatedUid();
-  if (uid) {
-    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
-    const local = entry.sessoes.find((s) => s.id === id);
-    if (local) return local;
-    if (canAttemptCloudSync()) {
-      try {
-        return await getSessaoByIdFirestore(uid, id);
-      } catch {
-        return null;
-      }
-    }
-    return null;
   }
   try {
     const db = await openDb();

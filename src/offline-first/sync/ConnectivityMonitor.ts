@@ -1,6 +1,4 @@
-import { doc, getDoc } from 'firebase/firestore';
 import type { ConnectivityState } from '../types';
-import { getFirestoreDb } from '../../config/firebase';
 import { probeInternetReachable } from '../../utils/probeInternetReachable';
 import { syncLogger } from './SyncLogger';
 
@@ -8,7 +6,7 @@ type Listener = (state: ConnectivityState) => void;
 
 const listeners = new Set<Listener>();
 let state: ConnectivityState =
-  typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : 'DEGRADED';
+  typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : 'ONLINE';
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let manualSyncLock = false;
 
@@ -23,31 +21,17 @@ async function probeInternet(): Promise<boolean> {
   return probeInternetReachable(4000);
 }
 
-async function probeFirestore(): Promise<boolean> {
-  const db = getFirestoreDb();
-  if (!db) return false;
-  try {
-    const ref = doc(db, 'member_lookup', '__connectivity_probe__');
-    await getDoc(ref);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function notify(): void {
   listeners.forEach((fn) => fn(state));
 }
 
+/** Avalia conectividade sem acessar Firestore (Firebase só no Sync Engine). */
 async function evaluate(): Promise<ConnectivityState> {
   if (manualSyncLock) return 'SYNCING';
   if (!readNavigatorOnline()) return 'OFFLINE';
 
   const internet = await probeInternet();
   if (!internet) return 'OFFLINE';
-
-  const firestore = await probeFirestore();
-  if (!firestore) return 'DEGRADED';
 
   return 'ONLINE';
 }
@@ -84,7 +68,7 @@ export class ConnectivityMonitor {
   }
 
   canSync(): boolean {
-    return state === 'ONLINE' || state === 'DEGRADED' || state === 'SYNCING';
+    return state === 'ONLINE' || state === 'SYNCING';
   }
 
   setSyncing(active: boolean): void {
@@ -94,9 +78,8 @@ export class ConnectivityMonitor {
       notify();
       return;
     }
-    // Restaura imediatamente para não bloquear nova rodada de upload enquanto refresh() é assíncrono.
     if (readNavigatorOnline()) {
-      state = 'DEGRADED';
+      state = 'ONLINE';
     } else {
       state = 'OFFLINE';
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
@@ -37,17 +37,26 @@ export function AppShell({ children, activeRoute, fullWidth }: Props) {
         <SidebarNav activeRoute={activeRoute} />
       </LinearGradient>
       <View style={styles.body} {...(Platform.OS === 'web' ? { className: 'app-body' as never } : {})}>
-        <LinearGradient
-          colors={[...t.gradientAppBg]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={[styles.main, fullWidth && styles.mainFull]}
-          {...(Platform.OS === 'web'
-            ? { className: `app-main${fullWidth ? ' app-main--full' : ''}` as never }
-            : {})}
+        <ScrollView
+          style={styles.mainScroll}
+          contentContainerStyle={styles.mainScrollContent}
+          showsVerticalScrollIndicator
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          {...(Platform.OS === 'web' ? { className: 'app-main-scroll' as never } : {})}
         >
-          {children}
-        </LinearGradient>
+          <LinearGradient
+            colors={[...t.gradientAppBg]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={[styles.main, fullWidth && styles.mainFull]}
+            {...(Platform.OS === 'web'
+              ? { className: `app-main${fullWidth ? ' app-main--full' : ''}` as never }
+              : {})}
+          >
+            {children}
+          </LinearGradient>
+        </ScrollView>
         <View style={[styles.footer, { borderTopColor: theme.border }]}>
           <Text style={[styles.footerText, { color: theme.textMuted }]}>
             Sistema TAF · {new Date().getFullYear()}
@@ -77,14 +86,22 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     minWidth: 0,
+    minHeight: 0,
     flexDirection: 'column',
   },
-  main: {
+  mainScroll: {
     flex: 1,
+    minHeight: 0,
+  },
+  mainScrollContent: {
+    flexGrow: 1,
+  },
+  main: {
     width: '100%',
     maxWidth: 1280,
     alignSelf: 'center',
     padding: 24,
+    minHeight: Platform.OS === 'web' ? ('100%' as unknown as number) : undefined,
   },
   mainFull: {
     maxWidth: undefined,

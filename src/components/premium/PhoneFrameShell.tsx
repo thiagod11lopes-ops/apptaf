@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Platform, StyleSheet } from 'react-native';
+import { View, Platform, StyleSheet, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -100,7 +100,16 @@ export function PhoneFrameShell({ children }: Props) {
           <View style={styles.bezelRing}>
             <View style={[styles.screenClip, { backgroundColor: theme.background }]}>
               <DynamicIsland />
-              <View style={styles.screenContent}>{children}</View>
+              <ScrollView
+                style={styles.screenScroll}
+                contentContainerStyle={styles.screenScrollContent}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                {...(Platform.OS === 'web' ? { className: 'phone-screen-scroll' as never } : {})}
+              >
+                <View style={styles.screenContent}>{children}</View>
+              </ScrollView>
               <HomeIndicator dark={isDark} />
             </View>
           </View>
@@ -214,10 +223,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  screenContent: {
+  screenScroll: {
     flex: 1,
+    minHeight: 0,
+  },
+  screenScrollContent: {
+    flexGrow: 1,
+  },
+  screenContent: {
+    flexGrow: 1,
     paddingTop: 52,
-    overflow: 'hidden',
+    paddingBottom: 28,
   },
   dynamicIsland: {
     position: 'absolute',

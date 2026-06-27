@@ -114,7 +114,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   page: {
     flex: 1,
-    minHeight: 0,
+    minHeight: Platform.OS === 'web' ? ('100%' as unknown as number) : 0,
   },
   topSection: {
     paddingHorizontal: 20,
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   },
   imageFrame: {
     flex: 1,
-    minHeight: 0,
+    minHeight: Platform.OS === 'web' ? 380 : 0,
     width: '100%',
     marginTop: 4,
     marginBottom: 8,

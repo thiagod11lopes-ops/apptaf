@@ -8,9 +8,13 @@ import React, {
   ReactNode,
 } from 'react';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildPremiumDarkTheme, buildPremiumLightTheme, type AppTheme } from '../theme/premium';
-import { THEME_STORAGE_KEY } from '../theme/sismavTokens';
+import {
+  hydrateAppMetaFromIndexedDb,
+  readAppMetaCache,
+  THEME_META_KEY,
+  writeAppMetaSync,
+} from '../offline-first/db/appMeta';
 
 export type Theme = AppTheme;
 export type ThemeMode = 'light' | 'dark';
@@ -43,18 +47,20 @@ export function ThemeProvider({
   const [themeMode, setThemeModeState] = useState<ThemeMode>('light');
 
   useEffect(() => {
-    AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
+    void (async () => {
+      await hydrateAppMetaFromIndexedDb();
+      const stored = readAppMetaCache(THEME_META_KEY);
       if (stored === 'light' || stored === 'dark') {
         setThemeModeState(stored);
       }
-    });
+    })();
   }, []);
 
   const isDark = themeMode === 'dark';
 
   useEffect(() => {
     applyDomTheme(themeMode);
-    AsyncStorage.setItem(THEME_STORAGE_KEY, themeMode).catch(() => {});
+    writeAppMetaSync(THEME_META_KEY, themeMode);
   }, [themeMode]);
 
   const setThemeMode = useCallback((mode: ThemeMode) => {

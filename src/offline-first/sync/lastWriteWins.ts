@@ -1,5 +1,4 @@
 import type { CadastroRecord, SessaoRecord, AplicadorRecord, PreCadastroRecord } from '../types';
-import { isUnsyncedLocalStatus } from './syncStatus';
 import { readSyncVersion, readUpdatedAt } from './recordMeta';
 
 export type SyncRecord = CadastroRecord | SessaoRecord | AplicadorRecord | PreCadastroRecord;
@@ -17,6 +16,7 @@ export function shouldSkipIdenticalRecords(
   remote: Partial<SyncRecord> | null | undefined,
 ): boolean {
   if (!local || !remote) return false;
+  if (local.deleted === true !== remote.deleted === true) return false;
   const localAt = readUpdatedAt(local);
   const remoteAt = readUpdatedAt(remote);
   if (localAt !== remoteAt) return false;
@@ -39,11 +39,6 @@ export function decideLastWriteWins(
     if (!local) {
       return { action: 'skip', reason: 'registro_inexistente' };
     }
-    if (local.deleted) {
-      return isUnsyncedLocalStatus(local.syncStatus)
-        ? { action: 'upload', reason: 'somente_local' }
-        : { action: 'skip', reason: 'local_ja_sincronizado' };
-    }
     return { action: 'upload', reason: 'somente_local' };
   }
 
@@ -57,12 +52,30 @@ export function decideLastWriteWins(
 
   const localAt = readUpdatedAt(local);
   const remoteAt = readUpdatedAt(remote);
+  const localDeleted = local.deleted === true;
+  const remoteDeleted = remote.deleted === true;
+
+  if (localAt === remoteAt && localDeleted !== remoteDeleted) {
+    if (remoteDeleted) {
+      return { action: 'download', reason: 'exclusao_remota_empate' };
+    }
+    return { action: 'upload', reason: 'exclusao_local_empate' };
+  }
 
   if (localAt > remoteAt) {
     return { action: 'upload', reason: 'local_updatedAt_mais_recente' };
   }
   if (remoteAt > localAt) {
     return { action: 'download', reason: 'remoto_updatedAt_mais_recente' };
+  }
+
+  const localSv = readSyncVersion(local);
+  const remoteSv = readSyncVersion(remote);
+  if (localSv > remoteSv) {
+    return { action: 'upload', reason: 'local_syncVersion_maior_empate' };
+  }
+  if (remoteSv > localSv) {
+    return { action: 'download', reason: 'remoto_syncVersion_maior_empate' };
   }
 
   return { action: 'skip', reason: 'updatedAt_empate' };

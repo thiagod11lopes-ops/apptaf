@@ -156,6 +156,31 @@ function countIds(local: SyncRecord[], remote: { id: string }[]): number {
   return ids.size;
 }
 
+/** Detecta divergência de presença (ativo × excluído) que o LWW possa não enfileirar. */
+function countActivePresenceDrift(
+  localRows: SyncRecord[],
+  remoteRows: Array<{ id: string }>,
+  toRecord: (remote: { id: string }, ownerUid: string) => SyncRecord,
+  ownerUid: string,
+): { extraDownloads: number; extraUploads: number } {
+  let extraDownloads = 0;
+  let extraUploads = 0;
+  const allIds = new Set([...localRows.map((r) => r.id), ...remoteRows.map((r) => r.id)]);
+
+  for (const id of allIds) {
+    const local = localRows.find((r) => r.id === id);
+    const remoteRaw = remoteRows.find((r) => r.id === id);
+    const remote = remoteRaw ? toRecord(remoteRaw, ownerUid) : undefined;
+    const localActive = local != null && local.deleted !== true;
+    const remoteActive = remote != null && remote.deleted !== true;
+    if (localActive === remoteActive) continue;
+    if (remoteActive && !localActive) extraDownloads += 1;
+    if (localActive && !remoteActive) extraUploads += 1;
+  }
+
+  return { extraDownloads, extraUploads };
+}
+
 function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }>(
   collection: CollectionName,
   ownerUid: string,
@@ -581,10 +606,21 @@ export async function estimateSyncQueueCounts(
   ownerUid: string,
 ): Promise<{ pendingUploads: number; pendingDownloads: number }> {
   const plan = await buildSyncPlanSnapshot(ownerUid);
-  return {
-    pendingUploads: plan.plannedUploads,
-    pendingDownloads: plan.plannedDownloads,
-  };
+  let pendingUploads = plan.plannedUploads;
+  let pendingDownloads = plan.plannedDownloads;
+
+  const drifts = [
+    countActivePresenceDrift(plan.localCad, plan.remoteCad, remoteToCadastroRecord, ownerUid),
+    countActivePresenceDrift(plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),
+    countActivePresenceDrift(plan.localApp, plan.remoteApp, remoteToAplicadorRecord, ownerUid),
+    countActivePresenceDrift(plan.localPre, plan.remotePre, remoteToPreCadastroRecord, ownerUid),
+  ];
+  for (const drift of drifts) {
+    pendingDownloads = Math.max(pendingDownloads, drift.extraDownloads);
+    pendingUploads = Math.max(pendingUploads, drift.extraUploads);
+  }
+
+  return { pendingUploads, pendingDownloads };
 }
 
 async function runPlanPhase(

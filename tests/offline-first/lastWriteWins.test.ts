@@ -48,9 +48,15 @@ describe('Last Write Wins', () => {
     expect(decideLastWriteWins(local, remote).action).toBe('skip');
   });
 
-  it('empate de updatedAt → skip', () => {
+  it('empate de updatedAt com syncVersion remoto maior → download', () => {
     const local = cad({ updatedAt: 4000, syncVersion: 2 });
     const remote = cad({ updatedAt: 4000, syncVersion: 3, syncStatus: 'synced' });
+    expect(decideLastWriteWins(local, remote).action).toBe('download');
+  });
+
+  it('empate total de updatedAt e syncVersion → skip', () => {
+    const local = cad({ updatedAt: 4000, syncVersion: 2 });
+    const remote = cad({ updatedAt: 4000, syncVersion: 2, syncStatus: 'synced', nome: 'Outro' });
     expect(decideLastWriteWins(local, remote).action).toBe('skip');
   });
 
@@ -79,5 +85,22 @@ describe('Last Write Wins', () => {
   it('local synced sem remoto e não deletado → upload', () => {
     const local = cad({ syncStatus: 'synced' });
     expect(decideLastWriteWins(local, undefined).action).toBe('upload');
+  });
+
+  it('exclusão local synced sem tombstone remoto → upload', () => {
+    const local = bumpRecordMeta(cad({ syncStatus: 'synced' }), 'dev-a', 'u1', 'DELETE');
+    expect(decideLastWriteWins(local, undefined).action).toBe('upload');
+  });
+
+  it('local ativo × remoto excluído no mesmo updatedAt → download', () => {
+    const local = cad({ updatedAt: 5000, syncVersion: 3 });
+    const remote = cad({
+      updatedAt: 5000,
+      syncVersion: 3,
+      deleted: true,
+      deletedAt: 5000,
+      syncStatus: 'synced',
+    });
+    expect(decideLastWriteWins(local, remote).action).toBe('download');
   });
 });

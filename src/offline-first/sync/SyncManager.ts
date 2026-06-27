@@ -9,7 +9,7 @@ import { syncLogger } from './SyncLogger';
 import { createLocalBackup, restoreLocalBackup } from './localBackup';
 import { detectClockDrift, type ClockDriftResult } from './clockDrift';
 import { prepareSyncSession } from './syncSessionPrepare';
-import { probeFirestoreConnectivity } from './firebase/FirebaseGateway';
+import { probeFirestoreConnectivityDetailed } from './firebase/FirebaseGateway';
 import type { SyncAuditEntry } from './syncAudit';
 import { buildSyncCounters, getLastSyncTimestamp } from './syncCounters';
 import type { SyncCountersState } from './syncUiState';
@@ -287,14 +287,13 @@ async function refreshCloudQueueEstimate(force = false): Promise<void> {
   if (uid === ANONYMOUS_OWNER || !syncAuthAvailable || syncInFlight) return;
   if (!connectivityMonitor.canSync()) return;
   if (queueEstimateInFlight && !force) return;
+  if (!getFirebaseAuth()?.currentUser) return;
 
   queueEstimateInFlight = true;
-  const wasOffline = systemState.isOffline();
   try {
-    if (wasOffline) await systemState.setOnlineMode();
     syncEngine.bindOwner(uid);
-    await syncEngine.init(uid);
     const estimate = await estimateSyncQueueCounts(uid);
+    if (syncInFlight) return;
     counters = {
       ...counters,
       pendingUploads: estimate.pendingUploads,
@@ -304,11 +303,6 @@ async function refreshCloudQueueEstimate(force = false): Promise<void> {
   } catch {
     // Mantém contadores locais se a estimativa falhar.
   } finally {
-    if (wasOffline) {
-      syncEngine.deactivateOnlineMode();
-      await syncEngine.shutdownSession();
-      await systemState.setOfflineMode();
-    }
     queueEstimateInFlight = false;
   }
 }
@@ -379,6 +373,10 @@ function scheduleReturnToOffline(delayMs: number): void {
 async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
   if (syncInFlight) return { ok: false, error: 'sync_in_progress' };
 
+  while (queueEstimateInFlight) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
   syncInFlight = true;
   uploading = true;
   uploadError = null;
@@ -438,11 +436,11 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     const session = await prepareSyncSession(loginUid, authUser.email);
     ownerUid = session.dataOwnerUid;
     syncEngine.bindOwner(ownerUid);
-    await syncEngine.init(ownerUid);
+    await syncEngine.init(ownerUid, { preserveOnlineMode: true });
 
-    const firestoreOk = await probeFirestoreConnectivity(ownerUid);
-    if (!firestoreOk) {
-      throw new Error('Não foi possível conectar ao Firebase. Tente novamente.');
+    const firestoreProbe = await probeFirestoreConnectivityDetailed(ownerUid);
+    if (!firestoreProbe.ok) {
+      throw new Error(firestoreProbe.reason ?? 'Não foi possível conectar ao Firebase. Tente novamente.');
     }
     completeStep('validate_permissions');
 

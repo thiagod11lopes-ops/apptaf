@@ -43,21 +43,58 @@ export { getTeamWipeMarker } from '../../../services/firebase/teamWipeFirestore'
 export { wipeCloudTeamDataFirestore as wipeAllCloudDataForOwner } from '../../../services/firebase/wipeCloudDataFirestore';
 
 /** Verifica conectividade lendo um doc sob users/{uid} (permitido pelas rules mesmo inexistente). */
-export async function probeFirestoreConnectivity(ownerUid?: string): Promise<boolean> {
+export type FirestoreProbeResult = {
+  ok: boolean;
+  reason?: string;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function probeFirestoreConnectivityDetailed(
+  ownerUid?: string,
+): Promise<FirestoreProbeResult> {
   const db = getFirestoreDb();
   const authUser = getFirebaseAuth()?.currentUser;
-  if (!db || !authUser) return false;
-
-  const uid = ownerUid?.trim() || authUser.uid;
-  if (!uid) return false;
+  if (!db) return { ok: false, reason: 'Firestore indisponível.' };
+  if (!authUser) return { ok: false, reason: 'Sessão Google não encontrada.' };
 
   try {
-    const ref = doc(db, 'users', uid, 'cadastros', '__connectivity_probe__');
-    await getDoc(ref);
-    return true;
+    await authUser.getIdToken(true);
   } catch {
-    return false;
+    return { ok: false, reason: 'Token de autenticação expirado. Entre novamente com Google.' };
   }
+
+  const uids = [...new Set([ownerUid?.trim(), authUser.uid].filter(Boolean))] as string[];
+  let lastReason = 'Não foi possível conectar ao Firebase.';
+
+  for (const uid of uids) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const ref = doc(db, 'users', uid, 'cadastros', '__connectivity_probe__');
+        await getDoc(ref);
+        return { ok: true };
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
+          lastReason = 'Permissão negada na nuvem. Verifique se sua conta está autorizada.';
+        } else if (/offline|unavailable|network|failed/i.test(msg)) {
+          lastReason = 'Sem conexão com o Firebase. Verifique a internet e tente novamente.';
+        } else if (msg.trim()) {
+          lastReason = msg;
+        }
+        if (attempt < 2) await sleep(400 * (attempt + 1));
+      }
+    }
+  }
+
+  return { ok: false, reason: lastReason };
+}
+
+export async function probeFirestoreConnectivity(ownerUid?: string): Promise<boolean> {
+  const result = await probeFirestoreConnectivityDetailed(ownerUid);
+  return result.ok;
 }
 
 /** Estima horário do servidor Firebase (ms UTC) para detecção de drift. */

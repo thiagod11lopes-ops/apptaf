@@ -248,9 +248,11 @@ export class SyncEngine {
     ownerUid = dataOwnerUid;
   }
 
-  async init(dataOwnerUid: string): Promise<void> {
+  async init(dataOwnerUid: string, opts?: { preserveOnlineMode?: boolean }): Promise<void> {
     ownerUid = dataOwnerUid;
-    await systemState.hydrate();
+    if (!opts?.preserveOnlineMode) {
+      await systemState.hydrate();
+    }
     await getMeta(`migrated:${dataOwnerUid}`);
     connectivityMonitor.start();
     onlineModeUid = dataOwnerUid;

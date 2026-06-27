@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Switch, ActivityIndicator, Platform } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,11 +12,17 @@ import {
   formatRecordsPerSecond,
   formatRemainingSeconds,
 } from '../../offline-first/sync/syncFormatters';
-import { hasPendingSyncResume, peekSyncResumeMessage } from '../../offline-first/sync/syncResume';
+import { SYNC_AUTH_REQUIRED_MESSAGE } from '../../offline-first/sync/SyncManager';
 import { stepIcon, stepLabel, type SyncStepState } from '../../offline-first/sync/syncSteps';
 import type { SyncUiState } from '../../offline-first/sync/syncUiState';
 
-function statusLabel(syncUi: SyncUiState): { emoji: string; label: string; color: string } {
+function statusLabel(
+  syncUi: SyncUiState,
+  isAuthenticated: boolean,
+): { emoji: string; label: string; color: string } {
+  if (syncUi.isBlocked || !isAuthenticated) {
+    return { emoji: '🟡', label: 'Bloqueado', color: '#ca8a04' };
+  }
   if (syncUi.phase === 'error') {
     return { emoji: '⚠', label: 'Erro', color: '#dc2626' };
   }
@@ -79,11 +85,17 @@ function StepRow({ step, theme }: { step: SyncStepState; theme: ReturnType<typeo
 export function SyncStatusBar() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
-  const { firebaseEnabled } = useAuth();
+  const { firebaseEnabled, isAuthenticated, authReady } = useAuth();
   const { syncUi, startSyncFromToggle, retrySync } = useOfflineSyncState();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [authBlockedHint, setAuthBlockedHint] = useState(false);
 
-  const status = statusLabel(syncUi);
+  const sessionReady = authReady && isAuthenticated && syncUi.isAuthenticated;
+
+  useEffect(() => {
+    if (sessionReady) setAuthBlockedHint(false);
+  }, [sessionReady]);
+  const status = statusLabel(syncUi, sessionReady);
   const switchOn =
     syncUi.isSyncing ||
     syncUi.phase === 'success' ||
@@ -94,19 +106,21 @@ export function SyncStatusBar() {
   const showUpToDate = syncUi.phase === 'already_up_to_date';
   const showError = syncUi.phase === 'error';
   const showIdleCounters = !showPanel && !showSuccess && !showUpToDate && !showError;
-  const pendingResume = !syncUi.isSyncing && hasPendingSyncResume();
-  const resumeMessage = pendingResume ? peekSyncResumeMessage() : null;
+  const showAuthBlocked = !sessionReady && !syncUi.isSyncing;
 
   const handleToggle = useCallback(
     async (next: boolean) => {
-      if (!next || !syncUi.toggleEnabled) return;
-      if (!firebaseEnabled) return;
-      const result = await startSyncFromToggle();
-      if (!result.ok && result.error) {
-        // Estado de erro já refletido em syncUi; evita falha silenciosa.
+      if (!next) return;
+      if (!sessionReady) {
+        setAuthBlockedHint(true);
+        return;
       }
+      if (!syncUi.toggleEnabled) return;
+      if (!firebaseEnabled) return;
+      setAuthBlockedHint(false);
+      await startSyncFromToggle();
     },
-    [firebaseEnabled, startSyncFromToggle, syncUi.toggleEnabled],
+    [firebaseEnabled, sessionReady, startSyncFromToggle, syncUi.toggleEnabled],
   );
 
   const openHistory = useCallback(() => {
@@ -156,27 +170,50 @@ export function SyncStatusBar() {
               ) : null}
             </View>
 
-            <View style={styles.switchRow}>
+            <View
+              style={styles.switchRow}
+              {...(Platform.OS === 'web'
+                ? ({
+                    title: sessionReady
+                      ? 'Ativar sincronização manual'
+                      : 'Faça login com Google antes de ativar sincronização',
+                  } as object)
+                : {})}
+            >
               {syncUi.isSyncing ? (
                 <ActivityIndicator size="small" color={theme.primary} style={styles.spinner} />
               ) : null}
               <Switch
                 value={switchOn}
                 onValueChange={(v) => void handleToggle(v)}
-                disabled={!syncUi.toggleEnabled}
+                disabled={!sessionReady || !syncUi.toggleEnabled}
                 trackColor={{ false: '#cbd5e1', true: theme.primary }}
                 thumbColor="#FFFFFF"
-                accessibilityLabel="Chave de sincronização"
+                accessibilityLabel={
+                  sessionReady
+                    ? 'Chave de sincronização'
+                    : 'Chave bloqueada — faça login com Google antes de sincronizar'
+                }
+                accessibilityState={{ disabled: !sessionReady || !syncUi.toggleEnabled }}
               />
             </View>
           </View>
 
-          {pendingResume ? (
-            <View style={[styles.resumeBanner, { backgroundColor: theme.primary + '18', borderColor: theme.primary }]}>
-              <Text style={[ts.caption, { color: theme.primary, fontWeight: '700', lineHeight: 18 }]}>
-                {resumeMessage ?? 'Login concluído. Retomando sincronização…'}
+          {showAuthBlocked ? (
+            <View style={[styles.blockedBanner, { backgroundColor: '#fef3c7', borderColor: '#ca8a04' }]}>
+              <Text style={[ts.caption, { color: '#92400e', fontWeight: '700', lineHeight: 18 }]}>
+                ⚠ Você precisa estar logado com Google para ativar a sincronização
+              </Text>
+              <Text style={[ts.caption, { color: '#92400e', lineHeight: 18, marginTop: 4 }]}>
+                {SYNC_AUTH_REQUIRED_MESSAGE}
               </Text>
             </View>
+          ) : null}
+
+          {authBlockedHint && sessionReady === false ? (
+            <Text style={[ts.caption, { color: theme.loss, fontWeight: '600' }]}>
+              {SYNC_AUTH_REQUIRED_MESSAGE}
+            </Text>
           ) : null}
 
           {showIdleCounters ? (
@@ -510,6 +547,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   resumeBanner: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  blockedBanner: {
     borderWidth: 1,
     borderRadius: 10,
     paddingVertical: 8,

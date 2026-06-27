@@ -38,6 +38,8 @@ export type SyncCountersState = {
 /** Estado global observado pela UI — sem acesso ao Firebase. */
 export type SyncUiState = {
   phase: SyncUiPhase;
+  isAuthenticated: boolean;
+  isBlocked: boolean;
   isOffline: boolean;
   isOnline: boolean;
   isSyncing: boolean;
@@ -71,6 +73,8 @@ export const EMPTY_COUNTERS: SyncCountersState = {
 export function defaultSyncUiState(pendingUploads = 0): SyncUiState {
   return {
     phase: 'offline',
+    isAuthenticated: false,
+    isBlocked: true,
     isOffline: true,
     isOnline: false,
     isSyncing: false,
@@ -82,6 +86,6 @@ export function defaultSyncUiState(pendingUploads = 0): SyncUiState {
     syncError: null,
     errorStepId: null,
     syncSteps: createInitialSyncSteps(),
-    toggleEnabled: true,
+    toggleEnabled: false,
   };
 }

@@ -1,4 +1,3 @@
-import { signOutFirebase } from '../../services/firebase/googleAuth';
 import { getCachedDataOwnerUid, getCachedLoginUid } from '../../services/firebase/authUid';
 import { getFirebaseAuth } from '../../config/firebase';
 import { connectivityMonitor } from './ConnectivityMonitor';
@@ -14,11 +13,6 @@ import { probeFirestoreConnectivity } from './firebase/FirebaseGateway';
 import type { SyncAuditEntry } from './syncAudit';
 import { buildSyncCounters, getLastSyncTimestamp } from './syncCounters';
 import type { SyncCountersState } from './syncUiState';
-import {
-  clearPendingSyncResume,
-  markPendingSyncResume,
-  SYNC_AUTH_REDIRECT,
-} from './syncResume';
 import {
   advanceStep,
   createInitialSyncSteps,
@@ -38,6 +32,12 @@ import {
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
 export type EnsureAuthenticatedFn = () => Promise<{ ok: boolean; error?: string }>;
+
+/** Erro interno quando sync é solicitado sem sessão Google ativa. */
+export const SYNC_AUTH_REQUIRED = 'AUTH_REQUIRED';
+
+export const SYNC_AUTH_REQUIRED_MESSAGE =
+  'Faça login com Google antes de ativar sincronização';
 
 export type SyncManagerState = {
   mode: SyncManagerMode;
@@ -70,6 +70,12 @@ export function formatSyncUploadError(raw?: string | null): string {
   }
   if (msg === 'no_owner') {
     return 'Sessão inválida. Entre novamente com Google.';
+  }
+  if (msg === SYNC_AUTH_REQUIRED || msg === SYNC_AUTH_REQUIRED_MESSAGE) {
+    return SYNC_AUTH_REQUIRED_MESSAGE;
+  }
+  if (msg === 'Faça login com Google para sincronizar.') {
+    return SYNC_AUTH_REQUIRED_MESSAGE;
   }
   if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
     return 'Permissão negada na nuvem. Verifique sua conta.';
@@ -112,21 +118,28 @@ let etaTimer: ReturnType<typeof setInterval> | null = null;
 let syncStartedAt = 0;
 let recordSyncStartedAt = 0;
 let storedEnsureAuth: EnsureAuthenticatedFn | null = null;
+let syncAuthAvailable = false;
 const listeners = new Set<Listener>();
 
 function buildSyncUi(): SyncUiState {
+  const isAuthenticated = syncAuthAvailable;
+  const isBlocked = !isAuthenticated;
   const isSyncing = uiPhase === 'preparing' || uiPhase === 'syncing' || uploading;
   const isOffline =
     uiPhase === 'offline' || uiPhase === 'error' || (uiPhase === 'success' && !isSyncing);
   const isOnline =
-    uiPhase === 'preparing' ||
-    uiPhase === 'syncing' ||
-    uiPhase === 'success' ||
-    uiPhase === 'already_up_to_date';
-  const toggleEnabled = !isSyncing && uiPhase !== 'success' && uiPhase !== 'already_up_to_date';
+    isAuthenticated &&
+    (uiPhase === 'preparing' ||
+      uiPhase === 'syncing' ||
+      uiPhase === 'success' ||
+      uiPhase === 'already_up_to_date');
+  const toggleEnabled =
+    isAuthenticated && !isSyncing && uiPhase !== 'success' && uiPhase !== 'already_up_to_date';
 
   return {
     phase: uiPhase,
+    isAuthenticated,
+    isBlocked,
     isOffline,
     isOnline,
     isSyncing,
@@ -273,14 +286,7 @@ async function returnToOfflineMode(): Promise<void> {
 
 function scheduleReturnToOffline(delayMs: number): void {
   successTimer = setTimeout(() => {
-    void (async () => {
-      try {
-        await signOutFirebase();
-      } catch {
-        // mantém sessão local
-      }
-      await returnToOfflineMode();
-    })();
+    void returnToOfflineMode();
   }, delayMs);
 }
 
@@ -311,43 +317,29 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
       throw new Error('offline');
     }
 
-    setUiProgress(0, 'Autenticando com Google…');
-    const hasSession = Boolean(getFirebaseAuth()?.currentUser && getCachedLoginUid());
-    if (!hasSession) {
-      markPendingSyncResume('Após o login, a sincronização continuará automaticamente.');
+    setUiProgress(0, 'Verificando sessão Google…');
+
+    if (!syncAuthAvailable || !getFirebaseAuth()?.currentUser) {
+      throw new Error(SYNC_AUTH_REQUIRED);
     }
 
     const authResult = await ensureAuth();
-    if (!authResult.ok && authResult.error === SYNC_AUTH_REDIRECT) {
-      setUiProgress(0, 'Redirecionando para login Google…');
-      syncMessage = 'Após o login, a sincronização continuará automaticamente.';
-      uiPhase = 'offline';
-      mode = 'OFFLINE';
-      syncInFlight = false;
-      uploading = false;
-      stopEtaTimer();
-      notifyListeners();
-      return { ok: false };
-    }
     if (!authResult.ok) {
-      clearPendingSyncResume();
-      throw new Error(authResult.error ?? 'Faça login com Google para sincronizar.');
+      throw new Error(authResult.error ?? SYNC_AUTH_REQUIRED);
     }
-
-    clearPendingSyncResume();
 
     const loginUid = getCachedLoginUid();
     if (!loginUid) {
-      throw new Error('Faça login com Google para sincronizar.');
+      throw new Error(SYNC_AUTH_REQUIRED);
     }
 
     completeStep('login_google');
-    setUiProgress(0, 'Login Google concluído ✓');
+    setUiProgress(0, 'Sessão Google confirmada ✓');
     setActiveStep('validate_permissions');
     setUiProgress(0, 'Confirmando sessão Google…');
     const authUser = getFirebaseAuth()?.currentUser;
     if (!authUser) {
-      throw new Error('Faça login com Google para sincronizar.');
+      throw new Error(SYNC_AUTH_REQUIRED);
     }
 
     await systemState.setOnlineMode();
@@ -487,7 +479,6 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     syncMessage = uploadError;
     mode = 'OFFLINE';
     await syncLogger.error('sync-manager', rawError);
-    clearPendingSyncResume();
     await systemState.setOfflineMode();
     syncEngine.deactivateOnlineMode();
     await syncEngine.shutdownSession();
@@ -525,6 +516,11 @@ export const syncManager = {
     storedEnsureAuth = fn;
   },
 
+  setAuthAvailable(authenticated: boolean): void {
+    syncAuthAvailable = authenticated;
+    notifyListeners();
+  },
+
   async bindSession(dataOwnerUid: string): Promise<void> {
     ownerUid = dataOwnerUid;
     syncEngine.bindOwner(dataOwnerUid);
@@ -558,9 +554,12 @@ export const syncManager = {
   },
 
   async startSyncFromToggle(ensureAuth?: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
+    if (!syncAuthAvailable || !getFirebaseAuth()?.currentUser) {
+      return { ok: false, error: SYNC_AUTH_REQUIRED_MESSAGE };
+    }
     const authFn = ensureAuth ?? storedEnsureAuth;
     if (!authFn) {
-      return { ok: false, error: 'Autenticação indisponível.' };
+      return { ok: false, error: SYNC_AUTH_REQUIRED_MESSAGE };
     }
     return runSyncPipeline(authFn);
   },

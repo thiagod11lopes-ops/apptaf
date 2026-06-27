@@ -12,7 +12,6 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
     pendingCount,
     online,
     appMode,
-    syncModalVisible,
     uploadError,
   } = useOfflineSyncState();
 
@@ -33,20 +32,18 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
 
   const statusHint = useMemo(() => {
     if (uploadError) return uploadError;
-    if (syncModalVisible) return 'Revise o relatório e confirme a sincronização';
     if (appMode === 'ONLINE_SYNCING') return 'Enviando e baixando diferenças…';
-    if (appMode === 'ONLINE_PREPARING') return 'Comparando dados locais com a nuvem…';
+    if (appMode === 'ONLINE_PREPARING') return 'Preparando sincronização…';
     if (pendingCount > 0) {
-      return `${pendingCount} alteração(ões) local(is) · sincronize em Configurações`;
+      return `${pendingCount} alteração(ões) local(is) · use a chave na tela inicial`;
     }
     if (isAuthenticated && isOfflineMode) {
       return 'Modo offline · dados locais (IndexedDB)';
     }
     if (!online) return 'Sem internet · operação 100% local';
-    return 'Modo offline · use Configurações para sincronizar';
+    return 'Modo offline · use a chave na tela inicial para sincronizar';
   }, [
     uploadError,
-    syncModalVisible,
     appMode,
     pendingCount,
     isAuthenticated,

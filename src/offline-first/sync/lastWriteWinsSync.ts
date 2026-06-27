@@ -52,6 +52,12 @@ export type LwwSyncStats = {
   errors: string[];
 };
 
+export type SyncProgressCallback = (update: {
+  processed: number;
+  total: number;
+  message: string;
+}) => void;
+
 function stripForFirestore<T extends Record<string, unknown>>(row: T): T {
   const copy = { ...row } as Record<string, unknown>;
   for (const key of [
@@ -149,10 +155,13 @@ async function syncCollection<TLocal extends SyncRecord, TRemote extends { id: s
   upload: (uid: string, local: TLocal, hasRemote: boolean) => Promise<void>,
   stats: LwwSyncStats,
   deletionAudits: DeletionAuditEntry[],
+  onProgress?: SyncProgressCallback,
+  progressOffset?: { base: number; count: number },
 ): Promise<void> {
   const localMap = new Map(localRows.map((r) => [r.id, r]));
   const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
   const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
+  let localProcessed = 0;
 
   for (const id of allIds) {
     const local = localMap.get(id);
@@ -197,6 +206,18 @@ async function syncCollection<TLocal extends SyncRecord, TRemote extends { id: s
           ),
         );
       }
+    } finally {
+      localProcessed += 1;
+      if (onProgress && progressOffset) {
+        const processed = progressOffset.base + localProcessed;
+        const phaseMsg =
+          stats.uploads > stats.downloads ? 'Enviando alterações…' : 'Baixando alterações…';
+        onProgress({
+          processed,
+          total: progressOffset.count,
+          message: phaseMsg,
+        });
+      }
     }
   }
 }
@@ -207,6 +228,7 @@ export async function executeLastWriteWinsSync(
     backupId?: number | null;
     clockDrift?: ClockDriftResult;
     userEmail?: string | null;
+    onProgress?: SyncProgressCallback;
   },
 ): Promise<{
   success: boolean;
@@ -227,9 +249,45 @@ export async function executeLastWriteWinsSync(
     getAllAplicadoresFirestore(ownerUid),
   ]);
 
-  await syncCollection('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord, uploadCadastro, stats, deletionAudits);
-  await syncCollection('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord, uploadSessao, stats, deletionAudits);
-  await syncCollection('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord, uploadAplicador, stats, deletionAudits);
+  const countIds = (local: SyncRecord[], remote: { id: string }[]) => {
+    const ids = new Set([...local.map((r) => r.id), ...remote.map((r) => r.id)]);
+    return ids.size;
+  };
+
+  const totalRecords =
+    countIds(localCad, remoteCad) + countIds(localSess, remoteSess) + countIds(localApp, remoteApp);
+
+  let processedBefore = 0;
+  const progressCb = options?.onProgress;
+
+  options?.onProgress?.({ processed: 0, total: totalRecords || 1, message: 'Aplicando atualizações…' });
+
+  const runColl = async <TLocal extends SyncRecord, TRemote extends { id: string }>(
+    collection: CollectionName,
+    localRows: TLocal[],
+    remoteRows: TRemote[],
+    toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
+    upload: (uid: string, local: TLocal, hasRemote: boolean) => Promise<void>,
+  ) => {
+    const base = processedBefore;
+    processedBefore += countIds(localRows, remoteRows);
+    await syncCollection(
+      collection,
+      ownerUid,
+      localRows,
+      remoteRows,
+      toRecord,
+      upload,
+      stats,
+      deletionAudits,
+      progressCb,
+      { base, count: totalRecords || 1 },
+    );
+  };
+
+  await runColl('cadastros', localCad, remoteCad, remoteToCadastroRecord, uploadCadastro);
+  await runColl('sessoes', localSess, remoteSess, remoteToSessaoRecord, uploadSessao);
+  await runColl('aplicadores', localApp, remoteApp, remoteToAplicadorRecord, uploadAplicador);
 
   const emailErrors = await pushPendingAuthorizedEmails(ownerUid);
   stats.errors.push(...emailErrors);

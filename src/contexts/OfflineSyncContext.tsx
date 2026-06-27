@@ -14,74 +14,103 @@ import {
   subscribeSyncManager,
   getSyncManagerState,
   type SyncManagerState,
+  type EnsureAuthenticatedFn,
 } from '../offline-first/sync/SyncManager';
 import type { PendingSyncSummary } from '../offline-first/sync/pendingSyncItems';
 import type { ConnectivityState } from '../offline-first/types';
-import type { SyncReport } from '../offline-first/sync/syncReport';
-import { RelatorioSincronizacaoModal } from '../components/sismav/RelatorioSincronizacaoModal';
-import { AssistenteSincronizacaoModal } from '../components/sismav/AssistenteSincronizacaoModal';
+import type { SyncUiState } from '../offline-first/sync/syncUiState';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
+import { waitForAuthenticatedUid } from '../services/firebase/authUid';
+import { subscribeDataChanged } from '../offline-first/sync/SyncEngine';
 
 type OfflineSyncContextType = {
-  online: boolean;
   connectivity: ConnectivityState;
   appMode: SyncManagerState['mode'];
-  /** @deprecated sempre false — UI usa IndexedDB */
+  /** @deprecated use syncUi */
+  online: boolean;
+  /** @deprecated sempre false */
   usingCloudData: boolean;
   /** @deprecated sempre false */
   usingSyncedSnapshot: boolean;
   pendingCount: number;
   pendingSummary: PendingSyncSummary;
-  syncReport: SyncReport | null;
   syncing: boolean;
-  syncModalVisible: boolean;
-  uploadError: string | null;
-  assistantProgress: SyncManagerState['assistantProgress'];
-  clockDriftWarning: string | null;
-  lastAudit: SyncManagerState['lastAudit'];
+  syncUi: SyncUiState;
+  startSyncFromToggle: () => Promise<{ ok: boolean; error?: string }>;
+  retrySync: () => Promise<{ ok: boolean; error?: string }>;
+  /** @deprecated use startSyncFromToggle */
   enterOnlineMode: () => Promise<{ ok: boolean; error?: string }>;
+  /** @deprecated */
   confirmManualSync: () => Promise<void>;
   cancelOnlineMode: () => void;
-  /** @deprecated use confirmManualSync */
-  confirmSync: () => Promise<void>;
   dismissSync: () => void;
   openSyncModal: () => void;
+  uploadError: string | null;
+  syncReport: null;
+  syncModalVisible: boolean;
+  assistantProgress: null;
+  clockDriftWarning: string | null;
+  lastAudit: SyncManagerState['lastAudit'];
+  confirmSync: () => Promise<void>;
 };
 
 const OfflineSyncContext = createContext<OfflineSyncContextType | null>(null);
 
-function hasNetworkConnectivity(state: ConnectivityState = getConnectivityState()): boolean {
-  return state === 'ONLINE' || state === 'DEGRADED' || state === 'SYNCING';
-}
-
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { authReady } = useAuth();
+  const { authReady, signInWithGoogle, firebaseEnabled } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
   const [managerState, setManagerState] = useState<SyncManagerState>(getSyncManagerState);
 
-  const online = hasNetworkConnectivity(connectivity);
   const pendingSummary = managerState.pendingSummary;
   const pendingCount = pendingSummary.total;
+  const syncUi = managerState.syncUi;
 
-  const enterOnlineMode = useCallback(async () => {
-    return syncManager.enterOnlineMode();
-  }, []);
+  const ensureAuthenticated = useCallback<EnsureAuthenticatedFn>(async () => {
+    if (!firebaseEnabled) {
+      return { ok: false, error: 'Configure o Firebase para sincronizar.' };
+    }
+    try {
+      const existing = await waitForAuthenticatedUid(800);
+      if (existing) return { ok: true };
+      const redirect = await signInWithGoogle();
+      if (redirect) {
+        await waitForAuthenticatedUid(25_000);
+      } else {
+        await waitForAuthenticatedUid(20_000);
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Falha no login Google.' };
+    }
+  }, [firebaseEnabled, signInWithGoogle]);
+
+  useEffect(() => {
+    syncManager.registerAuthHandler(ensureAuthenticated);
+  }, [ensureAuthenticated]);
+
+  const startSyncFromToggle = useCallback(async () => {
+    return syncManager.startSyncFromToggle(ensureAuthenticated);
+  }, [ensureAuthenticated]);
+
+  const retrySync = useCallback(async () => {
+    return syncManager.retrySync(ensureAuthenticated);
+  }, [ensureAuthenticated]);
+
+  const enterOnlineMode = startSyncFromToggle;
 
   const confirmManualSync = useCallback(async () => {
-    await syncManager.confirmManualSync();
-  }, []);
+    await startSyncFromToggle();
+  }, [startSyncFromToggle]);
 
   const cancelOnlineMode = useCallback(() => {
     syncManager.cancelOnlineMode();
   }, []);
 
   const dismissSync = useCallback(() => {
-    syncManager.dismissSyncModal();
+    syncManager.clearUploadError();
   }, []);
 
-  const openSyncModal = useCallback(() => {
-    syncManager.openSyncModal();
-  }, []);
+  const openSyncModal = useCallback(() => {}, []);
 
   useEffect(() => {
     return subscribeSyncManager(setManagerState);
@@ -93,49 +122,57 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    return subscribeDataChanged(() => {
+      void syncManager.refreshPending();
+    });
+  }, []);
+
+  useEffect(() => {
     if (!authReady) return;
     const ownerUid = getCachedDataOwnerUid();
     if (ownerUid) {
       void syncManager.bindSession(ownerUid);
     }
+    void syncManager.refreshPending();
   }, [authReady]);
 
   const value = useMemo(
     () => ({
-      online,
       connectivity,
       appMode: managerState.mode,
+      online: !syncUi.isOffline,
       usingCloudData: false,
       usingSyncedSnapshot: false,
       pendingCount,
       pendingSummary,
-      syncReport: managerState.syncReport,
-      syncing: managerState.uploading || connectivity === 'SYNCING',
-      syncModalVisible: managerState.syncModalVisible,
-      uploadError: managerState.uploadError,
-      assistantProgress: managerState.assistantProgress,
-      clockDriftWarning: managerState.clockDriftWarning,
-      lastAudit: managerState.lastAudit,
+      syncing: syncUi.isSyncing,
+      syncUi,
+      startSyncFromToggle,
+      retrySync,
       enterOnlineMode,
       confirmManualSync,
       cancelOnlineMode,
       confirmSync: confirmManualSync,
       dismissSync,
       openSyncModal,
+      uploadError: managerState.uploadError,
+      syncReport: null,
+      syncModalVisible: false,
+      assistantProgress: null,
+      clockDriftWarning: managerState.clockDriftWarning,
+      lastAudit: managerState.lastAudit,
     }),
     [
-      online,
       connectivity,
       managerState.mode,
-      managerState.syncReport,
-      managerState.uploading,
-      managerState.syncModalVisible,
       managerState.uploadError,
-      managerState.assistantProgress,
       managerState.clockDriftWarning,
       managerState.lastAudit,
       pendingCount,
       pendingSummary,
+      syncUi,
+      startSyncFromToggle,
+      retrySync,
       enterOnlineMode,
       confirmManualSync,
       cancelOnlineMode,
@@ -144,24 +181,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return (
-    <OfflineSyncContext.Provider value={value}>
-      {children}
-      <AssistenteSincronizacaoModal
-        visible={managerState.uploading && !managerState.syncModalVisible && managerState.mode !== 'OFFLINE'}
-        progress={managerState.assistantProgress}
-        clockDriftWarning={managerState.clockDriftWarning}
-      />
-      <RelatorioSincronizacaoModal
-        visible={managerState.syncModalVisible}
-        report={managerState.syncReport}
-        loading={managerState.uploading}
-        errorMessage={managerState.uploadError}
-        onClose={dismissSync}
-        onConfirm={() => void confirmManualSync()}
-      />
-    </OfflineSyncContext.Provider>
-  );
+  return <OfflineSyncContext.Provider value={value}>{children}</OfflineSyncContext.Provider>;
 }
 
 export function useOfflineSyncState(): OfflineSyncContextType {

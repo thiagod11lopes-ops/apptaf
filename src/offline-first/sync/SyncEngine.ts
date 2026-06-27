@@ -42,7 +42,7 @@ import { getPendingSyncItems } from './pendingSyncItems';
 import { isUnsyncedLocalStatus } from './syncStatus';
 import { markRecordSynced } from './recordMeta';
 import { buildFirestoreTombstone } from './tombstone';
-import { executeLastWriteWinsSync, type LwwSyncStats } from './lastWriteWinsSync';
+import { executeLastWriteWinsSync, type LwwSyncStats, type SyncProgressCallback } from './lastWriteWinsSync';
 import {
   beginCloudSync,
   endCloudSync,
@@ -581,6 +581,7 @@ export class SyncEngine {
     backupId?: number | null;
     clockDrift?: import('./clockDrift').ClockDriftResult;
     userEmail?: string | null;
+    onProgress?: SyncProgressCallback;
   }): Promise<{ success: boolean; stats: LwwSyncStats; audit: import('./syncAudit').SyncAuditEntry }> {
     if (!ownerUid) {
       return {

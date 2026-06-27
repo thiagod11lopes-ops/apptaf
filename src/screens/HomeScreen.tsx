@@ -4,6 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { AppHeader } from '../components/sismav/AppHeader';
+import { SyncStatusBar } from '../components/sismav/SyncStatusBar';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
@@ -62,6 +63,7 @@ export default function HomeScreen() {
     <View style={styles.page}>
       <View style={styles.topSection}>
         <AppHeader title="TAF" subtitle="Teste de Aptidão Física" />
+        <SyncStatusBar />
         <TopActionIcons activeRoute="Home" inline />
 
         <View style={styles.statsGrid}>

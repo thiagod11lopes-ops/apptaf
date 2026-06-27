@@ -8,7 +8,6 @@ import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
 import { ExcluirTodosDadosBlock } from '../components/ExcluirTodosDadosBlock';
 import { AuthorizedEmailsBlock } from '../components/AuthorizedEmailsBlock';
 import { useAuth } from '../contexts/AuthContext';
-import { OnlineModeBlock } from '../components/OnlineModeBlock';
 
 export default function ConfiguracoesScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
@@ -39,8 +38,11 @@ export default function ConfiguracoesScreen() {
 
         {firebaseEnabled ? (
           <Card elevated>
-            <Text style={ts.h2}>Sincronização com a nuvem</Text>
-            <OnlineModeBlock />
+            <Text style={ts.h2}>Sincronização</Text>
+            <Text style={[ts.caption, styles.sectionHint, { color: theme.textSecondary }]}>
+              Use a chave na tela inicial (abaixo de &quot;Teste de Aptidão Física&quot;) para sincronizar
+              com a nuvem. O sistema permanece offline durante o uso normal.
+            </Text>
           </Card>
         ) : null}
 

@@ -42,7 +42,7 @@ export default function LoginScreen() {
     if (pendingCount > 0) {
       return `Conectado · ${pendingCount} alteração(ões) local(is) aguardando sync`;
     }
-    return statusHint ?? 'Conectado · operação offline (sincronize em Configurações)';
+    return statusHint ?? 'Conectado · operação offline (sincronize na tela inicial)';
   }, [appMode, isAuthenticated, isSessionLoading, pendingCount, statusHint]);
 
   const handleLogout = useCallback(async () => {
@@ -113,7 +113,7 @@ export default function LoginScreen() {
                   Offline
                 </Text>
                 <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
-                  Dados locais no dispositivo · sincronize em Configurações
+                  Dados locais no dispositivo · sincronize na tela inicial
                 </Text>
               </View>
             )}

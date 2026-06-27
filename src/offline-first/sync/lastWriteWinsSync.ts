@@ -475,21 +475,50 @@ export type SyncPlanSnapshot = {
   remotePre: PreCadastroRecord[];
 };
 
+function remotePermissionMessage(collection: CollectionName, ownerUid: string): string {
+  if (collection === 'pre_cadastros') {
+    return 'Permissão negada na coleção pre_cadastros. Publique as regras completas do Firestore no Console Firebase (incluindo pre_cadastros).';
+  }
+  const loginUid = getCachedLoginUid();
+  if (loginUid && loginUid !== ownerUid) {
+    return `Permissão negada ao ler ${collection} do chefe. Confirme que seu e-mail está autorizado.`;
+  }
+  return `Permissão negada ao ler ${collection} na nuvem. Verifique as regras do Firestore.`;
+}
+
+async function fetchRemoteCollection<T>(
+  collection: CollectionName,
+  ownerUid: string,
+  fetcher: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await fetcher();
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
+      throw new Error(remotePermissionMessage(collection, ownerUid));
+    }
+    throw error;
+  }
+}
+
 async function buildSyncPlanSnapshot(ownerUid: string): Promise<SyncPlanSnapshot> {
   await migrateDeviceDataOnLogin(ownerUid);
   await migratePreCadastrosFromAppMeta(ownerUid);
 
-  const [localCad, localSess, localApp, localPre, remoteCad, remoteSess, remoteApp, remotePre] =
-    await Promise.all([
-      listCadastrosForSync(ownerUid, true),
-      listSessoesForSync(ownerUid, true),
-      listAplicadoresForSync(ownerUid, true),
-      listPreCadastrosForSync(ownerUid, true),
-      getAllCadastrosFirestoreLight(ownerUid),
-      getAllSessoesFirestoreLight(ownerUid),
-      getAllAplicadoresFirestore(ownerUid),
-      getAllPreCadastrosFirestore(ownerUid),
-    ]);
+  const [localCad, localSess, localApp, localPre] = await Promise.all([
+    listCadastrosForSync(ownerUid, true),
+    listSessoesForSync(ownerUid, true),
+    listAplicadoresForSync(ownerUid, true),
+    listPreCadastrosForSync(ownerUid, true),
+  ]);
+
+  const [remoteCad, remoteSess, remoteApp, remotePre] = await Promise.all([
+    fetchRemoteCollection('cadastros', ownerUid, () => getAllCadastrosFirestoreLight(ownerUid)),
+    fetchRemoteCollection('sessoes', ownerUid, () => getAllSessoesFirestoreLight(ownerUid)),
+    fetchRemoteCollection('aplicadores', ownerUid, () => getAllAplicadoresFirestore(ownerUid)),
+    fetchRemoteCollection('pre_cadastros', ownerUid, () => getAllPreCadastrosFirestore(ownerUid)),
+  ]);
 
   await reconcileIdenticalUnsyncedLocals('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
   await reconcileIdenticalUnsyncedLocals('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);

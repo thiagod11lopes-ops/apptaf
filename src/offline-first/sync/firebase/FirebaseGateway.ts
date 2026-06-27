@@ -51,6 +51,30 @@ export { wipeCloudTeamDataFirestore as wipeAllCloudDataForOwner } from '../../..
 /** Doc de probe — ID sem `__` (reservado pelo Firestore). */
 const CONNECTIVITY_PROBE_DOC_ID = 'connectivity_probe';
 
+/** Coleções lidas na sincronização — todas devem passar no probe antes do LWW. */
+const SYNC_PROBE_COLLECTIONS = [
+  'cadastros',
+  'sessoes',
+  'cadastro_rubricas',
+  'sessao_rubricas',
+  'aplicadores',
+  'pre_cadastros',
+] as const;
+
+function permissionDeniedReason(
+  collection: (typeof SYNC_PROBE_COLLECTIONS)[number],
+  targetUid: string,
+  authUid: string,
+): string {
+  if (collection === 'pre_cadastros') {
+    return 'Permissão negada na coleção pre_cadastros. Publique as regras completas do Firestore no Console Firebase (incluindo pre_cadastros).';
+  }
+  if (targetUid !== authUid) {
+    return 'Permissão negada na nuvem. Confirme que entrou com o e-mail autorizado pelo chefe.';
+  }
+  return 'Permissão negada na nuvem. Verifique se sua conta está autorizada e se as regras do Firestore foram publicadas.';
+}
+
 /** Verifica conectividade lendo um doc sob users/{uid} (permitido pelas rules mesmo inexistente). */
 export type FirestoreProbeResult = {
   ok: boolean;
@@ -83,24 +107,26 @@ export async function probeFirestoreConnectivityDetailed(
   let lastReason = 'Não foi possível conectar ao Firebase.';
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const ref = doc(db, 'users', targetUid, 'cadastros', CONNECTIVITY_PROBE_DOC_ID);
-      await getDoc(ref);
-      return { ok: true };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
-        lastReason =
-          targetUid !== authUser.uid
-            ? 'Permissão negada na nuvem. Confirme que entrou com o e-mail autorizado pelo chefe.'
-            : 'Permissão negada na nuvem. Verifique se sua conta está autorizada.';
-      } else if (/offline|unavailable|network|failed/i.test(msg)) {
-        lastReason = 'Sem conexão com o Firebase. Verifique a internet e tente novamente.';
-      } else if (msg.trim()) {
-        lastReason = msg;
+    let probeFailed = false;
+    for (const collection of SYNC_PROBE_COLLECTIONS) {
+      try {
+        const ref = doc(db, 'users', targetUid, collection, CONNECTIVITY_PROBE_DOC_ID);
+        await getDoc(ref);
+      } catch (error) {
+        probeFailed = true;
+        const msg = error instanceof Error ? error.message : String(error);
+        if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
+          lastReason = permissionDeniedReason(collection, targetUid, authUser.uid);
+        } else if (/offline|unavailable|network|failed/i.test(msg)) {
+          lastReason = 'Sem conexão com o Firebase. Verifique a internet e tente novamente.';
+        } else if (msg.trim()) {
+          lastReason = msg;
+        }
+        break;
       }
-      if (attempt < 2) await sleep(400 * (attempt + 1));
     }
+    if (!probeFailed) return { ok: true };
+    if (attempt < 2) await sleep(400 * (attempt + 1));
   }
 
   return { ok: false, reason: lastReason };

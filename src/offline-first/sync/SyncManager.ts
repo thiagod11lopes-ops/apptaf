@@ -81,6 +81,13 @@ export function formatSyncUploadError(raw?: string | null): string {
     return SYNC_AUTH_REQUIRED_MESSAGE;
   }
   if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
+    if (
+      /pre_cadastros|Publique as regras|Permissão negada na coleção|Permissão negada ao ler/i.test(
+        msg,
+      )
+    ) {
+      return msg;
+    }
     return 'Permissão negada na nuvem. Verifique sua conta.';
   }
   return msg;

@@ -8,12 +8,16 @@ service cloud.firestore {
         : '';
     }
 
-    function isActiveMemberByEmail(bossUid) {
-      let emailKey = normalizedEmail();
+    function isActiveMemberByEmailKey(emailKey, bossUid) {
       return emailKey != ''
         && exists(/databases/$(database)/documents/member_lookup/$(emailKey))
         && get(/databases/$(database)/documents/member_lookup/$(emailKey)).data.bossUid == bossUid
         && get(/databases/$(database)/documents/member_lookup/$(emailKey)).data.ativo == true;
+    }
+
+    function isActiveMemberByEmail(bossUid) {
+      let emailKey = normalizedEmail();
+      return isActiveMemberByEmailKey(emailKey, bossUid);
     }
 
     function isActiveMemberByUid(bossUid) {
@@ -65,7 +69,13 @@ service cloud.firestore {
         && request.auth.uid == memberUid
         && request.resource.data.bossUid is string
         && request.resource.data.ativo == true
-        && isActiveMemberByEmail(request.resource.data.bossUid);
+        && (
+          isActiveMemberByEmail(request.resource.data.bossUid)
+          || (
+            request.resource.data.email is string
+            && isActiveMemberByEmailKey(request.resource.data.email, request.resource.data.bossUid)
+          )
+        );
       allow delete: if request.auth != null && resource.data.bossUid == request.auth.uid;
     }
 

@@ -65,30 +65,35 @@ export async function probeFirestoreConnectivityDetailed(
 
   try {
     await authUser.getIdToken(true);
+    if (!authUser.email?.trim()) {
+      await authUser.reload();
+      await authUser.getIdToken(true);
+    }
   } catch {
     return { ok: false, reason: 'Token de autenticação expirado. Entre novamente com Google.' };
   }
 
-  const uids = [...new Set([ownerUid?.trim(), authUser.uid].filter(Boolean))] as string[];
+  const targetUid = ownerUid?.trim() || authUser.uid;
   let lastReason = 'Não foi possível conectar ao Firebase.';
 
-  for (const uid of uids) {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        const ref = doc(db, 'users', uid, 'cadastros', CONNECTIVITY_PROBE_DOC_ID);
-        await getDoc(ref);
-        return { ok: true };
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
-          lastReason = 'Permissão negada na nuvem. Verifique se sua conta está autorizada.';
-        } else if (/offline|unavailable|network|failed/i.test(msg)) {
-          lastReason = 'Sem conexão com o Firebase. Verifique a internet e tente novamente.';
-        } else if (msg.trim()) {
-          lastReason = msg;
-        }
-        if (attempt < 2) await sleep(400 * (attempt + 1));
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const ref = doc(db, 'users', targetUid, 'cadastros', CONNECTIVITY_PROBE_DOC_ID);
+      await getDoc(ref);
+      return { ok: true };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
+        lastReason =
+          targetUid !== authUser.uid
+            ? 'Permissão negada na nuvem. Confirme que entrou com o e-mail autorizado pelo chefe.'
+            : 'Permissão negada na nuvem. Verifique se sua conta está autorizada.';
+      } else if (/offline|unavailable|network|failed/i.test(msg)) {
+        lastReason = 'Sem conexão com o Firebase. Verifique a internet e tente novamente.';
+      } else if (msg.trim()) {
+        lastReason = msg;
       }
+      if (attempt < 2) await sleep(400 * (attempt + 1));
     }
   }
 

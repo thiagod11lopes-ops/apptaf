@@ -19,13 +19,21 @@ export async function prepareSyncSession(
 ): Promise<SyncSessionInfo> {
   const access = await resolveMemberAccess(loginUid, email);
   if (access.isAuthorizedMember && email) {
-    await registerAuthorizedMemberLogin(access.dataOwnerUid, email, loginUid);
+    const registered = await registerAuthorizedMemberLogin(access.dataOwnerUid, email, loginUid);
+    if (!registered.ok) {
+      throw new Error(
+        registered.error ??
+          'Não foi possível registrar seu acesso à nuvem do chefe. Entre novamente com o e-mail autorizado.',
+      );
+    }
   }
   await applyTeamWipeIfNeeded(access.dataOwnerUid, loginUid);
   await migrateDeviceDataOnLogin(access.dataOwnerUid);
   await migrateLegacyToDexie(access.dataOwnerUid);
   setAuthUidState(loginUid, access.dataOwnerUid, true);
-  await pullAuthorizedEmailsToLocal(access.dataOwnerUid);
+  if (!access.isAuthorizedMember) {
+    await pullAuthorizedEmailsToLocal(access.dataOwnerUid);
+  }
   return {
     dataOwnerUid: access.dataOwnerUid,
     isAuthorizedMember: access.isAuthorizedMember,

@@ -12,6 +12,12 @@ export async function pullAuthorizedEmailsToLocal(ownerUid: string): Promise<voi
 }
 
 export async function pushPendingAuthorizedEmails(ownerUid: string): Promise<string[]> {
+  const { getCachedLoginUid } = await import('../../services/firebase/authUid');
+  const loginUid = getCachedLoginUid();
+  if (loginUid && loginUid !== ownerUid) {
+    return [];
+  }
+
   const errors: string[] = [];
   const pending = await authorizedEmailRepository.listPendingSync(ownerUid);
   const db = getTafDatabase();

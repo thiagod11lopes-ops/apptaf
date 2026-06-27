@@ -10,7 +10,7 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { getFirestoreDb } from '../../config/firebase';
+import { getFirestoreDb, getFirebaseAuth } from '../../config/firebase';
 import { isValidAuthEmail, normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
 import { userAuthorizedEmailsPath } from './firestorePaths';
 
@@ -70,17 +70,27 @@ export async function resolveMemberAccess(
   return { dataOwnerUid: loginUid, isAuthorizedMember: false };
 }
 
-/** Registra o UID Firebase do membro autorizado (acesso à nuvem do chefe). Não bloqueia login se falhar. */
+/** Registra o UID Firebase do membro autorizado (acesso à nuvem do chefe). */
 export async function registerAuthorizedMemberLogin(
   bossUid: string,
   email: string,
   memberUid: string,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   const db = getFirestoreDb();
-  if (!db || !memberUid.trim() || memberUid === bossUid) return;
+  if (!db || !memberUid.trim() || memberUid === bossUid) {
+    return { ok: true };
+  }
 
   const emailKey = normalizeAuthEmail(email);
   try {
+    const auth = getFirebaseAuth()?.currentUser;
+    if (auth) {
+      await auth.getIdToken(true);
+      if (!auth.email?.trim()) {
+        await auth.reload();
+      }
+    }
+
     await setDoc(
       doc(db, MEMBER_LOOKUP_COLLECTION, emailKey),
       {
@@ -100,8 +110,16 @@ export async function registerAuthorizedMemberLogin(
       },
       { merge: true },
     );
-  } catch {
-    // Regras do Firestore ainda não publicadas ou offline — login segue normalmente.
+
+    return { ok: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      error: /permission|permiss[aã]o|denied/i.test(msg)
+        ? 'Permissão negada na nuvem. Use o mesmo e-mail autorizado pelo chefe.'
+        : msg,
+    };
   }
 }
 

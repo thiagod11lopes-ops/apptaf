@@ -21,7 +21,13 @@ import {
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
-import { setAuthUidState, waitForAuthenticatedUid, getCachedDataOwnerUid, getCachedLoginUid, hydrateAuthUidFromIndexedDb } from '../services/firebase/authUid';
+import {
+  setAuthUidState,
+  waitForAuthenticatedUid,
+  getCachedDataOwnerUid,
+  getCachedLoginUid,
+  hydrateAuthUidFromIndexedDb,
+} from '../services/firebase/authUid';
 import {
   clearPersistedAuthProfile,
   persistAuthProfile,
@@ -30,6 +36,7 @@ import {
 import { clearMemoryCloudCache } from '../services/cloudDataCache';
 import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { syncManager } from '../offline-first/sync/SyncManager';
+import { resolveLocalSessionAfterLogin } from '../offline-first/sync/syncSessionPrepare';
 import { systemState } from '../offline-first/sync/SystemState';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
@@ -42,6 +49,8 @@ type AuthContextType = {
   /** true enquanto resolve acesso, migração local e init da sessão após Google. */
   isSessionLoading: boolean;
   firebaseEnabled: boolean;
+  /** UID dono dos dados locais (chefe quando membro autorizado). */
+  dataOwnerUid: string | null;
   /** Chefe da conta — pode gerenciar e-mails autorizados e carregar planilha. */
   isBoss: boolean;
   /** Entrou com e-mail autorizado pelo chefe — usa banco do chefe. */
@@ -58,32 +67,58 @@ function hydrateInitialUser(): AppAuthUser | null {
   return readPersistedAuthProfile();
 }
 
-function resolveMemberFlag(mappedUid: string): boolean {
-  const persistedOwner = getCachedDataOwnerUid();
-  return persistedOwner != null && persistedOwner !== mappedUid;
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppAuthUser | null>(hydrateInitialUser);
   const [authReady, setAuthReady] = useState(false);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
   const [isAuthorizedMember, setIsAuthorizedMember] = useState(false);
+  const [dataOwnerUid, setDataOwnerUid] = useState<string | null>(() => getCachedDataOwnerUid());
   const firebaseEnabled = isFirebaseConfigured();
   const authInitializedRef = useRef(false);
 
-  const applySignedInAppUser = useCallback((mapped: AppAuthUser) => {
+  const applySignedInAppUserFallback = useCallback((mapped: AppAuthUser) => {
     const persistedOwner = getCachedDataOwnerUid();
-    const dataOwnerUid = persistedOwner ?? mapped.uid;
+    const ownerUid = persistedOwner ?? mapped.uid;
     setUser(mapped);
-    setIsAuthorizedMember(resolveMemberFlag(mapped.uid));
-    setAuthUidState(mapped.uid, dataOwnerUid, true);
+    setDataOwnerUid(ownerUid);
+    setIsAuthorizedMember(ownerUid !== mapped.uid);
+    setAuthUidState(mapped.uid, ownerUid, true);
     persistAuthProfile(mapped);
     clearPendingSyncResume();
     setAuthReady(true);
   }, []);
 
-  const applySignedInAppUserRef = useRef(applySignedInAppUser);
-  applySignedInAppUserRef.current = applySignedInAppUser;
+  const finalizeAuthenticatedSession = useCallback(
+    async (mapped: AppAuthUser) => {
+      setIsSessionLoading(true);
+      try {
+        await hydrateAuthUidFromIndexedDb();
+        const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
+        setUser(mapped);
+        setDataOwnerUid(session.dataOwnerUid);
+        setIsAuthorizedMember(session.isAuthorizedMember);
+        persistAuthProfile(mapped);
+        clearPendingSyncResume();
+        setAuthReady(true);
+        notifyDataChanged();
+
+        if (firebaseEnabled && getFirebaseAuth()?.currentUser) {
+          await syncManager.bindSession(session.dataOwnerUid);
+          syncManager.setAuthAvailable(true);
+          await syncManager.refreshCloudDiff();
+        }
+      } catch (error) {
+        console.warn('[auth] finalizeAuthenticatedSession falhou:', error);
+        applySignedInAppUserFallback(mapped);
+      } finally {
+        setIsSessionLoading(false);
+      }
+    },
+    [applySignedInAppUserFallback, firebaseEnabled],
+  );
+
+  const finalizeAuthenticatedSessionRef = useRef(finalizeAuthenticatedSession);
+  finalizeAuthenticatedSessionRef.current = finalizeAuthenticatedSession;
 
   useEffect(() => {
     const auth = getFirebaseAuth();
@@ -96,12 +131,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     const applySignedIn = (fbUser: User): void => {
-      applySignedInAppUserRef.current(mapFirebaseUser(fbUser));
+      void finalizeAuthenticatedSessionRef.current(mapFirebaseUser(fbUser));
     };
 
     const applySignedOut = (): void => {
       setUser(null);
       setIsAuthorizedMember(false);
+      setDataOwnerUid(null);
       setAuthUidState(null, null, true);
       clearPersistedAuthProfile();
       setAuthReady(true);
@@ -120,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       await hydrateAuthUidFromIndexedDb();
+      setDataOwnerUid(getCachedDataOwnerUid());
       const redirectUser =
         Platform.OS === 'web' ? await startFirebaseRedirectSignIn() : null;
       await auth.authStateReady();
@@ -130,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         applySignedIn(auth.currentUser);
         clearFirebaseAuthParamsFromWindow();
       } else if (redirectUser) {
-        applySignedInAppUserRef.current(redirectUser);
+        void finalizeAuthenticatedSessionRef.current(redirectUser);
       } else if (isFirebaseAuthRedirectReturn()) {
         setAuthReady(true);
       } else if (getCachedDataOwnerUid()) {
@@ -144,13 +181,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       if (fbUser) {
-        setIsSessionLoading(true);
-        try {
-          applySignedIn(fbUser);
-          clearFirebaseAuthParamsFromWindow();
-        } finally {
-          setIsSessionLoading(false);
-        }
+        applySignedIn(fbUser);
+        clearFirebaseAuthParamsFromWindow();
         return;
       }
 
@@ -175,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (idToken) {
       const signedIn = await signInWithGoogleCredential(idToken);
-      applySignedInAppUser(signedIn);
+      await finalizeAuthenticatedSession(signedIn);
       await waitForAuthenticatedUid(20_000);
       return false;
     }
@@ -185,16 +217,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await signInWithGoogleWeb();
     if (result.mode === 'redirect') return true;
     if (result.mode === 'popup') {
-      applySignedInAppUser(result.user);
+      await finalizeAuthenticatedSession(result.user);
     }
     await waitForAuthenticatedUid(20_000);
     return false;
-  }, [applySignedInAppUser, firebaseEnabled]);
+  }, [finalizeAuthenticatedSession, firebaseEnabled]);
 
   const syncLocalSessionFlags = useCallback(() => {
     const loginUid = getCachedLoginUid();
     const ownerUid = getCachedDataOwnerUid();
     if (!loginUid || !ownerUid) return;
+    setDataOwnerUid(ownerUid);
     setIsAuthorizedMember(ownerUid !== loginUid);
   }, []);
 
@@ -202,6 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOutFirebase();
     setUser(null);
     setIsAuthorizedMember(false);
+    setDataOwnerUid(null);
     setAuthUidState(null, null, true);
     clearPersistedAuthProfile();
     clearMemoryCloudCache();
@@ -222,13 +256,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authReady,
       isSessionLoading,
       firebaseEnabled,
+      dataOwnerUid,
       isBoss,
       isAuthorizedMember,
       signInWithGoogle,
       logout,
       syncLocalSessionFlags,
     }),
-    [user, authReady, isSessionLoading, firebaseEnabled, isBoss, isAuthorizedMember, signInWithGoogle, logout, syncLocalSessionFlags],
+    [
+      user,
+      authReady,
+      isSessionLoading,
+      firebaseEnabled,
+      dataOwnerUid,
+      isBoss,
+      isAuthorizedMember,
+      signInWithGoogle,
+      logout,
+      syncLocalSessionFlags,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

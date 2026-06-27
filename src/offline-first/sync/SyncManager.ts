@@ -9,6 +9,7 @@ import { syncLogger } from './SyncLogger';
 import { createLocalBackup, restoreLocalBackup } from './localBackup';
 import { detectClockDrift, type ClockDriftResult } from './clockDrift';
 import { prepareSyncSession } from './syncSessionPrepare';
+import { registerAuthorizedMemberLogin } from './firebase/FirebaseGateway';
 import { probeFirestoreConnectivityDetailed } from './firebase/FirebaseGateway';
 import type { SyncAuditEntry } from './syncAudit';
 import { buildSyncCounters, getLastSyncTimestamp } from './syncCounters';
@@ -284,6 +285,14 @@ function setPhase(phase: SyncUiPhase): void {
   notifyListeners();
 }
 
+async function ensureMemberCloudAccess(): Promise<void> {
+  const loginUid = getCachedLoginUid();
+  const ownerUid = getCachedDataOwnerUid();
+  const email = getFirebaseAuth()?.currentUser?.email;
+  if (!loginUid || !ownerUid || loginUid === ownerUid || !email?.trim()) return;
+  await registerAuthorizedMemberLogin(ownerUid, email, loginUid);
+}
+
 async function refreshCloudQueueEstimate(force = false): Promise<void> {
   const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
   if (uid === ANONYMOUS_OWNER || !syncAuthAvailable || syncInFlight) return;
@@ -293,6 +302,7 @@ async function refreshCloudQueueEstimate(force = false): Promise<void> {
 
   queueEstimateInFlight = true;
   try {
+    await ensureMemberCloudAccess();
     syncEngine.bindOwner(uid);
     const estimate = await estimateSyncQueueCounts(uid);
     if (syncInFlight) return;
@@ -302,8 +312,11 @@ async function refreshCloudQueueEstimate(force = false): Promise<void> {
       pendingDownloads: estimate.pendingDownloads,
     };
     notifyListeners();
-  } catch {
-    // Mantém contadores locais se a estimativa falhar.
+  } catch (error) {
+    await syncLogger.warn(
+      'sync-manager',
+      `Estimativa nuvem falhou: ${error instanceof Error ? error.message : String(error)}`,
+    );
   } finally {
     queueEstimateInFlight = false;
   }

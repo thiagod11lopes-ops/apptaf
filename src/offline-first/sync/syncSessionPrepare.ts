@@ -12,12 +12,33 @@ export type SyncSessionInfo = {
   isAuthorizedMember: boolean;
 };
 
+/**
+ * Resolve chefe/membro, registra acesso na nuvem e prepara IndexedDB local.
+ * Deve rodar no login — não apenas ao sincronizar.
+ */
+export async function resolveLocalSessionAfterLogin(
+  loginUid: string,
+  email: string | null | undefined,
+): Promise<SyncSessionInfo> {
+  const access = await resolveMemberAccess(loginUid, email);
+  if (access.isAuthorizedMember && email?.trim()) {
+    const registered = await registerAuthorizedMemberLogin(access.dataOwnerUid, email, loginUid);
+    if (!registered.ok) {
+      console.warn('[auth] registerAuthorizedMemberLogin no login:', registered.error);
+    }
+  }
+  await migrateDeviceDataOnLogin(access.dataOwnerUid);
+  await migrateLegacyToDexie(access.dataOwnerUid);
+  setAuthUidState(loginUid, access.dataOwnerUid, true);
+  return access;
+}
+
 /** Prepara sessão de sync: permissões, migrações, wipe remoto, e-mails autorizados. */
 export async function prepareSyncSession(
   loginUid: string,
   email: string | null,
 ): Promise<SyncSessionInfo> {
-  const access = await resolveMemberAccess(loginUid, email);
+  const access = await resolveLocalSessionAfterLogin(loginUid, email);
   if (access.isAuthorizedMember && email) {
     const registered = await registerAuthorizedMemberLogin(access.dataOwnerUid, email, loginUid);
     if (!registered.ok) {
@@ -28,14 +49,8 @@ export async function prepareSyncSession(
     }
   }
   await applyTeamWipeIfNeeded(access.dataOwnerUid, loginUid);
-  await migrateDeviceDataOnLogin(access.dataOwnerUid);
-  await migrateLegacyToDexie(access.dataOwnerUid);
-  setAuthUidState(loginUid, access.dataOwnerUid, true);
   if (!access.isAuthorizedMember) {
     await pullAuthorizedEmailsToLocal(access.dataOwnerUid);
   }
-  return {
-    dataOwnerUid: access.dataOwnerUid,
-    isAuthorizedMember: access.isAuthorizedMember,
-  };
+  return access;
 }

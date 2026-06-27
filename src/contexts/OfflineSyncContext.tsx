@@ -67,7 +67,7 @@ const verifyAuthenticatedOnly: EnsureAuthenticatedFn = async () => {
 };
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { authReady, firebaseEnabled, isAuthenticated, user } = useAuth();
+  const { authReady, firebaseEnabled, isAuthenticated, user, dataOwnerUid } = useAuth();
   const [connectivity, setConnectivity] = useState<ConnectivityState>(getConnectivityState());
   const [managerState, setManagerState] = useState<SyncManagerState>(getSyncManagerState);
 
@@ -83,14 +83,17 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       const hasFirebaseUser = Boolean(getFirebaseAuth()?.currentUser);
       syncManager.setAuthAvailable(isAuthenticated && hasFirebaseUser);
 
-      const ownerUid = getCachedDataOwnerUid();
+      const ownerUid = dataOwnerUid ?? getCachedDataOwnerUid();
       if (ownerUid) {
         await syncManager.bindSession(ownerUid);
+        if (hasFirebaseUser && isAuthenticated) {
+          await syncManager.refreshCloudDiff();
+        }
       } else {
         await syncManager.refreshPending();
       }
     })();
-  }, [authReady, firebaseEnabled, isAuthenticated, user?.uid]);
+  }, [authReady, firebaseEnabled, isAuthenticated, user?.uid, dataOwnerUid]);
 
   const hasValidSession =
     authReady && isAuthenticated && Boolean(getFirebaseAuth()?.currentUser);

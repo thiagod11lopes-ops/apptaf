@@ -106,19 +106,23 @@ export function CloudUserLoadIndicator({
       ) : null}
       {hint || flash || showCountdown ? (
         <View style={styles.hintBlock}>
-          {hint ? (
+          {hint || showCountdown ? (
             <View style={styles.hintRow}>
-              <Text
-                style={[
-                  styles.hint,
-                  {
-                    color: receivingFromCloudOnly && !loading ? theme.gain : theme.textMuted,
-                    fontWeight: receivingFromCloudOnly && !loading ? '700' : '600',
-                  },
-                ]}
-              >
-                {hint}
-              </Text>
+              {hint ? (
+                <Text
+                  style={[
+                    styles.hint,
+                    {
+                      color: receivingFromCloudOnly && !loading ? theme.gain : theme.textMuted,
+                      fontWeight: receivingFromCloudOnly && !loading ? '700' : '600',
+                    },
+                  ]}
+                >
+                  {hint}
+                </Text>
+              ) : (
+                <Text style={[styles.hint, { color: theme.textMuted }]}>Modo offline</Text>
+              )}
               {showCountdown ? (
                 <View style={[styles.countdownPill, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
                   <Text style={[styles.countdownText, { color: theme.primary }]}>

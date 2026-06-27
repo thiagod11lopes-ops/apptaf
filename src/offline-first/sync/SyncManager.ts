@@ -138,15 +138,13 @@ const CLOUD_DIFF_FLASH_NEEDS_SYNC_MS = 10_000;
 const listeners = new Set<Listener>();
 
 function buildCloudDiffWatch(): { countdownSec: number | null; flashMessage: string | null } {
-  const active =
-    syncAuthAvailable &&
-    mode === 'OFFLINE' &&
-    !syncInFlight &&
-    connectivityMonitor.canSync();
+  const watchEligible = syncAuthAvailable && mode === 'OFFLINE' && !syncInFlight;
   return {
     countdownSec:
-      active && !cloudDiffFlashMessage && !cloudDiffCompareInFlight ? cloudDiffCountdownSec : null,
-    flashMessage: active ? cloudDiffFlashMessage : null,
+      watchEligible && !cloudDiffFlashMessage && !cloudDiffCompareInFlight
+        ? cloudDiffCountdownSec
+        : null,
+    flashMessage: watchEligible ? cloudDiffFlashMessage : null,
   };
 }
 
@@ -770,6 +768,9 @@ export const syncManager = {
     await loadLastSyncFromAudit();
     await refreshPendingSummary();
     scheduleCloudQueueEstimate();
+    if (syncAuthAvailable) {
+      startCloudDiffWatch();
+    }
     notifyListeners();
   },
 

@@ -124,6 +124,8 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
               syncing={syncing}
               receivingFromCloudOnly={receivingFromCloudOnly}
               statusHint={statusHint}
+              cloudDiffCountdownSec={cloudDiffCountdownSec}
+              cloudDiffFlashMessage={cloudDiffFlashMessage}
             />
           </View>
         ) : null}

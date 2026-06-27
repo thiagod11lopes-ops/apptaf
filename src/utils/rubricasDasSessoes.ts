@@ -13,7 +13,7 @@ export async function carregarRubricasDasSessoesPorNip(): Promise<Map<string, Ru
   const sessoes = await getAllSessoesAplicacao();
 
   for (const sessao of sessoes) {
-    for (const r of sessao.resultados) {
+    for (const r of sessao.resultados ?? []) {
       const svg = r.rubricaCandidatoSvg?.trim();
       if (!svg) continue;
       const key = nipDigitos(r.nip);

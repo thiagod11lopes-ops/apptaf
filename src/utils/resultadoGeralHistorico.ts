@@ -136,7 +136,7 @@ export function agregarHistoricoPorParticipante(
 
   for (const sessao of ordenadas) {
     const tipo = sessao.tipoProva;
-    for (const r of sessao.resultados) {
+    for (const r of sessao.resultados ?? []) {
       const id = idParticipante(r, cadastros);
       if (!id) continue;
 

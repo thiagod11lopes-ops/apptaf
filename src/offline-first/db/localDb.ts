@@ -10,6 +10,7 @@ import { decideLastWriteWins } from '../sync/lastWriteWins';
 import { syncQueue } from '../sync/SyncQueue';
 import { syncLogger } from '../sync/SyncLogger';
 import { syncStatusForOperation } from '../sync/syncStatus';
+import { normalizeSessaoShape } from '../../utils/sessaoLight';
 
 const ANONYMOUS_OWNER = '__local__';
 
@@ -196,7 +197,7 @@ export async function putCadastroRecord(record: CadastroRecord): Promise<void> {
 export async function putSessaoRecord(record: SessaoRecord): Promise<void> {
   const db = getTafDatabase();
   if (!db) return;
-  await db.sessoes.put(record);
+  await db.sessoes.put({ ...record, ...normalizeSessaoShape(record) });
 }
 
 export async function putAplicadorRecord(record: AplicadorRecord): Promise<void> {
@@ -214,7 +215,7 @@ export async function importCadastroRecord(record: CadastroRecord): Promise<void
 export async function importSessaoRecord(record: SessaoRecord): Promise<void> {
   const db = getTafDatabase();
   if (!db) return;
-  await db.sessoes.put({ ...record, syncStatus: 'synced' });
+  await db.sessoes.put({ ...record, ...normalizeSessaoShape(record), syncStatus: 'synced' });
 }
 
 export async function getCadastroRaw(id: string): Promise<CadastroRecord | undefined> {

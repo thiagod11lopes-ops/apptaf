@@ -7,21 +7,38 @@ export type SessaoResultadoRubrica = {
   rubricaCandidatoSvg: string;
 };
 
+/** Garante campos mínimos — docs light/tombstone no Firestore podem omitir resultados. */
+export function normalizeSessaoShape(
+  sessao: Partial<SessaoAplicacaoTaf> & { id: string },
+): SessaoAplicacaoTaf {
+  return {
+    id: sessao.id,
+    criadoEm: sessao.criadoEm ?? '',
+    dataAplicacao: sessao.dataAplicacao ?? '',
+    tipoProva: sessao.tipoProva ?? 'corrida',
+    resultados: Array.isArray(sessao.resultados) ? sessao.resultados : [],
+    ...(sessao.aplicadorAssinatura ? { aplicadorAssinatura: sessao.aplicadorAssinatura } : {}),
+    ...(sessao.updatedAt != null ? { updatedAt: sessao.updatedAt } : {}),
+  };
+}
+
 export function extractSessaoRubricas(sessao: SessaoAplicacaoTaf): SessaoResultadoRubrica[] {
   const out: SessaoResultadoRubrica[] = [];
-  for (const r of sessao.resultados) {
+  const normalized = normalizeSessaoShape(sessao);
+  for (const r of normalized.resultados) {
     const svg = r.rubricaCandidatoSvg?.trim();
     if (!svg) continue;
-    const prova = r.prova ?? sessao.tipoProva;
+    const prova = r.prova ?? normalized.tipoProva;
     out.push({ nip: r.nip, prova, rubricaCandidatoSvg: svg });
   }
   return out;
 }
 
 export function toSessaoLight(sessao: SessaoAplicacaoTaf): SessaoAplicacaoTaf {
+  const base = normalizeSessaoShape(sessao);
   return {
-    ...sessao,
-    resultados: sessao.resultados.map((r) => {
+    ...base,
+    resultados: base.resultados.map((r) => {
       const { rubricaCandidatoSvg: _r, ...rest } = r;
       return rest as ResultadoCorridaItem;
     }),

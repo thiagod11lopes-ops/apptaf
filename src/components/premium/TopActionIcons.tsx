@@ -62,13 +62,28 @@ export function TopActionIcons({
         <PressableScale
           onPress={onSyncPress}
           style={[btnStyle, syncPendingBadge > 0 && { borderColor: theme.primary }]}
-          accessibilityLabel="Sincronizar com a nuvem"
+          accessibilityLabel={
+            syncPendingBadge > 0
+              ? `Sincronizar com a nuvem, ${syncPendingBadge} item(ns) na fila`
+              : 'Sincronizar com a nuvem'
+          }
         >
           <Save size={iconSize} color={syncPendingBadge > 0 ? theme.primary : tabInk} strokeWidth={strokeWidth} />
           {syncPendingBadge > 0 ? (
-            <View style={[styles.badge, { backgroundColor: theme.primary }]}>
+            <View
+              style={[
+                styles.badge,
+                {
+                  backgroundColor: theme.loss,
+                  borderColor: theme.cardBg,
+                },
+                Platform.OS === 'web'
+                  ? ({ boxShadow: '0 2px 8px rgba(220,38,38,0.45)' } as object)
+                  : { elevation: 4 },
+              ]}
+            >
               <Text style={styles.badgeText}>
-                {syncPendingBadge > 99 ? '99+' : syncPendingBadge}
+                {syncPendingBadge > 99 ? '99+' : syncPendingBadge.toLocaleString('pt-BR')}
               </Text>
             </View>
           ) : null}
@@ -144,19 +159,21 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 3,
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   badgeText: {
     color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
     lineHeight: 12,
+    fontVariant: ['tabular-nums'],
   },
 });

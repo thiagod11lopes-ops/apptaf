@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, Image, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,9 +28,15 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { user, authReady, isAuthenticated, firebaseEnabled } = useAuth();
-  const { pendingCount } = useOfflineSyncState();
+  const { syncUi } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
+
+  const syncQueueBadge = useMemo(() => {
+    const uploads = syncUi.counters.pendingUploads ?? 0;
+    const downloads = syncUi.counters.pendingDownloads ?? 0;
+    return uploads + downloads;
+  }, [syncUi.counters.pendingUploads, syncUi.counters.pendingDownloads]);
 
   const recarregarResumo = useCallback(async () => {
     if (!authReady) return;
@@ -70,7 +76,7 @@ export default function HomeScreen() {
           activeRoute="Home"
           inline
           onSyncPress={firebaseEnabled ? () => setSyncModalOpen(true) : undefined}
-          syncPendingBadge={pendingCount}
+          syncPendingBadge={syncQueueBadge}
         />
 
         <View style={styles.statsGrid}>

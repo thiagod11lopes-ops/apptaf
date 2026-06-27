@@ -17,6 +17,7 @@ import {
   signInWithGoogleWeb,
   startFirebaseRedirectSignIn,
   isFirebaseAuthRedirectReturn,
+  clearFirebaseAuthParamsFromWindow,
   signOutFirebase,
   type AppAuthUser,
 } from '../services/firebase/googleAuth';
@@ -57,6 +58,11 @@ function hydrateInitialUser(): AppAuthUser | null {
   return readPersistedAuthProfile();
 }
 
+function resolveMemberFlag(mappedUid: string): boolean {
+  const persistedOwner = getCachedDataOwnerUid();
+  return persistedOwner != null && persistedOwner !== mappedUid;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppAuthUser | null>(hydrateInitialUser);
   const [authReady, setAuthReady] = useState(false);
@@ -64,6 +70,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthorizedMember, setIsAuthorizedMember] = useState(false);
   const firebaseEnabled = isFirebaseConfigured();
   const authInitializedRef = useRef(false);
+
+  const applySignedInAppUser = useCallback((mapped: AppAuthUser) => {
+    const persistedOwner = getCachedDataOwnerUid();
+    const dataOwnerUid = persistedOwner ?? mapped.uid;
+    setUser(mapped);
+    setIsAuthorizedMember(resolveMemberFlag(mapped.uid));
+    setAuthUidState(mapped.uid, dataOwnerUid, true);
+    persistAuthProfile(mapped);
+    clearPendingSyncResume();
+    setAuthReady(true);
+  }, []);
+
+  const applySignedInAppUserRef = useRef(applySignedInAppUser);
+  applySignedInAppUserRef.current = applySignedInAppUser;
 
   useEffect(() => {
     const auth = getFirebaseAuth();
@@ -76,16 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     const applySignedIn = (fbUser: User): void => {
-      const mapped = mapFirebaseUser(fbUser);
-      const persistedOwner = getCachedDataOwnerUid();
-      const dataOwnerUid = persistedOwner ?? mapped.uid;
-      const isMember = persistedOwner != null && persistedOwner !== mapped.uid;
-      setUser(mapped);
-      setIsAuthorizedMember(isMember);
-      setAuthUidState(mapped.uid, dataOwnerUid, true);
-      persistAuthProfile(mapped);
-      clearPendingSyncResume();
-      setAuthReady(true);
+      applySignedInAppUserRef.current(mapFirebaseUser(fbUser));
     };
 
     const applySignedOut = (): void => {
@@ -97,20 +108,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void systemState.setOfflineMode();
     };
 
+    const confirmSignedOut = (): void => {
+      void (async () => {
+        await auth.authStateReady();
+        if (cancelled || auth.currentUser) return;
+        if (isFirebaseAuthRedirectReturn()) return;
+        setIsSessionLoading(false);
+        applySignedOut();
+      })();
+    };
+
     void (async () => {
-      if (Platform.OS === 'web') {
-        await startFirebaseRedirectSignIn();
-      }
+      const redirectUser =
+        Platform.OS === 'web' ? await startFirebaseRedirectSignIn() : null;
       await auth.authStateReady();
       authInitializedRef.current = true;
       if (cancelled) return;
 
       if (auth.currentUser) {
         applySignedIn(auth.currentUser);
-      } else if (!isFirebaseAuthRedirectReturn()) {
-        applySignedOut();
-      } else {
+        clearFirebaseAuthParamsFromWindow();
+      } else if (redirectUser) {
+        applySignedInAppUserRef.current(redirectUser);
+      } else if (isFirebaseAuthRedirectReturn()) {
         setAuthReady(true);
+      } else {
+        applySignedOut();
       }
     })();
 
@@ -121,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsSessionLoading(true);
         try {
           applySignedIn(fbUser);
+          clearFirebaseAuthParamsFromWindow();
         } finally {
           setIsSessionLoading(false);
         }
@@ -131,8 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setIsSessionLoading(false);
-      applySignedOut();
+      confirmSignedOut();
     });
 
     return () => {
@@ -149,7 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (idToken) {
       const signedIn = await signInWithGoogleCredential(idToken);
-      persistAuthProfile(signedIn);
+      applySignedInAppUser(signedIn);
       await waitForAuthenticatedUid(20_000);
       return false;
     }
@@ -159,11 +182,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await signInWithGoogleWeb();
     if (result.mode === 'redirect') return true;
     if (result.mode === 'popup') {
-      persistAuthProfile(result.user);
+      applySignedInAppUser(result.user);
     }
     await waitForAuthenticatedUid(20_000);
     return false;
-  }, [firebaseEnabled]);
+  }, [applySignedInAppUser, firebaseEnabled]);
 
   const syncLocalSessionFlags = useCallback(() => {
     const loginUid = getCachedLoginUid();

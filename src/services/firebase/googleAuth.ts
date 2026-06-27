@@ -197,6 +197,15 @@ export function isFirebaseAuthRedirectReturn(): boolean {
   return params.has('apiKey') || params.has('authType') || params.has('code');
 }
 
+/** Remove parâmetros do redirect Firebase da URL após login concluído. */
+export function clearFirebaseAuthParamsFromWindow(): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  if (!isFirebaseAuthRedirectReturn()) return;
+  const url = new URL(window.location.href);
+  url.search = '';
+  window.history.replaceState({}, document.title, `${url.pathname}${url.hash}`);
+}
+
 async function resolveGoogleRedirectSignIn(): Promise<AppAuthUser | null> {
   if (Platform.OS !== 'web') return null;
   const auth = getFirebaseAuth();
@@ -205,6 +214,7 @@ async function resolveGoogleRedirectSignIn(): Promise<AppAuthUser | null> {
   try {
     const result = await getRedirectResult(auth);
     if (!result?.user) return null;
+    clearFirebaseAuthParamsFromWindow();
     return mapFirebaseUser(result.user);
   } catch (error) {
     console.warn('[auth] getRedirectResult falhou:', error);

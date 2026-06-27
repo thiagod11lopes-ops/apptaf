@@ -3,6 +3,8 @@ import {
   getAuth,
   initializeAuth,
   getReactNativePersistence,
+  setPersistence,
+  browserLocalPersistence,
   type Auth,
 } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
@@ -69,7 +71,9 @@ export function getFirebaseApp(): FirebaseApp | null {
 
 function createAuth(firebaseApp: FirebaseApp): Auth {
   if (Platform.OS === 'web') {
-    return getAuth(firebaseApp);
+    const instance = getAuth(firebaseApp);
+    void setPersistence(instance, browserLocalPersistence).catch(() => undefined);
+    return instance;
   }
   try {
     return initializeAuth(firebaseApp, {

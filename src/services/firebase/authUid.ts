@@ -1,6 +1,7 @@
 import { getFirebaseAuth } from '../../config/firebase';
 
 const PERSISTED_OWNER_KEY = 'taf:lastDataOwnerUid';
+const PERSISTED_LOGIN_KEY = 'taf:lastLoginUid';
 
 /**
  * UID do login Firebase e UID dono dos dados (chefe quando membro autorizado).
@@ -34,6 +35,30 @@ function clearPersistedDataOwnerUid(): void {
   }
 }
 
+function persistLoginUid(uid: string): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(PERSISTED_LOGIN_KEY, uid);
+  } catch {
+    // quota / modo privado
+  }
+}
+
+function readPersistedLoginUid(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  const v = localStorage.getItem(PERSISTED_LOGIN_KEY);
+  return v?.trim() || null;
+}
+
+function clearPersistedLoginUid(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(PERSISTED_LOGIN_KEY);
+  } catch {
+    // silencioso
+  }
+}
+
 function notifyWaiters() {
   for (const waiter of waiters) {
     waiter(dataOwnerUid);
@@ -53,8 +78,10 @@ export function setAuthUidState(
     loginUid = nextLoginUid;
     dataOwnerUid = nextDataOwnerUid ?? nextLoginUid;
     persistDataOwnerUid(dataOwnerUid);
+    persistLoginUid(nextLoginUid);
   } else {
     loginUid = null;
+    clearPersistedLoginUid();
     dataOwnerUid = readPersistedDataOwnerUid() ?? dataOwnerUid;
   }
   authReady = ready;
@@ -70,7 +97,7 @@ export function clearPersistedStorageOwner(): void {
 }
 
 export function getCachedLoginUid(): string | null {
-  return loginUid ?? resolveUidFromFirebase();
+  return loginUid ?? resolveUidFromFirebase() ?? readPersistedLoginUid();
 }
 
 export function getCachedDataOwnerUid(): string | null {

@@ -189,7 +189,15 @@ export async function signInWithGoogleWeb(): Promise<GoogleWebSignInResult> {
 }
 
 /** Fallback: retorno do redirect Firebase (popup bloqueado no desktop). */
-export async function completeGoogleRedirectSignIn(): Promise<AppAuthUser | null> {
+let redirectSignInPromise: Promise<AppAuthUser | null> | null = null;
+
+export function isFirebaseAuthRedirectReturn(): boolean {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has('apiKey') || params.has('authType') || params.has('code');
+}
+
+async function resolveGoogleRedirectSignIn(): Promise<AppAuthUser | null> {
   if (Platform.OS !== 'web') return null;
   const auth = getFirebaseAuth();
   if (!auth) return null;
@@ -202,6 +210,19 @@ export async function completeGoogleRedirectSignIn(): Promise<AppAuthUser | null
     console.warn('[auth] getRedirectResult falhou:', error);
     return null;
   }
+}
+
+/** Inicia cedo — getRedirectResult só pode ser consumido uma vez por redirect. */
+export function startFirebaseRedirectSignIn(): Promise<AppAuthUser | null> {
+  if (Platform.OS !== 'web') return Promise.resolve(null);
+  if (!redirectSignInPromise) {
+    redirectSignInPromise = resolveGoogleRedirectSignIn();
+  }
+  return redirectSignInPromise;
+}
+
+export async function completeGoogleRedirectSignIn(): Promise<AppAuthUser | null> {
+  return startFirebaseRedirectSignIn();
 }
 
 export function extractGoogleIdTokenFromAuthResponse(response: AuthSessionResult | null): string | null {

@@ -157,10 +157,22 @@ function isPopupBlockedError(error: unknown): boolean {
   );
 }
 
+/** Em produção (GitHub Pages etc.) COOP bloqueia popup Firebase — usar redirect. */
+function shouldPreferGoogleRedirectOnWeb(): boolean {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host !== 'localhost' && host !== '127.0.0.1';
+}
+
 /** Login web no desktop (Chrome/Firefox) via popup Firebase. */
 export async function signInWithGoogleWeb(): Promise<GoogleWebSignInResult> {
   const auth = assertAuthConfigured();
   const provider = googleProvider();
+
+  if (shouldPreferGoogleRedirectOnWeb()) {
+    await signInWithRedirect(auth, provider);
+    return { mode: 'redirect' };
+  }
 
   try {
     const result = await signInWithPopup(auth, provider);

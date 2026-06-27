@@ -21,6 +21,7 @@ import type { ConnectivityState } from '../offline-first/types';
 import type { SyncUiState } from '../offline-first/sync/syncUiState';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import { waitForAuthenticatedUid } from '../services/firebase/authUid';
+import { getFirebaseAuth } from '../config/firebase';
 import { subscribeDataChanged } from '../offline-first/sync/SyncEngine';
 
 type OfflineSyncContextType = {
@@ -71,12 +72,14 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     }
     try {
       const existing = await waitForAuthenticatedUid(800);
-      if (existing) return { ok: true };
-      const redirect = await signInWithGoogle();
-      if (redirect) {
-        await waitForAuthenticatedUid(25_000);
-      } else {
-        await waitForAuthenticatedUid(20_000);
+      if (existing && getFirebaseAuth()?.currentUser) return { ok: true };
+
+      const isRedirect = await signInWithGoogle();
+      const uid = await waitForAuthenticatedUid(isRedirect ? 25_000 : 20_000);
+      const currentUser = getFirebaseAuth()?.currentUser;
+
+      if (!uid || !currentUser) {
+        return { ok: false, error: 'Faça login com Google para sincronizar.' };
       }
       return { ok: true };
     } catch (e) {

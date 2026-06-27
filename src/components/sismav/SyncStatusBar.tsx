@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, Switch, ActivityIndicator, Platform, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Switch, ActivityIndicator, Platform } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOfflineSyncState } from '../../contexts/OfflineSyncContext';
@@ -104,7 +104,11 @@ export function SyncStatusBar() {
   );
 
   const openHistory = useCallback(() => {
-    if (!syncUi.isSyncing) setHistoryOpen(true);
+    if (syncUi.isSyncing) return;
+    if (Platform.OS === 'web') {
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    }
+    setHistoryOpen(true);
   }, [syncUi.isSyncing]);
 
   if (!firebaseEnabled) return null;
@@ -116,21 +120,15 @@ export function SyncStatusBar() {
 
   return (
     <>
-      <Pressable
-        onPress={openHistory}
-        disabled={syncUi.isSyncing}
-        accessibilityRole="button"
-        accessibilityLabel="Painel de sincronização. Toque para ver histórico."
+      <View
+        style={[
+          styles.wrap,
+          {
+            backgroundColor: theme.backgroundSecondary,
+            borderColor: theme.border,
+          },
+        ]}
       >
-        <View
-          style={[
-            styles.wrap,
-            {
-              backgroundColor: theme.backgroundSecondary,
-              borderColor: theme.border,
-            },
-          ]}
-        >
           <View style={styles.topRow}>
             <View style={styles.statusCol}>
               <View style={styles.statusRow}>
@@ -296,12 +294,17 @@ export function SyncStatusBar() {
           ) : null}
 
           {!syncUi.isSyncing ? (
-            <Text style={[ts.caption, styles.historyHint, { color: theme.textMuted }]}>
-              Toque para ver histórico de sincronizações
-            </Text>
+            <PressableScale
+              onPress={openHistory}
+              style={styles.historyBtn}
+              accessibilityLabel="Ver histórico de sincronizações"
+            >
+              <Text style={[ts.caption, styles.historyHint, { color: theme.primary }]}>
+                Ver histórico de sincronizações
+              </Text>
+            </PressableScale>
           ) : null}
         </View>
-      </Pressable>
 
       <SyncHistoryModal visible={historyOpen} onClose={() => setHistoryOpen(false)} />
     </>
@@ -478,8 +481,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  historyBtn: {
+    alignSelf: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
   historyHint: {
     textAlign: 'center',
-    fontStyle: 'italic',
+    fontWeight: '600',
   },
 });

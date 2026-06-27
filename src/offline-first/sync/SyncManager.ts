@@ -331,7 +331,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     syncEngine.bindOwner(ownerUid);
     await syncEngine.init(ownerUid);
 
-    const firestoreOk = await probeFirestoreConnectivity();
+    const firestoreOk = await probeFirestoreConnectivity(ownerUid);
     if (!firestoreOk) {
       throw new Error('Não foi possível conectar ao Firebase. Tente novamente.');
     }

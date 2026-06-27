@@ -3,7 +3,7 @@
  * Demais camadas (React, Repository, Utils) NÃO devem importar firebase/firestore.
  */
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { getFirestoreDb } from '../../../config/firebase';
+import { getFirestoreDb, getFirebaseAuth } from '../../../config/firebase';
 
 export {
   getAllCadastrosFirestoreLight,
@@ -42,11 +42,17 @@ export { getTeamWipeMarker } from '../../../services/firebase/teamWipeFirestore'
 
 export { wipeCloudTeamDataFirestore as wipeAllCloudDataForOwner } from '../../../services/firebase/wipeCloudDataFirestore';
 
-export async function probeFirestoreConnectivity(): Promise<boolean> {
+/** Verifica conectividade lendo um doc sob users/{uid} (permitido pelas rules mesmo inexistente). */
+export async function probeFirestoreConnectivity(ownerUid?: string): Promise<boolean> {
   const db = getFirestoreDb();
-  if (!db) return false;
+  const authUser = getFirebaseAuth()?.currentUser;
+  if (!db || !authUser) return false;
+
+  const uid = ownerUid?.trim() || authUser.uid;
+  if (!uid) return false;
+
   try {
-    const ref = doc(db, 'member_lookup', '__connectivity_probe__');
+    const ref = doc(db, 'users', uid, 'cadastros', '__connectivity_probe__');
     await getDoc(ref);
     return true;
   } catch {

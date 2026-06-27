@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Modal,
   View,
@@ -29,8 +29,19 @@ export function ModernModal({ visible, onClose, title, children, footer, icon, d
   const { theme, isDark } = useTheme();
   const t = theme.tokens;
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !visible) return;
+    (document.activeElement as HTMLElement | null)?.blur?.();
+  }, [visible]);
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={dismissable ? onClose : undefined}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={dismissable ? onClose : undefined}
+      accessibilityViewIsModal
+    >
       <View style={styles.modalRoot}>
         <Pressable
           style={[styles.overlay, { backgroundColor: t.overlayBg }]}

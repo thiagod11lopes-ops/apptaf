@@ -28,8 +28,22 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { PREMIUM } from '../theme/premium';
-import { Card } from '../components/Card';
-import { AppHeader } from '../components/sismav/AppHeader';
+import { AplicarTafShell } from '../components/taf/aplicar/AplicarTafShell';
+import {
+  AplicarTafFlowHeader,
+  AplicarTafGlassPanel,
+  AplicarTafSectionHeader,
+  AplicarTafBackLink,
+  AplicarTafPrimaryButton,
+  AplicarTafInput,
+} from '../components/taf/aplicar/AplicarTafUi';
+import { AplicarTafHomeLauncher } from '../components/taf/aplicar/AplicarTafHomeLauncher';
+import { AplicarTafProvaSelector } from '../components/taf/aplicar/AplicarTafProvaSelector';
+import {
+  AplicarTafPreCadastroCard,
+  PRE_CADASTRO_ACCENTS,
+} from '../components/taf/aplicar/AplicarTafPreCadastroCard';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
   type ModalTesteJaAplicadoInfo,
@@ -1761,8 +1775,61 @@ export default function AplicarTAFScreen() {
     [getNotaModal],
   );
 
+  const flowHeader = useMemo(() => {
+    if (mostrarListaPreCadastro) {
+      return {
+        title: 'Pré-cadastros',
+        subtitle: 'Gerencie provas preparadas para iniciar com um toque',
+      };
+    }
+    if (mostrarProvas) {
+      if (corridaEtapa === 'menu') {
+        return {
+          title: modoPreCadastro ? 'Nova prova' : 'Modalidades',
+          subtitle: modoPreCadastro
+            ? 'Selecione a atividade do pré-cadastro'
+            : 'Escolha a prova que será aplicada agora',
+        };
+      }
+      if (corridaEtapa === 'participantes') {
+        return {
+          title: tituloProvaCurta,
+          subtitle: 'Defina quantos militares participarão',
+        };
+      }
+      if (corridaEtapa === 'nips') {
+        return {
+          title: tituloProvaCurta,
+          subtitle: `Confirme os NIPs de ${nParticipantesConfirmado} participante(s)`,
+        };
+      }
+    }
+    return {
+      title: 'Aplicar TAF',
+      subtitle: 'Central de condução de provas com cronômetro integrado',
+    };
+  }, [
+    mostrarListaPreCadastro,
+    mostrarProvas,
+    corridaEtapa,
+    modoPreCadastro,
+    tituloProvaCurta,
+    nParticipantesConfirmado,
+  ]);
+
+  const handleProvaSelect = useCallback(
+    (id: 'corrida' | 'natacao' | 'permanencia' | 'caminhada') => {
+      if (id === 'corrida') abrirCorrida();
+      else if (id === 'natacao') abrirNatacao();
+      else if (id === 'permanencia') abrirPermanencia();
+      else abrirCaminhada();
+    },
+    [abrirCorrida, abrirNatacao, abrirPermanencia, abrirCaminhada],
+  );
+
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
+    <AplicarTafShell>
+    <SafeAreaView style={[styles.safe, { backgroundColor: 'transparent' }]}>
       <ModalTesteJaAplicado
         info={modalTesteExistente}
         onClose={fecharModalTesteExistente}
@@ -1786,20 +1853,22 @@ export default function AplicarTAFScreen() {
         accessibilityViewIsModal
       >
         <View style={styles.modalTempoOverlay}>
-          <View style={styles.modalPermanenciaFinalCard}>
+          <View style={styles.modalFuturisticCard}>
+            <LinearGradient
+              colors={[theme.primary, '#6366f1']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.modalFuturisticStripe}
+            />
             <Text style={styles.modalPermanenciaFinalTitulo}>PERMANÊNCIA FINALIZADA</Text>
             <Text style={styles.modalPermanenciaFinalSub}>
               O tempo de 10 minutos foi atingido. Continue marcando Aprovado ou Reprovado e
               aplique o resultado quando terminar.
             </Text>
-            <TouchableOpacity
-              accessibilityLabel="Fechar aviso de permanência finalizada"
-              activeOpacity={0.85}
+            <AplicarTafPrimaryButton
+              label="OK"
               onPress={() => setModalPermanenciaFinalizadaVisible(false)}
-              style={styles.modalTempoBtnPrimaryCadastro}
-            >
-              <Text style={styles.modalTempoBtnPrimaryTextCadastro}>OK</Text>
-            </TouchableOpacity>
+            />
           </View>
         </View>
       </Modal>
@@ -1812,21 +1881,20 @@ export default function AplicarTAFScreen() {
         accessibilityViewIsModal
       >
         <View style={styles.modalTempoOverlay}>
-          <View style={styles.modalTempoCardCadastro}>
+          <View style={styles.modalFuturisticCard}>
+            <LinearGradient
+              colors={['#059669', '#14b8a6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.modalFuturisticStripe}
+            />
             <Text style={styles.modalTempoMensagemCadastro}>
               Tempo Registrado com Sucesso verifique tabela de Registrador de TAF
             </Text>
             {modalParcialAviso ? (
               <Text style={styles.modalTempoParcialCadastro}>{modalParcialAviso}</Text>
             ) : null}
-            <TouchableOpacity
-              accessibilityLabel="Fechar aviso e ver resumo"
-              activeOpacity={0.85}
-              onPress={fecharModalTempoRegistrado}
-              style={styles.modalTempoBtnPrimaryCadastro}
-            >
-              <Text style={styles.modalTempoBtnPrimaryTextCadastro}>OK</Text>
-            </TouchableOpacity>
+            <AplicarTafPrimaryButton label="OK" onPress={fecharModalTempoRegistrado} />
           </View>
         </View>
       </Modal>
@@ -1975,285 +2043,168 @@ export default function AplicarTAFScreen() {
         scrollEnabled={!modalRubricaNatacaoVisible}
       >
         <View style={styles.centerWrap}>
-          <AppHeader title="Aplicar TAF" onBack={() => navigation.goBack()} />
+          <AplicarTafFlowHeader
+            title={flowHeader.title}
+            subtitle={flowHeader.subtitle}
+            onBack={() => navigation.goBack()}
+          />
 
           {!mostrarProvas && !mostrarListaPreCadastro ? (
-            <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-              <TouchableOpacity
-                accessibilityLabel="Iniciar TAF"
-                onPress={iniciarTaf}
-                style={[
-                  styles.toggleBtn,
-                  { backgroundColor: selectedBgColor, borderColor: selectedBgColor },
-                ]}
-              >
-                <Text style={[ts.caption, { color: selectedTextColor }, styles.toggleBtnText]}>
-                  Iniciar TAF
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel="Pré Cadastro"
-                onPress={abrirListaPreCadastro}
-                style={[
-                  styles.toggleBtn,
-                  {
-                    backgroundColor: theme.backgroundSecondary,
-                    borderColor: theme.borderSubtle,
-                  },
-                ]}
-              >
-                <Text style={[ts.caption, { color: theme.text }, styles.toggleBtnText]}>
-                  Pré Cadastro
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <AplicarTafHomeLauncher onIniciarTaf={iniciarTaf} onPreCadastro={abrirListaPreCadastro} />
           ) : null}
 
           {mostrarListaPreCadastro ? (
-            <Card elevated style={styles.formCard}>
-              <View style={styles.section}>
-                <TouchableOpacity
-                  accessibilityLabel="Voltar ao início"
-                  activeOpacity={0.85}
-                  onPress={voltarInicioAplicarTaf}
-                  style={styles.btnVoltarCadastro}
-                >
-                  <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
-                </TouchableOpacity>
+            <AplicarTafGlassPanel accent="cyan">
+              <AplicarTafBackLink label="Voltar ao início" onPress={voltarInicioAplicarTaf} />
+              <AplicarTafSectionHeader
+                kicker="BIBLIOTECA"
+                title="Pré-cadastros salvos"
+                subtitle={`Corrida, natação e permanência: até ${MAX_PRE_CADASTRO_PARTICIPANTES} militares. Caminhada: até ${MAX_PARTICIPANTES}. Use Iniciar Prova para ir direto ao cronômetro.`}
+              />
 
-                <Text style={[ts.label, styles.labelText]}>Pré Cadastros</Text>
-                <Text style={[ts.bodySecondary, styles.formSubtitle]}>
-                  Corrida, natação e permanência: até {MAX_PRE_CADASTRO_PARTICIPANTES} militares por
-                  atividade. Caminhada: até {MAX_PARTICIPANTES} participantes. Ao aplicar o TAF, use
-                  &quot;Iniciar Prova&quot; para ir direto ao cronômetro com os dados já preenchidos.
+              {listaPreCadastros.length === 0 ? (
+                <Text style={[ts.bodySecondary, styles.preCadastroVazio]}>
+                  Nenhum pré-cadastro salvo ainda.
                 </Text>
+              ) : (
+                listaPreCadastros.map((pre) => (
+                  <AplicarTafPreCadastroCard
+                    key={pre.id}
+                    titulo={labelTipoProvaPreCadastro(pre.tipoProva)}
+                    meta={`${pre.participantes.length} participante${pre.participantes.length !== 1 ? 's' : ''} · ${formatarDataPreCadastro(pre.criadoEm)}`}
+                    nomesPreview={pre.participantes.map((p) => p.nomeMilitar).join(', ')}
+                    accentColors={PRE_CADASTRO_ACCENTS[pre.tipoProva] ?? PRE_CADASTRO_ACCENTS.corrida}
+                    onIniciar={() => iniciarProvaFromPreCadastro(pre)}
+                    onExcluir={() => excluirPreCadastro(pre)}
+                  />
+                ))
+              )}
 
-                {listaPreCadastros.length === 0 ? (
-                  <Text style={[ts.bodySecondary, styles.preCadastroVazio]}>
-                    Nenhum pré-cadastro salvo ainda.
-                  </Text>
-                ) : (
-                  listaPreCadastros.map((pre) => (
-                    <View
-                      key={pre.id}
-                      style={[
-                        styles.preCadastroCard,
-                        { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
-                      ]}
-                    >
-                      <Text style={[ts.label, styles.preCadastroTitulo]}>
-                        {labelTipoProvaPreCadastro(pre.tipoProva)}
-                      </Text>
-                      <Text style={[ts.bodySecondary, styles.preCadastroMeta]}>
-                        {pre.participantes.length} participante
-                        {pre.participantes.length !== 1 ? 's' : ''} · {formatarDataPreCadastro(pre.criadoEm)}
-                      </Text>
-                      <Text style={[ts.caption, styles.preCadastroNomes]} numberOfLines={3}>
-                        {pre.participantes.map((p) => p.nomeMilitar).join(', ')}
-                      </Text>
-                      <View style={styles.preCadastroAcoes}>
-                        <TouchableOpacity
-                          accessibilityLabel={`Iniciar prova de ${labelTipoProvaPreCadastro(pre.tipoProva)}`}
-                          activeOpacity={0.85}
-                          onPress={() => iniciarProvaFromPreCadastro(pre)}
-                          style={[styles.btnOkNip, styles.preCadastroBtnIniciar, { backgroundColor: theme.primary }]}
-                        >
-                          <Text style={[ts.body, styles.btnText]}>Iniciar Prova</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          accessibilityLabel="Excluir pré-cadastro"
-                          activeOpacity={0.85}
-                          onPress={() => excluirPreCadastro(pre)}
-                          style={[styles.preCadastroBtnExcluir, { borderColor: theme.border }]}
-                        >
-                          <Text style={[ts.caption, { color: theme.textSecondary }]}>Excluir</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))
-                )}
-
-                <TouchableOpacity
-                  accessibilityLabel="Novo pré-cadastro"
-                  activeOpacity={0.85}
-                  onPress={iniciarNovoPreCadastro}
-                  style={[styles.btn, { backgroundColor: theme.primary }]}
-                >
-                  <Text style={[ts.body, styles.btnText]}>+ Novo Pré Cadastro</Text>
-                </TouchableOpacity>
-              </View>
-            </Card>
+              <AplicarTafPrimaryButton label="+ Novo Pré Cadastro" onPress={iniciarNovoPreCadastro} />
+            </AplicarTafGlassPanel>
           ) : null}
 
         {mostrarProvas && corridaEtapa === 'menu' ? (
-          <Card elevated style={styles.formCard}>
+          <AplicarTafGlassPanel accent="violet">
             <View style={styles.section}>
               {modoPreCadastro ? (
-                <TouchableOpacity
-                  accessibilityLabel="Voltar para lista de pré-cadastros"
-                  activeOpacity={0.85}
+                <AplicarTafBackLink
+                  label="Voltar para lista de pré-cadastros"
                   onPress={() => {
                     setModoPreCadastro(false);
                     setMostrarProvas(false);
                     void recarregarListaPreCadastros().then(() => setMostrarListaPreCadastro(true));
                   }}
-                  style={styles.btnVoltarCadastro}
-                >
-                  <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
-                </TouchableOpacity>
-              ) : null}
-              <Text style={[ts.label, styles.labelText]}>
-                {modoPreCadastro ? 'Pré-cadastro — selecione a atividade' : 'Selecione a prova'}
-              </Text>
-              {modoPreCadastro ? (
-                <Text style={[ts.bodySecondary, styles.formSubtitle]}>
-                  Corrida, natação e permanência: até {MAX_PRE_CADASTRO_PARTICIPANTES} participantes.
-                  Caminhada: até {MAX_PARTICIPANTES} participantes.
-                </Text>
-              ) : null}
-              <View style={styles.btnRow}>
-                <TouchableOpacity
-                  accessibilityLabel="Corrida"
-                  onPress={abrirCorrida}
-                  style={[styles.btn, { backgroundColor: theme.primary }]}
-                >
-                  <Text style={[ts.body, styles.btnText]}>Corrida</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  accessibilityLabel="Natação"
-                  onPress={abrirNatacao}
-                  style={[styles.btn, { backgroundColor: theme.primary }]}
-                >
-                  <Text style={[ts.body, styles.btnText]}>Natação</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  accessibilityLabel="Permanência"
-                  onPress={abrirPermanencia}
-                  style={[styles.btn, { backgroundColor: theme.primary }]}
-                >
-                  <Text style={[ts.body, styles.btnText]}>Permanência</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.btnRow}>
-                <TouchableOpacity
-                  accessibilityLabel="Caminhada"
-                  onPress={abrirCaminhada}
-                  style={[styles.btn, { backgroundColor: theme.primary }]}
-                >
-                  <Text style={[ts.body, styles.btnText]}>Caminhada</Text>
-                </TouchableOpacity>
-              </View>
+                />
+              ) : (
+                <AplicarTafBackLink label="Voltar ao início" onPress={voltarInicioAplicarTaf} />
+              )}
+              <AplicarTafSectionHeader
+                kicker={modoPreCadastro ? 'PRÉ-CADASTRO' : 'PROVA AO VIVO'}
+                title={modoPreCadastro ? 'Selecione a atividade' : 'Selecione a prova'}
+                subtitle={
+                  modoPreCadastro
+                    ? `Corrida, natação e permanência: até ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes. Caminhada: até ${MAX_PARTICIPANTES}.`
+                    : 'Toque na modalidade para configurar participantes e iniciar'
+                }
+              />
+              <AplicarTafProvaSelector onSelect={handleProvaSelect} />
             </View>
-          </Card>
+          </AplicarTafGlassPanel>
         ) : null}
 
         {mostrarProvas && corridaEtapa === 'participantes' ? (
-          <Card elevated style={styles.formCard}>
+          <AplicarTafGlassPanel accent="cyan">
             <View style={styles.section}>
-              <TouchableOpacity
-                accessibilityLabel="Voltar para seleção de provas"
-                activeOpacity={0.85}
-                onPress={voltarMenuProvas}
-                style={styles.btnVoltarCadastro}
-              >
-                <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
-              </TouchableOpacity>
-
-              <Text style={[ts.label, styles.labelText]}>Número de Participantes</Text>
-              {modoPreCadastro ? (
-                <Text style={[ts.bodySecondary, styles.formSubtitle]}>
-                  {tipoProva === 'caminhada'
-                    ? `Informe de 1 a ${MAX_PARTICIPANTES} participantes.`
-                    : `Informe de 1 a ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes.`}
-                </Text>
-              ) : null}
-              <TextInput
+              <AplicarTafBackLink label="Voltar para seleção de provas" onPress={voltarMenuProvas} />
+              <AplicarTafSectionHeader
+                kicker="EQUIPE"
+                title="Número de participantes"
+                subtitle={
+                  modoPreCadastro
+                    ? tipoProva === 'caminhada'
+                      ? `Informe de 1 a ${MAX_PARTICIPANTES} participantes.`
+                      : `Informe de 1 a ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes.`
+                    : `Quantos militares participarão da ${tituloProvaCurta.toLowerCase()}?`
+                }
+              />
+              <AplicarTafInput
                 value={numeroParticipantesCorrida}
                 onChangeText={onChangeParticipantes}
                 placeholder="0"
-                placeholderTextColor={ui.placeholder}
                 keyboardType="number-pad"
                 maxLength={5}
-                style={[
-                  styles.input,
-                  { borderColor: inputBorder, backgroundColor: inputBg, color: inputTextColor },
-                ]}
                 autoCorrect={false}
                 spellCheck={false}
                 accessibilityLabel={`Número de participantes da ${tituloProvaCurta.toLowerCase()}`}
               />
               {erroParticipantes ? <Text style={styles.erroText}>{erroParticipantes}</Text> : null}
-
-              <TouchableOpacity
-                accessibilityLabel="Confirmar número de participantes"
-                onPress={confirmarParticipantes}
-                style={[styles.btn, { backgroundColor: theme.primary }]}
-              >
-                <Text style={[ts.body, styles.btnText]}>OK</Text>
-              </TouchableOpacity>
+              <AplicarTafPrimaryButton label="Confirmar" onPress={confirmarParticipantes} />
             </View>
-          </Card>
+          </AplicarTafGlassPanel>
         ) : null}
 
         {mostrarProvas && corridaEtapa === 'nips' ? (
-          <Card elevated style={styles.formCard}>
+          <AplicarTafGlassPanel accent="violet">
             <View style={styles.section}>
-              <TouchableOpacity
-                accessibilityLabel="Voltar para número de participantes"
-                activeOpacity={0.85}
-                onPress={voltarParticipantes}
-                style={styles.btnVoltarCadastro}
-              >
-                <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
-              </TouchableOpacity>
-
-              <Text style={[ts.label, styles.labelText]}>
-                {tituloProvaCurta} — NIPs dos participantes
-              </Text>
-              <Text style={[ts.bodySecondary, styles.formSubtitle]}>
-                Preencha o NIP de cada um dos {nParticipantesConfirmado} participantes.
-              </Text>
+              <AplicarTafBackLink label="Voltar para número de participantes" onPress={voltarParticipantes} />
+              <AplicarTafSectionHeader
+                kicker="IDENTIFICAÇÃO"
+                title={`${tituloProvaCurta} — NIPs`}
+                subtitle={`Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes.`}
+              />
 
             {nipsParticipantes.map((nip, index) => {
               const fb = nipFeedbackLinhas[index];
               return (
-              <View key={index} style={styles.nipRow}>
-                <View style={styles.nipLabelRow}>
+              <View
+                key={index}
+                style={[
+                  styles.nipGlassPanel,
+                  { borderColor: theme.border, backgroundColor: theme.isDark ? 'rgba(2,6,23,0.35)' : 'rgba(255,255,255,0.5)' },
+                ]}
+              >
+                <View style={styles.nipRowHeader}>
+                  <View style={[styles.nipIndexBadge, { backgroundColor: theme.isDark ? 'rgba(56,189,248,0.18)' : PREMIUM.accentMuted }]}>
+                    <Text style={[styles.nipIndexText, { color: theme.primary }]}>{index + 1}</Text>
+                  </View>
                   <LabelNip color={ui.label} fontSize={12} fontWeight="800" />
                 </View>
                 <View style={styles.nipInputRow}>
-                  <TextInput
+                  <AplicarTafInput
                     value={nip}
                     onChangeText={(t) => atualizarNip(index, t)}
                     placeholder="00.0000.00"
-                    placeholderTextColor={ui.placeholder}
                     keyboardType="number-pad"
-                    style={[
-                      styles.input,
-                      styles.inputNipFlex,
-                      { borderColor: inputBorder, backgroundColor: inputBg, color: inputTextColor },
-                    ]}
+                    style={styles.inputNipFlex}
                     autoCorrect={false}
                     spellCheck={false}
                     accessibilityLabel={`NIP do participante ${index + 1}`}
                   />
                   <TouchableOpacity
                     accessibilityLabel={`Confirmar NIP do participante ${index + 1}`}
-                    activeOpacity={0.85}
+                    activeOpacity={0.9}
                     onPress={() => verificarNipNoCadastro(index)}
-                    style={[styles.btnOkNip, { backgroundColor: theme.primary }]}
+                    style={styles.nipOkBtnWrap}
                   >
-                    <Text style={[ts.body, styles.btnText]}>OK</Text>
+                    <LinearGradient
+                      colors={[theme.primary, '#6366f1']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.nipOkBtn}
+                    >
+                      <Text style={[styles.nipOkBtnText, { color: theme.tokens.textOnPrimary }]}>OK</Text>
+                    </LinearGradient>
                   </TouchableOpacity>
-                  {fb?.tipo === 'ok' ? (
-                    <View style={styles.nomeCorredorBeside}>
-                      <Text style={styles.nomeCorredorBesideText} numberOfLines={4}>
-                        ({fb.nomeMilitar}) {labelAtleta} número{' '}
-                        <Text style={styles.numeroCorredor}>{index + 1}</Text>
-                      </Text>
-                    </View>
-                  ) : null}
                 </View>
+                {fb?.tipo === 'ok' ? (
+                  <View style={styles.nomeCorredorBeside}>
+                    <Text style={styles.nomeCorredorBesideText} numberOfLines={2}>
+                      {fb.nomeMilitar} · {labelAtleta}{' '}
+                      <Text style={styles.numeroCorredor}>#{index + 1}</Text>
+                    </Text>
+                  </View>
+                ) : null}
                 {fb?.tipo === 'completar_dados' ? (
                   <View
                     style={[
@@ -2266,20 +2217,15 @@ export default function AplicarTAFScreen() {
                       cadastro.
                     </Text>
                     <Text style={[ts.label, styles.dadosNipFieldLabel]}>Data de nascimento</Text>
-                    <TextInput
+                    <AplicarTafInput
                       value={fb.dataNascimento}
                       onChangeText={(t) =>
                         atualizarDadosNipLinha(index, { dataNascimento: formatDateInput(t) })
                       }
                       placeholder="DD/MM/AAAA"
-                      placeholderTextColor={ui.placeholder}
                       keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
                       inputMode="numeric"
                       maxLength={10}
-                      style={[
-                        styles.input,
-                        { borderColor: inputBorder, backgroundColor: theme.background, color: inputTextColor },
-                      ]}
                       accessibilityLabel={`Data de nascimento do participante ${index + 1}`}
                     />
                     <Text style={[ts.label, styles.dadosNipFieldLabel]}>Gênero</Text>
@@ -2312,19 +2258,13 @@ export default function AplicarTAFScreen() {
                       })}
                     </View>
                     {fb.erro ? <Text style={styles.feedbackErro}>{fb.erro}</Text> : null}
-                    <TouchableOpacity
-                      accessibilityLabel={`Salvar dados do participante ${index + 1}`}
-                      activeOpacity={0.85}
+                    <AplicarTafPrimaryButton
+                      label="Salvar e confirmar"
                       onPress={() => void confirmarDadosNipLinha(index)}
-                      style={[styles.btnSalvarDadosNip, { backgroundColor: theme.primary }]}
-                    >
-                      <Text style={[ts.body, styles.btnText]}>Salvar e confirmar</Text>
-                    </TouchableOpacity>
+                    />
                   </View>
                 ) : fb ? (
-                  <Text
-                    style={fb.tipo === 'ok' ? styles.feedbackOk : styles.feedbackErro}
-                  >
+                  <Text style={fb.tipo === 'ok' ? styles.feedbackOk : styles.feedbackErro}>
                     {fb.tipo === 'ok' || fb.tipo === 'erro' ? fb.texto : ''}
                   </Text>
                 ) : null}
@@ -2332,9 +2272,8 @@ export default function AplicarTAFScreen() {
             );
             })}
 
-            <TouchableOpacity
-              accessibilityLabel={modoPreCadastro ? 'Salvar pré-cadastro' : `Preparar ${tituloProvaCurta}`}
-              activeOpacity={0.85}
+            <AplicarTafPrimaryButton
+              label={modoPreCadastro ? 'Salvar Pré Cadastro' : `Preparar ${tituloProvaCurta}`}
               onPress={
                 modoPreCadastro
                   ? () => void salvarPreCadastro()
@@ -2342,14 +2281,9 @@ export default function AplicarTAFScreen() {
                     ? prepararPermanencia
                     : prepararProva
               }
-              style={[styles.btn, { backgroundColor: theme.primary }]}
-            >
-              <Text style={[ts.body, styles.btnText]}>
-                {modoPreCadastro ? 'Salvar Pré Cadastro' : `Preparar ${tituloProvaCurta}`}
-              </Text>
-            </TouchableOpacity>
+            />
             </View>
-          </Card>
+          </AplicarTafGlassPanel>
         ) : null}
         </View>
       </ScrollView>
@@ -2406,134 +2340,53 @@ export default function AplicarTAFScreen() {
         erroAplicar={corridaEtapa === 'tabela_permanencia' ? erroPermanencia : undefined}
       />
     </SafeAreaView>
+    </AplicarTafShell>
   );
 }
 
 function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColors>) {
   return StyleSheet.create({
   safe: { flex: 1, position: 'relative' as const },
-  scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 16 },
-  centerWrap: { flex: 1, alignItems: 'stretch' as const },
-  formCard: {
-    width: '100%',
-    maxWidth: '100%',
-    alignSelf: 'stretch',
-    marginBottom: 20,
-  },
-  section: { marginBottom: 20, width: '100%' },
-  labelText: {
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusMd,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    fontWeight: '500',
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}),
-  },
-  toggleStack: {
-    width: '100%',
-    maxWidth: '100%',
-    alignSelf: 'stretch',
-    alignItems: 'stretch',
-    padding: 8,
-    borderRadius: PREMIUM.radiusLg,
-    borderWidth: 1,
-    marginBottom: 20,
-    gap: 8,
-  },
-  toggleBtn: {
-    width: '100%',
-    paddingVertical: 12,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toggleBtnText: {
-    fontWeight: '700',
-  },
+  scrollContentCadastro: { paddingHorizontal: 18, paddingVertical: 12, paddingBottom: 28 },
+  centerWrap: { flex: 1, alignItems: 'stretch' as const, maxWidth: 720, alignSelf: 'center', width: '100%' },
+  section: { width: '100%' },
   preCadastroVazio: {
     marginBottom: 16,
     textAlign: 'center',
   },
-  preCadastroCard: {
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusMd,
-    padding: 14,
-    marginBottom: 12,
-    gap: 4,
-  },
-  preCadastroTitulo: {
-    marginBottom: 2,
-  },
-  preCadastroMeta: {
-    marginBottom: 4,
-  },
-  preCadastroNomes: {
-    marginBottom: 10,
-    lineHeight: 16,
-  },
-  preCadastroAcoes: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  preCadastroBtnIniciar: {
-    flexGrow: 1,
-    minWidth: 140,
-  },
-  preCadastroBtnExcluir: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-  },
-  btnRow: { marginTop: 8, gap: 10 },
-  btn: {
-    marginTop: 6,
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: PREMIUM.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnText: {
-    fontWeight: '700',
-  },
-  btnVoltarCadastro: { alignSelf: 'flex-start', marginBottom: 14 },
-  formSubtitle: {
-    marginBottom: 16,
-    lineHeight: 19,
-  },
-  btnOkNip: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: PREMIUM.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnIniciarDisabled: {
-    opacity: 0.72,
-  },
   modalTempoOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(2, 6, 23, 0.62)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
+    ...(Platform.OS === 'web' ? ({ backdropFilter: 'blur(12px)' } as object) : null),
   },
-  modalTempoCardCadastro: {
+  modalFuturisticCard: {
     width: '100%',
     maxWidth: 420,
-    borderRadius: 18,
-    backgroundColor: ui.modalBg,
-    padding: 16,
+    borderRadius: PREMIUM.radiusLg + 4,
+    backgroundColor: theme.isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.96)',
+    padding: 22,
     borderWidth: 1,
-    borderColor: theme.border,
+    borderColor: theme.isDark ? 'rgba(148, 163, 184, 0.22)' : theme.border,
+    overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0 24px 64px rgba(15,23,42,0.28)' } as object)
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 16 },
+          shadowOpacity: 0.25,
+          shadowRadius: 28,
+          elevation: 12,
+        }),
+  },
+  modalFuturisticStripe: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
   },
   modalAssinaturaOverlay: {
     flex: 1,
@@ -2614,11 +2467,12 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     marginTop: 8,
   },
   modalTempoMensagemCadastro: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
     textAlign: 'center',
     color: ui.text,
-    lineHeight: 22,
+    lineHeight: 24,
+    marginTop: 6,
   },
   modalTempoParcialCadastro: {
     marginTop: 12,
@@ -2628,50 +2482,67 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     textAlign: 'center',
     lineHeight: 19,
   },
-  modalTempoBtnPrimaryCadastro: {
-    marginTop: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+  btnIniciarDisabled: {
+    opacity: 0.72,
+  },
+  nipGlassPanel: {
     borderWidth: 1,
-    borderColor: theme.border,
-    backgroundColor: ui.btnDarkBg,
-    alignItems: 'center',
+    borderRadius: PREMIUM.radiusMd + 2,
+    padding: 12,
+    marginBottom: 10,
+    gap: 8,
   },
-  modalTempoBtnPrimaryTextCadastro: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
-  btnAplicarResultadoCronometro: {
-    width: '100%',
-    marginTop: 4,
-  },
-  nipRow: {
-    marginBottom: 14,
-  },
-  nipLabelRow: {
+  nipRowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: 8,
+  },
+  nipIndexBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nipIndexText: {
+    fontSize: 12,
+    fontWeight: '900',
   },
   nipInputRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  nipOkBtnWrap: {
+    borderRadius: PREMIUM.radiusMd + 2,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  nipOkBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+    minWidth: 64,
+  },
+  nipOkBtnText: {
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.4,
   },
   inputNipFlex: {
     flex: 1,
     minWidth: 0,
+    marginTop: 0,
   },
   nomeCorredorBeside: {
-    flex: 1,
-    flexBasis: 160,
-    minWidth: 140,
-    justifyContent: 'center',
+    width: '100%',
   },
   nomeCorredorBesideText: {
     fontSize: 13,
     fontWeight: '800',
     color: ui.text,
-    lineHeight: 28,
+    lineHeight: 20,
   },
   /** Número do corredor: o dobro do tamanho do texto ao lado, em verde */
   numeroCorredor: {
@@ -2881,33 +2752,21 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     fontWeight: '900',
     color: theme.isDark ? ui.text : theme.success,
   },
-  modalPermanenciaFinalCard: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: ui.modalBg,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 8,
-  },
   modalPermanenciaFinalTitulo: {
     fontSize: 18,
     fontWeight: '900',
     color: ui.text,
     textAlign: 'center',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+    marginTop: 8,
     marginBottom: 10,
   },
   modalPermanenciaFinalSub: {
     fontSize: 14,
-    color: ui.text,
+    color: theme.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 21,
+    marginBottom: 8,
   },
   });
 }

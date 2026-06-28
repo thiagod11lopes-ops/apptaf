@@ -15,6 +15,7 @@ import { Check, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
+import { getAplicarTafBackdrop, getAplicarTafGlass } from './aplicar/aplicarTafTheme';
 import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPanel';
 import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
@@ -219,6 +220,7 @@ export function TafProvaTempoModal({
   const ts = theme.textStyles;
 
   const tituloModal = `${tituloProva} preparada`;
+  const glass = getAplicarTafGlass(theme);
 
   const [voltasConfirmadas, setVoltasConfirmadas] = useState(false);
 
@@ -268,7 +270,10 @@ export function TafProvaTempoModal({
             key={`prov-modal-${index}`}
             style={[
               styles.participantCard,
-              { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
+              {
+                borderColor: glass.border,
+                backgroundColor: glass.bg,
+              },
             ]}
           >
             <View style={styles.participantRow}>
@@ -378,20 +383,29 @@ export function TafProvaTempoModal({
       onRequestClose={onClose}
       accessibilityViewIsModal
     >
-      <SafeAreaView style={[styles.safe, { backgroundColor: theme.cardBg }]}>
-        <View style={[styles.header, { borderBottomColor: theme.border }]}>
-          <Text style={[styles.headerTitle, { color: ui.text }]} numberOfLines={1}>
-            {tituloModal}
-          </Text>
-          <TouchableOpacity
-            accessibilityLabel="Fechar modal da prova"
-            activeOpacity={0.88}
-            onPress={onClose}
-            style={[styles.closeBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
-          >
-            <X size={22} color={ui.iconStrong} strokeWidth={2.5} />
-          </TouchableOpacity>
-        </View>
+      <View style={styles.modalRoot}>
+        <LinearGradient
+          colors={[...getAplicarTafBackdrop(theme)]}
+          locations={[0, 0.4, 0.75, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <SafeAreaView style={styles.safe}>
+          <View style={[styles.header, { borderBottomColor: glass.border }]}>
+            <View style={styles.headerTextCol}>
+              <Text style={[styles.headerKicker, { color: theme.primary }]}>PROVA ATIVA</Text>
+              <Text style={[styles.headerTitle, { color: ui.text }]} numberOfLines={1}>
+                {tituloModal}
+              </Text>
+            </View>
+            <TouchableOpacity
+              accessibilityLabel="Fechar modal da prova"
+              activeOpacity={0.88}
+              onPress={onClose}
+              style={[styles.closeBtn, { borderColor: glass.border, backgroundColor: glass.highlight }]}
+            >
+              <X size={22} color={ui.iconStrong} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
 
         <ScrollView
           style={styles.scroll}
@@ -406,26 +420,29 @@ export function TafProvaTempoModal({
           ) : null}
         </ScrollView>
 
-        <View style={[styles.bottomBar, { borderTopColor: theme.border, backgroundColor: theme.cardBg }]}>
+        <View style={[styles.bottomBar, { borderTopColor: glass.border, backgroundColor: glass.bg }]}>
           {podeAplicar ? (
             <TouchableOpacity
               accessibilityLabel={`Aplicar resultado da ${tituloProva.toLowerCase()}`}
-              activeOpacity={0.85}
+              activeOpacity={0.9}
               onPress={onAplicar}
               disabled={salvando}
-              style={[
-                styles.btnAplicar,
-                { backgroundColor: theme.primary },
-                salvando ? styles.btnDisabled : null,
-              ]}
+              style={[styles.btnAplicarWrap, salvando ? styles.btnDisabled : null]}
             >
-              {salvando ? (
-                <ActivityIndicator color={theme.tokens.textOnPrimary} />
-              ) : (
-                <Text style={[ts.body, styles.btnAplicarText, { color: theme.tokens.textOnPrimary }]}>
-                  Aplicar Resultado
-                </Text>
-              )}
+              <LinearGradient
+                colors={[theme.primary, '#6366f1']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.btnAplicar}
+              >
+                {salvando ? (
+                  <ActivityIndicator color={theme.tokens.textOnPrimary} />
+                ) : (
+                  <Text style={[ts.body, styles.btnAplicarText, { color: theme.tokens.textOnPrimary }]}>
+                    Aplicar Resultado
+                  </Text>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
           ) : (
             <TafCronometroPanel
@@ -457,13 +474,18 @@ export function TafProvaTempoModal({
           />
         ) : null}
       </SafeAreaView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalRoot: {
+    flex: 1,
+  },
   safe: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   header: {
     flexDirection: 'row',
@@ -471,14 +493,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
   },
-  headerTitle: {
+  headerTextCol: {
     flex: 1,
-    fontSize: 17,
-    fontWeight: '800',
-    paddingRight: 8,
+    minWidth: 0,
+    gap: 2,
+  },
+  headerKicker: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.3,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.3,
   },
   closeBtn: {
     width: 44,
@@ -647,10 +678,15 @@ const styles = StyleSheet.create({
     borderColor: '#B91C1C',
     backgroundColor: '#B91C1C',
   },
+  btnAplicarWrap: {
+    width: '100%',
+    borderRadius: PREMIUM.radiusMd + 2,
+    overflow: 'hidden',
+  },
   btnAplicar: {
     width: '100%',
-    paddingVertical: 12,
-    borderRadius: PREMIUM.radiusMd,
+    paddingVertical: 14,
+    borderRadius: PREMIUM.radiusMd + 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

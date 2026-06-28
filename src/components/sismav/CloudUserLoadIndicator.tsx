@@ -18,8 +18,6 @@ type Props = {
   /** Dados exibidos vêm somente da nuvem (nuvem verde). */
   receivingFromCloudOnly?: boolean;
   statusHint?: string | null;
-  /** Cronômetro regressivo até próxima comparação nuvem × local. */
-  cloudDiffCountdownSec?: number | null;
   /** Mensagem temporária após comparação (Ok sincronizado / clique em salvar…). */
   cloudDiffFlashMessage?: string | null;
 };
@@ -33,7 +31,6 @@ export function CloudUserLoadIndicator({
   syncing = false,
   receivingFromCloudOnly = false,
   statusHint = null,
-  cloudDiffCountdownSec = null,
   cloudDiffFlashMessage = null,
 }: Props) {
   const { theme } = useTheme();
@@ -44,8 +41,6 @@ export function CloudUserLoadIndicator({
   const showSyncPulse = syncing && !isOfflineLabel;
   const hint = statusHint?.trim() || null;
   const flash = cloudDiffFlashMessage?.trim() || null;
-  const showCountdown =
-    cloudDiffCountdownSec != null && cloudDiffCountdownSec >= 0 && !flash;
   const cloudColor = receivingFromCloudOnly ? theme.gain : theme.loss;
   const cloudA11y = receivingFromCloudOnly
     ? 'Recebendo dados somente da nuvem'
@@ -104,33 +99,20 @@ export function CloudUserLoadIndicator({
           />
         </View>
       ) : null}
-      {hint || flash || showCountdown ? (
+      {hint || flash ? (
         <View style={styles.hintBlock}>
-          {hint || showCountdown ? (
-            <View style={styles.hintRow}>
-              {hint ? (
-                <Text
-                  style={[
-                    styles.hint,
-                    {
-                      color: receivingFromCloudOnly && !loading ? theme.gain : theme.textMuted,
-                      fontWeight: receivingFromCloudOnly && !loading ? '700' : '600',
-                    },
-                  ]}
-                >
-                  {hint}
-                </Text>
-              ) : (
-                <Text style={[styles.hint, { color: theme.textMuted }]}>Modo offline</Text>
-              )}
-              {showCountdown ? (
-                <View style={[styles.countdownPill, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                  <Text style={[styles.countdownText, { color: theme.primary }]}>
-                    {cloudDiffCountdownSec}s
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+          {hint ? (
+            <Text
+              style={[
+                styles.hint,
+                {
+                  color: receivingFromCloudOnly && !loading ? theme.gain : theme.textMuted,
+                  fontWeight: receivingFromCloudOnly && !loading ? '700' : '600',
+                },
+              ]}
+            >
+              {hint}
+            </Text>
           ) : null}
           {flash ? (
             <Text
@@ -210,27 +192,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
     paddingHorizontal: 12,
-  },
-  hintRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  countdownPill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    minWidth: 36,
-    alignItems: 'center',
-  },
-  countdownText: {
-    fontSize: 11,
-    fontWeight: '800',
-    fontVariant: ['tabular-nums'],
-    letterSpacing: 0.3,
   },
   flashMessage: {
     fontSize: 11,

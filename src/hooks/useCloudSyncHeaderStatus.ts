@@ -65,7 +65,6 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
     syncedWithCloud,
     receivingFromCloudOnly: false,
     statusHint,
-    cloudDiffCountdownSec: cloudDiffWatch.countdownSec,
     cloudDiffFlashMessage: cloudDiffWatch.flashMessage,
     isOnlineAccount: isAuthenticated,
     usingCloudData: false,

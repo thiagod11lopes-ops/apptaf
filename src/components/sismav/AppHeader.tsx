@@ -38,7 +38,6 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
     syncing,
     receivingFromCloudOnly,
     statusHint,
-    cloudDiffCountdownSec,
     cloudDiffFlashMessage,
   } = useCloudSyncHeaderStatus(cloudLoad);
 
@@ -77,7 +76,6 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
                   syncing={syncing}
                   receivingFromCloudOnly={receivingFromCloudOnly}
                   statusHint={statusHint}
-                  cloudDiffCountdownSec={cloudDiffCountdownSec}
                   cloudDiffFlashMessage={cloudDiffFlashMessage}
                 />
               </View>
@@ -124,7 +122,6 @@ export function AppHeader({ title, subtitle, cloudLoad, right, darkHero, onBack 
               syncing={syncing}
               receivingFromCloudOnly={receivingFromCloudOnly}
               statusHint={statusHint}
-              cloudDiffCountdownSec={cloudDiffCountdownSec}
               cloudDiffFlashMessage={cloudDiffFlashMessage}
             />
           </View>

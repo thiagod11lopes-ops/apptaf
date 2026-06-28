@@ -1700,6 +1700,18 @@ export default function AplicarTAFScreen() {
           ? 'Caminhante'
           : 'Corredor';
 
+  const modalProvaTempoVisible =
+    corridaEtapa === 'tabela_corrida' || corridaEtapa === 'tabela_permanencia';
+
+  const provaModalTipo: TafProvaTempoModalProva =
+    corridaEtapa === 'tabela_permanencia'
+      ? 'permanencia'
+      : tipoProva === 'natacao'
+        ? 'natacao'
+        : tipoProva === 'caminhada'
+          ? 'caminhada'
+          : 'corrida';
+
   const nomesParticipantesModal = useMemo(
     () =>
       Array.from({ length: nParticipantesConfirmado }, (_, index) => {

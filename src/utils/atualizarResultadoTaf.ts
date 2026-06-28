@@ -108,7 +108,7 @@ export async function salvarResultadosTafEditados(
   const atualizado = aplicarEdicaoNoCadastro(base, input);
   await addCadastro(atualizado);
 
-  const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia'];
+  const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia', 'caminhada'];
   for (const tipo of tipos) {
     await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado);
   }
@@ -119,7 +119,7 @@ export async function salvarResultadosTafEditados(
 
 function limparTodosResultadosTafCadastro(c: CadastroItemPersist): CadastroItemPersist {
   let next = c;
-  for (const modalidade of ['corrida', 'natacao', 'permanencia'] as const) {
+  for (const modalidade of ['corrida', 'natacao', 'permanencia', 'caminhada'] as const) {
     next = limparResultadoModalidadeCadastro(next, modalidade);
   }
   return { ...next, resultadoNatacao: undefined };
@@ -132,7 +132,7 @@ export async function excluirTodosResultadosTafMilitar(
   const atualizado = limparTodosResultadosTafCadastro(cadastro);
   await addCadastro(atualizado);
 
-  const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia'];
+  const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia', 'caminhada'];
   for (const tipo of tipos) {
     await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado);
   }

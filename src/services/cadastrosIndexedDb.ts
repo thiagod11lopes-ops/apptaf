@@ -11,8 +11,11 @@ export type CadastroItemPersist = {
   /** Tempos TAF (Registrador de TAF), preenchidos quando houver registro */
   tempoCorrida?: string;
   tempoNatacao?: string;
+  tempoCaminhada?: string;
   /** Nota da corrida (ex.: 50–100 ou REPROVADO) */
   notaCorrida?: string;
+  /** Nota da caminhada 4.800 m (ex.: 50–100 ou REPROVADO) */
+  notaCaminhada?: string;
   /** Nota da natação (feminino: 50–100 ou REPROVADO) */
   notaNatacao?: string;
   /** Resultado da prova de natação (Registrador de TAF) */
@@ -24,10 +27,12 @@ export type CadastroItemPersist = {
   /** Data do registro TAF (DD/MM/AAAA) por modalidade */
   dataTafCorrida?: string;
   dataTafNatacao?: string;
+  dataTafCaminhada?: string;
   dataTafPermanencia?: string;
   /** Rúbrica do candidato (SVG data URL) por modalidade */
   rubricaCorridaSvg?: string;
   rubricaNatacaoSvg?: string;
+  rubricaCaminhadaSvg?: string;
   rubricaPermanenciaSvg?: string;
   /** Unix ms — usado na sincronização offline (mais recente prevalece). */
   updatedAt?: number;

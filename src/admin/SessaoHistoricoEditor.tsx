@@ -28,12 +28,16 @@ import {
   notaNatacaoParaPersistencia,
   textoNotaNatacaoFromCadastro,
 } from '../taf/natacaoNota';
+import {
+  notaCaminhadaParaPersistencia,
+  textoNotaCaminhadaFromCadastro,
+} from '../taf/caminhada4800Nota';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from '../utils/exportResultadosTafPdf';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
 
-const TIPOS: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia'];
+const TIPOS: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia', 'caminhada'];
 const PERMANENCIA_TEMPO_MS = 10 * 60 * 1000;
 
 function situacaoFromNota(nota?: string | null): string | undefined {
@@ -74,6 +78,19 @@ function notaPatchFromTempo(
       sexo,
     });
     const notaTexto = notaCorridaParaPersistencia(notaRaw) ?? (notaRaw === '—' ? '—' : undefined);
+    return {
+      notaTexto: notaTexto ?? '—',
+      reprovacaoTexto: situacaoFromNota(notaTexto ?? notaRaw),
+    };
+  }
+
+  if (tipo === 'caminhada') {
+    const notaRaw = textoNotaCaminhadaFromCadastro({
+      tempoCaminhada: tempo,
+      dataNascimento,
+      sexo,
+    });
+    const notaTexto = notaCaminhadaParaPersistencia(notaRaw) ?? (notaRaw === '—' ? '—' : undefined);
     return {
       notaTexto: notaTexto ?? '—',
       reprovacaoTexto: situacaoFromNota(notaTexto ?? notaRaw),

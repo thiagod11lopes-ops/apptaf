@@ -11,7 +11,7 @@ export type TrialTableState = {
 
 export type TrialTableAction =
   | { type: 'resetAll' }
-  | { type: 'prepararProva'; nParticipantes: number; tipoProva: 'corrida' | 'natacao' }
+  | { type: 'prepararProva'; nParticipantes: number; tipoProva: 'corrida' | 'natacao' | 'caminhada' }
   | { type: 'resizeChecksGrid'; p: number; v: number }
   | { type: 'resizeChegadaNatacao'; p: number }
   | { type: 'resizeTempos'; p: number }

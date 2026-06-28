@@ -64,6 +64,10 @@ import {
   notaNatacaoParaPersistencia,
   textoNotaNatacaoFromCadastro,
 } from '../taf/natacaoNota';
+import {
+  notaCaminhadaParaPersistencia,
+  textoNotaCaminhadaFromCadastro,
+} from '../taf/caminhada4800Nota';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
@@ -108,7 +112,17 @@ const PERMANENCIA_DURACAO_MS = 10 * 60 * 1000;
 
 type CorridaEtapa = 'menu' | 'participantes' | 'nips' | 'tabela_corrida' | 'tabela_permanencia';
 
-type TipoProvaTAF = 'corrida' | 'natacao' | 'permanencia';
+type TipoProvaTAF = 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
+
+function isProvaComVoltas(tipo: TipoProvaTAF | null): boolean {
+  return tipo === 'corrida' || tipo === 'caminhada';
+}
+
+function trialTipoFromProva(tipo: TipoProvaTAF): 'corrida' | 'natacao' | 'caminhada' {
+  if (tipo === 'natacao') return 'natacao';
+  if (tipo === 'caminhada') return 'caminhada';
+  return 'corrida';
+}
 
 /** Cronômetro da corrida: pode pausar e retomar antes de parar de vez. */
 type CronometroCorridaEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
@@ -132,6 +146,7 @@ const RUBRICA_CANVAS_HEIGHT = 180;
 function labelTipoProvaPreCadastro(tipo: PreCadastroTaf['tipoProva']): string {
   if (tipo === 'natacao') return 'Natação';
   if (tipo === 'permanencia') return 'Permanência';
+  if (tipo === 'caminhada') return 'Caminhada';
   return 'Corrida';
 }
 
@@ -473,6 +488,7 @@ export default function AplicarTAFScreen() {
 
   /** Nota corrida: exige coluna de tempo visível. */
   const mostrarColunaNotaCorrida = tipoProva === 'corrida' && mostrarColunaTempo;
+  const mostrarColunaNotaCaminhada = tipoProva === 'caminhada' && mostrarColunaTempo;
 
   /**
    * Natação: coluna “Nota” sempre ao lado de “Tempo” (valores preenchidos após marcar chegada;
@@ -502,6 +518,33 @@ export default function AplicarTAFScreen() {
     return out;
   }, [
     mostrarColunaNotaCorrida,
+    nParticipantesConfirmado,
+    nipFeedbackLinhas,
+    temposMilitaresMs,
+  ]);
+
+  const notaCaminhadaPorLinha = useMemo(() => {
+    if (!mostrarColunaNotaCaminhada) return [] as string[];
+    const out: string[] = [];
+    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+      const fb = nipFeedbackLinhas[i];
+      const ms = temposMilitaresMs[i];
+      if (fb?.tipo !== 'ok' || ms == null) {
+        out.push('—');
+        continue;
+      }
+      const tempoStr = formatMsByModality('corrida', ms);
+      out.push(
+        textoNotaCaminhadaFromCadastro({
+          tempoCaminhada: tempoStr,
+          dataNascimento: fb.dataNascimento,
+          sexo: fb.sexo,
+        }),
+      );
+    }
+    return out;
+  }, [
+    mostrarColunaNotaCaminhada,
     nParticipantesConfirmado,
     nipFeedbackLinhas,
     temposMilitaresMs,
@@ -552,12 +595,14 @@ export default function AplicarTAFScreen() {
     let w = wAtleta + wNome + nColunasVoltas * wVolta + 24;
     if (mostrarColunaTempo) w += wTempo;
     if (mostrarColunaNotaCorrida) w += wNota;
+    if (mostrarColunaNotaCaminhada) w += wNota;
     return w;
   }, [
     tipoProva,
     nColunasVoltas,
     mostrarColunaTempo,
     mostrarColunaNotaCorrida,
+    mostrarColunaNotaCaminhada,
     mostrarColunaNotaNatacao,
   ]);
 
@@ -617,7 +662,7 @@ export default function AplicarTAFScreen() {
   }, [todosIntegrantesComTempoRegistrado, cronometroEstado, tipoProva]);
 
   useEffect(() => {
-    if (corridaEtapa !== 'tabela_corrida' || tipoProva !== 'corrida') return;
+    if (corridaEtapa !== 'tabela_corrida' || !isProvaComVoltas(tipoProva)) return;
     dispatchTrial({
       type: 'resizeChecksGrid',
       p: nParticipantesConfirmado,
@@ -712,15 +757,16 @@ export default function AplicarTAFScreen() {
 
   const onCadastrarResultados = useCallback(async () => {
     if (salvandoResultadosCorrida) return;
-    if (tipoProva !== 'corrida' && tipoProva !== 'natacao') {
+    if (tipoProva !== 'corrida' && tipoProva !== 'natacao' && tipoProva !== 'caminhada') {
       Alert.alert(
         'Tipo de prova não definido',
-        'Volte ao menu e inicie o TAF escolhendo Corrida ou Natação.',
+        'Volte ao menu e inicie o TAF escolhendo Corrida, Natação ou Caminhada.',
       );
       return;
     }
     const prova = tipoProva;
-    const labelAtleta = prova === 'natacao' ? 'Nadador' : 'Corredor';
+    const labelAtleta =
+      prova === 'natacao' ? 'Nadador' : prova === 'caminhada' ? 'Caminhante' : 'Corredor';
 
     let cadastrosInicial: CadastroItemPersist[] = [];
     try {
@@ -765,6 +811,18 @@ export default function AplicarTAFScreen() {
             }),
           );
         }
+      } else if (prova === 'caminhada') {
+        const fbOk = nipFeedbackLinhas[i];
+        if (fbOk?.tipo === 'ok' && temposMilitaresMs[i] != null) {
+          const tempoStr = formatMsByModality('corrida', temposMilitaresMs[i]!);
+          notaTexto = notaCaminhadaParaPersistencia(
+            textoNotaCaminhadaFromCadastro({
+              tempoCaminhada: tempoStr,
+              dataNascimento: fbOk.dataNascimento,
+              sexo: fbOk.sexo,
+            }),
+          );
+        }
       }
 
       resultados.push({
@@ -794,7 +852,8 @@ export default function AplicarTAFScreen() {
           naoEncontrados.push(r.nome);
           continue;
         }
-        const tempoStr = formatMsByModality(prova, r.tempoMs);
+        const tempoMod: TafModality = prova === 'natacao' ? 'natacao' : 'corrida';
+        const tempoStr = formatMsByModality(tempoMod, r.tempoMs);
         const hoje = dataHojeBr();
         const atualizado: CadastroItemPersist =
           prova === 'natacao'
@@ -810,18 +869,31 @@ export default function AplicarTAFScreen() {
                   }),
                 ),
               }
-            : {
-                ...busca.cadastro,
-                tempoCorrida: tempoStr,
-                dataTafCorrida: hoje,
-                notaCorrida: notaCorridaParaPersistencia(
-                  textoNotaCorridaFromCadastro({
-                    tempoCorrida: tempoStr,
-                    dataNascimento: busca.cadastro.dataNascimento,
-                    sexo: busca.cadastro.sexo,
-                  }),
-                ),
-              };
+            : prova === 'caminhada'
+              ? {
+                  ...busca.cadastro,
+                  tempoCaminhada: tempoStr,
+                  dataTafCaminhada: hoje,
+                  notaCaminhada: notaCaminhadaParaPersistencia(
+                    textoNotaCaminhadaFromCadastro({
+                      tempoCaminhada: tempoStr,
+                      dataNascimento: busca.cadastro.dataNascimento,
+                      sexo: busca.cadastro.sexo,
+                    }),
+                  ),
+                }
+              : {
+                  ...busca.cadastro,
+                  tempoCorrida: tempoStr,
+                  dataTafCorrida: hoje,
+                  notaCorrida: notaCorridaParaPersistencia(
+                    textoNotaCorridaFromCadastro({
+                      tempoCorrida: tempoStr,
+                      dataNascimento: busca.cadastro.dataNascimento,
+                      sexo: busca.cadastro.sexo,
+                    }),
+                  ),
+                };
         await addCadastro(atualizado);
         const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);
         if (idx >= 0) listaAtual[idx] = atualizado;
@@ -835,7 +907,10 @@ export default function AplicarTAFScreen() {
           naoEncontrados.length > 0
             ? `Registro parcial: não foi possível localizar no cadastro: ${naoEncontrados.slice(0, 5).join(', ')}${naoEncontrados.length > 5 ? '…' : ''}.`
             : null;
-        if ((prova === 'natacao' || prova === 'corrida') && resultados.length > 0) {
+        if (
+          (prova === 'natacao' || prova === 'corrida' || prova === 'caminhada') &&
+          resultados.length > 0
+        ) {
           setModalParcialAviso(avisoParcial);
           setRubricasNatacaoSvg(Array.from({ length: resultados.length }, () => ''));
           setIndiceRubricaNatacao(0);
@@ -1034,6 +1109,12 @@ export default function AplicarTAFScreen() {
   const abrirPermanencia = useCallback(() => {
     tipoProvaRef.current = 'permanencia';
     setTipoProva('permanencia');
+    setCorridaEtapa('participantes');
+  }, []);
+
+  const abrirCaminhada = useCallback(() => {
+    tipoProvaRef.current = 'caminhada';
+    setTipoProva('caminhada');
     setCorridaEtapa('participantes');
   }, []);
 
@@ -1275,10 +1356,10 @@ export default function AplicarTAFScreen() {
   }, [modalTesteExistente, definirNipOk]);
 
   const prepararProva = useCallback(() => {
-    if (tipoProva !== 'corrida' && tipoProva !== 'natacao') {
+    if (tipoProva !== 'corrida' && tipoProva !== 'natacao' && tipoProva !== 'caminhada') {
       Alert.alert(
         'Tipo de prova não definido',
-        'Volte ao menu e escolha Corrida ou Natação antes de continuar.',
+        'Volte ao menu e escolha Corrida, Natação ou Caminhada antes de continuar.',
       );
       return;
     }
@@ -1295,7 +1376,7 @@ export default function AplicarTAFScreen() {
     dispatchTrial({
       type: 'prepararProva',
       nParticipantes: nParticipantesConfirmado,
-      tipoProva: tipoProva === 'natacao' ? 'natacao' : 'corrida',
+      tipoProva: trialTipoFromProva(tipoProva),
     });
     setCorridaEtapa('tabela_corrida');
   }, [resetCronometroCorrida, nParticipantesConfirmado, tipoProva, nipFeedbackLinhas]);
@@ -1556,11 +1637,11 @@ export default function AplicarTAFScreen() {
       setNumeroVoltas('');
       resetCronometroCorrida();
 
-      if (tipo === 'corrida' || tipo === 'natacao') {
+      if (tipo === 'corrida' || tipo === 'natacao' || tipo === 'caminhada') {
         dispatchTrial({
           type: 'prepararProva',
           nParticipantes: n,
-          tipoProva: tipo === 'natacao' ? 'natacao' : 'corrida',
+          tipoProva: trialTipoFromProva(tipo),
         });
         setCorridaEtapa('tabela_corrida');
       } else {
@@ -1632,13 +1713,17 @@ export default function AplicarTAFScreen() {
       ? 'Natação'
       : tipoProva === 'permanencia'
         ? 'Permanência'
-        : 'Corrida';
+        : tipoProva === 'caminhada'
+          ? 'Caminhada'
+          : 'Corrida';
   const labelAtleta =
     tipoProva === 'natacao'
       ? 'Nadador'
       : tipoProva === 'permanencia'
         ? 'Militar'
-        : 'Corredor';
+        : tipoProva === 'caminhada'
+          ? 'Caminhante'
+          : 'Corredor';
 
   const participantesPermanencia = useMemo(
     () =>
@@ -1747,7 +1832,9 @@ export default function AplicarTAFScreen() {
                   ? 'Natação'
                   : modProva === 'permanencia'
                     ? 'Permanência'
-                    : 'Corrida';
+                    : modProva === 'caminhada'
+                      ? 'Caminhada'
+                      : 'Corrida';
               return (
                 <View key={`rubrica-participante-${indiceRubricaNatacao}`}>
                   <Text style={styles.modalRubricaSubtituloCadastro}>
@@ -1770,7 +1857,10 @@ export default function AplicarTAFScreen() {
                   <Text style={styles.modalRubricaLinhaCadastro}>
                     Tempo de prova:{' '}
                     <Text style={styles.modalRubricaLinhaStrong}>
-                      {formatMsByModality(modProva, participanteAtual.tempoMs)}
+                      {formatMsByModality(
+                        modProva === 'natacao' ? 'natacao' : 'corrida',
+                        participanteAtual.tempoMs,
+                      )}
                     </Text>
                   </Text>
                   <Text style={styles.modalRubricaLinhaCadastro}>
@@ -2017,6 +2107,15 @@ export default function AplicarTAFScreen() {
                   style={[styles.btn, { backgroundColor: theme.primary }]}
                 >
                   <Text style={[ts.body, styles.btnText]}>Permanência</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.btnRow}>
+                <TouchableOpacity
+                  accessibilityLabel="Caminhada"
+                  onPress={abrirCaminhada}
+                  style={[styles.btn, { backgroundColor: theme.primary }]}
+                >
+                  <Text style={[ts.body, styles.btnText]}>Caminhada</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2277,10 +2376,14 @@ export default function AplicarTAFScreen() {
             </TouchableOpacity>
 
             <Text style={[ts.label, styles.labelText]}>
-              {tipoProva === 'natacao' ? 'Natação preparada' : 'Corrida preparada'}
+              {tipoProva === 'natacao'
+                ? 'Natação preparada'
+                : tipoProva === 'caminhada'
+                  ? 'Caminhada preparada'
+                  : 'Corrida preparada'}
             </Text>
 
-            {tipoProva === 'corrida' ? (
+            {isProvaComVoltas(tipoProva) ? (
               <>
                 <Text style={[ts.label, styles.labelText]}>Número de Voltas</Text>
                 <TextInput
@@ -2297,7 +2400,11 @@ export default function AplicarTAFScreen() {
                   ]}
                   autoCorrect={false}
                   spellCheck={false}
-                  accessibilityLabel="Número de voltas da corrida"
+                  accessibilityLabel={
+                    tipoProva === 'caminhada'
+                      ? 'Número de voltas da caminhada'
+                      : 'Número de voltas da corrida'
+                  }
                 />
               </>
             ) : null}
@@ -2351,6 +2458,11 @@ export default function AplicarTAFScreen() {
                     </Text>
                   ) : null}
                   {mostrarColunaNotaCorrida ? (
+                    <Text style={[styles.tabelaHeaderCell, styles.tabelaColNota]} numberOfLines={1}>
+                      Nota
+                    </Text>
+                  ) : null}
+                  {mostrarColunaNotaCaminhada ? (
                     <Text style={[styles.tabelaHeaderCell, styles.tabelaColNota]} numberOfLines={1}>
                       Nota
                     </Text>
@@ -2459,6 +2571,22 @@ export default function AplicarTAFScreen() {
                             numberOfLines={2}
                           >
                             {notaCorridaPorLinha[index] ?? '—'}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {mostrarColunaNotaCaminhada ? (
+                        <View style={[styles.tabelaColNota, styles.tabelaCelulaTempo]}>
+                          <Text
+                            style={[
+                              styles.tabelaCellText,
+                              styles.tabelaNotaText,
+                              notaCaminhadaPorLinha[index] === 'REPROVADO'
+                                ? styles.tabelaNotaRepro
+                                : null,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {notaCaminhadaPorLinha[index] ?? '—'}
                           </Text>
                         </View>
                       ) : null}

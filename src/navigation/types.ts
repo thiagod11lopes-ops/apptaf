@@ -5,7 +5,7 @@ export type ResultadoCorridaItem = {
   nome: string;
   tempoMs: number;
   nip: string;
-  prova?: 'corrida' | 'natacao' | 'permanencia';
+  prova?: 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
   notaTexto?: string;
   noraTexto?: string;
   reprovacaoTexto?: string;

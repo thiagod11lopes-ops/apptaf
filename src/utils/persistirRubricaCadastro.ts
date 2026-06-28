@@ -28,7 +28,9 @@ export async function persistirRubricasNoCadastro(
         ? { rubricaNatacaoSvg: svg }
         : prova === 'permanencia'
           ? { rubricaPermanenciaSvg: svg }
-          : { rubricaCorridaSvg: svg };
+          : prova === 'caminhada'
+            ? { rubricaCaminhadaSvg: svg }
+            : { rubricaCorridaSvg: svg };
 
     const atualizado: CadastroItemPersist = { ...busca.cadastro, ...patch };
     await addCadastro(atualizado);

@@ -25,6 +25,7 @@ function tempos(c: CadastroItemPersist) {
   return {
     corrida: (c.tempoCorrida ?? x.tempo ?? '').trim(),
     natacao: (c.tempoNatacao ?? '').trim(),
+    caminhada: (c.tempoCaminhada ?? '').trim(),
     permanencia: (c.tempoPermanencia ?? '').trim(),
   };
 }
@@ -67,6 +68,11 @@ export function temAvaliacaoNatacao(c: CadastroItemPersist): boolean {
 export function temAvaliacaoPermanencia(c: CadastroItemPersist): boolean {
   const t = tempos(c);
   return !!(resultadoPermanenciaCadastro(c) || t.permanencia);
+}
+
+export function temAvaliacaoCaminhada(c: CadastroItemPersist): boolean {
+  const t = tempos(c);
+  return !!(t.caminhada || (c.notaCaminhada || '').trim());
 }
 
 /** Militar com avaliação nas três modalidades (corrida, natação e permanência). */

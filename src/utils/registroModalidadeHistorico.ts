@@ -17,6 +17,7 @@ import {
   temAvaliacaoCorrida,
   temAvaliacaoNatacao,
   temAvaliacaoPermanencia,
+  temAvaliacaoCaminhada,
 } from './resultadoTafCadastro';
 import { SESSAO_REGISTRADOR_ID_PREFIX } from './sessoesUnificadasResultados';
 
@@ -89,6 +90,8 @@ function cadastroTemResultadoNaModalidade(
       return temAvaliacaoNatacao(c);
     case 'permanencia':
       return temAvaliacaoPermanencia(c);
+    case 'caminhada':
+      return temAvaliacaoCaminhada(c);
     default:
       return false;
   }

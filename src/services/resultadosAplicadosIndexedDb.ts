@@ -1,7 +1,7 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 
-export type TipoProvaAplicada = 'corrida' | 'natacao' | 'permanencia';
+export type TipoProvaAplicada = 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
 
 export type SessaoAplicacaoTaf = {
   id: string;
@@ -215,6 +215,8 @@ export function tituloTipoProva(tipo: TipoProvaAplicada): string {
       return 'Natação';
     case 'permanencia':
       return 'Permanência';
+    case 'caminhada':
+      return 'Caminhada';
     default:
       return 'Corrida';
   }

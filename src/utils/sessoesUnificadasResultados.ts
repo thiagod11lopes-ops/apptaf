@@ -9,6 +9,7 @@ import {
   temAvaliacaoCorrida,
   temAvaliacaoNatacao,
   temAvaliacaoPermanencia,
+  temAvaliacaoCaminhada,
 } from './resultadoTafCadastro';
 
 export const SESSAO_REGISTRADOR_ID_PREFIX = 'registrador-';
@@ -55,22 +56,40 @@ function participanteJaNaSessaoReal(
 
 function resultadoCorridaFromCadastro(
   c: CadastroItemPersist,
-  tipo: 'corrida' | 'natacao',
+  tipo: 'corrida' | 'natacao' | 'caminhada',
   corredor: number,
 ): ResultadoCorridaItem | null {
-  const tempo = (tipo === 'corrida' ? c.tempoCorrida : c.tempoNatacao)?.trim();
-  const nota = (tipo === 'corrida' ? c.notaCorrida : c.notaNatacao)?.trim();
-  if (!tempo && !nota) return null;
+  const tempo =
+    tipo === 'corrida'
+      ? c.tempoCorrida
+      : tipo === 'natacao'
+        ? c.tempoNatacao
+        : c.tempoCaminhada;
+  const nota =
+    tipo === 'corrida'
+      ? c.notaCorrida
+      : tipo === 'natacao'
+        ? c.notaNatacao
+        : c.notaCaminhada;
+  const tempoTrim = tempo?.trim();
+  const notaTrim = nota?.trim();
+  if (!tempoTrim && !notaTrim) return null;
 
-  const ms = tempo ? (tempoStringParaMsProva(tempo) ?? 0) : 0;
+  const ms = tempoTrim ? (tempoStringParaMsProva(tempoTrim) ?? 0) : 0;
+  const rubrica =
+    tipo === 'corrida'
+      ? c.rubricaCorridaSvg
+      : tipo === 'natacao'
+        ? c.rubricaNatacaoSvg
+        : c.rubricaCaminhadaSvg;
   return {
     corredor,
     nome: (c.nome ?? '').trim() || '—',
     nip: c.nip ?? '',
     tempoMs: ms,
     prova: tipo,
-    notaTexto: nota || undefined,
-    rubricaCandidatoSvg: tipo === 'corrida' ? c.rubricaCorridaSvg : c.rubricaNatacaoSvg,
+    notaTexto: notaTrim || undefined,
+    rubricaCandidatoSvg: rubrica,
   };
 }
 
@@ -104,6 +123,8 @@ function dataModalidadeCadastro(c: CadastroItemPersist, tipo: TipoProvaAplicada)
       return c.dataTafNatacao?.trim() || null;
     case 'permanencia':
       return c.dataTafPermanencia?.trim() || null;
+    case 'caminhada':
+      return c.dataTafCaminhada?.trim() || null;
     default:
       return null;
   }
@@ -125,6 +146,8 @@ function cadastroTemModalidade(c: CadastroItemPersist, tipo: TipoProvaAplicada):
       return temAvaliacaoNatacao(c);
     case 'permanencia':
       return temAvaliacaoPermanencia(c);
+    case 'caminhada':
+      return temAvaliacaoCaminhada(c);
     default:
       return false;
   }
@@ -137,6 +160,7 @@ function resultadoFromCadastro(
 ): ResultadoCorridaItem | null {
   if (tipo === 'corrida') return resultadoCorridaFromCadastro(c, 'corrida', corredor);
   if (tipo === 'natacao') return resultadoCorridaFromCadastro(c, 'natacao', corredor);
+  if (tipo === 'caminhada') return resultadoCorridaFromCadastro(c, 'caminhada', corredor);
   return resultadoPermanenciaFromCadastro(c, corredor);
 }
 
@@ -148,7 +172,7 @@ export function gerarSessoesVirtuaisFromCadastros(
   const grupos = new Map<string, { data: string; tipo: TipoProvaAplicada; resultados: ResultadoCorridaItem[] }>();
 
   for (const c of cadastros) {
-    for (const tipo of ['corrida', 'natacao', 'permanencia'] as const) {
+    for (const tipo of ['corrida', 'natacao', 'permanencia', 'caminhada'] as const) {
       if (!cadastroTemModalidade(c, tipo)) continue;
       if (participanteJaNaSessaoReal(c.id, tipo, sessoesReais, cadastros)) continue;
 
@@ -198,7 +222,7 @@ export async function persistirSessoesRegistradorFromCadastro(
   c: CadastroItemPersist,
   addSessao: (input: Omit<SessaoAplicacaoTaf, 'id' | 'criadoEm'>) => Promise<string>,
 ): Promise<void> {
-  const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia'];
+  const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia', 'caminhada'];
   for (const tipo of tipos) {
     if (!cadastroTemModalidade(c, tipo)) continue;
     const data = dataModalidadeParaSessao(c, tipo);

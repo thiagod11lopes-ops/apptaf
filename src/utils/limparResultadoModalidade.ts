@@ -1,11 +1,12 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 
-export type ModalidadeResultadoTaf = 'corrida' | 'natacao' | 'permanencia';
+export type ModalidadeResultadoTaf = 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
 
 const LABEL_MODALIDADE: Record<ModalidadeResultadoTaf, string> = {
   corrida: 'Corrida',
   natacao: 'Natação',
   permanencia: 'Permanência',
+  caminhada: 'Caminhada',
 };
 
 export function labelModalidadeResultado(m: ModalidadeResultadoTaf): string {
@@ -46,6 +47,12 @@ export function limparResultadoModalidadeCadastro(
       ) {
         next.resultadoNatacao = undefined;
       }
+      break;
+    case 'caminhada':
+      next.tempoCaminhada = undefined;
+      next.notaCaminhada = undefined;
+      next.dataTafCaminhada = undefined;
+      next.rubricaCaminhadaSvg = undefined;
       break;
   }
 

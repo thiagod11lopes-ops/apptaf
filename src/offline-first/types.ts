@@ -56,7 +56,7 @@ export interface PreCadastroRecord extends SyncableMeta {
   id: string;
   ownerUid: string;
   criadoEm: number;
-  tipoProva: 'corrida' | 'natacao' | 'permanencia';
+  tipoProva: 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
   participantes: PreCadastroParticipante[];
 }
 

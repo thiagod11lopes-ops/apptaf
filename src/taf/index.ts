@@ -3,4 +3,5 @@
  */
 export * from './tafTimeFormat';
 export * from './corrida2400Nota';
+export * from './caminhada4800Nota';
 export * from './natacaoNota';

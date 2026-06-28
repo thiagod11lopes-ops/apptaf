@@ -81,7 +81,7 @@ export function TopActionIcons({
             syncSaveIconState === 'success'
               ? 'Sincronização concluída com sucesso'
               : syncPendingBadge > 0
-                ? `Sincronizar com a nuvem, ${syncPendingBadge} alteração(ões) local(is) pendente(s)`
+                ? `Sincronizar com a nuvem, ${syncPendingBadge} alteração(ões) pendente(s) (enviar e receber)`
                 : 'Sincronizar com a nuvem'
           }
         >

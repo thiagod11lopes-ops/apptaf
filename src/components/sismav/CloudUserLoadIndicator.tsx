@@ -164,9 +164,9 @@ function loadingInitialPercent(
 const styles = StyleSheet.create({
   wrap: {
     width: '100%',
-    marginTop: 4,
+    marginTop: 2,
     alignItems: 'center',
-    gap: 6,
+    gap: 3,
   },
   labelRow: {
     flexDirection: 'row',
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   hintBlock: {
     width: '100%',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
     paddingHorizontal: 12,
   },
   hintRow: {
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 4,
   },
   countdownPill: {
     borderWidth: 1,

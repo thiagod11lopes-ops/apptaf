@@ -20,6 +20,7 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
 import { consumeLastRedirectAuthError } from '../services/firebase/googleAuth';
+import { navigateTab } from '../navigation/navigationRef';
 import { PREMIUM } from '../theme/premium';
 
 function userLabel(name: string | null, email: string | null): string {
@@ -58,6 +59,7 @@ export default function LoginScreen() {
 
   const onLoginSuccess = useCallback(() => {
     setErro(null);
+    navigateTab('Home');
   }, []);
 
   const [loading, setLoading] = useState(false);

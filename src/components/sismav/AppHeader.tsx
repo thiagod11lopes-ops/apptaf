@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 10,
     width: '100%',
   },
   sideSlot: {
@@ -167,25 +167,25 @@ const styles = StyleSheet.create({
   subtitleCenter: {
     textAlign: 'center',
     width: '100%',
-    marginTop: 12,
+    marginTop: 6,
   },
   cloudBlock: {
     width: '100%',
-    marginTop: 16,
+    marginTop: 8,
   },
   titleOnDark: { color: '#f1f5f9' },
   rule: {
     width: 28,
     height: 2,
     borderRadius: 2,
-    marginTop: 10,
+    marginTop: 5,
     marginBottom: 0,
   },
   ruleCentered: { alignSelf: 'center' },
   heroCard: {
     borderRadius: 16,
     padding: 20,
-    marginBottom: 20,
+    marginBottom: 10,
     width: '100%',
   },
   heroRow: {
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.72)',
     textTransform: 'uppercase',
     letterSpacing: 1.4,
-    marginTop: 12,
+    marginTop: 6,
     textAlign: 'center',
     width: '100%',
   },

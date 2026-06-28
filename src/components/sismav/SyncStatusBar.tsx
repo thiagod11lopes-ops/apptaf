@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Switch, ActivityIndicator, Platform } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOfflineSyncState } from '../../contexts/OfflineSyncContext';
@@ -21,11 +21,11 @@ function formatQueueCount(value: number | null | undefined): string {
 }
 
 function cloudConnectionLabel(syncUi: SyncUiState, loggedIn: boolean): string {
-  if (!loggedIn) return 'Faça login para conectar';
-  if (syncUi.phase === 'error') return 'Erro na conexão';
-  if (syncUi.isSyncing) return 'Conectando à nuvem…';
+  if (!loggedIn) return 'Faça login para sincronizar';
+  if (syncUi.phase === 'error') return 'Erro na sincronização';
+  if (syncUi.isSyncing) return 'Sincronizando…';
   if (syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date') return 'Sincronizado';
-  return 'Desconectado da nuvem';
+  return 'Dados locais · pronto para sync';
 }
 
 function PhaseProgressBar({
@@ -80,22 +80,10 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const { firebaseEnabled, isAuthenticated, authReady } = useAuth();
-  const { syncUi, startSyncFromToggle, retrySync, cancelOnlineMode } = useOfflineSyncState();
+  const { syncUi, retrySync } = useOfflineSyncState();
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [authBlockedHint, setAuthBlockedHint] = useState(false);
 
   const loggedIn = authReady && isAuthenticated;
-
-  useEffect(() => {
-    if (loggedIn) setAuthBlockedHint(false);
-  }, [loggedIn]);
-
-  const switchOn =
-    syncUi.isSyncing ||
-    syncUi.phase === 'success' ||
-    syncUi.phase === 'already_up_to_date' ||
-    syncUi.isOnline;
-
   const pendingUploads = syncUi.counters.pendingUploads;
   const pendingDownloads = syncUi.counters.pendingDownloads;
 
@@ -110,24 +98,6 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
     (syncUi.activeSyncDirection === 'upload' || syncUi.activeSyncDirection === 'finalize');
   const uploadActive = syncUi.isSyncing && syncUi.activeSyncDirection === 'upload';
   const uploadDone = syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date';
-
-  const handleToggle = useCallback(
-    async (next: boolean) => {
-      if (!next) {
-        if (!syncUi.isSyncing) cancelOnlineMode();
-        return;
-      }
-      if (!loggedIn) {
-        setAuthBlockedHint(true);
-        return;
-      }
-      if (!syncUi.toggleEnabled) return;
-      if (!firebaseEnabled) return;
-      setAuthBlockedHint(false);
-      await startSyncFromToggle();
-    },
-    [cancelOnlineMode, firebaseEnabled, loggedIn, startSyncFromToggle, syncUi.isSyncing, syncUi.toggleEnabled],
-  );
 
   const openHistory = useCallback(() => {
     if (syncUi.isSyncing) return;
@@ -174,7 +144,7 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
             ) : null}
           </View>
 
-          <View style={styles.switchCluster}>
+          <View style={styles.statusCluster}>
             <View style={styles.queueBadges}>
               <View style={[styles.queueBadge, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
                 <Text style={[ts.caption, { color: theme.textSecondary }]}>⬇</Text>
@@ -193,30 +163,6 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
             {syncUi.isSyncing ? (
               <ActivityIndicator size="small" color={theme.primary} />
             ) : null}
-
-            <View style={styles.switchWithCaption}>
-              <Text
-                style={[
-                  ts.caption,
-                  { color: switchOn ? theme.gain : theme.textMuted, fontWeight: '700', fontSize: 10 },
-                ]}
-              >
-                {switchOn ? 'CONECTADO' : 'DESCONECTADO'}
-              </Text>
-              <Switch
-                value={switchOn}
-                onValueChange={(v) => void handleToggle(v)}
-                disabled={!loggedIn || (!syncUi.toggleEnabled && !switchOn)}
-                trackColor={{ false: '#cbd5e1', true: theme.primary }}
-                thumbColor="#FFFFFF"
-                accessibilityLabel={
-                  loggedIn
-                    ? 'Conectar ou desconectar da nuvem'
-                    : 'Conexão bloqueada — faça login com Google'
-                }
-                accessibilityState={{ disabled: !loggedIn }}
-              />
-            </View>
           </View>
         </View>
 
@@ -228,18 +174,12 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
         {!loggedIn ? (
           <View style={[styles.blockedBanner, { backgroundColor: '#fef3c7', borderColor: '#ca8a04' }]}>
             <Text style={[ts.caption, { color: '#92400e', fontWeight: '700', lineHeight: 18 }]}>
-              ⚠ Faça login com Google para conectar à nuvem
+              ⚠ Faça login com Google para sincronizar
             </Text>
             <Text style={[ts.caption, { color: '#92400e', lineHeight: 18, marginTop: 4 }]}>
               {SYNC_AUTH_REQUIRED_MESSAGE}
             </Text>
           </View>
-        ) : null}
-
-        {authBlockedHint && !loggedIn ? (
-          <Text style={[ts.caption, { color: theme.loss, fontWeight: '600' }]}>
-            {SYNC_AUTH_REQUIRED_MESSAGE}
-          </Text>
         ) : null}
 
         {showProgress ? (
@@ -352,7 +292,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
-  switchCluster: {
+  statusCluster: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -377,10 +317,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
-  },
-  switchWithCaption: {
-    alignItems: 'center',
-    gap: 2,
   },
   queueLegend: {
     flexDirection: 'row',

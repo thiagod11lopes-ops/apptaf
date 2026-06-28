@@ -28,16 +28,29 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { user, authReady, isAuthenticated, firebaseEnabled, dataOwnerUid } = useAuth();
-  const { syncUi, pendingCount } = useOfflineSyncState();
+  const { syncUi, pendingCount, startSyncFromToggle } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
+
+  const handleSyncPress = useCallback(() => {
+    setSyncModalOpen(true);
+    if (!syncUi.isSyncing && syncUi.toggleEnabled) {
+      void startSyncFromToggle();
+    }
+  }, [startSyncFromToggle, syncUi.isSyncing, syncUi.toggleEnabled]);
+
+  const syncPendingTotal = useMemo(() => {
+    const uploads = syncUi.counters.pendingUploads ?? pendingCount;
+    const downloads = syncUi.counters.pendingDownloads ?? 0;
+    return uploads + downloads;
+  }, [pendingCount, syncUi.counters.pendingDownloads, syncUi.counters.pendingUploads]);
 
   const syncSaveIconState = useMemo((): 'idle' | 'pending' | 'success' => {
     if (syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date') return 'success';
     if (syncUi.isSyncing) return 'idle';
-    if (pendingCount > 0) return 'pending';
+    if (syncPendingTotal > 0) return 'pending';
     return 'idle';
-  }, [syncUi.phase, syncUi.isSyncing, pendingCount]);
+  }, [syncUi.phase, syncUi.isSyncing, syncPendingTotal]);
 
   const recarregarResumo = useCallback(async () => {
     if (!authReady) return;
@@ -76,8 +89,8 @@ export default function HomeScreen() {
         <TopActionIcons
           activeRoute="Home"
           inline
-          onSyncPress={firebaseEnabled ? () => setSyncModalOpen(true) : undefined}
-          syncPendingBadge={syncSaveIconState === 'pending' ? pendingCount : 0}
+          onSyncPress={firebaseEnabled ? handleSyncPress : undefined}
+          syncPendingBadge={syncSaveIconState === 'pending' ? syncPendingTotal : 0}
           syncSaveIconState={syncSaveIconState}
         />
 
@@ -135,7 +148,7 @@ const styles = StyleSheet.create({
   },
   topSection: {
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 6,
     flexShrink: 0,
   },
   statsGrid: {

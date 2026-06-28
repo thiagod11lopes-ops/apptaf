@@ -1,19 +1,21 @@
 ---
-description: Ao finalizar atualizações com mudanças de código, fazer commit e push automaticamente
+description: Após cada alteração de código, fazer commit e push automaticamente
 alwaysApply: true
 ---
 
-# Commit e sync após atualizações
+# Commit e push automático
 
-Ao **concluir uma tarefa de implementação ou correção** neste projeto (quando houver alterações nos arquivos):
+**Sempre que alterar arquivos do projeto** (implementação, correção, teste ou config), ao **concluir a tarefa**:
 
-1. Siga o protocolo de git do projeto (status, diff, log, mensagem de commit adequada).
-2. Faça o **commit** das alterações relevantes (nunca incluir segredos como `.env`).
-3. Faça o **push** para `origin main` (`git push origin main`) para disparar o deploy.
+1. Rode `git status`, `git diff` e `git log -3` para entender o que mudou.
+2. Faça **commit** das alterações relevantes (nunca `.env`, credenciais ou segredos).
+3. Faça **push** para `origin main` (`git push origin main`).
 4. Informe o hash do commit e confirme que o push foi enviado.
 
+Não espere o usuário pedir commit ou push — isso é parte obrigatória do encerramento de cada tarefa com diff.
+
 **Não commite nem faça push** quando:
-- A tarefa foi apenas informativa (explicação, revisão) sem alteração de arquivos.
+- A tarefa foi só leitura, explicação ou revisão, sem alteração de arquivos.
 - O usuário pedir explicitamente para não commitar ou não enviar.
 
 Mensagens de commit: curtas, em português, estilo `fix:`, `feat:`, `chore:`.

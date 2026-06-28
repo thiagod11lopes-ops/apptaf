@@ -53,7 +53,6 @@ export function buildResumoAplicacaoHtml(
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
   const colProva = escapeHtml(cabecalhoColunaProvaResultados(resultados));
-  const temNotas = resultados.some((r) => r.notaTexto != null && r.notaTexto !== '');
 
   /** Colunas fixas do PDF: Nadador/Corredor, Nome, NIP, Tempo, Nota, Situação, Rúbrica do candidato */
   const theadPdf = `<th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th>`;
@@ -89,7 +88,6 @@ export function buildResumoAplicacaoHtml(
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #111827; line-height: 1.15; }
     h1 { font-size: 27px; margin: 0 0 8px; line-height: 1.15; }
     .meta { font-size: 18px; color: #6B7280; margin-bottom: 16px; line-height: 1.15; }
-    .intro { font-size: 20px; margin-bottom: 20px; line-height: 1.28; color: #374151; }
     .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
     ${PDF_TABELA_COMPACTA_STYLES}
     ${RUBRICA_PDF_STYLES}
@@ -100,13 +98,6 @@ export function buildResumoAplicacaoHtml(
 <body>
   <h1>${escapeHtml(titulo)}</h1>
   <p class="meta">Gerado em ${escapeHtml(dataStr)}</p>
-  <p class="intro">Os tempos compatíveis com o cadastro foram gravados na coluna <strong>${escapeHtml(
-    textoColunaCadastro,
-  )}</strong> da planilha de Cadastro.${
-    temNotas
-      ? ' Notas conforme faixa etária e tempos limite (50 a 100 pontos). Corrida e natação: tabelas F e M.'
-      : ''
-  } Abaixo, o resumo desta aplicação.</p>
   ${
     resultados.length === 0
       ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessão.</p>'

@@ -123,6 +123,54 @@ function mergeRecordsById<T extends { id: string; updatedAt: number; ownerUid: s
   return [...byId.values()];
 }
 
+function uniqueOwnerSources(...uids: (string | null | undefined)[]): string[] {
+  const out: string[] = [];
+  for (const uid of uids) {
+    const v = uid?.trim();
+    if (!v || out.includes(v)) continue;
+    out.push(v);
+  }
+  return out;
+}
+
+function resolveDisplayOwnerUid(ownerUid: string | null): string {
+  if (ownerUid?.trim()) return ownerUid.trim();
+  return ANONYMOUS_OWNER;
+}
+
+/** Lista cadastros para exibição — inclui owner persistido e __local__ (modo offline). */
+export async function listCadastrosForDisplay(ownerUid: string | null): Promise<CadastroRecord[]> {
+  const { readAppMetaCache } = await import('./appMeta');
+  const primary = resolveDisplayOwnerUid(ownerUid);
+  const persisted = readAppMetaCache('session:dataOwnerUid');
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted);
+  const batches = await Promise.all(sources.map((uid) => listCadastros(uid)));
+  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
+  return mergeRecordsById(mergeTarget, batches);
+}
+
+/** Lista sessões para exibição — inclui owner persistido e __local__ (modo offline). */
+export async function listSessoesForDisplay(ownerUid: string | null): Promise<SessaoRecord[]> {
+  const { readAppMetaCache } = await import('./appMeta');
+  const primary = resolveDisplayOwnerUid(ownerUid);
+  const persisted = readAppMetaCache('session:dataOwnerUid');
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted);
+  const batches = await Promise.all(sources.map((uid) => listSessoes(uid)));
+  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
+  return mergeRecordsById(mergeTarget, batches).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+}
+
+/** Lista aplicadores para exibição — inclui owner persistido e __local__ (modo offline). */
+export async function listAplicadoresForDisplay(ownerUid: string | null): Promise<AplicadorRecord[]> {
+  const { readAppMetaCache } = await import('./appMeta');
+  const primary = resolveDisplayOwnerUid(ownerUid);
+  const persisted = readAppMetaCache('session:dataOwnerUid');
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted);
+  const batches = await Promise.all(sources.map((uid) => listAplicadores(uid)));
+  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
+  return mergeRecordsById(mergeTarget, batches);
+}
+
 /** Lista registros locais para sync — inclui __local__ e UID de login antes da migração. */
 export async function listCadastrosForSync(
   ownerUid: string,

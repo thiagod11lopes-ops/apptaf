@@ -132,10 +132,23 @@ export function setAuthUidState(
   } else {
     loginUid = null;
     clearPersistedLoginUid();
-    dataOwnerUid = readPersistedDataOwnerUid() ?? dataOwnerUid;
+    if (nextDataOwnerUid != null) {
+      dataOwnerUid = nextDataOwnerUid;
+      persistDataOwnerUid(nextDataOwnerUid);
+    } else {
+      dataOwnerUid = readPersistedDataOwnerUid() ?? dataOwnerUid;
+    }
   }
   authReady = ready;
   notifyWaiters();
+}
+
+/** Encerra login Firebase mantendo ownerUid local para continuar offline. */
+export async function enterOfflineStorageSession(): Promise<string | null> {
+  await hydrateAuthUidFromIndexedDb();
+  const owner = getCachedDataOwnerUid();
+  setAuthUidState(null, owner, true);
+  return owner;
 }
 
 /** Limpa vínculo persistido (ex.: após "Excluir todos os dados"). */
@@ -169,6 +182,8 @@ export async function resolveStorageOwnerUid(): Promise<string | null> {
   const { hydrateAppMetaFromIndexedDb } = await import('../../offline-first/db/appMeta');
   await hydrateAppMetaFromIndexedDb();
   await hydrateAuthUidFromIndexedDb();
+  const owner = getCachedDataOwnerUid();
+  if (owner) return owner;
   if (!authReady) {
     await waitForAuthUid();
   }

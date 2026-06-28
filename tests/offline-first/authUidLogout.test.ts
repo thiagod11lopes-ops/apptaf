@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { readAppMetaCache } from '../../src/offline-first/db/appMeta';
 import {
   clearPersistedStorageOwner,
   getCachedDataOwnerUid,
@@ -19,8 +20,13 @@ describe('authUid — logout mantém cache local', () => {
   });
 
   it('após logout, getCachedDataOwnerUid ainda resolve o dono dos dados', () => {
-    setAuthUidState(null, null, true);
+    setAuthUidState(null, OWNER, true);
     expect(getCachedLoginUid()).toBeNull();
     expect(getCachedDataOwnerUid()).toBe(OWNER);
+  });
+
+  it('logout explícito com owner preserva persistência', () => {
+    setAuthUidState(null, OWNER, true);
+    expect(readAppMetaCache('session:dataOwnerUid')).toBe(OWNER);
   });
 });

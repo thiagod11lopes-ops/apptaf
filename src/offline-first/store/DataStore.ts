@@ -5,8 +5,11 @@ import { calcularResumoInicioTafFromHistorico } from '../../utils/resultadoGeral
 import type { ResumoInicioTafHistorico } from '../../utils/resultadoGeralHistorico';
 import {
   listCadastros,
+  listCadastrosForDisplay,
   listAplicadores,
+  listAplicadoresForDisplay,
   listSessoes,
+  listSessoesForDisplay,
   resolveOwnerUid,
   saveCadastro,
   saveAplicador,
@@ -24,17 +27,17 @@ import { syncQueue } from '../sync/SyncQueue';
 
 export class DataStore {
   async getCadastros(ownerUid: string | null): Promise<CadastroItemPersist[]> {
-    const rows = await listCadastros(resolveOwnerUid(ownerUid));
+    const rows = await listCadastrosForDisplay(ownerUid);
     return filterRowsForDisplay(rows).map(stripMeta);
   }
 
   async getAplicadores(ownerUid: string | null): Promise<AplicadorItemPersist[]> {
-    const rows = await listAplicadores(resolveOwnerUid(ownerUid));
+    const rows = await listAplicadoresForDisplay(ownerUid);
     return filterRowsForDisplay(rows).map(stripMeta);
   }
 
   async getSessoes(ownerUid: string | null): Promise<SessaoAplicacaoTaf[]> {
-    const rows = await listSessoes(resolveOwnerUid(ownerUid));
+    const rows = await listSessoesForDisplay(ownerUid);
     return filterRowsForDisplay(rows).map(stripMeta);
   }
 

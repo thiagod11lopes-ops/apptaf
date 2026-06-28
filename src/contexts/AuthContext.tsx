@@ -27,6 +27,7 @@ import {
   waitForAuthenticatedUid,
   getCachedDataOwnerUid,
   getCachedLoginUid,
+  enterOfflineStorageSession,
 } from '../services/firebase/authUid';
 import {
   clearPersistedAuthProfile,
@@ -131,8 +132,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const auth = getFirebaseAuth();
     if (!auth) {
-      setAuthReady(true);
-      setAuthUidState(null, null, true);
+      void (async () => {
+        await hydrateAppStorageFromIndexedDb();
+        const owner = getCachedDataOwnerUid();
+        setDataOwnerUid(owner);
+        setAuthUidState(null, owner, true);
+        setAuthReady(true);
+      })();
       return;
     }
 
@@ -142,11 +148,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void finalizeAuthenticatedSessionRef.current(mapFirebaseUser(fbUser));
     };
 
-    const applySignedOut = (): void => {
+    const applyLocalOfflineSession = (): void => {
+      const owner = getCachedDataOwnerUid();
       setUser(null);
       setIsAuthorizedMember(false);
-      setDataOwnerUid(null);
-      setAuthUidState(null, null, true);
+      setDataOwnerUid(owner);
+      setAuthUidState(null, owner, true);
       clearPersistedAuthProfile();
       setAuthReady(true);
       void systemState.setOfflineMode();
@@ -158,13 +165,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled || auth.currentUser) return;
         if (isFirebaseAuthRedirectReturn()) return;
         setIsSessionLoading(false);
-        applySignedOut();
+        applyLocalOfflineSession();
       })();
     };
 
     void (async () => {
       await hydrateAppStorageFromIndexedDb();
-      setDataOwnerUid(getCachedDataOwnerUid());
+      const owner = getCachedDataOwnerUid();
+      setDataOwnerUid(owner);
       const redirectUser =
         Platform.OS === 'web' ? await startFirebaseRedirectSignIn() : null;
       await auth.authStateReady();
@@ -178,10 +186,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void finalizeAuthenticatedSessionRef.current(redirectUser);
       } else if (isFirebaseAuthRedirectReturn()) {
         setAuthReady(true);
-      } else if (getCachedDataOwnerUid()) {
+      } else if (owner) {
+        setAuthUidState(null, owner, true);
         setAuthReady(true);
       } else {
-        applySignedOut();
+        applyLocalOfflineSession();
       }
     })();
 
@@ -240,11 +249,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    const ownerBeforeLogout = getCachedDataOwnerUid();
     await signOutFirebase();
     setUser(null);
     setIsAuthorizedMember(false);
-    setDataOwnerUid(null);
-    setAuthUidState(null, null, true);
     clearPersistedAuthProfile();
     clearMemoryCloudCache();
     resetCloudSyncStatus();
@@ -252,6 +260,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     syncEngine.shutdown();
     await syncManager.shutdown();
     await systemState.setOfflineMode();
+    await enterOfflineStorageSession();
+    setDataOwnerUid(ownerBeforeLogout ?? getCachedDataOwnerUid());
     notifyDataChanged();
   }, []);
 

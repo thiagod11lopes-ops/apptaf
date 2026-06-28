@@ -99,6 +99,7 @@ export default function ResultadosScreen() {
     (sessao: SessaoAplicacaoTaf) => {
       navigation.navigate('CadastrarResultados', {
         resultados: sessao.resultados,
+        aplicadorAssinatura: sessao.aplicadorAssinatura,
         returnTo: 'Resultados',
       });
     },

@@ -3,6 +3,7 @@ import type { SessaoAplicacaoTaf } from '../../src/services/resultadosAplicadosI
 import type { AplicadorAssinaturaResumo } from '../../src/types/aplicadorAssinatura';
 import { assinaturasUnicasDasSessoes } from '../../src/utils/assinaturaAplicadorDasSessoes';
 import { buildResultadosTafHtml } from '../../src/utils/exportResultadosTafPdf';
+import { buildResumoAplicacaoHtml } from '../../src/utils/exportResumoAplicacaoPdf';
 
 const assinatura: AplicadorAssinaturaResumo = {
   aplicadorId: 'app-1',
@@ -60,5 +61,26 @@ describe('assinatura aplicador no PDF do histórico', () => {
     expect(html).toContain('aplicador-assinatura');
     expect(html).toContain('João Aplicador');
     expect(html).toContain('NIP 11.1111.11');
+  });
+
+  it('buildResumoAplicacaoHtml inclui rubrica do aplicador ao abrir sessão do histórico', () => {
+    const html = buildResumoAplicacaoHtml(
+      [
+        {
+          corredor: 1,
+          nome: 'Militar Teste',
+          nip: '12.3456.78',
+          tempoMs: 720000,
+          notaTexto: '90',
+          prova: 'corrida',
+        },
+      ],
+      'Corrida',
+      'Resumo da aplicação — TAF',
+      assinatura,
+    );
+    expect(html).toContain('aplicador-assinatura');
+    expect(html).toContain('João Aplicador');
+    expect(html).toContain('aplicador-rubrica');
   });
 });

@@ -49,6 +49,7 @@ import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../servi
 import { addSessaoAplicacao, getAllSessoesAplicacao, getSessaoAplicacaoById, updateSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
 import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
+import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
   buscarRegistroModalidadeExistente,
   removerParticipanteModalidadeDoHistorico,
@@ -147,7 +148,6 @@ type NipFeedbackLinha =
   | null;
 
 const MAX_VOLTAS_COLUNAS = 99;
-const RUBRICA_CANVAS_HEIGHT = 180;
 
 function labelTipoProvaPreCadastro(tipo: PreCadastroTaf['tipoProva']): string {
   if (tipo === 'natacao') return 'Natação';
@@ -893,9 +893,11 @@ export default function AplicarTAFScreen() {
           const copiaResultados = resultados.map((r) => ({ ...r }));
           setListaResultadosRubricaNatacao(copiaResultados);
           pendingResultadosNavRef.current = copiaResultados;
+          setCorridaEtapa('nips');
           setModalRubricaNatacaoVisible(true);
         } else {
           setModalParcialAviso(avisoParcial);
+          setCorridaEtapa('nips');
           setModalTempoRegistradoVisible(true);
         }
       } else {
@@ -992,7 +994,7 @@ export default function AplicarTAFScreen() {
     const rubricaSvgAtual = buildRubricaSvgDataUrl(
       strokesProntos,
       rubricaCanvasWidth,
-      RUBRICA_CANVAS_HEIGHT,
+      RUBRICA_NATIVA_ALTURA,
       RUBRICA_COR_TRACO,
       RUBRICA_COR_FUNDO,
     );
@@ -1060,6 +1062,20 @@ export default function AplicarTAFScreen() {
     setRubricaStrokeAtual([]);
     setErroRubricaNatacao('');
   }, [indiceRubricaNatacao, modalRubricaNatacaoVisible]);
+
+  /** Evita scroll da página por trás do modal de assinatura (web / PWA). */
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    if (!modalRubricaNatacaoVisible) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.touchAction = prevTouchAction;
+    };
+  }, [modalRubricaNatacaoVisible]);
 
   const onChangeParticipantes = useCallback((text: string) => {
     const apenasDigitos = text.replace(/\D/g, '');
@@ -1468,6 +1484,7 @@ export default function AplicarTAFScreen() {
         const copiaPerm = resultadosPerm.map((r) => ({ ...r }));
         setListaResultadosRubricaNatacao(copiaPerm);
         pendingResultadosNavRef.current = copiaPerm;
+        setCorridaEtapa('nips');
         setModalRubricaNatacaoVisible(true);
       } else {
         Alert.alert(
@@ -1837,8 +1854,8 @@ export default function AplicarTAFScreen() {
         onRequestClose={() => {}}
         accessibilityViewIsModal
       >
-        <View style={styles.modalTempoOverlay}>
-          <View style={styles.modalRubricaCardCadastro}>
+        <View style={styles.modalAssinaturaOverlay}>
+          <View style={styles.modalAssinaturaCenter}>
             {(() => {
               const lista = listaResultadosRubricaNatacao;
               const participanteAtual = lista?.[indiceRubricaNatacao];
@@ -1853,65 +1870,52 @@ export default function AplicarTAFScreen() {
                     : modProva === 'caminhada'
                       ? 'Caminhada'
                       : 'Corrida';
+              const temTracoRubrica =
+                rubricaStrokes.some((s) => s.length > 0) || rubricaStrokeAtual.length > 0;
               return (
-                <View key={`rubrica-participante-${indiceRubricaNatacao}`}>
-                  <View style={styles.modalRubricaLinhaRow}>
-                    <Text style={styles.modalRubricaSubtituloCadastro}>
-                      Participante {indiceRubricaNatacao + 1} de {totalLista}
-                    </Text>
-                    <Text style={[styles.modalRubricaLinhaCadastro, styles.modalRubricaLinhaInline]}>
-                      Modalidade:{' '}
-                      <Text style={styles.modalRubricaLinhaStrong}>{tituloModalidade}</Text>
-                    </Text>
-                  </View>
-                  <Text style={styles.modalRubricaLinhaCadastro}>
-                    Nome:{' '}
-                    <Text style={styles.modalRubricaLinhaStrong}>{participanteAtual.nome}</Text>
+                <View
+                  key={`rubrica-participante-${indiceRubricaNatacao}`}
+                  style={[
+                    styles.modalAssinaturaCard,
+                    { backgroundColor: theme.cardBg, borderColor: theme.border },
+                  ]}
+                >
+                  <Text style={[styles.modalAssinaturaTitulo, { color: theme.text }]}>
+                    Assinatura do candidato
                   </Text>
-                  <Text style={styles.modalRubricaLinhaCadastro}>
-                    NIP:{' '}
-                    <Text style={styles.modalRubricaLinhaStrong}>
-                      {participanteAtual.nip || '—'}
-                    </Text>
+                  <Text style={[styles.modalAssinaturaSub, { color: theme.textSecondary }]}>
+                    Participante {indiceRubricaNatacao + 1} de {totalLista} · {tituloModalidade}
                   </Text>
-                  <View style={styles.modalRubricaLinhaRow}>
-                    <Text style={[styles.modalRubricaLinhaCadastro, styles.modalRubricaLinhaInline]}>
-                      Tempo de prova:{' '}
-                      <Text style={styles.modalRubricaLinhaStrong}>
-                        {formatMsByModality(
-                          modProva === 'natacao' ? 'natacao' : 'corrida',
-                          participanteAtual.tempoMs,
-                        )}
-                      </Text>
-                    </Text>
-                    <Text style={[styles.modalRubricaLinhaCadastro, styles.modalRubricaLinhaInline]}>
-                      NOTA:{' '}
-                      <Text style={styles.modalRubricaLinhaStrong}>
-                        {textoNotaRubricaModal(participanteAtual)}
-                      </Text>
-                    </Text>
-                  </View>
-                  <Text style={styles.modalRubricaLinhaCadastro}>
-                    Situação:{' '}
-                    <Text style={styles.modalRubricaLinhaStrong}>
-                      {textoSituacaoRubricaModal(participanteAtual)}
-                    </Text>
+                  <Text style={[styles.modalAssinaturaSub, { color: theme.textSecondary }]}>
+                    {participanteAtual.nome} — NIP {participanteAtual.nip || '—'} — Tempo{' '}
+                    {formatMsByModality(
+                      modProva === 'natacao' ? 'natacao' : 'corrida',
+                      participanteAtual.tempoMs,
+                    )}{' '}
+                    · Nota {textoNotaRubricaModal(participanteAtual)} — desenhe a rúbrica abaixo.
                   </Text>
-                  <Text style={styles.modalRubricaLegendaCadastro}>Rúbrica do candidato</Text>
+
                   <View
-                    style={styles.modalRubricaCanvasWrap}
+                    style={[
+                      styles.modalAssinaturaCanvasWrap,
+                      { borderColor: theme.border, backgroundColor: RUBRICA_COR_FUNDO },
+                      Platform.OS === 'web'
+                        ? ({ touchAction: 'none', userSelect: 'none', cursor: 'crosshair' } as object)
+                        : null,
+                    ]}
                     onLayout={(e) => {
                       const w = e.nativeEvent.layout.width;
                       if (w > 0) setRubricaCanvasWidth(w);
                     }}
                     onStartShouldSetResponder={() => true}
                     onMoveShouldSetResponder={() => true}
+                    onResponderTerminationRequest={() => false}
                     onResponderGrant={iniciarRubricaStroke}
                     onResponderMove={moverRubricaStroke}
                     onResponderRelease={finalizarRubricaStroke}
                     onResponderTerminate={finalizarRubricaStroke}
                   >
-                    <Svg width="100%" height={RUBRICA_CANVAS_HEIGHT}>
+                    <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>
                       {rubricaStrokes.map((stroke, idx) => (
                         <SvgPath
                           key={`stroke-${indiceRubricaNatacao}-${idx}`}
@@ -1935,25 +1939,36 @@ export default function AplicarTAFScreen() {
                       ) : null}
                     </Svg>
                   </View>
+
                   {erroRubricaNatacao ? (
-                    <Text style={styles.modalRubricaErroCadastro}>{erroRubricaNatacao}</Text>
+                    <Text style={[styles.modalAssinaturaErro, { color: theme.loss }]}>
+                      {erroRubricaNatacao}
+                    </Text>
                   ) : null}
-                  <View style={styles.modalRubricaBotoesRow}>
+
+                  <View style={styles.modalAssinaturaFooterBtns}>
                     <TouchableOpacity
                       accessibilityLabel="Limpar rúbrica"
-                      activeOpacity={0.85}
+                      activeOpacity={0.88}
                       onPress={limparRubricaNatacaoAtual}
-                      style={[styles.modalRubricaBtnSecundario, styles.modalRubricaBtnMeio]}
+                      style={[styles.modalAssinaturaBtnSecundario, { borderColor: theme.border }]}
                     >
-                      <Text style={styles.modalRubricaBtnSecundarioText}>Limpar</Text>
+                      <Text style={{ color: theme.text, fontWeight: '700' }}>Limpar</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       accessibilityLabel="Confirmar rúbrica do candidato"
-                      activeOpacity={0.85}
+                      activeOpacity={0.88}
                       onPress={confirmarRubricaNatacao}
-                      style={[styles.modalTempoBtnPrimaryCadastro, styles.modalRubricaBtnMeio]}
+                      disabled={!temTracoRubrica}
+                      style={[
+                        styles.modalAssinaturaBtnPrimaryFlex,
+                        {
+                          backgroundColor: theme.primary,
+                          opacity: temTracoRubrica ? 1 : 0.55,
+                        },
+                      ]}
                     >
-                      <Text style={styles.modalTempoBtnPrimaryTextCadastro}>
+                      <Text style={[styles.modalAssinaturaBtnPrimaryText, { color: theme.text }]}>
                         {indiceRubricaNatacao + 1 < totalLista ? 'Próximo' : 'Finalizar'}
                       </Text>
                     </TouchableOpacity>
@@ -1974,6 +1989,7 @@ export default function AplicarTAFScreen() {
         contentContainerStyle={styles.scrollContentCadastro}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!modalRubricaNatacaoVisible}
       >
         <View style={styles.centerWrap}>
           <AppHeader title="Aplicar TAF" onBack={() => navigation.goBack()} />
@@ -2356,7 +2372,12 @@ export default function AplicarTAFScreen() {
       </ScrollView>
 
       <TafProvaTempoModal
-        visible={mostrarProvas && modalProvaTempoVisible}
+        visible={
+          mostrarProvas &&
+          modalProvaTempoVisible &&
+          !modalRubricaNatacaoVisible &&
+          !modalTempoRegistradoVisible
+        }
         onClose={voltarDeTabelaParaNips}
         prova={provaModalTipo}
         tituloProva={tituloProvaCurta}
@@ -2531,87 +2552,83 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     borderWidth: 1,
     borderColor: theme.border,
   },
-  modalRubricaCardCadastro: {
+  modalAssinaturaOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 16,
+    ...(Platform.OS === 'web'
+      ? ({
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          overflow: 'hidden',
+          zIndex: 9999,
+        } as object)
+      : null),
+  },
+  modalAssinaturaCenter: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  modalAssinaturaCard: {
     width: '100%',
     maxWidth: 480,
-    borderRadius: 18,
-    backgroundColor: ui.modalBg,
-    padding: 16,
+    alignSelf: 'center',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.border,
+    padding: 20,
   },
-  modalRubricaSubtituloCadastro: {
-    fontSize: 12,
+  modalAssinaturaTitulo: {
+    fontSize: 18,
     fontWeight: '800',
-    color: ui.text,
-    flexShrink: 1,
+    marginBottom: 8,
   },
-  modalRubricaLinhaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 6,
-  },
-  modalRubricaLinhaCadastro: {
+  modalAssinaturaSub: {
     fontSize: 13,
-    fontWeight: '700',
-    color: ui.text,
-    marginBottom: 6,
+    lineHeight: 19,
+    marginBottom: 16,
   },
-  modalRubricaLinhaInline: {
-    marginBottom: 0,
-  },
-  modalRubricaLinhaStrong: {
-    color: ui.text,
-    fontWeight: '900',
-  },
-  modalRubricaLegendaCadastro: {
-    marginTop: 8,
-    fontSize: 12,
-    fontWeight: '800',
-    color: ui.text,
-    marginBottom: 6,
-  },
-  modalRubricaCanvasWrap: {
-    borderWidth: 1,
-    borderColor: theme.border,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    height: RUBRICA_CANVAS_HEIGHT,
-    overflow: 'hidden',
-  },
-  modalRubricaBtnSecundario: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  modalAssinaturaCanvasWrap: {
+    width: '100%',
+    height: RUBRICA_NATIVA_ALTURA,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: theme.border,
-    backgroundColor: ui.toggleInactiveBg,
+    overflow: 'hidden',
+    marginBottom: 10,
+    flexShrink: 0,
+  },
+  modalAssinaturaErro: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modalAssinaturaBtnSecundario: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalRubricaBtnSecundarioText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: ui.text,
+  modalAssinaturaBtnPrimaryFlex: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
   },
-  modalRubricaBotoesRow: {
+  modalAssinaturaBtnPrimaryText: {
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  modalAssinaturaFooterBtns: {
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: 10,
-    marginTop: 10,
-  },
-  modalRubricaBtnMeio: {
-    flex: 1,
-    marginTop: 0,
-  },
-  modalRubricaErroCadastro: {
     marginTop: 8,
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.isDark ? ui.text : '#B91C1C',
   },
   modalTempoMensagemCadastro: {
     fontSize: 16,

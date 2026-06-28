@@ -68,6 +68,8 @@ export type TafCronometroPanelProps = {
   onContinuar: () => void;
   hint?: string;
   footer?: React.ReactNode;
+  /** Modal de prova: só display + controles integrados, sem cabeçalho extra. */
+  variant?: 'full' | 'compact';
 };
 
 export function TafCronometroPanel({
@@ -83,10 +85,12 @@ export function TafCronometroPanel({
   onContinuar,
   hint,
   footer,
+  variant = 'full',
 }: TafCronometroPanelProps) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const status = statusMeta(estado, theme);
+  const compact = variant === 'compact';
 
   const displayColor =
     estado === 'rodando'
@@ -105,6 +109,131 @@ export function TafCronometroPanel({
   const displayShellBorder = theme.isDark ? 'rgba(148, 163, 184, 0.22)' : 'rgba(15, 23, 42, 0.85)';
 
   const monoWeb = Platform.OS === 'web' ? ({ fontVariantNumeric: 'tabular-nums' } as object) : null;
+
+  const timeNode =
+    estado === 'pausado' ? (
+      <TextInput
+        value={pausadoTexto}
+        onChangeText={onPausadoTextoChange}
+        onBlur={onBlurPausado}
+        selectTextOnFocus
+        accessibilityLabel="Editar tempo do cronômetro pausado"
+        placeholder="MM:SS"
+        placeholderTextColor="rgba(148, 163, 184, 0.65)"
+        autoCorrect={false}
+        autoComplete="off"
+        spellCheck={false}
+        {...(Platform.OS === 'ios' ? { textContentType: 'none' as const } : {})}
+        keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
+        style={[
+          compact ? styles.displayInputCompact : styles.displayInput,
+          { color: displayColor },
+          monoWeb,
+          Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null,
+        ]}
+      />
+    ) : (
+      <Text
+        style={[
+          compact ? styles.displayTextCompact : styles.displayText,
+          { color: displayColor },
+          monoWeb,
+        ]}
+      >
+        {tempoExibido}
+      </Text>
+    );
+
+  const controlsNode =
+    estado === 'inicial' || estado === 'finalizado' ? (
+      <TouchableOpacity
+        accessibilityLabel={`Iniciar ${tituloProva}`}
+        activeOpacity={0.88}
+        onPress={onIniciar}
+        style={[
+          compact ? styles.btnCompactPrimary : styles.btnPrimary,
+          { backgroundColor: theme.primary },
+        ]}
+      >
+        <Play
+          size={compact ? 16 : 18}
+          color={theme.tokens.textOnPrimary}
+          strokeWidth={2.6}
+          fill={theme.tokens.textOnPrimary}
+        />
+        {!compact ? (
+          <Text style={[styles.btnPrimaryText, { color: theme.tokens.textOnPrimary }]}>
+            Iniciar {tituloProva}
+          </Text>
+        ) : (
+          <Text style={[styles.btnCompactPrimaryText, { color: theme.tokens.textOnPrimary }]}>
+            Iniciar
+          </Text>
+        )}
+      </TouchableOpacity>
+    ) : (
+      <View style={compact ? styles.controlsCompactRow : styles.controlsRow}>
+        <TouchableOpacity
+          accessibilityLabel={estado === 'pausado' ? 'Continuar cronômetro' : 'Pausar cronômetro'}
+          activeOpacity={0.88}
+          onPress={estado === 'pausado' ? onContinuar : onPausar}
+          style={[
+            compact ? styles.btnIconCompact : styles.btnIcon,
+            {
+              borderColor: theme.border,
+              backgroundColor: theme.backgroundSecondary,
+            },
+          ]}
+        >
+          {estado === 'pausado' ? (
+            <Play
+              size={compact ? 18 : 22}
+              color={ui.iconStrong}
+              strokeWidth={2.5}
+              fill={ui.iconStrong}
+            />
+          ) : (
+            <Pause size={compact ? 18 : 22} color={ui.iconStrong} strokeWidth={2.5} />
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityLabel={`Parar ${tituloProva}`}
+          activeOpacity={0.88}
+          onPress={onParar}
+          style={[
+            compact ? styles.btnStopCompact : styles.btnStop,
+            { backgroundColor: ui.btnDarkBg, borderColor: theme.border },
+          ]}
+        >
+          <Text style={compact ? styles.btnStopCompactText : styles.btnStopText}>
+            {compact ? 'Parar' : `Parar ${tituloProva}`}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+
+  if (compact) {
+    return (
+      <View style={[styles.shellCompact, { borderColor: theme.border, backgroundColor: theme.cardBg }]}>
+        <View
+          style={[
+            styles.displayShellCompact,
+            {
+              backgroundColor: displayShellBg,
+              borderColor: displayShellBorder,
+            },
+          ]}
+        >
+          <View style={styles.compactMergedRow}>
+            <View style={styles.compactTimeCol}>{timeNode}</View>
+            <View style={styles.compactControlsCol}>{controlsNode}</View>
+          </View>
+        </View>
+        {hint ? <Text style={[styles.hintCompact, { color: theme.textMuted }]}>{hint}</Text> : null}
+        {footer ? <View style={styles.footerSlot}>{footer}</View> : null}
+      </View>
+    );
+  }
 
   return (
     <View
@@ -153,77 +282,11 @@ export function TafCronometroPanel({
           },
         ]}
       >
-        {estado === 'pausado' ? (
-          <TextInput
-            value={pausadoTexto}
-            onChangeText={onPausadoTextoChange}
-            onBlur={onBlurPausado}
-            selectTextOnFocus
-            accessibilityLabel="Editar tempo do cronômetro pausado"
-            placeholder="MM:SS"
-            placeholderTextColor="rgba(148, 163, 184, 0.65)"
-            autoCorrect={false}
-            autoComplete="off"
-            spellCheck={false}
-            {...(Platform.OS === 'ios' ? { textContentType: 'none' as const } : {})}
-            keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
-            style={[
-              styles.displayInput,
-              { color: displayColor },
-              monoWeb,
-              Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null,
-            ]}
-          />
-        ) : (
-          <Text style={[styles.displayText, { color: displayColor }, monoWeb]}>{tempoExibido}</Text>
-        )}
+        {timeNode}
         <Text style={styles.displayHint}>tempo oficial da prova</Text>
       </View>
 
-      <View style={styles.controlsRow}>
-        {estado === 'inicial' || estado === 'finalizado' ? (
-          <TouchableOpacity
-            accessibilityLabel={`Iniciar ${tituloProva}`}
-            activeOpacity={0.88}
-            onPress={onIniciar}
-            style={[styles.btnPrimary, { backgroundColor: theme.primary }]}
-          >
-            <Play size={18} color={theme.tokens.textOnPrimary} strokeWidth={2.6} fill={theme.tokens.textOnPrimary} />
-            <Text style={[styles.btnPrimaryText, { color: theme.tokens.textOnPrimary }]}>
-              Iniciar {tituloProva}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            <TouchableOpacity
-              accessibilityLabel={estado === 'pausado' ? 'Continuar cronômetro' : 'Pausar cronômetro'}
-              activeOpacity={0.88}
-              onPress={estado === 'pausado' ? onContinuar : onPausar}
-              style={[
-                styles.btnIcon,
-                {
-                  borderColor: theme.border,
-                  backgroundColor: theme.backgroundSecondary,
-                },
-              ]}
-            >
-              {estado === 'pausado' ? (
-                <Play size={22} color={ui.iconStrong} strokeWidth={2.5} fill={ui.iconStrong} />
-              ) : (
-                <Pause size={22} color={ui.iconStrong} strokeWidth={2.5} />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              accessibilityLabel={`Parar ${tituloProva}`}
-              activeOpacity={0.88}
-              onPress={onParar}
-              style={[styles.btnStop, { backgroundColor: ui.btnDarkBg, borderColor: theme.border }]}
-            >
-              <Text style={styles.btnStopText}>Parar {tituloProva}</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+      {controlsNode}
 
       {hint ? (
         <Text style={[styles.hint, { color: theme.textMuted }]}>{hint}</Text>
@@ -376,5 +439,97 @@ const styles = StyleSheet.create({
   },
   footerSlot: {
     width: '100%',
+  },
+  shellCompact: {
+    width: '100%',
+    borderRadius: PREMIUM.radiusMd + 2,
+    borderWidth: 1,
+    padding: 10,
+    gap: 8,
+  },
+  displayShellCompact: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  compactMergedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  compactTimeCol: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactControlsCol: {
+    flexShrink: 0,
+    alignItems: 'stretch',
+    justifyContent: 'center',
+  },
+  displayTextCompact: {
+    fontSize: Platform.select({ web: 32, default: 28 }),
+    fontWeight: '800',
+    letterSpacing: Platform.select({ web: 2, default: 1.5 }),
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    lineHeight: Platform.select({ web: 36, default: 32 }),
+  },
+  displayInputCompact: {
+    fontSize: Platform.select({ web: 32, default: 28 }),
+    fontWeight: '800',
+    letterSpacing: Platform.select({ web: 2, default: 1.5 }),
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    minWidth: 100,
+    textAlign: 'center',
+    padding: 0,
+    borderWidth: 0,
+  },
+  controlsCompactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  btnCompactPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: PREMIUM.radiusMd,
+    minWidth: 88,
+  },
+  btnCompactPrimaryText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  btnIconCompact: {
+    width: 40,
+    height: 40,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnStopCompact: {
+    minHeight: 40,
+    minWidth: 64,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  btnStopCompactText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  hintCompact: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

@@ -378,43 +378,42 @@ export function TafProvaTempoModal({
         </ScrollView>
 
         <View style={[styles.bottomBar, { borderTopColor: theme.border, backgroundColor: theme.cardBg }]}>
-          <TafCronometroPanel
-            variant="compact"
-            tituloProva={tituloProva}
-            tempoExibido={tempoExibido}
-            estado={cronometroEstado}
-            pausadoTexto={cronometroPausadoTexto}
-            onPausadoTextoChange={onCronometroPausadoTextoChange}
-            onBlurPausado={onBlurCronometroPausado}
-            onIniciar={onIniciarCronometro}
-            onParar={onPararCronometro}
-            onPausar={onPausarCronometro}
-            onContinuar={onContinuarCronometro}
-            hint={cronometroHint}
-            footer={
-              podeAplicar ? (
-                <TouchableOpacity
-                  accessibilityLabel={`Aplicar resultado da ${tituloProva.toLowerCase()}`}
-                  activeOpacity={0.85}
-                  onPress={onAplicar}
-                  disabled={salvando}
-                  style={[
-                    styles.btnAplicar,
-                    { backgroundColor: theme.primary },
-                    salvando ? styles.btnDisabled : null,
-                  ]}
-                >
-                  {salvando ? (
-                    <ActivityIndicator color={theme.tokens.textOnPrimary} />
-                  ) : (
-                    <Text style={[ts.body, styles.btnAplicarText, { color: theme.tokens.textOnPrimary }]}>
-                      Aplicar Resultado
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              ) : null
-            }
-          />
+          {podeAplicar ? (
+            <TouchableOpacity
+              accessibilityLabel={`Aplicar resultado da ${tituloProva.toLowerCase()}`}
+              activeOpacity={0.85}
+              onPress={onAplicar}
+              disabled={salvando}
+              style={[
+                styles.btnAplicar,
+                { backgroundColor: theme.primary },
+                salvando ? styles.btnDisabled : null,
+              ]}
+            >
+              {salvando ? (
+                <ActivityIndicator color={theme.tokens.textOnPrimary} />
+              ) : (
+                <Text style={[ts.body, styles.btnAplicarText, { color: theme.tokens.textOnPrimary }]}>
+                  Aplicar Resultado
+                </Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TafCronometroPanel
+              variant="compact"
+              tituloProva={tituloProva}
+              tempoExibido={tempoExibido}
+              estado={cronometroEstado}
+              pausadoTexto={cronometroPausadoTexto}
+              onPausadoTextoChange={onCronometroPausadoTextoChange}
+              onBlurPausado={onBlurCronometroPausado}
+              onIniciar={onIniciarCronometro}
+              onParar={onPararCronometro}
+              onPausar={onPausarCronometro}
+              onContinuar={onContinuarCronometro}
+              hint={cronometroHint}
+            />
+          )}
         </View>
 
         {mostrarPromptVoltas && onChangeNumeroVoltas ? (

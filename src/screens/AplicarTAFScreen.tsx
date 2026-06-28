@@ -124,6 +124,12 @@ function trialTipoFromProva(tipo: TipoProvaTAF): 'corrida' | 'natacao' | 'caminh
   return 'corrida';
 }
 
+/** Pré-cadastro: caminhada usa o limite da prova ao vivo; demais atividades ficam em 15. */
+function limiteParticipantesPreCadastro(tipo: TipoProvaTAF | null): number {
+  if (tipo === 'caminhada') return MAX_PARTICIPANTES;
+  return MAX_PRE_CADASTRO_PARTICIPANTES;
+}
+
 /** Cronômetro da corrida: pode pausar e retomar antes de parar de vez. */
 type CronometroCorridaEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
 
@@ -1132,14 +1138,16 @@ export default function AplicarTAFScreen() {
 
   const confirmarParticipantes = useCallback(() => {
     const n = parseInt(numeroParticipantesCorrida, 10);
-    const limite = modoPreCadastro ? MAX_PRE_CADASTRO_PARTICIPANTES : MAX_PARTICIPANTES;
+    const limite = modoPreCadastro
+      ? limiteParticipantesPreCadastro(tipoProva)
+      : MAX_PARTICIPANTES;
     if (!Number.isFinite(n) || n < 1) {
       setErroParticipantes('Informe um número válido (mínimo 1).');
       return;
     }
     if (n > limite) {
       setErroParticipantes(
-        modoPreCadastro
+        modoPreCadastro && tipoProva !== 'caminhada'
           ? `Máximo de ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes no pré-cadastro.`
           : `Máximo de ${MAX_PARTICIPANTES} participantes.`,
       );
@@ -1150,7 +1158,7 @@ export default function AplicarTAFScreen() {
     setNipsParticipantes(Array.from({ length: n }, () => ''));
     setNipFeedbackLinhas(Array.from({ length: n }, () => null));
     setCorridaEtapa('nips');
-  }, [numeroParticipantesCorrida, modoPreCadastro]);
+  }, [numeroParticipantesCorrida, modoPreCadastro, tipoProva]);
 
   const definirNipOk = useCallback((index: number, c: CadastroItemPersist) => {
     const nome = (c.nome || '').trim() || 'Sem nome';
@@ -1560,7 +1568,7 @@ export default function AplicarTAFScreen() {
 
   const salvarPreCadastro = useCallback(async () => {
     if (!tipoProva) {
-      Alert.alert('Atividade não definida', 'Volte ao menu e escolha Corrida, Natação ou Permanência.');
+      Alert.alert('Atividade não definida', 'Volte ao menu e escolha Corrida, Natação, Caminhada ou Permanência.');
       return;
     }
     for (let i = 0; i < nParticipantesConfirmado; i += 1) {
@@ -2000,7 +2008,8 @@ export default function AplicarTAFScreen() {
 
                 <Text style={[ts.label, styles.labelText]}>Pré Cadastros</Text>
                 <Text style={[ts.bodySecondary, styles.formSubtitle]}>
-                  Cadastre até {MAX_PRE_CADASTRO_PARTICIPANTES} militares por atividade. Ao aplicar o TAF, use
+                  Corrida, natação e permanência: até {MAX_PRE_CADASTRO_PARTICIPANTES} militares por
+                  atividade. Caminhada: até {MAX_PARTICIPANTES} participantes. Ao aplicar o TAF, use
                   &quot;Iniciar Prova&quot; para ir direto ao cronômetro com os dados já preenchidos.
                 </Text>
 
@@ -2083,7 +2092,8 @@ export default function AplicarTAFScreen() {
               </Text>
               {modoPreCadastro ? (
                 <Text style={[ts.bodySecondary, styles.formSubtitle]}>
-                  Máximo de {MAX_PRE_CADASTRO_PARTICIPANTES} participantes por atividade.
+                  Corrida, natação e permanência: até {MAX_PRE_CADASTRO_PARTICIPANTES} participantes.
+                  Caminhada: até {MAX_PARTICIPANTES} participantes.
                 </Text>
               ) : null}
               <View style={styles.btnRow}>
@@ -2137,7 +2147,9 @@ export default function AplicarTAFScreen() {
               <Text style={[ts.label, styles.labelText]}>Número de Participantes</Text>
               {modoPreCadastro ? (
                 <Text style={[ts.bodySecondary, styles.formSubtitle]}>
-                  Informe de 1 a {MAX_PRE_CADASTRO_PARTICIPANTES} participantes.
+                  {tipoProva === 'caminhada'
+                    ? `Informe de 1 a ${MAX_PARTICIPANTES} participantes.`
+                    : `Informe de 1 a ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes.`}
                 </Text>
               ) : null}
               <TextInput

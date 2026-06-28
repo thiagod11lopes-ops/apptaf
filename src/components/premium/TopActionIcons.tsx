@@ -5,6 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { navigateTab } from '../../navigation/navigationRef';
 import type { RootStackParamList } from '../../navigation/types';
+import { ActionIconTooltip } from './ActionIconTooltip';
 import { PressableScale } from './PressableScale';
 import { PREMIUM } from '../../theme/premium';
 
@@ -14,11 +15,27 @@ const BTN_SIZE = PREMIUM.minTouch;
 const TOP_LINKS: {
   route: keyof RootStackParamList;
   label: string;
+  description: string;
   Icon: typeof BookOpen;
 }[] = [
-  { route: 'Normas', label: 'Normas', Icon: BookOpen },
-  { route: 'CadastroAplicador', label: 'Aplicador de teste físico', Icon: UserRoundCheck },
-  { route: 'AplicacaoTAF', label: 'Registrador de TAF', Icon: ClipboardList },
+  {
+    route: 'Normas',
+    label: 'Normas',
+    description: 'Consultar tabelas e regras oficiais do TAF',
+    Icon: BookOpen,
+  },
+  {
+    route: 'CadastroAplicador',
+    label: 'Aplicador',
+    description: 'Cadastrar aplicadores de teste físico',
+    Icon: UserRoundCheck,
+  },
+  {
+    route: 'AplicacaoTAF',
+    label: 'Registrador de TAF',
+    description: 'Registrar resultados manualmente no cadastro',
+    Icon: ClipboardList,
+  },
 ];
 
 type Props = {
@@ -30,6 +47,20 @@ type Props = {
   syncPendingBadge?: number;
   syncSaveIconState?: 'idle' | 'pending' | 'success';
 };
+
+function wrapTooltip(
+  inline: boolean,
+  title: string,
+  description: string | undefined,
+  node: React.ReactElement,
+) {
+  if (!inline) return node;
+  return (
+    <ActionIconTooltip title={title} description={description}>
+      {node}
+    </ActionIconTooltip>
+  );
+}
 
 export function TopActionIcons({
   activeRoute,
@@ -71,57 +102,75 @@ export function TopActionIcons({
         ? theme.primary
         : tabInk;
 
+  const syncTooltipTitle =
+    syncSaveIconState === 'success'
+      ? 'Sincronizado'
+      : syncPendingBadge > 0
+        ? 'Sincronizar agora'
+        : 'Sincronizar';
+  const syncTooltipDescription =
+    syncSaveIconState === 'success'
+      ? 'Dados atualizados com a nuvem'
+      : syncPendingBadge > 0
+        ? `${syncPendingBadge} alteração(ões) para enviar ou receber`
+        : 'Enviar e receber dados com a nuvem';
+
   return (
     <View style={[styles.row, inline && styles.rowInline]}>
-      {onSyncPress ? (
-        <PressableScale
-          onPress={onSyncPress}
-          style={[btnStyle, { borderColor: syncBorderColor }]}
-          accessibilityLabel={
-            syncSaveIconState === 'success'
-              ? 'Sincronização concluída com sucesso'
-              : syncPendingBadge > 0
-                ? `Sincronizar com a nuvem, ${syncPendingBadge} alteração(ões) pendente(s) (enviar e receber)`
-                : 'Sincronizar com a nuvem'
-          }
-        >
-          <Save size={iconSize} color={syncIconColor} strokeWidth={strokeWidth} />
-          {syncSaveIconState === 'success' ? (
-            <View
-              style={[
-                styles.badge,
-                styles.successBadge,
-                {
-                  backgroundColor: theme.gain,
-                  borderColor: theme.cardBg,
-                },
-                Platform.OS === 'web'
-                  ? ({ boxShadow: '0 2px 8px rgba(22,163,74,0.45)' } as object)
-                  : { elevation: 4 },
-              ]}
+      {onSyncPress
+        ? wrapTooltip(
+            inline,
+            syncTooltipTitle,
+            syncTooltipDescription,
+            <PressableScale
+              onPress={onSyncPress}
+              style={[btnStyle, { borderColor: syncBorderColor }]}
+              accessibilityLabel={
+                syncSaveIconState === 'success'
+                  ? 'Sincronização concluída com sucesso'
+                  : syncPendingBadge > 0
+                    ? `Sincronizar com a nuvem, ${syncPendingBadge} alteração(ões) pendente(s) (enviar e receber)`
+                    : 'Sincronizar com a nuvem'
+              }
             >
-              <Check size={11} color="#FFFFFF" strokeWidth={3} />
-            </View>
-          ) : syncPendingBadge > 0 ? (
-            <View
-              style={[
-                styles.badge,
-                {
-                  backgroundColor: theme.loss,
-                  borderColor: theme.cardBg,
-                },
-                Platform.OS === 'web'
-                  ? ({ boxShadow: '0 2px 8px rgba(220,38,38,0.45)' } as object)
-                  : { elevation: 4 },
-              ]}
-            >
-              <Text style={styles.badgeText}>
-                {syncPendingBadge > 99 ? '99+' : syncPendingBadge.toLocaleString('pt-BR')}
-              </Text>
-            </View>
-          ) : null}
-        </PressableScale>
-      ) : null}
+              <Save size={iconSize} color={syncIconColor} strokeWidth={strokeWidth} />
+              {syncSaveIconState === 'success' ? (
+                <View
+                  style={[
+                    styles.badge,
+                    styles.successBadge,
+                    {
+                      backgroundColor: theme.gain,
+                      borderColor: theme.cardBg,
+                    },
+                    Platform.OS === 'web'
+                      ? ({ boxShadow: '0 2px 8px rgba(22,163,74,0.45)' } as object)
+                      : { elevation: 4 },
+                  ]}
+                >
+                  <Check size={11} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              ) : syncPendingBadge > 0 ? (
+                <View
+                  style={[
+                    styles.badge,
+                    {
+                      backgroundColor: theme.loss,
+                      borderColor: theme.cardBg,
+                    },
+                    Platform.OS === 'web'
+                      ? ({ boxShadow: '0 2px 8px rgba(220,38,38,0.45)' } as object)
+                      : { elevation: 4 },
+                  ]}
+                >
+                  <Text style={styles.badgeText}>
+                    {syncPendingBadge > 99 ? '99+' : syncPendingBadge.toLocaleString('pt-BR')}
+                  </Text>
+                </View>
+              ) : null}
+            </PressableScale>,
+          )
+        : null}
       {TOP_LINKS.filter(
         (link) =>
           activeRoute !== link.route &&
@@ -129,42 +178,60 @@ export function TopActionIcons({
       ).map((link) => {
         const Icon = link.Icon;
         return (
-          <PressableScale
-            key={link.route}
-            onPress={() => navigateTab(link.route)}
-            style={btnStyle}
-            accessibilityLabel={link.label}
-          >
-            <Icon size={iconSize} color={tabInk} strokeWidth={strokeWidth} />
-          </PressableScale>
+          <React.Fragment key={link.route}>
+            {wrapTooltip(
+              inline,
+              link.label,
+              link.description,
+              <PressableScale
+                onPress={() => navigateTab(link.route)}
+                style={btnStyle}
+                accessibilityLabel={link.label}
+              >
+                <Icon size={iconSize} color={tabInk} strokeWidth={strokeWidth} />
+              </PressableScale>,
+            )}
+          </React.Fragment>
         );
       })}
-      {activeRoute !== 'Login' ? (
+      {activeRoute !== 'Login'
+        ? wrapTooltip(
+            inline,
+            isAuthenticated ? 'Conta' : 'Entrar',
+            isAuthenticated
+              ? 'Sua conta Google conectada ao TAF'
+              : 'Fazer login com Google',
+            <PressableScale
+              onPress={() => navigateTab('Login')}
+              style={[
+                btnStyle,
+                isAuthenticated && {
+                  borderColor: theme.primary,
+                  backgroundColor: theme.accentMuted,
+                },
+              ]}
+              accessibilityLabel={isAuthenticated ? 'Conta do usuário' : 'Entrar'}
+            >
+              <User
+                size={iconSize}
+                color={isAuthenticated ? theme.primary : tabInk}
+                strokeWidth={strokeWidth}
+              />
+            </PressableScale>,
+          )
+        : null}
+      {wrapTooltip(
+        inline,
+        'Configurações',
+        'Ajustes, tema e dados do aplicativo',
         <PressableScale
-          onPress={() => navigateTab('Login')}
-          style={[
-            btnStyle,
-            isAuthenticated && {
-              borderColor: theme.primary,
-              backgroundColor: theme.accentMuted,
-            },
-          ]}
-          accessibilityLabel={isAuthenticated ? 'Conta do usuário' : 'Entrar'}
+          onPress={() => navigateTab('Configuracoes')}
+          style={btnStyle}
+          accessibilityLabel="Ajustes"
         >
-          <User
-            size={iconSize}
-            color={isAuthenticated ? theme.primary : tabInk}
-            strokeWidth={strokeWidth}
-          />
-        </PressableScale>
-      ) : null}
-      <PressableScale
-        onPress={() => navigateTab('Configuracoes')}
-        style={btnStyle}
-        accessibilityLabel="Ajustes"
-      >
-        <Settings size={iconSize} color={tabInk} strokeWidth={strokeWidth} />
-      </PressableScale>
+          <Settings size={iconSize} color={tabInk} strokeWidth={strokeWidth} />
+        </PressableScale>,
+      )}
     </View>
   );
 }
@@ -182,6 +249,8 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 2,
     marginBottom: 4,
+    overflow: 'visible',
+    zIndex: 20,
   },
   btn: {
     borderRadius: PREMIUM.radiusMd,

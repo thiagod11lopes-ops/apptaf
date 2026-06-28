@@ -150,6 +150,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 6,
     flexShrink: 0,
+    ...(Platform.OS === 'web' ? { overflow: 'visible' as const, zIndex: 10 } : null),
   },
   statsGrid: {
     flexDirection: 'row',

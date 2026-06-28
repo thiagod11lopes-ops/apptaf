@@ -11,13 +11,15 @@ function aplicadoresCollection(uid: string) {
   return collection(db, userAplicadoresPath(uid));
 }
 
-/** Aplicadores do chefe — inclui senhaHash para assinatura offline nos e-mails autorizados. */
+import { stripSenhaFromAplicador, toAplicadorFirestorePayload } from '../../utils/aplicadorSyncPolicy';
+
+/** Aplicadores do chefe — senhaHash para assinatura offline; senha em texto nunca na nuvem. */
 export async function getAllAplicadoresFirestore(uid: string): Promise<AplicadorItemPersist[]> {
   const snap = await getDocs(aplicadoresCollection(uid));
   return snap.docs
     .map((docSnap) => {
       const raw = docSnap.data() as AplicadorItemPersist & { deleted?: boolean; deletedAt?: number };
-      return { ...raw, id: docSnap.id };
+      return stripSenhaFromAplicador({ ...raw, id: docSnap.id });
     })
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
@@ -28,19 +30,19 @@ export async function addAplicadorFirestore(uid: string, item: AplicadorItemPers
 
   const docId = item.id || `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
+  const payload = toAplicadorFirestorePayload(item);
   await setDoc(
     doc(db, userAplicadoresPath(uid), docId),
     sanitizeForFirestore({
       id: docId,
-      nip: item.nip || '',
-      nome: item.nome || 'Sem Nome',
-      categoria: item.categoria || 'Praças',
-      sexo: item.sexo,
-      oficial: item.oficial,
-      praca: item.praca,
-      senha: item.senha,
-      senhaHash: item.senhaHash,
-      updatedAt: item.updatedAt ?? Date.now(),
+      nip: payload.nip || '',
+      nome: payload.nome || 'Sem Nome',
+      categoria: payload.categoria || 'Praças',
+      sexo: payload.sexo,
+      oficial: payload.oficial,
+      praca: payload.praca,
+      senhaHash: payload.senhaHash,
+      updatedAt: payload.updatedAt ?? Date.now(),
     }),
   );
 }

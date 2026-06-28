@@ -488,6 +488,17 @@ export default function CadastroAplicadorScreen() {
             </Card>
           ) : null}
 
+          {!isBoss ? (
+            <Card elevated style={styles.formCard}>
+              <Text style={[ts.bodySecondary, { color: theme.textSecondary, textAlign: 'center' }]}>
+                O cadastro de aplicadores é exclusivo do e-mail chefe. E-mails autorizados usam nome, posto,
+                NIP e senha apenas ao finalizar provas.
+              </Text>
+            </Card>
+          ) : null}
+
+          {isBoss ? (
+            <>
           <View style={[styles.tableToggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <TouchableOpacity
               accessibilityLabel="Mostrar tabela de aplicadores"
@@ -601,6 +612,8 @@ export default function CadastroAplicadorScreen() {
                 </ScrollView>
               )}
             </Card>
+          ) : null}
+            </>
           ) : null}
         </View>
       </ScrollView>

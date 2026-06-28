@@ -24,6 +24,7 @@ import {
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { notifyDataChanged, subscribeDataChanged } from '../sync/SyncEngine';
 import { syncQueue } from '../sync/SyncQueue';
+import { sanitizeAplicadorForDisplay } from '../../utils/aplicadorSyncPolicy';
 
 export class DataStore {
   async getCadastros(ownerUid: string | null): Promise<CadastroItemPersist[]> {
@@ -33,7 +34,9 @@ export class DataStore {
 
   async getAplicadores(ownerUid: string | null): Promise<AplicadorItemPersist[]> {
     const rows = await listAplicadoresForDisplay(ownerUid);
-    return filterRowsForDisplay(rows).map(stripMeta);
+    return filterRowsForDisplay(rows)
+      .map(stripMeta)
+      .map((item) => sanitizeAplicadorForDisplay(item));
   }
 
   async getSessoes(ownerUid: string | null): Promise<SessaoAplicacaoTaf[]> {

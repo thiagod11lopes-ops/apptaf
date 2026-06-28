@@ -23,6 +23,11 @@ import { getCadastroRubricasFirestore } from '../../services/firebase/cadastroRu
 import { getSessaoRubricasFirestore } from '../../services/firebase/sessaoRubricasFirestore';
 import { normalizeSessaoShape, type SessaoResultadoRubrica } from '../../utils/sessaoLight';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
+import {
+  isAuthorizedMemberSession,
+  mergeAplicadorAfterRemoteDownload,
+  toAplicadorFirestorePayload,
+} from '../../utils/aplicadorSyncPolicy';
 import { getDeviceId } from '../deviceId';
 import type {
   AplicadorRecord,
@@ -35,6 +40,7 @@ import {
   listAplicadoresForSync,
   listCadastrosForSync,
   listSessoesForSync,
+  getAplicadorRaw,
   putAplicadorRecord,
   putCadastroRecord,
   putSessaoRecord,
@@ -313,6 +319,46 @@ async function flushRemainingPendingRecords(
     const local = item.record as SyncRecord;
     if (!isUnsyncedLocalStatus(local.syncStatus)) continue;
 
+    if (isAuthorizedMemberSession() && item.collection === 'aplicadores') {
+      const remote = remoteMaps.aplicadores.get(item.id);
+      try {
+        if (remote) {
+          await executePlanItem(
+            ownerUid,
+            {
+              collection: 'aplicadores',
+              id: item.id,
+              action: 'download',
+              local,
+              remote,
+              hasRemote: true,
+            },
+            uploadFns,
+            stats,
+            deletionAudits,
+          );
+        } else {
+          const loginUid = getCachedLoginUid();
+          const merged = markRecordSynced({ ...local, ownerUid }, loginUid);
+          await putAplicadorRecord(merged as AplicadorRecord);
+          stats.ignored += 1;
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        stats.errors.push(`${item.collection}/${item.id}: ${msg}`);
+      } finally {
+        processed += 1;
+        progressCb?.({
+          processed,
+          total: pending.total,
+          message: 'Enviando alterações…',
+          stepId: 'uploading',
+          phase: 'upload',
+        });
+      }
+      continue;
+    }
+
     const remote = remoteMaps[item.collection].get(item.id);
     const decision = decideLastWriteWins(local, remote);
     const hasRemote = remoteMaps[item.collection].has(item.id);
@@ -426,7 +472,10 @@ async function uploadAplicador(uid: string, local: AplicadorRecord, hasRemote: b
     await persistSyncedLocal(uid, local, 'aplicadores');
     return;
   }
-  await addAplicadorFirestore(uid, stripForFirestore({ ...local, ownerUid: uid }) as AplicadorItemPersist);
+  await addAplicadorFirestore(
+    uid,
+    toAplicadorFirestorePayload(stripForFirestore({ ...local, ownerUid: uid }) as AplicadorItemPersist),
+  );
   await persistSyncedLocal(uid, local, 'aplicadores');
 }
 
@@ -461,6 +510,14 @@ async function downloadRecord(
     if (rubDoc) {
       payload = applySessaoRubricasFromRemote(payload as SessaoRecord, rubDoc) as SyncRecord;
     }
+  } else if (collection === 'aplicadores' && remote.deleted !== true) {
+    const existing = await getAplicadorRaw(remote.id);
+    const business = mergeAplicadorAfterRemoteDownload(
+      payload as AplicadorItemPersist,
+      existing,
+      isAuthorizedMemberSession(),
+    );
+    payload = { ...payload, ...business } as SyncRecord;
   }
 
   const merged = markRecordSynced(
@@ -491,6 +548,10 @@ async function executePlanItem(
   const upload = uploadFns[item.collection];
 
   if (item.action === 'upload' && item.local) {
+    if (isAuthorizedMemberSession() && item.collection === 'aplicadores') {
+      stats.ignored += 1;
+      return;
+    }
     await upload(ownerUid, item.local, item.hasRemote);
     stats.uploads += 1;
     if (item.local.deleted) {
@@ -581,7 +642,9 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     ...prePlanFresh.plan,
   ];
   const downloadItems = fullPlan.filter((p) => p.action === 'download');
-  const uploadItems = fullPlan.filter((p) => p.action === 'upload');
+  const uploadItems = fullPlan
+    .filter((p) => p.action === 'upload')
+    .filter((p) => !(isAuthorizedMemberSession() && p.collection === 'aplicadores'));
 
   return {
     downloadItems,
@@ -613,7 +676,9 @@ export async function estimateSyncQueueCounts(
   const drifts = [
     countActivePresenceDrift(plan.localCad, plan.remoteCad, remoteToCadastroRecord, ownerUid),
     countActivePresenceDrift(plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),
-    countActivePresenceDrift(plan.localApp, plan.remoteApp, remoteToAplicadorRecord, ownerUid),
+    ...(isAuthorizedMemberSession()
+      ? [{ extraDownloads: 0, extraUploads: 0 }]
+      : [countActivePresenceDrift(plan.localApp, plan.remoteApp, remoteToAplicadorRecord, ownerUid)]),
     countActivePresenceDrift(plan.localPre, plan.remotePre, remoteToPreCadastroRecord, ownerUid),
     countBusinessContentDrift('cadastros', plan.localCad, plan.remoteCad, remoteToCadastroRecord, ownerUid),
     countBusinessContentDrift('sessoes', plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),

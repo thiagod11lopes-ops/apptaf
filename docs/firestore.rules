@@ -100,7 +100,8 @@ service cloud.firestore {
     }
 
     match /users/{userId}/aplicadores/{docId} {
-      allow read, write: if canAccessUserData(userId);
+      allow read: if canAccessUserData(userId);
+      allow write: if isBoss(userId);
     }
 
     match /users/{userId}/pre_cadastros/{docId} {

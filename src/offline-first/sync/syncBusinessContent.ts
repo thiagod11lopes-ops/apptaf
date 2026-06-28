@@ -1,5 +1,7 @@
 import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
+import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
+import { aplicadorBusinessContentEqual } from '../../utils/aplicadorSyncPolicy';
 import type { CollectionName } from '../types';
 import type { SyncRecord } from './lastWriteWins';
 import { toCadastroLight } from '../../utils/cadastroLight';
@@ -78,6 +80,12 @@ export function syncBusinessContentEqual(
     return sessaoBusinessContentEqual(
       local as SessaoAplicacaoTaf,
       remote as SessaoAplicacaoTaf,
+    );
+  }
+  if (collection === 'aplicadores') {
+    return aplicadorBusinessContentEqual(
+      local as AplicadorItemPersist,
+      remote as AplicadorItemPersist,
     );
   }
   return JSON.stringify(local) === JSON.stringify(remote);

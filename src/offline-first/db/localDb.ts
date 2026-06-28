@@ -5,6 +5,7 @@ import type { AplicadorRecord, CadastroRecord, SessaoRecord } from '../types';
 import { getTafDatabase } from './tafDatabase';
 import { getDeviceId } from '../deviceId';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
+import { isAuthorizedMemberSession } from '../../utils/aplicadorSyncPolicy';
 import { bumpRecordMeta, markRecordSynced, ensureRecordMeta } from '../sync/recordMeta';
 import { decideLastWriteWins } from '../sync/lastWriteWins';
 import { syncQueue } from '../sync/SyncQueue';
@@ -395,6 +396,9 @@ export async function saveAplicador(
   ownerUid: string,
   userId: string | null,
 ): Promise<AplicadorRecord> {
+  if (isAuthorizedMemberSession()) {
+    throw new Error('Cadastro de aplicador disponível apenas para o e-mail chefe.');
+  }
   const existing = await getAplicadorRaw(item.id);
   const operation = existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
   const record = await toAplicadorRecord(
@@ -422,6 +426,9 @@ export async function softDeleteAplicador(
   ownerUid: string,
   userId: string | null,
 ): Promise<void> {
+  if (isAuthorizedMemberSession()) {
+    throw new Error('Cadastro de aplicador disponível apenas para o e-mail chefe.');
+  }
   const existing = await getAplicadorRaw(id);
   if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
   const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');

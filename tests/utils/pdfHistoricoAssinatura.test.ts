@@ -82,5 +82,6 @@ describe('assinatura aplicador no PDF do histórico', () => {
     expect(html).toContain('aplicador-assinatura');
     expect(html).toContain('João Aplicador');
     expect(html).toContain('aplicador-rubrica');
+    expect(html).toContain('<strong>Corrida</strong>');
   });
 });

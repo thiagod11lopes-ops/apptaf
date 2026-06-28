@@ -3,6 +3,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import { tituloTipoProva, type TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
 import {
@@ -33,6 +34,12 @@ const PRINT_LANDSCAPE_CSS = `
     }
 `;
 
+/** Inferência do rótulo da prova (Corrida, Natação, etc.) a partir dos resultados da sessão. */
+export function tituloProvaResumoPdf(resultados: ResultadoCorridaItem[]): string {
+  const prova = resultados.find((r) => r.prova)?.prova ?? 'corrida';
+  return tituloTipoProva(prova as TipoProvaAplicada);
+}
+
 /** Cabeçalho da 1ª coluna: Nadador (só natação), Corredor (só corrida), ou ambos se misto. */
 export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[]): string {
   const temNatacao = resultados.some((r) => r.prova === 'natacao');
@@ -53,6 +60,7 @@ export function buildResumoAplicacaoHtml(
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
   const colProva = escapeHtml(cabecalhoColunaProvaResultados(resultados));
+  const tituloProva = escapeHtml(tituloProvaResumoPdf(resultados));
 
   /** Colunas fixas do PDF: Nadador/Corredor, Nome, NIP, Tempo, Nota, Situação, Rúbrica do candidato */
   const theadPdf = `<th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th>`;
@@ -97,7 +105,7 @@ export function buildResumoAplicacaoHtml(
 </head>
 <body>
   <h1>${escapeHtml(titulo)}</h1>
-  <p class="meta">Gerado em ${escapeHtml(dataStr)}</p>
+  <p class="meta">Gerado em ${escapeHtml(dataStr)} · <strong>${tituloProva}</strong></p>
   ${
     resultados.length === 0
       ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessão.</p>'
@@ -112,7 +120,7 @@ export function buildResumoAplicacaoHtml(
 }
 
 /**
- * Gera PDF no dispositivo (nativo) ou abre janela de impressão (web — escolha “Salvar como PDF”).
+ * Gera PDF no dispositivo (nativo) ou abre visualização HTML (web — imprimir/salvar manualmente).
  */
 export async function exportResumoAplicacaoPdf(
   resultados: ResultadoCorridaItem[],
@@ -125,16 +133,13 @@ export async function exportResumoAplicacaoPdf(
     const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
     if (!win) {
       throw new Error(
-        'Não foi possível abrir a janela de impressão. Permita pop-ups neste site e tente novamente.',
+        'Não foi possível abrir a visualização do PDF. Permita pop-ups neste site e tente novamente.',
       );
     }
     win.document.open();
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => {
-      win.print();
-    }, 300);
     return;
   }
 

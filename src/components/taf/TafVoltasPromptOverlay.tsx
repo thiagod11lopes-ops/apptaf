@@ -6,6 +6,7 @@ import {
   TextInput,
   Platform,
   Pressable,
+  TouchableOpacity,
   type TextInput as TextInputType,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,6 +30,8 @@ type Props = {
   tituloProva: string;
   numeroVoltas: string;
   onChangeNumeroVoltas: (text: string) => void;
+  onConfirm: () => void;
+  confirmEnabled: boolean;
 };
 
 export function TafVoltasPromptOverlay({
@@ -37,6 +40,8 @@ export function TafVoltasPromptOverlay({
   tituloProva,
   numeroVoltas,
   onChangeNumeroVoltas,
+  onConfirm,
+  confirmEnabled,
 }: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
@@ -135,8 +140,8 @@ export function TafVoltasPromptOverlay({
           <Text style={[styles.kicker, { color: theme.textMuted }]}>{provaLabel} preparada</Text>
           <Text style={[styles.title, { color: ui.text }]}>Número de voltas</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Informe quantas voltas serão marcadas na {tituloProva.toLowerCase()}. O painel será
-            liberado automaticamente.
+            Informe quantas voltas serão marcadas na {tituloProva.toLowerCase()} e toque em OK para
+            confirmar.
           </Text>
 
           <View
@@ -152,11 +157,15 @@ export function TafVoltasPromptOverlay({
               ref={inputRef}
               value={numeroVoltas}
               onChangeText={onChangeNumeroVoltas}
+              onSubmitEditing={() => {
+                if (confirmEnabled) onConfirm();
+              }}
               placeholder="0"
               placeholderTextColor={ui.placeholder}
               keyboardType="number-pad"
               maxLength={4}
               autoFocus
+              returnKeyType="done"
               style={[styles.input, { color: ui.text }]}
               autoCorrect={false}
               spellCheck={false}
@@ -167,6 +176,37 @@ export function TafVoltasPromptOverlay({
               }
             />
           </View>
+
+          <TouchableOpacity
+            accessibilityLabel="Confirmar número de voltas"
+            accessibilityState={{ disabled: !confirmEnabled }}
+            activeOpacity={0.88}
+            onPress={onConfirm}
+            disabled={!confirmEnabled}
+            style={[styles.okBtnWrap, !confirmEnabled ? styles.okBtnDisabled : null]}
+          >
+            <LinearGradient
+              colors={
+                confirmEnabled
+                  ? [theme.primary, '#6366f1']
+                  : theme.isDark
+                    ? ['rgba(51,65,85,0.9)', 'rgba(30,41,59,0.9)']
+                    : ['rgba(203,213,225,0.95)', 'rgba(226,232,240,0.95)']
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.okBtn}
+            >
+              <Text
+                style={[
+                  styles.okBtnText,
+                  { color: confirmEnabled ? theme.tokens.textOnPrimary : theme.textMuted },
+                ]}
+              >
+                OK
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </LinearGradient>
       </Animated.View>
     </View>
@@ -275,5 +315,35 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.select({ ios: 12, default: 10 }),
     letterSpacing: 2,
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}),
+  },
+  okBtnWrap: {
+    width: '100%',
+    marginTop: 6,
+    borderRadius: PREMIUM.radiusMd,
+    overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0 8px 20px rgba(37,99,235,0.28)' } as object)
+      : {
+          shadowColor: '#2563eb',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.28,
+          shadowRadius: 12,
+          elevation: 6,
+        }),
+  },
+  okBtnDisabled: {
+    ...(Platform.OS === 'web' ? ({ boxShadow: 'none' } as object) : { elevation: 0, shadowOpacity: 0 }),
+  },
+  okBtn: {
+    width: '100%',
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: PREMIUM.radiusMd,
+  },
+  okBtnText: {
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1.2,
   },
 });

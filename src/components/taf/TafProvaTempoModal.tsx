@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -220,14 +220,32 @@ export function TafProvaTempoModal({
 
   const tituloModal = `${tituloProva} preparada`;
 
+  const [voltasConfirmadas, setVoltasConfirmadas] = useState(false);
+
+  useEffect(() => {
+    if (!visible) setVoltasConfirmadas(false);
+  }, [visible]);
+
+  useEffect(() => {
+    if (!numeroVoltas) setVoltasConfirmadas(false);
+  }, [numeroVoltas]);
+
   const cronometroParado =
     cronometroEstado === 'inicial' || cronometroEstado === 'finalizado';
+
+  const voltasValidas = nColunasVoltas >= 1;
 
   const mostrarPromptVoltas =
     (prova === 'corrida' || prova === 'caminhada') &&
     onChangeNumeroVoltas != null &&
     cronometroParado &&
-    nColunasVoltas < 1;
+    !voltasConfirmadas;
+
+  const nColunasVoltasAtivas = voltasConfirmadas ? nColunasVoltas : 0;
+
+  const confirmarVoltas = () => {
+    if (voltasValidas) setVoltasConfirmadas(true);
+  };
 
   const participantesList = (
     <>
@@ -305,9 +323,9 @@ export function TafProvaTempoModal({
               ) : null}
 
               {(prova === 'corrida' || prova === 'caminhada') &&
-              nColunasVoltas > 0 &&
+              nColunasVoltasAtivas > 0 &&
               onToggleVolta
-                ? Array.from({ length: nColunasVoltas }, (__, v) => (
+                ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
                     <CheckVolta
                       key={`volta-${index}-${v}`}
                       checked={checksVoltas[index]?.[v] ?? false}
@@ -406,6 +424,8 @@ export function TafProvaTempoModal({
             tituloProva={tituloProva}
             numeroVoltas={numeroVoltas}
             onChangeNumeroVoltas={onChangeNumeroVoltas}
+            onConfirm={confirmarVoltas}
+            confirmEnabled={voltasValidas}
           />
         ) : null}
       </SafeAreaView>

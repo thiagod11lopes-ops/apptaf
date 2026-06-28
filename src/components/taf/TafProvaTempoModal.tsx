@@ -509,15 +509,15 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   metaField: {
-    minWidth: 52,
+    minWidth: 104,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingTop: 4,
-    paddingBottom: 5,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 10,
     alignItems: 'center',
     overflow: 'hidden',
-    gap: 1,
+    gap: 2,
     ...(Platform.OS === 'web'
       ? ({ boxShadow: '0 2px 10px rgba(15,23,42,0.08)' } as object)
       : {
@@ -529,19 +529,19 @@ const styles = StyleSheet.create({
         }),
   },
   metaLabel: {
-    fontSize: 8,
+    fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 0.6,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   metaValue: {
-    fontSize: 10,
+    fontSize: 20,
     fontWeight: '900',
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    letterSpacing: 0.2,
+    letterSpacing: 0.4,
   },
   metaValueReprov: {
-    fontSize: 9,
+    fontSize: 18,
   },
   checksRow: {
     flexDirection: 'row',

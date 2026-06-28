@@ -1845,13 +1845,15 @@ export default function AplicarTAFScreen() {
                       : 'Corrida';
               return (
                 <View key={`rubrica-participante-${indiceRubricaNatacao}`}>
-                  <Text style={styles.modalRubricaSubtituloCadastro}>
-                    Participante {indiceRubricaNatacao + 1} de {totalLista}
-                  </Text>
-                  <Text style={styles.modalRubricaLinhaCadastro}>
-                    Modalidade:{' '}
-                    <Text style={styles.modalRubricaLinhaStrong}>{tituloModalidade}</Text>
-                  </Text>
+                  <View style={styles.modalRubricaLinhaRow}>
+                    <Text style={styles.modalRubricaSubtituloCadastro}>
+                      Participante {indiceRubricaNatacao + 1} de {totalLista}
+                    </Text>
+                    <Text style={[styles.modalRubricaLinhaCadastro, styles.modalRubricaLinhaInline]}>
+                      Modalidade:{' '}
+                      <Text style={styles.modalRubricaLinhaStrong}>{tituloModalidade}</Text>
+                    </Text>
+                  </View>
                   <Text style={styles.modalRubricaLinhaCadastro}>
                     Nome:{' '}
                     <Text style={styles.modalRubricaLinhaStrong}>{participanteAtual.nome}</Text>
@@ -1862,21 +1864,23 @@ export default function AplicarTAFScreen() {
                       {participanteAtual.nip || '—'}
                     </Text>
                   </Text>
-                  <Text style={styles.modalRubricaLinhaCadastro}>
-                    Tempo de prova:{' '}
-                    <Text style={styles.modalRubricaLinhaStrong}>
-                      {formatMsByModality(
-                        modProva === 'natacao' ? 'natacao' : 'corrida',
-                        participanteAtual.tempoMs,
-                      )}
+                  <View style={styles.modalRubricaLinhaRow}>
+                    <Text style={[styles.modalRubricaLinhaCadastro, styles.modalRubricaLinhaInline]}>
+                      Tempo de prova:{' '}
+                      <Text style={styles.modalRubricaLinhaStrong}>
+                        {formatMsByModality(
+                          modProva === 'natacao' ? 'natacao' : 'corrida',
+                          participanteAtual.tempoMs,
+                        )}
+                      </Text>
                     </Text>
-                  </Text>
-                  <Text style={styles.modalRubricaLinhaCadastro}>
-                    NOTA:{' '}
-                    <Text style={styles.modalRubricaLinhaStrong}>
-                      {textoNotaRubricaModal(participanteAtual)}
+                    <Text style={[styles.modalRubricaLinhaCadastro, styles.modalRubricaLinhaInline]}>
+                      NOTA:{' '}
+                      <Text style={styles.modalRubricaLinhaStrong}>
+                        {textoNotaRubricaModal(participanteAtual)}
+                      </Text>
                     </Text>
-                  </Text>
+                  </View>
                   <Text style={styles.modalRubricaLinhaCadastro}>
                     Situação:{' '}
                     <Text style={styles.modalRubricaLinhaStrong}>
@@ -1921,27 +1925,29 @@ export default function AplicarTAFScreen() {
                       ) : null}
                     </Svg>
                   </View>
-                  <TouchableOpacity
-                    accessibilityLabel="Limpar rúbrica"
-                    activeOpacity={0.85}
-                    onPress={limparRubricaNatacaoAtual}
-                    style={styles.modalRubricaBtnSecundario}
-                  >
-                    <Text style={styles.modalRubricaBtnSecundarioText}>Limpar assinatura</Text>
-                  </TouchableOpacity>
                   {erroRubricaNatacao ? (
                     <Text style={styles.modalRubricaErroCadastro}>{erroRubricaNatacao}</Text>
                   ) : null}
-                  <TouchableOpacity
-                    accessibilityLabel="Confirmar rúbrica do candidato"
-                    activeOpacity={0.85}
-                    onPress={confirmarRubricaNatacao}
-                    style={styles.modalTempoBtnPrimaryCadastro}
-                  >
-                    <Text style={styles.modalTempoBtnPrimaryTextCadastro}>
-                      {indiceRubricaNatacao + 1 < totalLista ? 'Próximo' : 'Finalizar'}
-                    </Text>
-                  </TouchableOpacity>
+                  <View style={styles.modalRubricaBotoesRow}>
+                    <TouchableOpacity
+                      accessibilityLabel="Limpar rúbrica"
+                      activeOpacity={0.85}
+                      onPress={limparRubricaNatacaoAtual}
+                      style={[styles.modalRubricaBtnSecundario, styles.modalRubricaBtnMeio]}
+                    >
+                      <Text style={styles.modalRubricaBtnSecundarioText}>Limpar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      accessibilityLabel="Confirmar rúbrica do candidato"
+                      activeOpacity={0.85}
+                      onPress={confirmarRubricaNatacao}
+                      style={[styles.modalTempoBtnPrimaryCadastro, styles.modalRubricaBtnMeio]}
+                    >
+                      <Text style={styles.modalTempoBtnPrimaryTextCadastro}>
+                        {indiceRubricaNatacao + 1 < totalLista ? 'Próximo' : 'Finalizar'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               );
             })()}
@@ -2879,13 +2885,24 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     fontSize: 12,
     fontWeight: '800',
     color: ui.text,
-    marginBottom: 10,
+    flexShrink: 1,
+  },
+  modalRubricaLinhaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 6,
   },
   modalRubricaLinhaCadastro: {
     fontSize: 13,
     fontWeight: '700',
     color: ui.text,
     marginBottom: 6,
+  },
+  modalRubricaLinhaInline: {
+    marginBottom: 0,
   },
   modalRubricaLinhaStrong: {
     color: ui.text,
@@ -2907,19 +2924,29 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     overflow: 'hidden',
   },
   modalRubricaBtnSecundario: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: theme.border,
     backgroundColor: ui.toggleInactiveBg,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalRubricaBtnSecundarioText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
     color: ui.text,
+  },
+  modalRubricaBotoesRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+    marginTop: 10,
+  },
+  modalRubricaBtnMeio: {
+    flex: 1,
+    marginTop: 0,
   },
   modalRubricaErroCadastro: {
     marginTop: 8,

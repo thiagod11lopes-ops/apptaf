@@ -7,16 +7,15 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  TextInput,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
-import { Check, Pause, Play } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { PREMIUM } from '../theme/premium';
+import { TafCronometroPanel, type TafCronometroEstado } from './taf/TafCronometroPanel';
 
 export type ResultadoPermanenciaOpcao = 'aprovado' | 'reprovado' | null;
 
-export type CronometroPermanenciaEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
+export type CronometroPermanenciaEstado = TafCronometroEstado;
 
 type ParticipantePermanencia = {
   index: number;
@@ -39,9 +38,6 @@ type PermanenciaTafPanelProps = {
   onAplicarResultado: () => void;
   salvando: boolean;
   erroAplicar?: string;
-  inputBorder: string;
-  inputBg: string;
-  inputTextColor: string;
 };
 
 function CheckPermanencia({
@@ -91,9 +87,6 @@ export function PermanenciaTafPanel({
   onAplicarResultado,
   salvando,
   erroAplicar,
-  inputBorder,
-  inputBg,
-  inputTextColor,
 }: PermanenciaTafPanelProps) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
@@ -146,97 +139,44 @@ export function PermanenciaTafPanel({
         })}
       </ScrollView>
 
-      <View style={styles.cronometroBloco}>
-        <View style={styles.cronometroRow}>
-          {cronometroEstado === 'inicial' || cronometroEstado === 'finalizado' ? (
+      <TafCronometroPanel
+        tituloProva="Permanência"
+        tempoExibido={tempoExibido}
+        estado={cronometroEstado}
+        pausadoTexto={cronometroPausadoTexto}
+        onPausadoTextoChange={onCronometroPausadoTextoChange}
+        onBlurPausado={onBlurCronometroPausado}
+        onIniciar={onIniciarCronometro}
+        onParar={onPararCronometro}
+        onPausar={onPausarCronometro}
+        onContinuar={onContinuarCronometro}
+        hint="Limite da prova: 10:00"
+        footer={
+          todosMarcados ? (
             <TouchableOpacity
-              accessibilityLabel="Iniciar permanência"
+              accessibilityLabel="Aplicar resultado da permanência"
               activeOpacity={0.85}
-              onPress={onIniciarCronometro}
-              style={styles.btnCronometro}
+              onPress={onAplicarResultado}
+              disabled={salvando}
+              style={[
+                styles.btnAplicar,
+                { backgroundColor: theme.primary },
+                salvando ? styles.btnDisabled : null,
+              ]}
             >
-              <Text style={styles.btnCronometroText}>Iniciar Permanência</Text>
+              {salvando ? (
+                <ActivityIndicator color={theme.tokens.textOnPrimary} />
+              ) : (
+                <Text style={[ts.body, styles.btnAplicarText, { color: theme.tokens.textOnPrimary }]}>
+                  Aplicar Resultado
+                </Text>
+              )}
             </TouchableOpacity>
-          ) : null}
-          {cronometroEstado === 'rodando' || cronometroEstado === 'pausado' ? (
-            <TouchableOpacity
-              accessibilityLabel="Parar permanência"
-              activeOpacity={0.85}
-              onPress={onPararCronometro}
-              style={styles.btnCronometro}
-            >
-              <Text style={styles.btnCronometroText}>Parar</Text>
-            </TouchableOpacity>
-          ) : null}
-          {cronometroEstado === 'rodando' ? (
-            <TouchableOpacity
-              accessibilityLabel="Pausar cronômetro"
-              activeOpacity={0.85}
-              onPress={onPausarCronometro}
-              style={[styles.btnIcon, { borderColor: theme.border, backgroundColor: ui.inputBg }]}
-            >
-              <Pause size={22} color={ui.iconStrong} strokeWidth={2.5} />
-            </TouchableOpacity>
-          ) : null}
-          {cronometroEstado === 'pausado' ? (
-            <TouchableOpacity
-              accessibilityLabel="Continuar cronômetro"
-              activeOpacity={0.85}
-              onPress={onContinuarCronometro}
-              style={[styles.btnIcon, { borderColor: theme.border, backgroundColor: ui.inputBg }]}
-            >
-              <Play size={22} color={ui.iconStrong} strokeWidth={2.5} />
-            </TouchableOpacity>
-          ) : null}
-          <View style={[styles.cronometroBox, { borderColor: inputBorder, backgroundColor: inputBg }]}>
-            {cronometroEstado === 'pausado' ? (
-              <TextInput
-                value={cronometroPausadoTexto}
-                onChangeText={onCronometroPausadoTextoChange}
-                onBlur={onBlurCronometroPausado}
-                placeholder="MM:SS"
-                placeholderTextColor={ui.placeholder}
-                style={[styles.cronometroInput, { color: inputTextColor }]}
-              />
-            ) : (
-              <Text
-                style={[
-                  styles.cronometroText,
-                  { color: inputTextColor },
-                  Platform.OS === 'web' ? ({ fontVariantNumeric: 'tabular-nums' } as object) : null,
-                ]}
-              >
-                {tempoExibido}
-              </Text>
-            )}
-          </View>
-        </View>
-        <Text style={[styles.limiteHint, { color: ui.text }]}>Limite da prova: 10:00</Text>
-      </View>
+          ) : null
+        }
+      />
 
       {erroAplicar ? <Text style={[styles.erroText, { color: ui.text }]}>{erroAplicar}</Text> : null}
-
-      {todosMarcados ? (
-        <TouchableOpacity
-          accessibilityLabel="Aplicar resultado da permanência"
-          activeOpacity={0.85}
-          onPress={onAplicarResultado}
-          disabled={salvando}
-          style={[
-            styles.btnAplicar,
-            { backgroundColor: theme.primary },
-            salvando ? styles.btnDisabled : null,
-          ]}
-        >
-          {salvando ? (
-            <ActivityIndicator color={theme.tokens.textOnPrimary} />
-          ) : (
-            <Text style={[ts.body, styles.btnAplicarText, { color: theme.tokens.textOnPrimary }]}>
-              Aplicar Resultado
-            </Text>
-          )}
-        </TouchableOpacity>
-      ) : null}
     </View>
   );
 }
@@ -309,60 +249,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#111827',
-  },
-  cronometroBloco: { marginTop: 4, gap: 6 },
-  cronometroRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 10,
-  },
-  btnCronometro: {
-    backgroundColor: '#111827',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  btnCronometroText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  btnIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  cronometroBox: {
-    minWidth: 100,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cronometroText: {
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  cronometroInput: {
-    fontSize: 28,
-    fontWeight: '900',
-    minWidth: 88,
-    textAlign: 'center',
-    padding: 0,
-  },
-  limiteHint: {
-    fontSize: 12,
-    color: 'rgba(17,24,39,0.5)',
-    fontWeight: '600',
   },
   erroText: {
     color: '#B91C1C',

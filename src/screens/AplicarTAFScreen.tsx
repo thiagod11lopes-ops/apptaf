@@ -71,7 +71,8 @@ import {
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
-import { Check, Pause, Play } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
+import { TafCronometroPanel } from '../components/taf/TafCronometroPanel';
 import {
   aplicarTafTrialReducer,
   initialTrialTableState,
@@ -2373,9 +2374,6 @@ export default function AplicarTAFScreen() {
                 }}
                 salvando={salvandoResultadosCorrida}
                 erroAplicar={erroPermanencia}
-                inputBorder={inputBorder}
-                inputBg={inputBg}
-                inputTextColor={inputTextColor}
               />
             </View>
           </Card>
@@ -2651,115 +2649,44 @@ export default function AplicarTAFScreen() {
               </View>
             </ScrollView>
 
-            <View style={styles.cronometroBloco}>
-              <View style={styles.iniciarCorridaRow}>
-                {(cronometroEstado === 'inicial' || cronometroEstado === 'finalizado') ? (
+            <TafCronometroPanel
+              tituloProva={tituloProvaCurta}
+              tempoExibido={tempoExibido}
+              estado={cronometroEstado}
+              pausadoTexto={cronometroPausadoTexto}
+              onPausadoTextoChange={onCronometroPausadoTextoChange}
+              onBlurPausado={onBlurCronometroPausado}
+              onIniciar={iniciarCronometroCorrida}
+              onParar={pararCronometroCorrida}
+              onPausar={pausarCronometroCorrida}
+              onContinuar={continuarCronometroCorrida}
+              footer={
+                todosIntegrantesComTempoRegistrado ? (
                   <TouchableOpacity
-                    accessibilityLabel={`Iniciar ${tituloProvaCurta}`}
+                    accessibilityLabel={`Aplicar resultado da ${tituloProvaCurta.toLowerCase()}`}
                     activeOpacity={0.85}
-                    onPress={iniciarCronometroCorrida}
-                    style={styles.btnIniciarCorridaCadastro}
+                    onPress={() => {
+                      void onCadastrarResultados();
+                    }}
+                    disabled={salvandoResultadosCorrida}
+                    style={[
+                      styles.btnOkNip,
+                      styles.btnAplicarResultadoCronometro,
+                      { backgroundColor: theme.primary },
+                      salvandoResultadosCorrida ? styles.btnIniciarDisabled : null,
+                    ]}
                   >
-                    <Text style={styles.btnIniciarCorridaTextCadastro}>
-                      Iniciar {tituloProvaCurta}
-                    </Text>
+                    {salvandoResultadosCorrida ? (
+                      <ActivityIndicator color={theme.tokens.textOnPrimary} />
+                    ) : (
+                      <Text style={[ts.body, styles.btnText, { color: theme.tokens.textOnPrimary }]}>
+                        Aplicar Resultado
+                      </Text>
+                    )}
                   </TouchableOpacity>
-                ) : null}
-                {(cronometroEstado === 'rodando' || cronometroEstado === 'pausado') ? (
-                  <TouchableOpacity
-                    accessibilityLabel={`Parar ${tituloProvaCurta}`}
-                    activeOpacity={0.85}
-                    onPress={pararCronometroCorrida}
-                    style={styles.btnIniciarCorridaCadastro}
-                  >
-                    <Text style={styles.btnIniciarCorridaTextCadastro}>
-                      Parar {tituloProvaCurta}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                {cronometroEstado === 'rodando' ? (
-                  <TouchableOpacity
-                    accessibilityLabel="Pausar cronômetro"
-                    activeOpacity={0.85}
-                    onPress={pausarCronometroCorrida}
-                    style={styles.btnPausaPlayCronometroCadastro}
-                  >
-                    <Pause size={22} color={ui.iconStrong} strokeWidth={2.5} />
-                  </TouchableOpacity>
-                ) : null}
-                {cronometroEstado === 'pausado' ? (
-                  <TouchableOpacity
-                    accessibilityLabel="Continuar cronômetro"
-                    activeOpacity={0.85}
-                    onPress={continuarCronometroCorrida}
-                    style={styles.btnPausaPlayCronometroCadastro}
-                  >
-                    <Play size={22} color={ui.iconStrong} strokeWidth={2.5} />
-                  </TouchableOpacity>
-                ) : null}
-                <View style={styles.cronometroBoxCadastro}>
-                  {cronometroEstado === 'pausado' ? (
-                    <TextInput
-                      value={cronometroPausadoTexto}
-                      onChangeText={onCronometroPausadoTextoChange}
-                      onBlur={onBlurCronometroPausado}
-                      selectTextOnFocus
-                      accessibilityLabel="Editar tempo do cronômetro (pausado)"
-                      placeholder="MM:SS"
-                      placeholderTextColor={ui.placeholder}
-                      autoCorrect={false}
-                      autoComplete="off"
-                      spellCheck={false}
-                      {...(Platform.OS === 'ios' ? { textContentType: 'none' as const } : {})}
-                      keyboardType={
-                        Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'
-                      }
-                      style={[
-                        styles.cronometroInputCadastro,
-                        Platform.OS === 'web'
-                          ? ({ fontVariantNumeric: 'tabular-nums' } as object)
-                          : null,
-                      ]}
-                    />
-                  ) : (
-                    <Text
-                      style={[
-                        styles.cronometroTextCadastro,
-                        Platform.OS === 'web'
-                          ? ({ fontVariantNumeric: 'tabular-nums' } as object)
-                          : null,
-                      ]}
-                    >
-                      {tempoExibido}
-                    </Text>
-                  )}
-                </View>
-              </View>
-              {todosIntegrantesComTempoRegistrado ? (
-                <TouchableOpacity
-                  accessibilityLabel={`Aplicar resultado da ${tituloProvaCurta.toLowerCase()}`}
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    void onCadastrarResultados();
-                  }}
-                  disabled={salvandoResultadosCorrida}
-                  style={[
-                    styles.btnOkNip,
-                    styles.btnAplicarResultadoCadastro,
-                    { backgroundColor: theme.primary },
-                    salvandoResultadosCorrida ? styles.btnIniciarDisabled : null,
-                  ]}
-                >
-                  {salvandoResultadosCorrida ? (
-                    <ActivityIndicator color={theme.tokens.textOnPrimary} />
-                  ) : (
-                    <Text style={[ts.body, styles.btnText, { color: theme.tokens.textOnPrimary }]}>
-                      Aplicar Resultado
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              ) : null}
-            </View>
+                ) : null
+              }
+            />
           </View>
           </Card>
         ) : null}
@@ -3003,61 +2930,9 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     alignItems: 'center',
   },
   modalTempoBtnPrimaryTextCadastro: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
-  btnIniciarCorridaCadastro: {
-    flex: 1,
-    minWidth: 160,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
-    backgroundColor: ui.toggleInactiveBg,
-  },
-  btnIniciarCorridaTextCadastro: { color: ui.text, fontSize: 13, fontWeight: '800' },
-  btnPausaPlayCronometroCadastro: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
-    backgroundColor: ui.toggleInactiveBg,
-  },
-  cronometroBoxCadastro: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.border,
-    backgroundColor: ui.inputBg,
-    minWidth: 132,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cronometroTextCadastro: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: ui.text,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
-  cronometroInputCadastro: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: ui.text,
-    minWidth: 120,
-    textAlign: 'center',
-    paddingVertical: 0,
-    paddingHorizontal: 4,
-    borderWidth: 0,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as const } : {}),
-  },
-  btnAplicarResultadoCadastro: {
+  btnAplicarResultadoCronometro: {
     width: '100%',
-    marginTop: 14,
+    marginTop: 4,
   },
   nipRow: {
     marginBottom: 14,
@@ -3155,16 +3030,6 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   tabelaScrollHorizontal: {
     width: '100%',
     marginBottom: 4,
-  },
-  cronometroBloco: {
-    width: '100%',
-    marginTop: 16,
-  },
-  iniciarCorridaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flexWrap: 'wrap',
   },
   tabelaCard: {
     borderRadius: 14,

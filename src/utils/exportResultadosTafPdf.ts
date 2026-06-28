@@ -2,7 +2,12 @@ import { Platform, Alert } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoTafLinha } from './resultadoTafCadastro';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
+import {
+  blocosAplicadorAssinaturaHtml,
+  PDF_APLICADOR_ASSINATURA_STYLES,
+} from './pdfAplicadorAssinaturaHtml';
 
 const PDF_A4_LANDSCAPE_WIDTH = 842;
 const PDF_A4_LANDSCAPE_HEIGHT = 595;
@@ -40,6 +45,7 @@ function escapeHtml(s: string): string {
 export function buildResultadosTafHtml(
   linhas: ResultadoTafLinha[],
   subtitulo: string,
+  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
   const rows = linhas
@@ -75,6 +81,7 @@ export function buildResultadosTafHtml(
     .sub { color: #444; margin-bottom: 12px; font-size: 17px; line-height: 1.15; }
     ${PDF_TABELA_COMPACTA_STYLES}
     ${RUBRICA_PDF_STYLES}
+    ${PDF_APLICADOR_ASSINATURA_STYLES}
   </style>
 </head>
 <body>
@@ -101,6 +108,7 @@ export function buildResultadosTafHtml(
     </thead>
     <tbody>${rows || '<tr><td colspan="14">Nenhum registro</td></tr>'}</tbody>
   </table>
+  ${blocosAplicadorAssinaturaHtml(aplicadorAssinaturas)}
 </body>
 </html>`;
 }
@@ -108,12 +116,13 @@ export function buildResultadosTafHtml(
 export async function exportResultadosTafPdf(
   linhas: ResultadoTafLinha[],
   subtitulo: string,
+  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): Promise<void> {
   if (linhas.length === 0) {
     throw new Error('Não há resultados para exportar.');
   }
 
-  const html = buildResultadosTafHtml(linhas, subtitulo);
+  const html = buildResultadosTafHtml(linhas, subtitulo, aplicadorAssinaturas);
 
   if (Platform.OS === 'web') {
     const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;

@@ -2,9 +2,13 @@ import { Platform, Alert } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
-import { postoGradExibicaoAssinatura, type AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
+import {
+  blocoAplicadorAssinaturaHtml,
+  PDF_APLICADOR_ASSINATURA_STYLES,
+} from './pdfAplicadorAssinaturaHtml';
 
 function escapeHtml(s: string): string {
   return String(s)
@@ -36,23 +40,6 @@ export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[
   if (temNatacao && !temCorrida) return 'Nadador';
   if (temCorrida && !temNatacao) return 'Corredor';
   return 'Corredor / Nadador';
-}
-
-function blocoAplicadorAssinaturaHtml(assinatura?: AplicadorAssinaturaResumo): string {
-  if (!assinatura?.nome?.trim()) return '';
-  const postoGrad = escapeHtml(postoGradExibicaoAssinatura(assinatura));
-  const rubricaHtml = assinatura.rubricaSvg
-    ? `<div class="aplicador-rubrica">${celulaRubricaHtml(assinatura.rubricaSvg)}</div>`
-    : '';
-  return `<div class="aplicador-assinatura">
-    ${rubricaHtml}
-    <hr class="aplicador-linha"/>
-    <p class="aplicador-identificacao">
-      <span class="aplicador-posto-grad">${postoGrad}</span>
-      <span class="aplicador-nome">${escapeHtml(assinatura.nome)}</span>
-    </p>
-    <p class="aplicador-nip">NIP ${escapeHtml(assinatura.nip || '—')}</p>
-  </div>`;
 }
 
 /**
@@ -106,47 +93,7 @@ export function buildResumoAplicacaoHtml(
     .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
     ${PDF_TABELA_COMPACTA_STYLES}
     ${RUBRICA_PDF_STYLES}
-    .aplicador-assinatura {
-      margin-top: 28px;
-      text-align: center;
-      page-break-inside: avoid;
-    }
-    .aplicador-rubrica {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 8px;
-    }
-    .aplicador-linha {
-      width: 72%;
-      max-width: 420px;
-      margin: 0 auto 12px;
-      border: none;
-      border-top: 1px solid #374151;
-    }
-    .aplicador-identificacao {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      justify-content: center;
-      gap: 8px;
-      margin: 0 0 4px;
-    }
-    .aplicador-posto-grad {
-      font-size: 14px;
-      font-weight: 700;
-      color: #6B7280;
-    }
-    .aplicador-nome {
-      font-size: 16px;
-      font-weight: 800;
-      color: #111827;
-    }
-    .aplicador-nip {
-      font-size: 13px;
-      font-weight: 600;
-      color: #6B7280;
-      margin: 0;
-    }
+    ${PDF_APLICADOR_ASSINATURA_STYLES}
     ${PRINT_LANDSCAPE_CSS}
   </style>
 </head>

@@ -30,6 +30,7 @@ import { listarResultadosGeralFromHistorico } from '../../utils/resultadoGeralHi
 import { enriquecerLinhasComRubricas } from '../../utils/resultadoTafCadastro';
 import { carregarRubricasDasSessoesPorNip } from '../../utils/rubricasDasSessoes';
 import { exportResultadosTafPdf, PERMANENCIA_TEMPO_PDF_PADRAO } from '../../utils/exportResultadosTafPdf';
+import { assinaturasUnicasDasSessoes } from '../../utils/assinaturaAplicadorDasSessoes';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
 import { RubricaCell } from '../RubricaThumb';
 import { PREMIUM } from '../../theme/premium';
@@ -157,7 +158,8 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
       }
       const rubSessoes = await carregarRubricasDasSessoesPorNip();
       const linhas = enriquecerLinhasComRubricas(linhasBase, cadastros, rubSessoes);
-      await exportResultadosTafPdf(linhas, `Resultados do dia — ${dataBrSelecionada}`);
+      const assinaturas = assinaturasUnicasDasSessoes(sessoesDoDia);
+      await exportResultadosTafPdf(linhas, `Resultados do dia — ${dataBrSelecionada}`, assinaturas);
     } catch (e) {
       onAviso?.(e instanceof Error ? e.message : 'Falha ao gerar PDF.');
     } finally {

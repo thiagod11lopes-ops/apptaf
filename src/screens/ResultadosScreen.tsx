@@ -3,8 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  SafeAreaView,
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -42,6 +40,7 @@ import {
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { PREMIUM } from '../theme/premium';
+import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Resultados'>;
 type AbaResultados = 'historico' | 'consulta' | 'pendencia' | 'geral';
@@ -123,12 +122,8 @@ export default function ResultadosScreen() {
   }, [sessaoParaExcluir, carregar]);
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: 'transparent' }]}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+    <>
+    <MobileScreenScaffold contentContainerStyle={styles.scroll}>
         <AppHeader
           title="Resultados"
           subtitle="Histórico · gerenciar resultados · resultado geral · pendências"
@@ -263,7 +258,7 @@ export default function ResultadosScreen() {
         ) : (
           <ResultadosPendenciaParcialPanel />
         )}
-      </ScrollView>
+    </MobileScreenScaffold>
 
       <ConfirmacaoExcluirSessaoModal
         sessao={sessaoParaExcluir}
@@ -273,15 +268,12 @@ export default function ResultadosScreen() {
         }}
         onConfirm={() => void executarExclusao()}
       />
-    </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
   scroll: {
-    paddingHorizontal: 16,
-    paddingBottom: 28,
     paddingTop: 8,
   },
   hero: {

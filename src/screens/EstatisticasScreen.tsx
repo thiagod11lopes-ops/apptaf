@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Platform,
 } from 'react-native';
@@ -19,6 +18,7 @@ import { StatBarChart } from '../components/estatisticas/StatBarChart';
 import { KpiCard } from '../components/fintech/KpiCard';
 import { PillTabs } from '../components/fintech/PillTabs';
 import { MonoValue } from '../components/fintech/MonoValue';
+import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 
 type ViewTab = 'geral' | 'modalidade' | 'notas';
 
@@ -56,11 +56,7 @@ export default function EstatisticasScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView
-        contentContainerStyle={[styles.scroll, maxWidth]}
-        showsVerticalScrollIndicator={false}
-      >
+    <MobileScreenScaffold contentContainerStyle={[styles.scroll, maxWidth]}>
         <AppHeader title="Estatísticas" onBack={() => navigation.goBack()} />
 
         {loading ? (
@@ -215,14 +211,12 @@ export default function EstatisticasScreen() {
               ) : null}
             </>
           )}
-      </ScrollView>
-    </View>
+    </MobileScreenScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { padding: 16, paddingBottom: 32, gap: 4 },
+  scroll: { paddingTop: 4, gap: 4 },
   centered: { paddingVertical: 48, alignItems: 'center', justifyContent: 'center' },
   lead: { fontSize: 12, lineHeight: 18, marginBottom: 12, marginTop: 4 },
   kpiGrid: {

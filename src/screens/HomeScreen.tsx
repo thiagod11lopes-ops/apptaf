@@ -16,6 +16,9 @@ import {
   type ResumoInicioTafHistorico,
 } from '../utils/resultadoGeralHistorico';
 import { PREMIUM } from '../theme/premium';
+import { MobileGlassShell } from '../components/mobile/MobileGlassShell';
+import { useMobileLayout } from '../components/mobile/useMobileLayout';
+import { isNativeMobileApp } from '../components/mobile/MobileScreenScaffold';
 
 const tafImage = require('../../TAF1.png');
 
@@ -67,6 +70,9 @@ export default function HomeScreen() {
 
   useAuthDataReload(recarregarResumo);
 
+  const { horizontalPad } = useMobileLayout();
+  const nativeMobile = isNativeMobileApp();
+
   const frameShadow =
     Platform.OS === 'web'
       ? ({
@@ -82,9 +88,9 @@ export default function HomeScreen() {
           elevation: 6,
         };
 
-  return (
-    <View style={styles.page}>
-      <View style={styles.topSection}>
+  const body = (
+    <>
+      <View style={[styles.topSection, nativeMobile ? { paddingHorizontal: horizontalPad } : null]}>
         <AppHeader title="TAF" subtitle="Teste de Aptidão Física" />
         <TopActionIcons
           activeRoute="Home"
@@ -121,6 +127,7 @@ export default function HomeScreen() {
       <View
         style={[
           styles.imageFrame,
+          nativeMobile ? { marginHorizontal: horizontalPad } : null,
           {
             backgroundColor: theme.cardBg,
             borderColor: theme.border,
@@ -137,8 +144,14 @@ export default function HomeScreen() {
       </View>
 
       <SyncQuickOverlay visible={overlayVisible} />
-    </View>
+    </>
   );
+
+  if (nativeMobile) {
+    return <MobileGlassShell>{body}</MobileGlassShell>;
+  }
+
+  return <View style={styles.page}>{body}</View>;
 }
 
 const styles = StyleSheet.create({

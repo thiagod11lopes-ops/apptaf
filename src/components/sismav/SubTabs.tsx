@@ -3,6 +3,8 @@ import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getMobileAppGlass } from '../mobile/mobileAppTheme';
+import { isNativeMobileApp } from '../mobile/MobileScreenScaffold';
 
 export type SubTabOption<T extends string> = { id: T; label: string };
 
@@ -15,6 +17,8 @@ type Props<T extends string> = {
 export function SubTabs<T extends string>({ options, value, onChange }: Props<T>) {
   const { theme } = useTheme();
   const t = theme.tokens;
+  const glass = getMobileAppGlass(theme);
+  const useGlass = isNativeMobileApp();
 
   return (
     <ScrollView
@@ -24,10 +28,16 @@ export function SubTabs<T extends string>({ options, value, onChange }: Props<T>
       contentContainerStyle={[
         styles.container,
         {
-          backgroundColor: theme.surface,
-          borderColor: theme.border,
+          backgroundColor: useGlass ? glass.bg : theme.surface,
+          borderColor: useGlass ? glass.border : theme.border,
         },
-        Platform.OS === 'web' ? ({ boxShadow: t.shadowSm } as object) : undefined,
+        Platform.OS === 'web' ? ({ boxShadow: t.shadowSm } as object) : useGlass ? {
+          elevation: 4,
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+        } : undefined,
       ]}
       accessibilityRole="tablist"
     >

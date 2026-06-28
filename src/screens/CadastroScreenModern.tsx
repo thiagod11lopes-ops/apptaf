@@ -4,8 +4,6 @@ import {
   Text,
   StyleSheet,
   Platform,
-  SafeAreaView,
-  ScrollView,
   TouchableOpacity,
   TextInput,
 } from 'react-native';
@@ -32,6 +30,7 @@ import {
 } from '../taf/natacaoNota';
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
+import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -279,12 +278,8 @@ export default function CadastroScreenModern() {
   const successColor = theme.gain;
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+    <>
+    <MobileScreenScaffold contentContainerStyle={styles.scrollContent}>
         <View style={styles.centerWrap}>
           <AppHeader title="Cadastro" onBack={() => navigation.navigate('Home' as never)} />
 
@@ -625,7 +620,7 @@ export default function CadastroScreenModern() {
             />
           ) : null}
         </View>
-      </ScrollView>
+    </MobileScreenScaffold>
 
       {excluirId ? (
         <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)' }]}>
@@ -705,13 +700,12 @@ export default function CadastroScreenModern() {
           </View>
         </View>
       ) : null}
-    </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, position: 'relative' },
-  scrollContent: { paddingHorizontal: 16, paddingVertical: 16 },
+  scrollContent: { paddingVertical: 12 },
   centerWrap: { flex: 1, alignItems: 'stretch' },
   formCard: {
     width: '100%',

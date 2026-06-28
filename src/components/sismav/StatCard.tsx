@@ -1,7 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
+import { getMobileAppGlass } from '../mobile/mobileAppTheme';
+import { isNativeMobileApp } from '../mobile/MobileScreenScaffold';
 
 type Props = {
   label: string;
@@ -14,6 +17,8 @@ export function StatCard({ label, value, variant = 'default' }: Props) {
   const { usePhoneFrame, width } = useDeviceLayout();
   const compactGrid = usePhoneFrame || width < 420;
   const t = theme.tokens;
+  const glass = getMobileAppGlass(theme);
+  const useGlass = isNativeMobileApp();
   const valueColor =
     variant === 'positive'
       ? theme.success
@@ -25,18 +30,40 @@ export function StatCard({ label, value, variant = 'default' }: Props) {
             ? t.warning500
             : theme.text;
 
+  const accentColors: [string, string] =
+    variant === 'positive'
+      ? ['#059669', '#14b8a6']
+      : variant === 'negative'
+        ? ['#dc2626', '#f87171']
+        : variant === 'warning'
+          ? ['#d97706', '#fbbf24']
+          : variant === 'primary'
+            ? ['#2563eb', '#38bdf8']
+            : ['#64748b', '#94a3b8'];
+
   return (
     <View
       style={[
         styles.card,
         compactGrid ? styles.cardCompact : styles.cardRegular,
         {
-          backgroundColor: theme.surface,
-          borderColor: theme.border,
+          backgroundColor: useGlass ? glass.bg : theme.surface,
+          borderColor: useGlass ? glass.border : theme.border,
         },
-        Platform.OS === 'web' ? ({ boxShadow: t.shadowCard } as object) : { elevation: 2 },
+        Platform.OS === 'web'
+          ? ({ boxShadow: t.shadowCard } as object)
+          : {
+              elevation: useGlass ? 6 : 2,
+              shadowColor: '#0f172a',
+              shadowOffset: { width: 0, height: useGlass ? 8 : 3 },
+              shadowOpacity: useGlass ? 0.12 : 0.06,
+              shadowRadius: useGlass ? 16 : 6,
+            },
       ]}
     >
+      {useGlass ? (
+        <LinearGradient colors={accentColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.stripe} />
+      ) : null}
       <Text
         style={[styles.label, compactGrid && styles.labelCompact, { color: theme.textMuted }]}
         numberOfLines={2}
@@ -55,6 +82,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     gap: 6,
+    overflow: 'hidden',
+  },
+  stripe: {
+    height: 2,
+    width: '100%',
   },
   cardRegular: {
     flexGrow: 1,

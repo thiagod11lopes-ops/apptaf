@@ -194,7 +194,9 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-            <Text style={[styles.titulo, { color: theme.text }]}>Assinatura do aplicador</Text>
+            {etapa === 'senha' ? (
+              <Text style={[styles.titulo, { color: theme.text }]}>Assinatura do aplicador</Text>
+            ) : null}
 
             {etapa === 'senha' ? (
               <>
@@ -305,13 +307,28 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
               </>
             ) : (
               <>
+                <View style={styles.headerRow}>
+                  <Text style={[styles.titulo, styles.tituloComVoltar, { color: theme.text }]}>
+                    Assinatura do aplicador
+                  </Text>
+                  <TouchableOpacity
+                    accessibilityLabel="Voltar para senha do aplicador"
+                    onPress={() => {
+                      setEtapa('senha');
+                      setErroRubrica('');
+                    }}
+                    style={[styles.btnVoltarTopo, { borderColor: theme.border }]}
+                  >
+                    <Text style={{ color: theme.textSecondary, fontWeight: '700' }}>Voltar</Text>
+                  </TouchableOpacity>
+                </View>
+
                 <Text style={[styles.sub, { color: theme.textSecondary }]}>
                   {aplicadorSelecionado
                     ? `${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome} — desenhe a rúbrica abaixo.`
                     : 'Desenhe a rúbrica do aplicador.'}
                 </Text>
 
-                <Text style={[styles.label, { color: theme.textSecondary }]}>Rúbrica do aplicador</Text>
                 <View
                   style={[
                     styles.canvasWrap,
@@ -353,26 +370,18 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
                   </Svg>
                 </View>
 
-                <TouchableOpacity
-                  onPress={limparRubrica}
-                  style={[styles.btnSecundario, { borderColor: theme.border }]}
-                >
-                  <Text style={{ color: theme.text, fontWeight: '700' }}>Limpar rúbrica</Text>
-                </TouchableOpacity>
-
                 {erroRubrica ? <Text style={[styles.erro, { color: theme.loss }]}>{erroRubrica}</Text> : null}
 
                 <View style={styles.footerBtns}>
                   <TouchableOpacity
-                    onPress={() => {
-                      setEtapa('senha');
-                      setErroRubrica('');
-                    }}
-                    style={[styles.btnGhost, { borderColor: theme.border }]}
+                    accessibilityLabel="Limpar rúbrica"
+                    onPress={limparRubrica}
+                    style={[styles.btnSecundario, { borderColor: theme.border }]}
                   >
-                    <Text style={{ color: theme.textSecondary, fontWeight: '700' }}>Voltar</Text>
+                    <Text style={{ color: theme.text, fontWeight: '700' }}>Limpar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
+                    accessibilityLabel="Concluir assinatura do aplicador"
                     onPress={concluirAssinatura}
                     disabled={!temTracoRubrica}
                     style={[
@@ -414,6 +423,20 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   titulo: { fontSize: 18, fontWeight: '800', marginBottom: 8 },
+  tituloComVoltar: { marginBottom: 0 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  btnVoltarTopo: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
   sub: { fontSize: 13, lineHeight: 19, marginBottom: 16 },
   label: { fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
@@ -445,12 +468,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   btnSecundario: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
+    flex: 1,
+    paddingVertical: 14,
     paddingHorizontal: 14,
     borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   erro: { fontSize: 13, fontWeight: '600', marginBottom: 10, textAlign: 'center' },
   btnPrimary: {
@@ -468,13 +492,8 @@ const styles = StyleSheet.create({
   btnPrimaryText: { fontWeight: '800', fontSize: 15 },
   footerBtns: {
     flexDirection: 'row',
+    alignItems: 'stretch',
     gap: 10,
     marginTop: 8,
-  },
-  btnGhost: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderWidth: 1,
   },
 });

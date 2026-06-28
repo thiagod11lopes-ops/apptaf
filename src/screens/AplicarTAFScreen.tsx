@@ -30,7 +30,6 @@ import type { AppTheme } from '../theme/premium';
 import { PREMIUM } from '../theme/premium';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
-import { LandscapeOrientationModal } from '../components/sismav/LandscapeOrientationModal';
 import {
   ModalTesteJaAplicado,
   type ModalTesteJaAplicadoInfo,
@@ -226,7 +225,6 @@ export default function AplicarTAFScreen() {
   const inputBg = theme.cardBg;
   const inputBorder = ui.inputBorder;
   const inputTextColor = ui.text;
-  const [modalOrientacaoPaisagem, setModalOrientacaoPaisagem] = useState(false);
   const [mostrarListaPreCadastro, setMostrarListaPreCadastro] = useState(false);
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
   const [listaPreCadastros, setListaPreCadastros] = useState<PreCadastroTaf[]>([]);
@@ -1691,15 +1689,6 @@ export default function AplicarTAFScreen() {
     dispatchTrial({ type: 'resetAll' });
   }, [resetCronometroCorrida]);
 
-  const confirmarOrientacaoEIniciarTaf = useCallback(() => {
-    setModalOrientacaoPaisagem(false);
-    iniciarTaf();
-  }, [iniciarTaf]);
-
-  const aoPressionarIniciarTaf = useCallback(() => {
-    setModalOrientacaoPaisagem(true);
-  }, []);
-
   const tituloProvaCurta =
     tipoProva === 'natacao'
       ? 'Natação'
@@ -1774,12 +1763,6 @@ export default function AplicarTAFScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
-      <LandscapeOrientationModal
-        visible={modalOrientacaoPaisagem}
-        onContinue={confirmarOrientacaoEIniciarTaf}
-        onClose={() => setModalOrientacaoPaisagem(false)}
-      />
-
       <ModalTesteJaAplicado
         info={modalTesteExistente}
         onClose={fecharModalTesteExistente}
@@ -1998,7 +1981,7 @@ export default function AplicarTAFScreen() {
             <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
               <TouchableOpacity
                 accessibilityLabel="Iniciar TAF"
-                onPress={aoPressionarIniciarTaf}
+                onPress={iniciarTaf}
                 style={[
                   styles.toggleBtn,
                   { backgroundColor: selectedBgColor, borderColor: selectedBgColor },

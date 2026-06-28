@@ -592,8 +592,8 @@ export default function AplicarTAFScreen() {
     const wNota = 64;
     const wAtleta = 56;
     if (tipoProva === 'natacao') {
-      const wMarcar = 128;
-      let w = wAtleta + 200 + wMarcar + 24;
+      const wChegada = 40;
+      let w = wAtleta + wNomeInline + wChegada + 16;
       if (mostrarColunaTempo) w += wTempo;
       if (mostrarColunaNotaNatacao) w += wNota;
       return w;
@@ -2447,15 +2447,19 @@ export default function AplicarTAFScreen() {
                 <View style={styles.tabelaHeaderRow}>
                   <Text style={[styles.tabelaHeaderCell, styles.tabelaColCorredor]}>{labelAtleta}</Text>
                   {tipoProva === 'natacao' ? (
-                    <>
-                      <Text style={[styles.tabelaHeaderCell, styles.tabelaColNome]}>Nome</Text>
+                    <View style={styles.tabelaGrupoNomeVoltas}>
+                      <Text style={[styles.tabelaHeaderCell, styles.tabelaColNomeInline]}>Nome</Text>
                       <Text
-                        style={[styles.tabelaHeaderCell, styles.tabelaColMarcarChegada]}
+                        style={[
+                          styles.tabelaHeaderCell,
+                          styles.tabelaHeaderChegada,
+                          styles.tabelaColChegadaInline,
+                        ]}
                         numberOfLines={2}
                       >
                         Marcar Chegada
                       </Text>
-                    </>
+                    </View>
                   ) : nColunasVoltas > 0 ? (
                     <View style={styles.tabelaGrupoNomeVoltas}>
                       <Text style={[styles.tabelaHeaderCell, styles.tabelaColNomeInline]}>Nome</Text>
@@ -2513,11 +2517,14 @@ export default function AplicarTAFScreen() {
                         <Text style={styles.tabelaNumeroVerde}>{index + 1}</Text>
                       </View>
                       {tipoProva === 'natacao' ? (
-                        <>
-                          <Text style={[styles.tabelaCellText, styles.tabelaColNome]} numberOfLines={2}>
+                        <View style={styles.tabelaGrupoNomeVoltas}>
+                          <Text
+                            style={[styles.tabelaCellText, styles.tabelaColNomeInline]}
+                            numberOfLines={2}
+                          >
                             {nome}
                           </Text>
-                          <View style={[styles.tabelaColMarcarChegada, styles.tabelaCelulaCheck]}>
+                          <View style={[styles.tabelaColChegadaInline, styles.tabelaCelulaCheck]}>
                             <TouchableOpacity
                               accessibilityRole="checkbox"
                               accessibilityState={{ checked: marcadoChegada }}
@@ -2538,7 +2545,7 @@ export default function AplicarTAFScreen() {
                               </View>
                             </TouchableOpacity>
                           </View>
-                        </>
+                        </View>
                       ) : nColunasVoltas > 0 ? (
                         <View style={styles.tabelaGrupoNomeVoltas}>
                           <Text
@@ -3218,6 +3225,20 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     minWidth: 96,
     maxWidth: 160,
     paddingRight: 4,
+  },
+  tabelaColChegadaInline: {
+    width: 40,
+    minWidth: 40,
+    textAlign: 'center',
+    paddingHorizontal: 0,
+  },
+  tabelaHeaderChegada: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: -0.2,
+    textAlign: 'center',
+    width: 52,
+    minWidth: 52,
   },
   tabelaColMarcarChegada: {
     width: 128,

@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, StyleSheet, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, Image, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
@@ -15,7 +16,8 @@ import {
   type ResumoInicioTafHistorico,
 } from '../utils/resultadoGeralHistorico';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
-import { TafTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 
 const tafImage = require('../../TAF1.png');
 
@@ -28,6 +30,7 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
 
 export default function HomeScreen() {
   const { theme } = useTheme();
+  const { isNarrowPhone } = useAplicarTafLayout();
   const { user, authReady, isAuthenticated, firebaseEnabled, dataOwnerUid } = useAuth();
   const { syncUi, pendingCount, startSyncFromToggle } = useOfflineSyncState();
   const { overlayVisible, showOverlay } = useSyncQuickOverlay();
@@ -70,14 +73,30 @@ export default function HomeScreen() {
   return (
     <MobileScreenScaffold scroll={false} style={styles.page} contentContainerStyle={styles.pageContent}>
       <View style={styles.headerBlock}>
-        <TafTabHeader
-          kicker="SISTEMA TAF"
-          title="Iniciar"
-          subtitle="Teste de Aptidão Física"
-        />
+        <View style={styles.titleBlock}>
+          <Text
+            style={[
+              theme.textStyles.brandTitle,
+              styles.titleCenter,
+              { fontSize: isNarrowPhone ? 26 : 28 },
+            ]}
+          >
+            TAF
+          </Text>
+          <LinearGradient
+            colors={[theme.primary, '#6366f1']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.titleRule}
+          />
+          <Text style={[styles.subtitleCenter, { color: theme.textSecondary }]}>
+            Teste de Aptidão Física
+          </Text>
+        </View>
         <TopActionIcons
           activeRoute="Home"
           inline
+          centered
           onSyncPress={firebaseEnabled ? handleSyncPress : undefined}
           syncPendingBadge={syncSaveIconState === 'pending' ? syncPendingTotal : 0}
           syncSaveIconState={syncSaveIconState}
@@ -146,8 +165,33 @@ const styles = StyleSheet.create({
   headerBlock: {
     width: '100%',
     flexShrink: 0,
-    gap: 4,
+    alignItems: 'center',
+    gap: 8,
     ...(Platform.OS === 'web' ? { overflow: 'visible' as const, zIndex: 10 } : null),
+  },
+  titleBlock: {
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  titleCenter: {
+    textAlign: 'center',
+    width: '100%',
+  },
+  titleRule: {
+    width: 32,
+    height: 2,
+    borderRadius: 2,
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  subtitleCenter: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    textAlign: 'center',
+    width: '100%',
+    marginTop: 4,
   },
   statsPanel: {
     flexShrink: 0,

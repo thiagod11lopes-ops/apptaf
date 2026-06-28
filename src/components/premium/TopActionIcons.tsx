@@ -42,6 +42,8 @@ type Props = {
   activeRoute: keyof RootStackParamList;
   /** Layout da faixa abaixo do subtítulo na Home */
   inline?: boolean;
+  /** Centraliza os ícones na faixa (Home). */
+  centered?: boolean;
   /** Abre modal de sincronização com a nuvem (ícone à esquerda de Normas). */
   onSyncPress?: () => void;
   syncPendingBadge?: number;
@@ -65,6 +67,7 @@ function wrapTooltip(
 export function TopActionIcons({
   activeRoute,
   inline = false,
+  centered = false,
   onSyncPress,
   syncPendingBadge = 0,
   syncSaveIconState = 'idle',
@@ -116,7 +119,7 @@ export function TopActionIcons({
         : 'Enviar e receber dados com a nuvem';
 
   return (
-    <View style={[styles.row, inline && styles.rowInline]}>
+    <View style={[styles.row, inline && styles.rowInline, centered && styles.rowCentered]}>
       {onSyncPress
         ? wrapTooltip(
             inline,
@@ -253,6 +256,10 @@ const styles = StyleSheet.create({
     flexWrap: 'nowrap',
     overflow: 'visible',
     zIndex: 20,
+  },
+  rowCentered: {
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
   btn: {
     borderRadius: PREMIUM.radiusMd,

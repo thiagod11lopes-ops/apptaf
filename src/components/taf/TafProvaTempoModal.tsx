@@ -8,14 +8,15 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import { getAplicarTafBackdrop, getAplicarTafGlass } from './aplicar/aplicarTafTheme';
+import { useAplicarTafLayout } from './aplicar/useAplicarTafLayout';
 import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPanel';
 import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
@@ -67,12 +68,14 @@ function MetaResultadoField({
   tone,
   theme,
   ui,
+  flexCell,
 }: {
   label: string;
   value: string;
   tone: 'tempo' | 'nota' | 'notaReprov';
   theme: ReturnType<typeof useTheme>['theme'];
   ui: ReturnType<typeof getUiColors>;
+  flexCell?: boolean;
 }) {
   const valueColor =
     tone === 'notaReprov' ? theme.loss : tone === 'nota' ? theme.gain : ui.text;
@@ -105,7 +108,7 @@ function MetaResultadoField({
 
   return (
     <View
-      style={[styles.metaField, { borderColor }]}
+      style={[styles.metaField, flexCell ? styles.metaFieldFlex : null, { borderColor }]}
       accessibilityLabel={`${label}: ${value}`}
     >
       <LinearGradient colors={[...gradientColors]} style={StyleSheet.absoluteFill} />
@@ -128,10 +131,12 @@ function CheckVolta({
   checked,
   onPress,
   a11y,
+  touchLarge,
 }: {
   checked: boolean;
   onPress: () => void;
   a11y: string;
+  touchLarge?: boolean;
 }) {
   return (
     <TouchableOpacity
@@ -140,7 +145,8 @@ function CheckVolta({
       accessibilityLabel={a11y}
       activeOpacity={0.85}
       onPress={onPress}
-      style={styles.checkOuter}
+      hitSlop={touchLarge ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined}
+      style={[styles.checkOuter, touchLarge ? styles.checkOuterLarge : null]}
     >
       <View style={[styles.checkBox, checked ? styles.checkBoxOn : styles.checkBoxOff]}>
         {checked ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
@@ -154,11 +160,13 @@ function CheckPermanenciaModal({
   checked,
   onPress,
   variant,
+  touchLarge,
 }: {
   label: string;
   checked: boolean;
   onPress: () => void;
   variant: 'aprovado' | 'reprovado';
+  touchLarge?: boolean;
 }) {
   const onStyle = variant === 'aprovado' ? styles.checkPermOnAprov : styles.checkPermOnReprov;
   return (
@@ -168,7 +176,8 @@ function CheckPermanenciaModal({
       accessibilityLabel={label}
       activeOpacity={0.85}
       onPress={onPress}
-      style={styles.checkPermOuter}
+      hitSlop={touchLarge ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined}
+      style={[styles.checkPermOuter, touchLarge ? styles.checkOuterLarge : null]}
     >
       <View style={[styles.checkPermBox, checked ? onStyle : styles.checkPermOff]}>
         {checked ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
@@ -218,6 +227,7 @@ export function TafProvaTempoModal({
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const ts = theme.textStyles;
+  const { participantStacked, isNativeMobile, modalBottomPad, horizontalPad } = useAplicarTafLayout();
 
   const tituloModal = `${tituloProva} preparada`;
   const glass = getAplicarTafGlass(theme);
@@ -276,8 +286,18 @@ export function TafProvaTempoModal({
               },
             ]}
           >
-            <View style={styles.participantRow}>
-              <View style={styles.identityCol}>
+            <View
+              style={[
+                styles.participantRow,
+                participantStacked ? styles.participantRowStacked : null,
+              ]}
+            >
+              <View
+                style={[
+                  styles.identityCol,
+                  participantStacked ? styles.identityColStacked : null,
+                ]}
+              >
                 <View
                   style={[
                     styles.numBadge,
@@ -286,19 +306,30 @@ export function TafProvaTempoModal({
                 >
                   <Text style={[styles.numBadgeText, { color: theme.success }]}>{index + 1}</Text>
                 </View>
-                <Text style={[styles.participantNome, { color: ui.text }]} numberOfLines={1}>
+                <Text
+                  style={[styles.participantNome, { color: ui.text }]}
+                  numberOfLines={participantStacked ? 2 : 1}
+                >
                   {nome}
                 </Text>
               </View>
 
               {temChecks ? (
                 <>
-                  <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
+                  <View
+                    style={[
+                      participantStacked ? styles.rowDividerH : styles.rowDivider,
+                      { backgroundColor: theme.border },
+                    ]}
+                  />
                   <ScrollView
                     horizontal
                     nestedScrollEnabled
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.checksTrack}
+                    showsHorizontalScrollIndicator={isNativeMobile}
+                    style={[
+                      styles.checksTrack,
+                      participantStacked ? styles.checksTrackStacked : null,
+                    ]}
                     contentContainerStyle={styles.checksTrackContent}
                     keyboardShouldPersistTaps="handled"
                   >
@@ -308,12 +339,14 @@ export function TafProvaTempoModal({
                           label="Aprovado"
                           checked={resultadosPermanencia[index] === 'aprovado'}
                           variant="aprovado"
+                          touchLarge={isNativeMobile}
                           onPress={() => onTogglePermanencia(index, 'aprovado')}
                         />
                         <CheckPermanenciaModal
                           label="Reprovado"
                           checked={resultadosPermanencia[index] === 'reprovado'}
                           variant="reprovado"
+                          touchLarge={isNativeMobile}
                           onPress={() => onTogglePermanencia(index, 'reprovado')}
                         />
                       </>
@@ -323,6 +356,7 @@ export function TafProvaTempoModal({
                       <CheckVolta
                         checked={chegadaNatacao[index] ?? false}
                         a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
+                        touchLarge={isNativeMobile}
                         onPress={() => onToggleChegada(index)}
                       />
                     ) : null}
@@ -335,6 +369,7 @@ export function TafProvaTempoModal({
                             key={`volta-${index}-${v}`}
                             checked={checksVoltas[index]?.[v] ?? false}
                             a11y={`Volta ${v + 1}, participante ${index + 1}`}
+                            touchLarge={isNativeMobile}
                             onPress={() => onToggleVolta(index, v)}
                           />
                         ))
@@ -345,8 +380,18 @@ export function TafProvaTempoModal({
 
               {mostrarTempo || mostrarNota ? (
                 <>
-                  <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-                  <View style={styles.metaStrip}>
+                  <View
+                    style={[
+                      participantStacked ? styles.rowDividerH : styles.rowDivider,
+                      { backgroundColor: theme.border },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.metaStrip,
+                      participantStacked ? styles.metaStripStacked : null,
+                    ]}
+                  >
                     {mostrarTempo ? (
                       <MetaResultadoField
                         label="Tempo"
@@ -354,6 +399,7 @@ export function TafProvaTempoModal({
                         tone="tempo"
                         theme={theme}
                         ui={ui}
+                        flexCell={participantStacked}
                       />
                     ) : null}
                     {mostrarNota ? (
@@ -363,6 +409,7 @@ export function TafProvaTempoModal({
                         tone={notaReprov ? 'notaReprov' : 'nota'}
                         theme={theme}
                         ui={ui}
+                        flexCell={participantStacked}
                       />
                     ) : null}
                   </View>
@@ -389,7 +436,7 @@ export function TafProvaTempoModal({
           locations={[0, 0.4, 0.75, 1]}
           style={StyleSheet.absoluteFill}
         />
-        <SafeAreaView style={styles.safe}>
+        <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
           <View style={[styles.header, { borderBottomColor: glass.border }]}>
             <View style={styles.headerTextCol}>
               <Text style={[styles.headerKicker, { color: theme.primary }]}>PROVA ATIVA</Text>
@@ -409,7 +456,10 @@ export function TafProvaTempoModal({
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingHorizontal: horizontalPad },
+          ]}
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator
@@ -420,7 +470,17 @@ export function TafProvaTempoModal({
           ) : null}
         </ScrollView>
 
-        <View style={[styles.bottomBar, { borderTopColor: glass.border, backgroundColor: glass.bg }]}>
+        <View
+          style={[
+            styles.bottomBar,
+            {
+              borderTopColor: glass.border,
+              backgroundColor: glass.bg,
+              paddingBottom: modalBottomPad,
+              paddingHorizontal: horizontalPad,
+            },
+          ]}
+        >
           {podeAplicar ? (
             <TouchableOpacity
               accessibilityLabel={`Aplicar resultado da ${tituloProva.toLowerCase()}`}
@@ -567,8 +627,42 @@ const styles = StyleSheet.create({
   checksTrack: {
     flexGrow: 1,
     flexShrink: 1,
-    maxWidth: '46%',
-    ...(Platform.OS === 'web' ? ({ minWidth: 56 } as object) : null),
+    maxWidth: Platform.OS === 'web' ? '46%' : '38%',
+    minWidth: 48,
+  },
+  participantRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  identityColStacked: {
+    width: '100%',
+    flex: 0,
+  },
+  rowDividerH: {
+    height: 1,
+    width: '100%',
+    opacity: 0.55,
+  },
+  checksTrackStacked: {
+    maxWidth: '100%',
+    width: '100%',
+    flexGrow: 0,
+  },
+  metaStripStacked: {
+    width: '100%',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  metaFieldFlex: {
+    flex: 1,
+    minWidth: 0,
+  },
+  checkOuterLarge: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   checksTrackContent: {
     flexDirection: 'row',

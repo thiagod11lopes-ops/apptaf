@@ -6,6 +6,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
 import { getAplicarTafGlass } from './aplicarTafTheme';
+import { useAplicarTafLayout } from './useAplicarTafLayout';
 
 type ProvaId = 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
 
@@ -29,6 +30,7 @@ export function AplicarTafProvaSelector({ onSelect }: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const glass = getAplicarTafGlass(theme);
+  const { provaTileWidth, isNativeMobile } = useAplicarTafLayout();
 
   return (
     <View style={styles.grid}>
@@ -40,7 +42,7 @@ export function AplicarTafProvaSelector({ onSelect }: Props) {
             accessibilityLabel={prova.label}
             activeOpacity={0.9}
             onPress={() => onSelect(prova.id)}
-            style={styles.tileWrap}
+            style={[styles.tileWrap, { width: provaTileWidth, maxWidth: provaTileWidth }]}
           >
             <View
               style={[
@@ -48,6 +50,7 @@ export function AplicarTafProvaSelector({ onSelect }: Props) {
                 {
                   backgroundColor: glass.bg,
                   borderColor: glass.border,
+                  minHeight: isNativeMobile ? 100 : 108,
                 },
                 Platform.OS === 'web'
                   ? ({ boxShadow: '0 8px 24px rgba(15,23,42,0.08)' } as object)
@@ -79,11 +82,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+    justifyContent: 'space-between',
   },
   tileWrap: {
-    width: '48%',
-    flexGrow: 1,
-    minWidth: 148,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   tile: {
     borderWidth: 1,

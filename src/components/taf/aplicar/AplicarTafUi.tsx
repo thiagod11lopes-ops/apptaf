@@ -15,6 +15,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
 import { aplicarTafShared, getAplicarTafGlass } from './aplicarTafTheme';
+import { useAplicarTafLayout } from './useAplicarTafLayout';
 
 export function AplicarTafFlowHeader({
   title,
@@ -27,6 +28,7 @@ export function AplicarTafFlowHeader({
 }) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
+  const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
 
   return (
     <View style={styles.headerWrap}>
@@ -40,7 +42,18 @@ export function AplicarTafFlowHeader({
       </TouchableOpacity>
       <View style={styles.headerTextCol}>
         <Text style={[styles.headerKicker, { color: theme.primary }]}>CENTRAL TAF</Text>
-        <Text style={[styles.headerTitle, { color: ui.text }]}>{title}</Text>
+        <Text
+          style={[
+            styles.headerTitle,
+            {
+              color: ui.text,
+              fontSize: isNarrowPhone ? 22 : isNativeMobile ? 24 : 26,
+              lineHeight: isNarrowPhone ? 26 : isNativeMobile ? 28 : 30,
+            },
+          ]}
+        >
+          {title}
+        </Text>
         {subtitle ? (
           <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>
         ) : null}
@@ -60,6 +73,7 @@ export function AplicarTafGlassPanel({
 }) {
   const { theme } = useTheme();
   const glass = getAplicarTafGlass(theme);
+  const { isNativeMobile } = useAplicarTafLayout();
   const accentColor =
     accent === 'violet'
       ? theme.isDark
@@ -84,6 +98,7 @@ export function AplicarTafGlassPanel({
       <View
         style={[
           styles.panelInner,
+          { padding: isNativeMobile ? 14 : 18 },
           Platform.OS === 'web' ? ({ backdropFilter: 'blur(18px)' } as object) : null,
           {
             backgroundColor: glass.bg,
@@ -117,13 +132,24 @@ export function AplicarTafSectionHeader({
 }) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
+  const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
 
   return (
     <View style={styles.sectionHeader}>
       {kicker ? (
         <Text style={[styles.sectionKicker, { color: theme.primary }]}>{kicker}</Text>
       ) : null}
-      <Text style={[styles.sectionTitle, { color: ui.text }]}>{title}</Text>
+      <Text
+        style={[
+          styles.sectionTitle,
+          {
+            color: ui.text,
+            fontSize: isNarrowPhone ? 18 : isNativeMobile ? 19 : 20,
+          },
+        ]}
+      >
+        {title}
+      </Text>
       {subtitle ? (
         <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>
       ) : null}
@@ -272,10 +298,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   headerTitle: {
-    fontSize: 26,
     fontWeight: '900',
     letterSpacing: -0.5,
-    lineHeight: 30,
   },
   headerSubtitle: {
     fontSize: 13,
@@ -300,7 +324,6 @@ const styles = StyleSheet.create({
   panelInner: {
     borderWidth: 1,
     borderRadius: PREMIUM.radiusLg + 4,
-    padding: 18,
     gap: 4,
   },
   sectionHeader: {
@@ -314,7 +337,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   sectionTitle: {
-    fontSize: 20,
     fontWeight: '900',
     letterSpacing: -0.3,
   },

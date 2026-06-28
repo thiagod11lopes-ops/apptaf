@@ -18,10 +18,11 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  SafeAreaView,
   GestureResponderEvent,
+  KeyboardAvoidingView,
 } from 'react-native';
 import Svg, { Path as SvgPath } from 'react-native-svg';
+import { SafeAreaView as SafeAreaViewInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
@@ -43,6 +44,7 @@ import {
   AplicarTafPreCadastroCard,
   PRE_CADASTRO_ACCENTS,
 } from '../components/taf/aplicar/AplicarTafPreCadastroCard';
+import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -232,6 +234,7 @@ export default function AplicarTAFScreen() {
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const styles = useMemo(() => createAplicarTafStyles(theme, ui), [theme, ui]);
+  const { horizontalPad, scrollBottomPad, insets } = useAplicarTafLayout();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const grayBg = theme.background;
   const selectedBgColor = theme.primary;
@@ -1829,7 +1832,15 @@ export default function AplicarTAFScreen() {
 
   return (
     <AplicarTafShell>
-    <SafeAreaView style={[styles.safe, { backgroundColor: 'transparent' }]}>
+    <SafeAreaViewInsets
+      style={[styles.safe, { backgroundColor: 'transparent' }]}
+      edges={['top', 'left', 'right']}
+    >
+      <KeyboardAvoidingView
+        style={styles.keyboardRoot}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 4 : 0}
+      >
       <ModalTesteJaAplicado
         info={modalTesteExistente}
         onClose={fecharModalTesteExistente}
@@ -1852,7 +1863,7 @@ export default function AplicarTAFScreen() {
         onRequestClose={() => setModalPermanenciaFinalizadaVisible(false)}
         accessibilityViewIsModal
       >
-        <View style={styles.modalTempoOverlay}>
+        <View style={[styles.modalTempoOverlay, { paddingHorizontal: horizontalPad }]}>
           <View style={styles.modalFuturisticCard}>
             <LinearGradient
               colors={[theme.primary, '#6366f1']}
@@ -1880,7 +1891,7 @@ export default function AplicarTAFScreen() {
         onRequestClose={fecharModalTempoRegistrado}
         accessibilityViewIsModal
       >
-        <View style={styles.modalTempoOverlay}>
+        <View style={[styles.modalTempoOverlay, { paddingHorizontal: horizontalPad }]}>
           <View style={styles.modalFuturisticCard}>
             <LinearGradient
               colors={['#059669', '#14b8a6']}
@@ -1905,7 +1916,15 @@ export default function AplicarTAFScreen() {
         onRequestClose={() => {}}
         accessibilityViewIsModal
       >
-        <View style={styles.modalAssinaturaOverlay}>
+        <View
+          style={[
+            styles.modalAssinaturaOverlay,
+            {
+              paddingHorizontal: horizontalPad,
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}
+        >
           <View style={styles.modalAssinaturaCenter}>
             {(() => {
               const lista = listaResultadosRubricaNatacao;
@@ -2037,7 +2056,10 @@ export default function AplicarTAFScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContentCadastro}
+        contentContainerStyle={[
+          styles.scrollContentCadastro,
+          { paddingHorizontal: horizontalPad, paddingBottom: scrollBottomPad },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         scrollEnabled={!modalRubricaNatacaoVisible}
@@ -2339,7 +2361,8 @@ export default function AplicarTAFScreen() {
         salvando={salvandoResultadosCorrida}
         erroAplicar={corridaEtapa === 'tabela_permanencia' ? erroPermanencia : undefined}
       />
-    </SafeAreaView>
+      </KeyboardAvoidingView>
+    </SafeAreaViewInsets>
     </AplicarTafShell>
   );
 }
@@ -2347,7 +2370,8 @@ export default function AplicarTAFScreen() {
 function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColors>) {
   return StyleSheet.create({
   safe: { flex: 1, position: 'relative' as const },
-  scrollContentCadastro: { paddingHorizontal: 18, paddingVertical: 12, paddingBottom: 28 },
+  keyboardRoot: { flex: 1 },
+  scrollContentCadastro: { paddingVertical: 12 },
   centerWrap: { flex: 1, alignItems: 'stretch' as const, maxWidth: 720, alignSelf: 'center', width: '100%' },
   section: { width: '100%' },
   preCadastroVazio: {

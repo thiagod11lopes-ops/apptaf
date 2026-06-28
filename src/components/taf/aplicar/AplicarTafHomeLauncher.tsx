@@ -6,6 +6,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
 import { getAplicarTafGlass } from './aplicarTafTheme';
+import { useAplicarTafLayout } from './useAplicarTafLayout';
 
 type Props = {
   onIniciarTaf: () => void;
@@ -16,6 +17,7 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onPreCadastro }: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const glass = getAplicarTafGlass(theme);
+  const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
 
   return (
     <View style={styles.wrap}>
@@ -31,12 +33,14 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onPreCadastro }: Props) {
             colors={[theme.primary, '#6366f1', '#4f46e5']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.tilePrimary}
+            style={[styles.tilePrimary, { minHeight: isNarrowPhone ? 118 : isNativeMobile ? 124 : 132 }]}
           >
             <View style={styles.iconRing}>
               <Play size={28} color="#fff" strokeWidth={2.4} fill="#fff" />
             </View>
-            <Text style={styles.tileTitlePrimary}>Iniciar TAF</Text>
+            <Text style={[styles.tileTitlePrimary, isNarrowPhone ? styles.tileTitleCompact : null]}>
+              Iniciar TAF
+            </Text>
             <Text style={styles.tileSubPrimary}>Prova ao vivo com cronômetro</Text>
             <Sparkles size={16} color="rgba(255,255,255,0.55)" style={styles.spark} />
           </LinearGradient>
@@ -54,13 +58,16 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onPreCadastro }: Props) {
               {
                 backgroundColor: glass.bg,
                 borderColor: glass.border,
+                minHeight: isNarrowPhone ? 100 : isNativeMobile ? 106 : 112,
               },
             ]}
           >
             <View style={[styles.iconRingMuted, { backgroundColor: theme.isDark ? 'rgba(56,189,248,0.15)' : PREMIUM.accentMuted }]}>
               <ClipboardList size={26} color={theme.primary} strokeWidth={2.2} />
             </View>
-            <Text style={[styles.tileTitle, { color: ui.text }]}>Pré Cadastro</Text>
+            <Text style={[styles.tileTitle, { color: ui.text }, isNarrowPhone ? styles.tileTitleCompact : null]}>
+              Pré Cadastro
+            </Text>
             <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
               Prepare participantes antes da prova
             </Text>
@@ -92,14 +99,12 @@ const styles = StyleSheet.create({
   },
   tilePrimary: {
     padding: 20,
-    minHeight: 132,
     justifyContent: 'flex-end',
     gap: 4,
     position: 'relative',
   },
   tileSecondary: {
     padding: 20,
-    minHeight: 112,
     borderRadius: PREMIUM.radiusLg + 6,
     borderWidth: 1,
     gap: 4,
@@ -131,6 +136,9 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: -0.3,
+  },
+  tileTitleCompact: {
+    fontSize: 20,
   },
   tileSubPrimary: {
     color: 'rgba(255,255,255,0.82)',

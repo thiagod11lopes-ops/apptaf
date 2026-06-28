@@ -6,6 +6,7 @@ import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
 import { AplicarTafPrimaryButton } from './AplicarTafUi';
 import { getAplicarTafGlass } from './aplicarTafTheme';
+import { useAplicarTafLayout } from './useAplicarTafLayout';
 
 type Props = {
   titulo: string;
@@ -27,6 +28,8 @@ export function AplicarTafPreCadastroCard({
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const glass = getAplicarTafGlass(theme);
+  const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
+  const stackActions = isNativeMobile || isNarrowPhone;
 
   return (
     <View
@@ -46,11 +49,11 @@ export function AplicarTafPreCadastroCard({
         <Text style={[styles.nomes, { color: theme.textMuted }]} numberOfLines={2}>
           {nomesPreview}
         </Text>
-        <View style={styles.actions}>
+        <View style={[styles.actions, stackActions ? styles.actionsStacked : null]}>
           <View style={styles.btnIniciarWrap}>
             <AplicarTafPrimaryButton label="Iniciar Prova" onPress={onIniciar} />
           </View>
-          <View style={styles.btnExcluirWrap}>
+          <View style={[styles.btnExcluirWrap, stackActions ? styles.btnExcluirStacked : null]}>
             <AplicarTafPrimaryButton label="Excluir" onPress={onExcluir} variant="outline" />
           </View>
         </View>
@@ -94,6 +97,9 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     gap: 8,
   },
+  actionsStacked: {
+    flexDirection: 'column',
+  },
   btnIniciarWrap: {
     flex: 1,
     minWidth: 0,
@@ -101,6 +107,9 @@ const styles = StyleSheet.create({
   btnExcluirWrap: {
     width: 96,
     flexShrink: 0,
+  },
+  btnExcluirStacked: {
+    width: '100%',
   },
 });
 

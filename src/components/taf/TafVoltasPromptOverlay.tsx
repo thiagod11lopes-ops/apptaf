@@ -7,6 +7,7 @@ import {
   Platform,
   Pressable,
   TouchableOpacity,
+  useWindowDimensions,
   type TextInput as TextInputType,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -45,6 +46,8 @@ export function TafVoltasPromptOverlay({
 }: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
+  const { width: screenW } = useWindowDimensions();
+  const cardW = Math.min(Math.max(screenW - 40, 280), 360);
   const inputRef = useRef<TextInputType>(null);
   const cardScale = useSharedValue(0.9);
   const cardOpacity = useSharedValue(0);
@@ -93,10 +96,15 @@ export function TafVoltasPromptOverlay({
     <View style={styles.root} pointerEvents="box-none">
       <Pressable style={styles.backdrop} accessibilityLabel="Informe o número de voltas" />
 
-      <Animated.View style={[styles.cardWrap, cardStyle]}>
+      <Animated.View style={[styles.cardWrap, { width: cardW }, cardStyle]}>
         <Animated.View
           style={[
             styles.glowRing,
+            {
+              width: cardW + 18,
+              height: cardW * 0.72,
+              borderRadius: (cardW + 18) / 2,
+            },
             ringStyle,
             {
               borderTopColor: theme.primary,
@@ -213,8 +221,6 @@ export function TafVoltasPromptOverlay({
   );
 }
 
-const CARD_W = Math.min(340, Platform.OS === 'web' ? 360 : 340);
-
 const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
@@ -232,7 +238,6 @@ const styles = StyleSheet.create({
       : null),
   },
   cardWrap: {
-    width: CARD_W,
     alignItems: 'center',
     justifyContent: 'center',
     ...(Platform.OS === 'web'
@@ -247,9 +252,6 @@ const styles = StyleSheet.create({
   },
   glowRing: {
     position: 'absolute',
-    width: CARD_W + 18,
-    height: CARD_W * 0.72,
-    borderRadius: (CARD_W + 18) / 2,
     borderWidth: 2,
     opacity: 0.55,
   },

@@ -256,6 +256,13 @@ export function TafProvaTempoModal({
         const nota = getNota?.(index) ?? '—';
         const notaReprov = isNotaReprovado?.(index) ?? false;
 
+        const temChecks =
+          (prova === 'permanencia' && onTogglePermanencia != null) ||
+          (prova === 'natacao' && onToggleChegada != null) ||
+          ((prova === 'corrida' || prova === 'caminhada') &&
+            nColunasVoltasAtivas > 0 &&
+            onToggleVolta != null);
+
         return (
           <View
             key={`prov-modal-${index}`}
@@ -264,76 +271,98 @@ export function TafProvaTempoModal({
               { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
             ]}
           >
-            <View style={styles.participantTopRow}>
-              <View
-                style={[
-                  styles.numBadge,
-                  { backgroundColor: theme.isDark ? 'rgba(34,197,94,0.2)' : PREMIUM.accentMuted },
-                ]}
-              >
-                <Text style={[styles.numBadgeText, { color: theme.success }]}>{index + 1}</Text>
+            <View style={styles.participantRow}>
+              <View style={styles.identityCol}>
+                <View
+                  style={[
+                    styles.numBadge,
+                    { backgroundColor: theme.isDark ? 'rgba(34,197,94,0.2)' : PREMIUM.accentMuted },
+                  ]}
+                >
+                  <Text style={[styles.numBadgeText, { color: theme.success }]}>{index + 1}</Text>
+                </View>
+                <Text style={[styles.participantNome, { color: ui.text }]} numberOfLines={1}>
+                  {nome}
+                </Text>
               </View>
-              <Text style={[styles.participantNome, { color: ui.text }]} numberOfLines={2}>
-                {nome}
-              </Text>
-              {mostrarTempo ? (
-                <MetaResultadoField
-                  label="Tempo"
-                  value={tempoStr}
-                  tone="tempo"
-                  theme={theme}
-                  ui={ui}
-                />
-              ) : null}
-              {mostrarNota ? (
-                <MetaResultadoField
-                  label="Nota"
-                  value={nota}
-                  tone={notaReprov ? 'notaReprov' : 'nota'}
-                  theme={theme}
-                  ui={ui}
-                />
-              ) : null}
-            </View>
 
-            <View style={styles.checksRow}>
-              {prova === 'permanencia' && onTogglePermanencia ? (
+              {temChecks ? (
                 <>
-                  <CheckPermanenciaModal
-                    label="Aprovado"
-                    checked={resultadosPermanencia[index] === 'aprovado'}
-                    variant="aprovado"
-                    onPress={() => onTogglePermanencia(index, 'aprovado')}
-                  />
-                  <CheckPermanenciaModal
-                    label="Reprovado"
-                    checked={resultadosPermanencia[index] === 'reprovado'}
-                    variant="reprovado"
-                    onPress={() => onTogglePermanencia(index, 'reprovado')}
-                  />
+                  <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
+                  <ScrollView
+                    horizontal
+                    nestedScrollEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.checksTrack}
+                    contentContainerStyle={styles.checksTrackContent}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {prova === 'permanencia' && onTogglePermanencia ? (
+                      <>
+                        <CheckPermanenciaModal
+                          label="Aprovado"
+                          checked={resultadosPermanencia[index] === 'aprovado'}
+                          variant="aprovado"
+                          onPress={() => onTogglePermanencia(index, 'aprovado')}
+                        />
+                        <CheckPermanenciaModal
+                          label="Reprovado"
+                          checked={resultadosPermanencia[index] === 'reprovado'}
+                          variant="reprovado"
+                          onPress={() => onTogglePermanencia(index, 'reprovado')}
+                        />
+                      </>
+                    ) : null}
+
+                    {prova === 'natacao' && onToggleChegada ? (
+                      <CheckVolta
+                        checked={chegadaNatacao[index] ?? false}
+                        a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
+                        onPress={() => onToggleChegada(index)}
+                      />
+                    ) : null}
+
+                    {(prova === 'corrida' || prova === 'caminhada') &&
+                    nColunasVoltasAtivas > 0 &&
+                    onToggleVolta
+                      ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
+                          <CheckVolta
+                            key={`volta-${index}-${v}`}
+                            checked={checksVoltas[index]?.[v] ?? false}
+                            a11y={`Volta ${v + 1}, participante ${index + 1}`}
+                            onPress={() => onToggleVolta(index, v)}
+                          />
+                        ))
+                      : null}
+                  </ScrollView>
                 </>
               ) : null}
 
-              {prova === 'natacao' && onToggleChegada ? (
-                <CheckVolta
-                  checked={chegadaNatacao[index] ?? false}
-                  a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
-                  onPress={() => onToggleChegada(index)}
-                />
+              {mostrarTempo || mostrarNota ? (
+                <>
+                  <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
+                  <View style={styles.metaStrip}>
+                    {mostrarTempo ? (
+                      <MetaResultadoField
+                        label="Tempo"
+                        value={tempoStr}
+                        tone="tempo"
+                        theme={theme}
+                        ui={ui}
+                      />
+                    ) : null}
+                    {mostrarNota ? (
+                      <MetaResultadoField
+                        label="Nota"
+                        value={nota}
+                        tone={notaReprov ? 'notaReprov' : 'nota'}
+                        theme={theme}
+                        ui={ui}
+                      />
+                    ) : null}
+                  </View>
+                </>
               ) : null}
-
-              {(prova === 'corrida' || prova === 'caminhada') &&
-              nColunasVoltasAtivas > 0 &&
-              onToggleVolta
-                ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
-                    <CheckVolta
-                      key={`volta-${index}-${v}`}
-                      checked={checksVoltas[index]?.[v] ?? false}
-                      a11y={`Volta ${v + 1}, participante ${index + 1}`}
-                      onPress={() => onToggleVolta(index, v)}
-                    />
-                  ))
-                : null}
             </View>
           </View>
         );
@@ -464,10 +493,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 8,
-    gap: 4,
+    paddingHorizontal: 10,
+    paddingTop: 6,
+    paddingBottom: 6,
+    gap: 3,
   },
   bottomBar: {
     paddingHorizontal: 12,
@@ -480,29 +509,63 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: PREMIUM.radiusMd,
     paddingHorizontal: 8,
-    paddingVertical: 6,
-    marginBottom: 4,
-    gap: 4,
+    paddingVertical: 4,
+    marginBottom: 3,
+    overflow: 'hidden',
   },
-  participantTopRow: {
+  participantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 36,
+  },
+  identityCol: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    flexWrap: 'wrap',
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  rowDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    opacity: 0.55,
+    marginVertical: 2,
+  },
+  checksTrack: {
+    flexGrow: 1,
+    flexShrink: 1,
+    maxWidth: '46%',
+    ...(Platform.OS === 'web' ? ({ minWidth: 56 } as object) : null),
+  },
+  checksTrackContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 2,
+  },
+  metaStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
   },
   numBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   numBadgeText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
   },
   participantNome: {
     flex: 1,
+    minWidth: 0,
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 14,
@@ -541,13 +604,6 @@ const styles = StyleSheet.create({
   },
   metaValueReprov: {
     fontSize: 18,
-  },
-  checksRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
-    paddingLeft: 24,
   },
   checkOuter: {
     padding: 2,

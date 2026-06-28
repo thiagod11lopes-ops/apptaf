@@ -23,6 +23,24 @@ import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
 
 export type TafProvaTempoModalProva = 'corrida' | 'caminhada' | 'natacao' | 'permanencia';
 
+type MetaFieldScale = 'normal' | 'compact' | 'minimal';
+
+/** Escala Tempo/Nota conforme comprimento do nome (corrida/caminhada). */
+function resolveMetaScaleForNome(
+  nome: string,
+  mostrarTempo: boolean,
+  mostrarNota: boolean,
+  isNativeMobile: boolean,
+): MetaFieldScale {
+  const len = nome.trim().length;
+  const dualMeta = mostrarTempo && mostrarNota;
+
+  if (len >= 34 || (dualMeta && len >= 24)) return 'minimal';
+  if (len >= 22 || (dualMeta && len >= 16)) return 'compact';
+  if (isNativeMobile || len >= 14) return 'compact';
+  return 'normal';
+}
+
 export type TafProvaTempoModalProps = {
   visible: boolean;
   onClose: () => void;
@@ -68,14 +86,14 @@ function MetaResultadoField({
   tone,
   theme,
   ui,
-  compact,
+  scale = 'normal',
 }: {
   label: string;
   value: string;
   tone: 'tempo' | 'nota' | 'notaReprov';
   theme: ReturnType<typeof useTheme>['theme'];
   ui: ReturnType<typeof getUiColors>;
-  compact?: boolean;
+  scale?: MetaFieldScale;
 }) {
   const valueColor =
     tone === 'notaReprov' ? theme.loss : tone === 'nota' ? theme.gain : ui.text;
@@ -106,11 +124,15 @@ function MetaResultadoField({
           ? 'rgba(56,189,248,0.35)'
           : 'rgba(37,99,235,0.22)';
 
+  const isCompact = scale === 'compact' || scale === 'minimal';
+  const isMinimal = scale === 'minimal';
+
   return (
     <View
       style={[
         styles.metaField,
-        compact ? styles.metaFieldCompact : null,
+        isCompact ? styles.metaFieldCompact : null,
+        isMinimal ? styles.metaFieldMinimal : null,
         { borderColor },
       ]}
       accessibilityLabel={`${label}: ${value}`}
@@ -119,21 +141,27 @@ function MetaResultadoField({
       <Text
         style={[
           styles.metaLabel,
-          compact ? styles.metaLabelCompact : null,
+          isCompact ? styles.metaLabelCompact : null,
+          isMinimal ? styles.metaLabelMinimal : null,
           { color: theme.textMuted },
         ]}
+        numberOfLines={1}
       >
         {label}
       </Text>
       <Text
         style={[
           styles.metaValue,
-          compact ? styles.metaValueCompact : null,
+          isCompact ? styles.metaValueCompact : null,
+          isMinimal ? styles.metaValueMinimal : null,
           { color: valueColor },
           tone === 'notaReprov' ? styles.metaValueReprov : null,
-          tone === 'notaReprov' && compact ? styles.metaValueReprovCompact : null,
+          tone === 'notaReprov' && isCompact ? styles.metaValueReprovCompact : null,
+          tone === 'notaReprov' && isMinimal ? styles.metaValueReprovMinimal : null,
         ]}
         numberOfLines={1}
+        adjustsFontSizeToFit={isMinimal}
+        minimumFontScale={0.75}
       >
         {value}
       </Text>
@@ -289,6 +317,15 @@ export function TafProvaTempoModal({
             nColunasVoltasAtivas > 0 &&
             onToggleVolta != null);
 
+        const isCorridaCaminhada = prova === 'corrida' || prova === 'caminhada';
+        const metaScale: MetaFieldScale =
+          isCorridaCaminhada && (mostrarTempo || mostrarNota)
+            ? resolveMetaScaleForNome(nome, mostrarTempo, mostrarNota, isNativeMobile)
+            : isNativeMobile
+              ? 'compact'
+              : 'normal';
+        const nomeLongo = nome.trim().length >= 18;
+
         return (
           <View
             key={`prov-modal-${index}`}
@@ -301,7 +338,13 @@ export function TafProvaTempoModal({
             ]}
           >
             <View style={styles.participantRow}>
-              <View style={[styles.identityCol, isNativeMobile ? styles.identityColCompact : null]}>
+              <View
+                style={[
+                  styles.identityCol,
+                  isNativeMobile ? styles.identityColCompact : null,
+                  isCorridaCaminhada && (mostrarTempo || mostrarNota) ? styles.identityColAdaptive : null,
+                ]}
+              >
                 <View
                   style={[
                     styles.numBadge,
@@ -323,9 +366,10 @@ export function TafProvaTempoModal({
                   style={[
                     styles.participantNome,
                     isNativeMobile ? styles.participantNomeCompact : null,
+                    isCorridaCaminhada && nomeLongo ? styles.participantNomeLong : null,
                     { color: ui.text },
                   ]}
-                  numberOfLines={1}
+                  numberOfLines={nomeLongo ? 2 : 1}
                   ellipsizeMode="tail"
                 >
                   {nome}
@@ -391,7 +435,12 @@ export function TafProvaTempoModal({
               {mostrarTempo || mostrarNota ? (
                 <>
                   <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-                  <View style={styles.metaStrip}>
+                  <View
+                    style={[
+                      styles.metaStrip,
+                      isCorridaCaminhada ? styles.metaStripAdaptive : null,
+                    ]}
+                  >
                     {mostrarTempo ? (
                       <MetaResultadoField
                         label="Tempo"
@@ -399,7 +448,7 @@ export function TafProvaTempoModal({
                         tone="tempo"
                         theme={theme}
                         ui={ui}
-                        compact={isNativeMobile}
+                        scale={metaScale}
                       />
                     ) : null}
                     {mostrarNota ? (
@@ -409,7 +458,7 @@ export function TafProvaTempoModal({
                         tone={notaReprov ? 'notaReprov' : 'nota'}
                         theme={theme}
                         ui={ui}
-                        compact={isNativeMobile}
+                        scale={metaScale}
                       />
                     ) : null}
                   </View>
@@ -621,6 +670,15 @@ const styles = StyleSheet.create({
   identityColCompact: {
     maxWidth: '30%',
   },
+  identityColAdaptive: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: undefined,
+  },
+  participantNomeLong: {
+    lineHeight: 13,
+  },
   rowDivider: {
     width: 1,
     alignSelf: 'stretch',
@@ -652,6 +710,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     flexShrink: 0,
+  },
+  metaStripAdaptive: {
+    flexShrink: 3,
+    minWidth: 0,
   },
   numBadge: {
     width: 22,
@@ -686,6 +748,7 @@ const styles = StyleSheet.create({
   },
   metaField: {
     minWidth: 104,
+    flexShrink: 1,
     borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 14,
@@ -705,11 +768,20 @@ const styles = StyleSheet.create({
         }),
   },
   metaFieldCompact: {
-    minWidth: 58,
+    minWidth: 52,
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingTop: 3,
     paddingBottom: 4,
+    gap: 0,
+  },
+  metaFieldMinimal: {
+    minWidth: 40,
+    maxWidth: 72,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingTop: 2,
+    paddingBottom: 3,
     gap: 0,
   },
   metaLabel: {
@@ -722,6 +794,10 @@ const styles = StyleSheet.create({
     fontSize: 8,
     letterSpacing: 0.8,
   },
+  metaLabelMinimal: {
+    fontSize: 7,
+    letterSpacing: 0.5,
+  },
   metaValue: {
     fontSize: 20,
     fontWeight: '900',
@@ -732,11 +808,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.2,
   },
+  metaValueMinimal: {
+    fontSize: 10,
+    letterSpacing: 0,
+  },
   metaValueReprov: {
     fontSize: 18,
   },
   metaValueReprovCompact: {
     fontSize: 11,
+  },
+  metaValueReprovMinimal: {
+    fontSize: 9,
   },
   checkOuter: {
     padding: 2,

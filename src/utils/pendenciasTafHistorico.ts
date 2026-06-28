@@ -2,6 +2,7 @@ import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import { nipDigitos } from './nipFormat';
 import type { PendenciaParcialItem } from './resultadoTafCadastro';
+import { temAvaliacaoCorridaOuCaminhada } from './resultadoTafCadastro';
 import { agregarHistoricoPorParticipante } from './resultadoGeralHistorico';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 
@@ -73,7 +74,7 @@ function itemFromCadastro(
   c: CadastroItemPersist,
   agg: ReturnType<typeof agregarHistoricoPorParticipante>[number] | undefined,
 ): PendenciaTafItem | null {
-  const temCorrida = !!agg?.corrida;
+  const temCorrida = !!agg?.corrida || temAvaliacaoCorridaOuCaminhada(c);
   const temNatacao = !!agg?.natacao;
   const temPermanencia = !!agg?.permanencia;
   if (temCorrida && temNatacao && temPermanencia) return null;

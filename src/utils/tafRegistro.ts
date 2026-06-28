@@ -32,6 +32,7 @@ function tempos(c: CadastroItemPersist) {
   const x = c as CadastroItemPersist & { tempo?: string };
   return {
     corrida: (c.tempoCorrida ?? x.tempo ?? '').trim(),
+    caminhada: (c.tempoCaminhada ?? '').trim(),
     natacao: (c.tempoNatacao ?? '').trim(),
   };
 }
@@ -44,7 +45,12 @@ export function temRegistroModalidade(
   const t = tempos(c);
   switch (modalidade) {
     case 'corrida':
-      return !!(t.corrida || (c.notaCorrida || '').trim());
+      return !!(
+        t.corrida ||
+        t.caminhada ||
+        (c.notaCorrida || '').trim() ||
+        (c.notaCaminhada || '').trim()
+      );
     case 'natacao':
       return !!(t.natacao || (c.notaNatacao || '').trim());
     case 'permanencia':
@@ -57,8 +63,10 @@ export function temRegistroModalidade(
     default:
       return (
         !!t.corrida ||
+        !!t.caminhada ||
         !!t.natacao ||
         !!(c.notaCorrida || '').trim() ||
+        !!(c.notaCaminhada || '').trim() ||
         !!(c.notaNatacao || '').trim() ||
         !!c.resultadoPermanencia ||
         !!c.resultadoNatacao ||
@@ -69,15 +77,19 @@ export function temRegistroModalidade(
 
 function datasModalidade(c: CadastroItemPersist, modalidade: FiltroModalidadeTaf): string[] {
   switch (modalidade) {
-    case 'corrida':
-      return c.dataTafCorrida ? [c.dataTafCorrida] : [];
+    case 'corrida': {
+      const datas = [c.dataTafCorrida, c.dataTafCaminhada].filter(
+        (d): d is string => !!d?.trim(),
+      );
+      return datas;
+    }
     case 'natacao':
       return c.dataTafNatacao ? [c.dataTafNatacao] : [];
     case 'permanencia':
       return c.dataTafPermanencia ? [c.dataTafPermanencia] : [];
     case 'Todos':
     default:
-      return [c.dataTafCorrida, c.dataTafNatacao, c.dataTafPermanencia].filter(
+      return [c.dataTafCorrida, c.dataTafCaminhada, c.dataTafNatacao, c.dataTafPermanencia].filter(
         (d): d is string => !!d?.trim(),
       );
   }

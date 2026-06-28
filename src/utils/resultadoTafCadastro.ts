@@ -75,9 +75,18 @@ export function temAvaliacaoCaminhada(c: CadastroItemPersist): boolean {
   return !!(t.caminhada || (c.notaCaminhada || '').trim());
 }
 
-/** Militar com avaliação nas três modalidades (corrida, natação e permanência). */
+/** Corrida 2.400 m ou caminhada 4.800 m — uma substitui a outra no TAF. */
+export function temAvaliacaoCorridaOuCaminhada(c: CadastroItemPersist): boolean {
+  return temAvaliacaoCorrida(c) || temAvaliacaoCaminhada(c);
+}
+
+/** Militar com avaliação nas três modalidades (corrida ou caminhada, natação e permanência). */
 export function cadastroComTafCompleto(c: CadastroItemPersist): boolean {
-  return temAvaliacaoCorrida(c) && temAvaliacaoNatacao(c) && temAvaliacaoPermanencia(c);
+  return (
+    temAvaliacaoCorridaOuCaminhada(c) &&
+    temAvaliacaoNatacao(c) &&
+    temAvaliacaoPermanencia(c)
+  );
 }
 
 export type ResumoInicioTaf = {
@@ -109,7 +118,7 @@ export type PendenciaParcialItem = {
 };
 
 export function pendenciaParcialFromCadastro(c: CadastroItemPersist): PendenciaParcialItem {
-  const temCorrida = temAvaliacaoCorrida(c);
+  const temCorrida = temAvaliacaoCorridaOuCaminhada(c);
   const temNatacao = temAvaliacaoNatacao(c);
   const temPermanencia = temAvaliacaoPermanencia(c);
   const faltam: string[] = [];

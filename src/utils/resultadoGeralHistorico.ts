@@ -6,7 +6,11 @@ import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { formatNipInput, nipDigitos } from './nipFormat';
 import type { PendenciaParcialItem, ResultadoGeralItem } from './resultadoTafCadastro';
-import { postoGradFromLinhaId } from './resultadoTafCadastro';
+import {
+  postoGradFromLinhaId,
+  temAvaliacaoCaminhada,
+  temAvaliacaoCorridaOuCaminhada,
+} from './resultadoTafCadastro';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 
 type ModalidadeHistorico = {
@@ -163,15 +167,59 @@ export function agregarHistoricoPorParticipante(
       atualizarIdentidade(agg, r, cadastros);
       const slice = sliceFromResultado(tipo, r);
 
-      if (tipo === 'corrida') agg.corrida = slice;
+      if (tipo === 'corrida' || tipo === 'caminhada') agg.corrida = slice;
       else if (tipo === 'natacao') agg.natacao = slice;
       else if (tipo === 'permanencia') agg.permanencia = slice;
     }
   }
 
+  enriquecerCorridaCaminhadaFromCadastros(map, cadastros);
   enriquecerPermanenciaFromCadastros(map, cadastros);
 
   return [...map.values()].filter((agg) => agg.corrida || agg.natacao || agg.permanencia);
+}
+
+function situacaoFromNotaCadastro(nota: string | undefined): string {
+  const n = (nota || '').trim();
+  if (!n) return '—';
+  if (n.toUpperCase() === 'REPROVADO') return 'Reprovado';
+  return 'Aprovado';
+}
+
+function enriquecerCorridaCaminhadaFromCadastros(
+  map: Map<string, AggRow>,
+  cadastros: CadastroItemPersist[],
+): void {
+  for (const c of cadastros) {
+    if (!temAvaliacaoCorridaOuCaminhada(c)) continue;
+
+    let agg = map.get(c.id);
+    if (!agg) {
+      const nipC = nipDigitos(c.nip);
+      if (nipC.length >= 8) {
+        for (const row of map.values()) {
+          if (nipDigitos(row.nip) === nipC) {
+            agg = row;
+            break;
+          }
+        }
+      }
+    }
+    if (!agg) continue;
+
+    const notaAtual = (agg.corrida?.nota ?? '').trim();
+    if (notaAtual && notaAtual !== '—') continue;
+
+    const temCaminhada = temAvaliacaoCaminhada(c);
+    const nota = (
+      temCaminhada ? c.notaCaminhada : c.notaCorrida
+    )?.trim();
+    agg.corrida = {
+      nota: nota || '—',
+      situacao: situacaoFromNotaCadastro(nota),
+      rubricaSvg: temCaminhada ? c.rubricaCaminhadaSvg : c.rubricaCorridaSvg,
+    };
+  }
 }
 
 function enriquecerPermanenciaFromCadastros(

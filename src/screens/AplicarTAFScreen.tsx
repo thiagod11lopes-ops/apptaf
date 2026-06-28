@@ -586,19 +586,19 @@ export default function AplicarTAFScreen() {
   ]);
 
   const larguraMinTabela = useMemo(() => {
-    const wVolta = 44;
-    const wNome = 200;
+    const wVolta = 40;
+    const wNomeInline = 128;
     const wTempo = 82;
     const wNota = 64;
-    const wAtleta = 72;
+    const wAtleta = 56;
     if (tipoProva === 'natacao') {
       const wMarcar = 128;
-      let w = wAtleta + wNome + wMarcar + 24;
+      let w = wAtleta + 200 + wMarcar + 24;
       if (mostrarColunaTempo) w += wTempo;
       if (mostrarColunaNotaNatacao) w += wNota;
       return w;
     }
-    let w = wAtleta + wNome + nColunasVoltas * wVolta + 24;
+    let w = wAtleta + wNomeInline + nColunasVoltas * wVolta + 16;
     if (mostrarColunaTempo) w += wTempo;
     if (mostrarColunaNotaCorrida) w += wNota;
     if (mostrarColunaNotaCaminhada) w += wNota;
@@ -2446,30 +2446,36 @@ export default function AplicarTAFScreen() {
               >
                 <View style={styles.tabelaHeaderRow}>
                   <Text style={[styles.tabelaHeaderCell, styles.tabelaColCorredor]}>{labelAtleta}</Text>
-                  <Text style={[styles.tabelaHeaderCell, styles.tabelaColNome]}>Nome</Text>
                   {tipoProva === 'natacao' ? (
-                    <Text
-                      style={[styles.tabelaHeaderCell, styles.tabelaColMarcarChegada]}
-                      numberOfLines={2}
-                    >
-                      Marcar Chegada
-                    </Text>
-                  ) : nColunasVoltas > 0 ? (
-                    Array.from({ length: nColunasVoltas }, (_, v) => (
+                    <>
+                      <Text style={[styles.tabelaHeaderCell, styles.tabelaColNome]}>Nome</Text>
                       <Text
-                        key={`h-volta-${v}`}
-                        style={[
-                          styles.tabelaHeaderCell,
-                          styles.tabelaHeaderVolta,
-                          styles.tabelaColVolta,
-                          v === 0 ? styles.tabelaColVoltaPrimeira : null,
-                        ]}
-                        numberOfLines={1}
+                        style={[styles.tabelaHeaderCell, styles.tabelaColMarcarChegada]}
+                        numberOfLines={2}
                       >
-                        V{v + 1}
+                        Marcar Chegada
                       </Text>
-                    ))
-                  ) : null}
+                    </>
+                  ) : nColunasVoltas > 0 ? (
+                    <View style={styles.tabelaGrupoNomeVoltas}>
+                      <Text style={[styles.tabelaHeaderCell, styles.tabelaColNomeInline]}>Nome</Text>
+                      {Array.from({ length: nColunasVoltas }, (_, v) => (
+                        <Text
+                          key={`h-volta-${v}`}
+                          style={[
+                            styles.tabelaHeaderCell,
+                            styles.tabelaHeaderVolta,
+                            styles.tabelaColVolta,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          V{v + 1}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={[styles.tabelaHeaderCell, styles.tabelaColNome]}>Nome</Text>
+                  )}
                   {mostrarColunaTempo ? (
                     <Text style={[styles.tabelaHeaderCell, styles.tabelaColTempo]} numberOfLines={1}>
                       Tempo
@@ -2506,66 +2512,76 @@ export default function AplicarTAFScreen() {
                       <View style={[styles.tabelaCell, styles.tabelaColCorredor]}>
                         <Text style={styles.tabelaNumeroVerde}>{index + 1}</Text>
                       </View>
-                      <Text style={[styles.tabelaCellText, styles.tabelaColNome]} numberOfLines={2}>
-                        {nome}
-                      </Text>
                       {tipoProva === 'natacao' ? (
-                        <View style={[styles.tabelaColMarcarChegada, styles.tabelaCelulaCheck]}>
-                          <TouchableOpacity
-                            accessibilityRole="checkbox"
-                            accessibilityState={{ checked: marcadoChegada }}
-                            accessibilityLabel={`Marcar chegada, ${labelAtleta} ${index + 1}`}
-                            activeOpacity={0.85}
-                            onPress={() => toggleMarcarChegadaNatacao(index)}
-                            style={styles.checkVoltaOuter}
-                          >
-                            <View
-                              style={[
-                                styles.checkVoltaBox,
-                                marcadoChegada ? styles.checkVoltaBoxOn : styles.checkVoltaBoxOff,
-                              ]}
+                        <>
+                          <Text style={[styles.tabelaCellText, styles.tabelaColNome]} numberOfLines={2}>
+                            {nome}
+                          </Text>
+                          <View style={[styles.tabelaColMarcarChegada, styles.tabelaCelulaCheck]}>
+                            <TouchableOpacity
+                              accessibilityRole="checkbox"
+                              accessibilityState={{ checked: marcadoChegada }}
+                              accessibilityLabel={`Marcar chegada, ${labelAtleta} ${index + 1}`}
+                              activeOpacity={0.85}
+                              onPress={() => toggleMarcarChegadaNatacao(index)}
+                              style={styles.checkVoltaOuter}
                             >
-                              {marcadoChegada ? (
-                                <Check size={11} color="#FFFFFF" strokeWidth={2.5} />
-                              ) : null}
-                            </View>
-                          </TouchableOpacity>
-                        </View>
-                      ) : nColunasVoltas > 0 ? (
-                        Array.from({ length: nColunasVoltas }, (__, v) => {
-                          const marcado = checksVoltas[index]?.[v] ?? false;
-                          return (
-                            <View
-                              key={`d-volta-${index}-${v}`}
-                              style={[
-                                styles.tabelaColVolta,
-                                styles.tabelaCelulaCheck,
-                                v === 0 ? styles.tabelaColVoltaPrimeira : null,
-                              ]}
-                            >
-                              <TouchableOpacity
-                                accessibilityRole="checkbox"
-                                accessibilityState={{ checked: marcado }}
-                                accessibilityLabel={`Volta ${v + 1}, participante ${index + 1}`}
-                                activeOpacity={0.85}
-                                onPress={() => toggleCheckVolta(index, v)}
-                                style={styles.checkVoltaOuter}
+                              <View
+                                style={[
+                                  styles.checkVoltaBox,
+                                  marcadoChegada ? styles.checkVoltaBoxOn : styles.checkVoltaBoxOff,
+                                ]}
                               >
-                                <View
-                                  style={[
-                                    styles.checkVoltaBox,
-                                    marcado ? styles.checkVoltaBoxOn : styles.checkVoltaBoxOff,
-                                  ]}
+                                {marcadoChegada ? (
+                                  <Check size={11} color="#FFFFFF" strokeWidth={2.5} />
+                                ) : null}
+                              </View>
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      ) : nColunasVoltas > 0 ? (
+                        <View style={styles.tabelaGrupoNomeVoltas}>
+                          <Text
+                            style={[styles.tabelaCellText, styles.tabelaColNomeInline]}
+                            numberOfLines={2}
+                          >
+                            {nome}
+                          </Text>
+                          {Array.from({ length: nColunasVoltas }, (__, v) => {
+                            const marcado = checksVoltas[index]?.[v] ?? false;
+                            return (
+                              <View
+                                key={`d-volta-${index}-${v}`}
+                                style={[styles.tabelaColVolta, styles.tabelaCelulaCheck]}
+                              >
+                                <TouchableOpacity
+                                  accessibilityRole="checkbox"
+                                  accessibilityState={{ checked: marcado }}
+                                  accessibilityLabel={`Volta ${v + 1}, participante ${index + 1}`}
+                                  activeOpacity={0.85}
+                                  onPress={() => toggleCheckVolta(index, v)}
+                                  style={styles.checkVoltaOuter}
                                 >
-                                  {marcado ? (
-                                    <Check size={11} color="#FFFFFF" strokeWidth={2.5} />
-                                  ) : null}
-                                </View>
-                              </TouchableOpacity>
-                            </View>
-                          );
-                        })
-                      ) : null}
+                                  <View
+                                    style={[
+                                      styles.checkVoltaBox,
+                                      marcado ? styles.checkVoltaBoxOn : styles.checkVoltaBoxOff,
+                                    ]}
+                                  >
+                                    {marcado ? (
+                                      <Check size={11} color="#FFFFFF" strokeWidth={2.5} />
+                                    ) : null}
+                                  </View>
+                                </TouchableOpacity>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      ) : (
+                        <Text style={[styles.tabelaCellText, styles.tabelaColNome]} numberOfLines={2}>
+                          {nome}
+                        </Text>
+                      )}
                       {mostrarColunaTempo ? (
                         <View style={[styles.tabelaColTempo, styles.tabelaCelulaTempo]}>
                           <Text
@@ -3182,12 +3198,25 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     color: ui.text,
   },
   tabelaColCorredor: {
-    width: 72,
-    paddingRight: 6,
+    width: 56,
+    minWidth: 56,
+    paddingRight: 4,
   },
   tabelaColNome: {
     flex: 1,
     minWidth: 100,
+    paddingRight: 4,
+  },
+  tabelaGrupoNomeVoltas: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: 2,
+  },
+  tabelaColNomeInline: {
+    width: 128,
+    minWidth: 96,
+    maxWidth: 160,
     paddingRight: 4,
   },
   tabelaColMarcarChegada: {
@@ -3197,14 +3226,10 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     paddingHorizontal: 4,
   },
   tabelaColVolta: {
-    width: 44,
-    minWidth: 44,
+    width: 40,
+    minWidth: 40,
     textAlign: 'center',
     paddingHorizontal: 0,
-  },
-  /** Aproxima a 1ª coluna de volta da coluna Nome (antes havia espaço por flex na Nome). */
-  tabelaColVoltaPrimeira: {
-    marginLeft: -2,
   },
   tabelaColTempo: {
     width: 82,

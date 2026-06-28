@@ -5,8 +5,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { AppHeader } from '../components/sismav/AppHeader';
-import { SyncCloudModal } from '../components/sismav/SyncCloudModal';
+import { SyncQuickOverlay } from '../components/sismav/SyncQuickOverlay';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
+import { useSyncQuickOverlay } from '../hooks/useSyncQuickOverlay';
 import { StatCard } from '../components/sismav/StatCard';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
@@ -29,21 +30,20 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const { user, authReady, isAuthenticated, firebaseEnabled, dataOwnerUid } = useAuth();
   const { syncUi, pendingCount, startSyncFromToggle } = useOfflineSyncState();
+  const { overlayVisible, showOverlay } = useSyncQuickOverlay();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
-  const [syncModalOpen, setSyncModalOpen] = useState(false);
-
-  const handleSyncPress = useCallback(() => {
-    setSyncModalOpen(true);
-    if (!syncUi.isSyncing && syncUi.toggleEnabled) {
-      void startSyncFromToggle();
-    }
-  }, [startSyncFromToggle, syncUi.isSyncing, syncUi.toggleEnabled]);
 
   const syncPendingTotal = useMemo(() => {
     const uploads = syncUi.counters.pendingUploads ?? pendingCount;
     const downloads = syncUi.counters.pendingDownloads ?? 0;
     return uploads + downloads;
   }, [pendingCount, syncUi.counters.pendingDownloads, syncUi.counters.pendingUploads]);
+
+  const handleSyncPress = useCallback(() => {
+    if (syncUi.isSyncing) return;
+    if (syncPendingTotal > 0) showOverlay();
+    void startSyncFromToggle();
+  }, [startSyncFromToggle, syncUi.isSyncing, showOverlay, syncPendingTotal]);
 
   const syncSaveIconState = useMemo((): 'idle' | 'pending' | 'success' => {
     if (syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date') return 'success';
@@ -136,7 +136,7 @@ export default function HomeScreen() {
         />
       </View>
 
-      <SyncCloudModal visible={syncModalOpen} onClose={() => setSyncModalOpen(false)} />
+      <SyncQuickOverlay visible={overlayVisible} />
     </View>
   );
 }

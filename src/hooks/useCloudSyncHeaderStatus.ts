@@ -19,24 +19,24 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
   const { cloudDiffWatch } = syncUi;
 
   const isOfflineMode = appMode === 'OFFLINE';
+  const syncInProgress =
+    appMode === 'ONLINE_PREPARING' || appMode === 'ONLINE_SYNCING' || syncing;
 
-  const loading = appMode === 'ONLINE_PREPARING' || appMode === 'ONLINE_SYNCING' || syncing;
+  const loading = false;
 
   const syncedWithCloud = false;
 
   const statusSuffix = useMemo(() => {
-    if (appMode === 'ONLINE_SYNCING') return 'sincronizando';
-    if (appMode === 'ONLINE_PREPARING') return 'preparando sync';
+    if (syncInProgress) return null;
     if (pendingCount > 0) return `${pendingCount} pendente(s)`;
     return null;
-  }, [appMode, pendingCount]);
+  }, [syncInProgress, pendingCount]);
 
   const label = statusSuffix ? `${accountLabel} · ${statusSuffix}` : accountLabel;
 
   const statusHint = useMemo(() => {
+    if (syncInProgress) return null;
     if (uploadError) return uploadError;
-    if (appMode === 'ONLINE_SYNCING') return 'Enviando e baixando diferenças…';
-    if (appMode === 'ONLINE_PREPARING') return 'Preparando sincronização…';
     if (pendingCount > 0) {
       return `${pendingCount} alteração(ões) local(is) · use a chave na tela inicial`;
     }
@@ -46,8 +46,8 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
     if (!online) return 'Sem internet · operação 100% local';
     return 'Modo offline · use a chave na tela inicial para sincronizar';
   }, [
+    syncInProgress,
     uploadError,
-    appMode,
     pendingCount,
     isAuthenticated,
     isOfflineMode,
@@ -59,9 +59,9 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
     label,
     statusSuffix,
     loading,
-    percent: loading ? 55 : 100,
-    uploading: appMode === 'ONLINE_SYNCING',
-    syncing: loading,
+    percent: 100,
+    uploading: false,
+    syncing: false,
     syncedWithCloud,
     receivingFromCloudOnly: false,
     statusHint,

@@ -7,6 +7,7 @@ import { Card } from '../components/Card';
 import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
 import { ExcluirTodosDadosBlock } from '../components/ExcluirTodosDadosBlock';
 import { AuthorizedEmailsBlock } from '../components/AuthorizedEmailsBlock';
+import { SyncStatusBar } from '../components/sismav/SyncStatusBar';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function ConfiguracoesScreen() {
@@ -38,11 +39,12 @@ export default function ConfiguracoesScreen() {
 
         {firebaseEnabled ? (
           <Card elevated>
-            <Text style={ts.h2}>Sincronização</Text>
+            <Text style={ts.h2}>Sincronização com a nuvem</Text>
             <Text style={[ts.caption, styles.sectionHint, { color: theme.textSecondary }]}>
-              Use a chave na tela inicial (abaixo de &quot;Teste de Aptidão Física&quot;) para sincronizar
-              com a nuvem. O sistema permanece offline durante o uso normal.
+              Use a chave na tela inicial para enviar e receber dados. O carregamento rápido some em
+              até 3 segundos; se a sync continuar, acompanhe o progresso aqui.
             </Text>
+            <SyncStatusBar embedded />
           </Card>
         ) : null}
 

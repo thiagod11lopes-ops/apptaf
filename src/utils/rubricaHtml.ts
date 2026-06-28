@@ -76,6 +76,9 @@ export const PDF_TABELA_COMPACTA_STYLES = `
   table.resultados-taf td.col-rubrica {
     text-align: center;
   }
+  table.resultados-taf thead {
+    display: table-header-group;
+  }
   table.resultados-taf .nota {
     font-weight: 700;
     text-align: center;

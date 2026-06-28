@@ -10,29 +10,12 @@ import {
   blocoAplicadorAssinaturaHtml,
   PDF_APLICADOR_ASSINATURA_STYLES,
 } from './pdfAplicadorAssinaturaHtml';
-
-function escapeHtml(s: string): string {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/** A4 paisagem em pontos (72 PPI) — usado no PDF nativo e como referência de layout. */
-const PDF_A4_LANDSCAPE_WIDTH = 842;
-const PDF_A4_LANDSCAPE_HEIGHT = 595;
-
-const PRINT_LANDSCAPE_CSS = `
-    @page {
-      size: A4 landscape;
-      margin: 10mm;
-    }
-    @media print {
-      html, body { width: 100%; margin: 0; }
-      body { padding: 12px; }
-    }
-`;
+import {
+  buildPdfLandscapeDocument,
+  escapeHtmlPdf,
+  PDF_A4_LANDSCAPE_HEIGHT,
+  PDF_A4_LANDSCAPE_WIDTH,
+} from './pdfLayout';
 
 /** Inferência do rótulo da prova (Corrida, Natação, etc.) a partir dos resultados da sessão. */
 export function tituloProvaResumoPdf(resultados: ResultadoCorridaItem[]): string {
@@ -54,31 +37,30 @@ export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[
  */
 export function buildResumoAplicacaoHtml(
   resultados: ResultadoCorridaItem[],
-  textoColunaCadastro: string,
+  _textoColunaCadastro: string,
   titulo = 'Resumo da aplicação — TAF',
   aplicadorAssinatura?: AplicadorAssinaturaResumo,
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
-  const colProva = escapeHtml(cabecalhoColunaProvaResultados(resultados));
-  const tituloProva = escapeHtml(tituloProvaResumoPdf(resultados));
+  const colProva = escapeHtmlPdf(cabecalhoColunaProvaResultados(resultados));
+  const tituloProva = escapeHtmlPdf(tituloProvaResumoPdf(resultados));
 
-  /** Colunas fixas do PDF: Nadador/Corredor, Nome, NIP, Tempo, Nota, Situação, Rúbrica do candidato */
   const theadPdf = `<th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th>`;
 
   const rows = resultados
     .map((r) => {
       const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
-      const nip = r.nip ? escapeHtml(r.nip) : '—';
-      const nota = escapeHtml(r.notaTexto ?? '—');
-      const situacao = escapeHtml(
+      const nip = r.nip ? escapeHtmlPdf(r.nip) : '—';
+      const nota = escapeHtmlPdf(r.notaTexto ?? '—');
+      const situacao = escapeHtmlPdf(
         r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : 'Aprovado'),
       );
       const rubrica = celulaRubricaHtml(r.rubricaCandidatoSvg);
       return `<tr>
         <td>${papel} ${r.corredor}</td>
-        <td>${escapeHtml(r.nome)}</td>
+        <td>${escapeHtmlPdf(r.nome)}</td>
         <td>${nip}</td>
-        <td class="tempo">${escapeHtml(formatMsByModality(r.prova ?? 'corrida', r.tempoMs))}</td>
+        <td class="tempo">${escapeHtmlPdf(formatMsByModality(r.prova ?? 'corrida', r.tempoMs))}</td>
         <td class="nota">${nota}</td>
         <td class="repro">${situacao}</td>
         <td class="col-rubrica">${rubrica}</td>
@@ -86,37 +68,27 @@ export function buildResumoAplicacaoHtml(
     })
     .join('');
 
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>${escapeHtml(titulo)}</title>
-  <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #111827; line-height: 1.15; }
-    h1 { font-size: 27px; margin: 0 0 8px; line-height: 1.15; }
-    .meta { font-size: 18px; color: #6B7280; margin-bottom: 16px; line-height: 1.15; }
-    .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
-    ${PDF_TABELA_COMPACTA_STYLES}
-    ${RUBRICA_PDF_STYLES}
-    ${PDF_APLICADOR_ASSINATURA_STYLES}
-    ${PRINT_LANDSCAPE_CSS}
-  </style>
-</head>
-<body>
-  <h1>${escapeHtml(titulo)}</h1>
-  <p class="meta">Gerado em ${escapeHtml(dataStr)} · <strong>${tituloProva}</strong></p>
-  ${
+  const conteudoHtml =
     resultados.length === 0
       ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessão.</p>'
       : `<table class="resultados-taf">
     <thead><tr>${theadPdf}</tr></thead>
     <tbody>${rows}</tbody>
-  </table>`
-  }
-  ${blocoAplicadorAssinaturaHtml(aplicadorAssinatura)}
-</body>
-</html>`;
+  </table>`;
+
+  return buildPdfLandscapeDocument({
+    documentTitle: titulo,
+    titulo,
+    metaHtml: `Gerado em ${escapeHtmlPdf(dataStr)} · <strong>${tituloProva}</strong>`,
+    conteudoHtml,
+    aplicadorHtml: blocoAplicadorAssinaturaHtml(aplicadorAssinatura),
+    extraStyles: `
+      .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
+      ${PDF_TABELA_COMPACTA_STYLES}
+      ${RUBRICA_PDF_STYLES}
+      ${PDF_APLICADOR_ASSINATURA_STYLES}
+    `,
+  });
 }
 
 /**

@@ -37,7 +37,7 @@ describe('assinatura aplicador no PDF do histórico', () => {
     expect(assinaturasUnicasDasSessoes(sessoes)).toHaveLength(1);
   });
 
-  it('buildResultadosTafHtml inclui bloco de assinatura do aplicador', () => {
+  it('buildResultadosTafHtml repete cabeçalho e assinatura do aplicador em layout de páginas', () => {
     const html = buildResultadosTafHtml(
       [
         {
@@ -58,12 +58,15 @@ describe('assinatura aplicador no PDF do histórico', () => {
       'Resultados do dia — 01/01/2026',
       [assinatura],
     );
+    expect(html).toContain('pdf-print-header');
+    expect(html).toContain('pdf-print-footer');
     expect(html).toContain('aplicador-assinatura');
     expect(html).toContain('João Aplicador');
     expect(html).toContain('NIP 11.1111.11');
+    expect(html).toContain('A4 landscape');
   });
 
-  it('buildResumoAplicacaoHtml inclui rubrica do aplicador ao abrir sessão do histórico', () => {
+  it('buildResumoAplicacaoHtml repete cabeçalho e rubrica do aplicador em layout de páginas', () => {
     const html = buildResumoAplicacaoHtml(
       [
         {
@@ -79,9 +82,12 @@ describe('assinatura aplicador no PDF do histórico', () => {
       'Resumo da aplicação — TAF',
       assinatura,
     );
+    expect(html).toContain('pdf-print-header');
+    expect(html).toContain('pdf-print-footer');
+    expect(html).toContain('Resumo da aplicação — TAF');
+    expect(html).toContain('<strong>Corrida</strong>');
     expect(html).toContain('aplicador-assinatura');
     expect(html).toContain('João Aplicador');
     expect(html).toContain('aplicador-rubrica');
-    expect(html).toContain('<strong>Corrida</strong>');
   });
 });

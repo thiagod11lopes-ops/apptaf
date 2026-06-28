@@ -6,7 +6,6 @@ import {
   Modal,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Platform,
   ActivityIndicator,
   SafeAreaView,
@@ -16,6 +15,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPanel';
+import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
 
 export type TafProvaTempoModalProva = 'corrida' | 'caminhada' | 'natacao' | 'permanencia';
@@ -159,10 +159,11 @@ export function TafProvaTempoModal({
   const cronometroParado =
     cronometroEstado === 'inicial' || cronometroEstado === 'finalizado';
 
-  const mostrarCampoVoltas =
+  const mostrarPromptVoltas =
     (prova === 'corrida' || prova === 'caminhada') &&
     onChangeNumeroVoltas != null &&
-    cronometroParado;
+    cronometroParado &&
+    nColunasVoltas < 1;
 
   const participantesList = (
     <>
@@ -306,35 +307,6 @@ export function TafProvaTempoModal({
         </ScrollView>
 
         <View style={[styles.bottomBar, { borderTopColor: theme.border, backgroundColor: theme.cardBg }]}>
-          {mostrarCampoVoltas ? (
-            <View style={[styles.fieldVoltas, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
-              <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Número de voltas</Text>
-              <TextInput
-                value={numeroVoltas}
-                onChangeText={onChangeNumeroVoltas}
-                placeholder="0"
-                placeholderTextColor={ui.placeholder}
-                keyboardType="number-pad"
-                maxLength={4}
-                style={[
-                  styles.voltasInput,
-                  {
-                    borderColor: ui.inputBorder,
-                    backgroundColor: theme.cardBg,
-                    color: ui.text,
-                  },
-                ]}
-                autoCorrect={false}
-                spellCheck={false}
-                accessibilityLabel={
-                  prova === 'caminhada'
-                    ? 'Número de voltas da caminhada'
-                    : 'Número de voltas da corrida'
-                }
-              />
-            </View>
-          ) : null}
-
           <TafCronometroPanel
             variant="compact"
             tituloProva={tituloProva}
@@ -373,6 +345,16 @@ export function TafProvaTempoModal({
             }
           />
         </View>
+
+        {mostrarPromptVoltas && onChangeNumeroVoltas ? (
+          <TafVoltasPromptOverlay
+            visible={mostrarPromptVoltas}
+            prova={prova}
+            tituloProva={tituloProva}
+            numeroVoltas={numeroVoltas}
+            onChangeNumeroVoltas={onChangeNumeroVoltas}
+          />
+        ) : null}
       </SafeAreaView>
     </Modal>
   );
@@ -421,27 +403,6 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.select({ ios: 10, default: 12 }),
     borderTopWidth: 1,
     gap: 8,
-  },
-  fieldVoltas: {
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusMd,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  fieldLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  voltasInput: {
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusMd - 2,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 15,
-    fontWeight: '700',
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}),
   },
   participantCard: {
     borderWidth: 1,

@@ -17,7 +17,7 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onPreCadastro }: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const glass = getAplicarTafGlass(theme);
-  const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
+  const { isNarrowPhone } = useAplicarTafLayout();
 
   return (
     <View style={styles.wrap}>
@@ -33,16 +33,20 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onPreCadastro }: Props) {
             colors={[theme.primary, '#6366f1', '#4f46e5']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.tilePrimary, { minHeight: isNarrowPhone ? 118 : isNativeMobile ? 124 : 132 }]}
+            style={styles.tilePrimary}
           >
-            <View style={styles.iconRing}>
-              <Play size={28} color="#fff" strokeWidth={2.4} fill="#fff" />
+            <View style={styles.tileBody}>
+              <View style={styles.iconRing}>
+                <Play size={26} color="#fff" strokeWidth={2.4} fill="#fff" />
+              </View>
+              <View style={styles.textCol}>
+                <Text style={[styles.tileTitlePrimary, isNarrowPhone ? styles.tileTitleCompact : null]}>
+                  Iniciar TAF
+                </Text>
+                <Text style={styles.tileSubPrimary}>Prova ao vivo com cronômetro</Text>
+              </View>
+              <Sparkles size={18} color="rgba(255,255,255,0.5)" style={styles.spark} />
             </View>
-            <Text style={[styles.tileTitlePrimary, isNarrowPhone ? styles.tileTitleCompact : null]}>
-              Iniciar TAF
-            </Text>
-            <Text style={styles.tileSubPrimary}>Prova ao vivo com cronômetro</Text>
-            <Sparkles size={16} color="rgba(255,255,255,0.55)" style={styles.spark} />
           </LinearGradient>
         </TouchableOpacity>
 
@@ -58,19 +62,29 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onPreCadastro }: Props) {
               {
                 backgroundColor: glass.bg,
                 borderColor: glass.border,
-                minHeight: isNarrowPhone ? 100 : isNativeMobile ? 106 : 112,
               },
             ]}
           >
-            <View style={[styles.iconRingMuted, { backgroundColor: theme.isDark ? 'rgba(56,189,248,0.15)' : PREMIUM.accentMuted }]}>
-              <ClipboardList size={26} color={theme.primary} strokeWidth={2.2} />
+            <View style={styles.tileBody}>
+              <View
+                style={[
+                  styles.iconRingMuted,
+                  { backgroundColor: theme.isDark ? 'rgba(56,189,248,0.15)' : PREMIUM.accentMuted },
+                ]}
+              >
+                <ClipboardList size={24} color={theme.primary} strokeWidth={2.2} />
+              </View>
+              <View style={styles.textCol}>
+                <Text
+                  style={[styles.tileTitle, { color: ui.text }, isNarrowPhone ? styles.tileTitleCompact : null]}
+                >
+                  Pré Cadastro
+                </Text>
+                <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
+                  Prepare participantes antes da prova
+                </Text>
+              </View>
             </View>
-            <Text style={[styles.tileTitle, { color: ui.text }, isNarrowPhone ? styles.tileTitleCompact : null]}>
-              Pré Cadastro
-            </Text>
-            <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
-              Prepare participantes antes da prova
-            </Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -98,47 +112,48 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tilePrimary: {
-    padding: 20,
-    justifyContent: 'flex-end',
-    gap: 4,
-    position: 'relative',
+    padding: 18,
   },
   tileSecondary: {
-    padding: 20,
+    padding: 18,
     borderRadius: PREMIUM.radiusLg + 6,
     borderWidth: 1,
-    gap: 4,
-    justifyContent: 'flex-end',
+  },
+  tileBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
   iconRing: {
-    position: 'absolute',
-    top: 18,
-    left: 18,
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+    width: 50,
+    height: 50,
+    borderRadius: 15,
     backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   iconRingMuted: {
-    position: 'absolute',
-    top: 18,
-    left: 18,
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 50,
+    height: 50,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+  textCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
   },
   tileTitlePrimary: {
     color: '#fff',
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '900',
     letterSpacing: -0.3,
   },
   tileTitleCompact: {
-    fontSize: 20,
+    fontSize: 19,
   },
   tileSubPrimary: {
     color: 'rgba(255,255,255,0.82)',
@@ -150,7 +165,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     letterSpacing: -0.2,
-    marginTop: 36,
   },
   tileSub: {
     fontSize: 13,
@@ -158,8 +172,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   spark: {
-    position: 'absolute',
-    top: 22,
-    right: 20,
+    flexShrink: 0,
+    alignSelf: 'flex-start',
+    marginTop: 4,
   },
 });

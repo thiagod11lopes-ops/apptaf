@@ -17,9 +17,9 @@ type Props = {
 
 const logoMb = require('../../../Logomb.png');
 
-const OUTER = 96;
-const LOGO = 56;
-const STROKE = 4;
+const OUTER = 384;
+const LOGO = 224;
+const STROKE = 6;
 const RADIUS = (OUTER - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const ARC_VISIBLE = CIRCUMFERENCE * 0.28;
@@ -93,24 +93,22 @@ export function SyncQuickOverlay({ visible }: Props) {
               styles.logoWrap,
               logoStyle,
               Platform.OS === 'web'
-                ? ({ filter: 'drop-shadow(0 0 20px rgba(56,189,248,0.35))' } as object)
+                ? ({ filter: 'drop-shadow(0 0 28px rgba(56,189,248,0.35))' } as object)
                 : {
                     shadowColor: '#38bdf8',
                     shadowOffset: { width: 0, height: 0 },
                     shadowOpacity: 0.45,
-                    shadowRadius: 16,
+                    shadowRadius: 24,
                     elevation: 12,
                   },
             ]}
           >
-            <View style={[styles.logoFrame, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-              <Image
-                source={logoMb}
-                style={styles.logo}
-                resizeMode="contain"
-                accessibilityLabel="Marinha do Brasil"
-              />
-            </View>
+            <Image
+              source={logoMb}
+              style={styles.logo}
+              resizeMode="contain"
+              accessibilityLabel="Marinha do Brasil"
+            />
           </Animated.View>
         </View>
       </View>
@@ -144,19 +142,10 @@ const styles = StyleSheet.create({
     height: LOGO,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoFrame: {
-    width: LOGO,
-    height: LOGO,
-    borderRadius: LOGO / 2,
-    borderWidth: 1,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 6,
+    backgroundColor: 'transparent',
   },
   logo: {
-    width: '100%',
-    height: '100%',
+    width: LOGO,
+    height: LOGO,
   },
 });

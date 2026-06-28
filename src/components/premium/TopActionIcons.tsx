@@ -247,8 +247,10 @@ const styles = StyleSheet.create({
   },
   rowInline: {
     gap: 10,
-    marginTop: 2,
-    marginBottom: 4,
+    marginTop: 0,
+    marginBottom: 2,
+    justifyContent: 'flex-start',
+    flexWrap: 'nowrap',
     overflow: 'visible',
     zIndex: 20,
   },

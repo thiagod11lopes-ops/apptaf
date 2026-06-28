@@ -66,7 +66,9 @@ export function StatCard({ label, value, variant = 'default' }: Props) {
       ) : null}
       <Text
         style={[styles.label, compactGrid && styles.labelCompact, { color: theme.textMuted }]}
-        numberOfLines={2}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
       >
         {label}
       </Text>
@@ -95,10 +97,10 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   cardCompact: {
-    flexGrow: 1,
-    flexBasis: '47%',
+    width: '48%',
+    flexGrow: 0,
+    flexShrink: 0,
     minWidth: 0,
-    maxWidth: '48%',
     paddingVertical: 12,
     paddingHorizontal: 10,
   },

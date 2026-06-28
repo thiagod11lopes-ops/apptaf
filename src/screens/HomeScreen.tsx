@@ -69,20 +69,20 @@ export default function HomeScreen() {
 
   return (
     <MobileScreenScaffold scroll={false} style={styles.page} contentContainerStyle={styles.pageContent}>
-      <TafTabHeader
-        kicker="SISTEMA TAF"
-        title="Iniciar"
-        subtitle="Teste de Aptidão Física"
-        right={
-          <TopActionIcons
-            activeRoute="Home"
-            inline
-            onSyncPress={firebaseEnabled ? handleSyncPress : undefined}
-            syncPendingBadge={syncSaveIconState === 'pending' ? syncPendingTotal : 0}
-            syncSaveIconState={syncSaveIconState}
-          />
-        }
-      />
+      <View style={styles.headerBlock}>
+        <TafTabHeader
+          kicker="SISTEMA TAF"
+          title="Iniciar"
+          subtitle="Teste de Aptidão Física"
+        />
+        <TopActionIcons
+          activeRoute="Home"
+          inline
+          onSyncPress={firebaseEnabled ? handleSyncPress : undefined}
+          syncPendingBadge={syncSaveIconState === 'pending' ? syncPendingTotal : 0}
+          syncSaveIconState={syncSaveIconState}
+        />
+      </View>
 
       <TafGlassPanel accent="cyan" style={styles.statsPanel}>
         <View style={styles.statsGrid}>
@@ -92,7 +92,7 @@ export default function HomeScreen() {
             variant="primary"
           />
           <StatCard
-            label="TAF concluído"
+            label="Concluídos"
             value={resumo.completos.toLocaleString('pt-BR')}
             variant="positive"
           />
@@ -143,13 +143,20 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     gap: 12,
   },
+  headerBlock: {
+    width: '100%',
+    flexShrink: 0,
+    gap: 4,
+    ...(Platform.OS === 'web' ? { overflow: 'visible' as const, zIndex: 10 } : null),
+  },
   statsPanel: {
     flexShrink: 0,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
+    justifyContent: 'space-between',
   },
   imagePanel: {
     flex: 1,

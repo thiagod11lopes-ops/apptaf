@@ -36,7 +36,7 @@ export function AplicarTafTabHeader({
   const glass = getAplicarTafGlass(theme);
 
   return (
-    <View style={styles.headerWrap}>
+    <View style={[styles.headerWrap, right ? styles.headerWrapWithRight : null]}>
       {onBack ? (
         <TouchableOpacity
           accessibilityLabel="Voltar"
@@ -48,7 +48,9 @@ export function AplicarTafTabHeader({
         </TouchableOpacity>
       ) : null}
       <View style={[styles.headerTextCol, !onBack ? styles.headerTextColExpanded : null]}>
-        <Text style={[styles.headerKicker, { color: theme.primary }]}>{kicker}</Text>
+        <Text style={[styles.headerKicker, { color: theme.primary }]} numberOfLines={1}>
+          {kicker}
+        </Text>
         <Text
           style={[
             styles.headerTitle,
@@ -58,11 +60,19 @@ export function AplicarTafTabHeader({
               lineHeight: isNarrowPhone ? 26 : isNativeMobile ? 28 : 30,
             },
           ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
         >
           {title}
         </Text>
         {subtitle ? (
-          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>
+          <Text
+            style={[styles.headerSubtitle, { color: theme.textSecondary }]}
+            numberOfLines={2}
+          >
+            {subtitle}
+          </Text>
         ) : null}
       </View>
       {right ? <View style={styles.headerRight}>{right}</View> : null}
@@ -296,6 +306,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
+  },
+  headerWrapWithRight: {
     marginBottom: 20,
   },
   backBtn: {

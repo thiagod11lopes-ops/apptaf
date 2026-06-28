@@ -18,7 +18,7 @@ import {
   type Header,
   type SortingState,
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, Trash2 } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, ArrowUpDown, History, Pencil, Trash2 } from 'lucide-react-native';
 import { PressableScale } from './premium/PressableScale';
 import { useTheme } from '../contexts/ThemeContext';
 import { SearchHighlightText } from './SearchHighlightText';
@@ -34,7 +34,7 @@ const COL = {
   status: 88,
   nota: 62,
   situacao: 84,
-  acoes: 76,
+  acoes: 108,
 } as const;
 
 const columnHelper = createColumnHelper<ResultadoGeralItem>();
@@ -79,9 +79,10 @@ type Props = {
   buscaLower: string;
   onEditar?: (item: ResultadoGeralItem) => void;
   onExcluir?: (item: ResultadoGeralItem) => void;
+  onVerHistorico?: (item: ResultadoGeralItem) => void;
 };
 
-export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: Props) {
+export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir, onVerHistorico }: Props) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -262,6 +263,13 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
         cell: (info) => (
           <View style={styles.acoesRow}>
             <PressableScale
+              onPress={() => onVerHistorico?.(info.row.original)}
+              style={[styles.acaoBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
+              accessibilityLabel={`Ver histórico de testes de ${info.row.original.nome}`}
+            >
+              <History size={15} color={theme.primary} strokeWidth={2.2} />
+            </PressableScale>
+            <PressableScale
               onPress={() => onEditar?.(info.row.original)}
               style={[styles.acaoBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
               accessibilityLabel={`Editar resultados de ${info.row.original.nome}`}
@@ -279,7 +287,7 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
         ),
       }),
     ],
-    [buscaLower, cellBase, theme, onEditar, onExcluir, colSizes],
+    [buscaLower, cellBase, theme, onEditar, onExcluir, onVerHistorico, colSizes],
   );
 
   const table = useReactTable({

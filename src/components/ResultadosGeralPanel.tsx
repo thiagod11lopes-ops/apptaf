@@ -15,6 +15,7 @@ import { ResultadosGeralTable } from './ResultadosGeralTable';
 import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
+import type { FiltroHistoricoMilitar } from '../utils/filtrarSessoesHistoricoMilitar';
 import { listarResultadosGeralFromHistorico } from '../utils/resultadoGeralHistorico';
 import { EditarResultadoTafModal } from './sismav/EditarResultadoTafModal';
 import { ConfirmacaoExcluirResultadoGeralModal } from './sismav/ConfirmacaoExcluirResultadoGeralModal';
@@ -49,7 +50,11 @@ function linhaCombinaBusca(item: ResultadoGeralItem, q: string, qDigits: string)
   return false;
 }
 
-export function ResultadosGeralPanel() {
+export function ResultadosGeralPanel({
+  onVerHistoricoMilitar,
+}: {
+  onVerHistoricoMilitar?: (filtro: FiltroHistoricoMilitar) => void;
+}) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -98,6 +103,17 @@ export function ResultadosGeralPanel() {
       await recarregarLista();
     },
     [recarregarLista],
+  );
+
+  const abrirHistorico = useCallback(
+    (item: ResultadoGeralItem) => {
+      onVerHistoricoMilitar?.({
+        id: item.id,
+        nip: item.nip,
+        nome: item.nome,
+      });
+    },
+    [onVerHistoricoMilitar],
   );
 
   const executarExclusao = useCallback(async () => {
@@ -191,7 +207,7 @@ export function ResultadosGeralPanel() {
             ? `${linhasVisiveis.length} de ${lista.length} militar${lista.length !== 1 ? 'es' : ''}`
             : `${lista.length} militar${lista.length !== 1 ? 'es' : ''} no histórico`}
           {' · '}
-          Toque no cabeçalho para ordenar · use os ícones para editar ou excluir
+          Toque no cabeçalho para ordenar · ícones: histórico, editar ou excluir
         </Text>
       </View>
 
@@ -223,6 +239,7 @@ export function ResultadosGeralPanel() {
         <ResultadosGeralTable
           data={linhasVisiveis}
           buscaLower={buscaLower}
+          onVerHistorico={abrirHistorico}
           onEditar={abrirEdicao}
           onExcluir={setMilitarParaExcluir}
         />

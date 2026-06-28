@@ -10,7 +10,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ChevronRight, Trash2 } from 'lucide-react-native';
+import { ChevronRight, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
@@ -21,7 +21,7 @@ import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
 import { ResultadosPendenciaParcialPanel } from '../components/ResultadosPendenciaParcialPanel';
 import { ResultadosGeralPanel } from '../components/ResultadosGeralPanel';
 import type { RootStackParamList } from '../navigation/types';
-import { getAllCadastros } from '../services/cadastrosIndexedDb';
+import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import {
   getAllSessoesAplicacao,
   tituloTipoProva,
@@ -31,13 +31,17 @@ import {
   deleteSessaoFromHistorico,
 } from '../services/deleteSessaoHistorico';
 import {
+  filtrarSessoesHistoricoMilitar,
+  type FiltroHistoricoMilitar,
+} from '../utils/filtrarSessoesHistoricoMilitar';
+import {
   isSessaoApenasVirtualCadastro,
   isSessaoVirtualRegistrador,
   unificarSessoesComCadastroRegistrador,
 } from '../utils/sessoesUnificadasResultados';
-import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
+import { PREMIUM } from '../theme/premium';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Resultados'>;
 type AbaResultados = 'historico' | 'consulta' | 'pendencia' | 'geral';
@@ -49,6 +53,10 @@ export default function ResultadosScreen() {
   const navigation = useNavigation<Nav>();
   const [aba, setAba] = useState<AbaResultados>('historico');
   const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>([]);
+  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
+  const [historicoFiltroMilitar, setHistoricoFiltroMilitar] = useState<FiltroHistoricoMilitar | null>(
+    null,
+  );
   const [carregando, setCarregando] = useState(true);
   const [sessaoParaExcluir, setSessaoParaExcluir] = useState<SessaoAplicacaoTaf | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -57,13 +65,35 @@ export default function ResultadosScreen() {
   const carregar = useCallback(() => {
     setCarregando(true);
     Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
-      .then(([cadastros, sessoes]) =>
-        setSessoes(unificarSessoesComCadastroRegistrador(sessoes, cadastros)),
-      )
+      .then(([cadastrosLista, sessoesLista]) => {
+        setCadastros(cadastrosLista);
+        setSessoes(unificarSessoesComCadastroRegistrador(sessoesLista, cadastrosLista));
+      })
       .finally(() => setCarregando(false));
   }, []);
 
   useAuthDataReload(carregar);
+
+  const sessoesHistoricoVisiveis = useMemo(() => {
+    if (!historicoFiltroMilitar) return sessoes;
+    return filtrarSessoesHistoricoMilitar(sessoes, historicoFiltroMilitar, cadastros);
+  }, [sessoes, historicoFiltroMilitar, cadastros]);
+
+  const abrirHistoricoMilitar = useCallback((filtro: FiltroHistoricoMilitar) => {
+    setHistoricoFiltroMilitar(filtro);
+    setAba('historico');
+  }, []);
+
+  const limparFiltroHistorico = useCallback(() => {
+    setHistoricoFiltroMilitar(null);
+  }, []);
+
+  const mudarAba = useCallback((novaAba: AbaResultados) => {
+    if (novaAba !== 'historico') {
+      setHistoricoFiltroMilitar(null);
+    }
+    setAba(novaAba);
+  }, []);
 
   const abrirSessao = useCallback(
     (sessao: SessaoAplicacaoTaf) => {
@@ -111,11 +141,43 @@ export default function ResultadosScreen() {
             { id: 'pendencia', label: 'Pendência' },
           ]}
           value={aba}
-          onChange={setAba}
+          onChange={mudarAba}
         />
 
         {aba === 'historico' ? (
           <>
+            {historicoFiltroMilitar ? (
+              <View
+                style={[
+                  styles.filtroHistoricoBanner,
+                  { backgroundColor: theme.backgroundSecondary, borderColor: theme.border },
+                ]}
+              >
+                <View style={styles.filtroHistoricoTexto}>
+                  <Text style={[ts.label, { color: theme.primary }]}>Histórico do militar</Text>
+                  <Text style={[ts.body, { color: ui.text, marginTop: 4 }]}>
+                    {historicoFiltroMilitar.nome}
+                    {historicoFiltroMilitar.nip && historicoFiltroMilitar.nip !== '—'
+                      ? ` · NIP ${historicoFiltroMilitar.nip}`
+                      : ''}
+                  </Text>
+                  <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
+                    {sessoesHistoricoVisiveis.length} teste
+                    {sessoesHistoricoVisiveis.length !== 1 ? 's' : ''} registrado
+                    {sessoesHistoricoVisiveis.length !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={limparFiltroHistorico}
+                  style={[styles.limparFiltroBtn, { borderColor: theme.border }]}
+                  accessibilityLabel="Ver histórico completo"
+                  accessibilityRole="button"
+                >
+                  <X size={18} color={theme.textSecondary} strokeWidth={2.4} />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
             {carregando ? (
               <Text style={[ts.caption, { color: theme.textMuted, textAlign: 'center' }]}>
                 Carregando…
@@ -128,18 +190,22 @@ export default function ResultadosScreen() {
               </Text>
             ) : null}
 
-            {!carregando && sessoes.length === 0 ? (
+            {!carregando && sessoesHistoricoVisiveis.length === 0 ? (
               <Card elevated style={styles.emptyCard}>
                 <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
-                  Nenhuma aplicação registrada ainda.
+                  {historicoFiltroMilitar
+                    ? 'Nenhum teste registrado para este militar.'
+                    : 'Nenhuma aplicação registrada ainda.'}
                 </Text>
                 <Text style={[ts.caption, styles.emptyHint, { color: theme.textMuted, textAlign: 'center' }]}>
-                  Use Aplicar TAF ou o Registrador de TAF; os resultados aparecerão aqui.
+                  {historicoFiltroMilitar
+                    ? 'Use Aplicar TAF ou o Registrador de TAF para registrar novas provas.'
+                    : 'Use Aplicar TAF ou o Registrador de TAF; os resultados aparecerão aqui.'}
                 </Text>
               </Card>
             ) : null}
 
-            {sessoes.map((sessao) => {
+            {sessoesHistoricoVisiveis.map((sessao) => {
               const titulo = tituloTipoProva(sessao.tipoProva);
               const qtd = sessao.resultados.length;
               const virtualRegistrador = isSessaoVirtualRegistrador(sessao);
@@ -192,7 +258,7 @@ export default function ResultadosScreen() {
         ) : aba === 'consulta' ? (
           <ResultadosConsultaPanel />
         ) : aba === 'geral' ? (
-          <ResultadosGeralPanel />
+          <ResultadosGeralPanel onVerHistoricoMilitar={abrirHistoricoMilitar} />
         ) : (
           <ResultadosPendenciaParcialPanel />
         )}
@@ -284,5 +350,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
     lineHeight: 18,
+  },
+  filtroHistoricoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 14,
+    borderRadius: PREMIUM.radiusLg,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  filtroHistoricoTexto: {
+    flex: 1,
+  },
+  limparFiltroBtn: {
+    padding: 8,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
   },
 });

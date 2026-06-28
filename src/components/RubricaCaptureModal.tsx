@@ -1,12 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  type GestureResponderEvent,
-} from 'react-native';
+import { Modal, ScrollView, TouchableOpacity, Text, View, Platform } from 'react-native';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ResultadoCorridaItem } from '../navigation/types';
@@ -18,9 +11,19 @@ import {
   buildStrokePath,
   type RubricaStroke,
 } from '../utils/rubricaSvgBuilder';
-import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
+import { RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
-import { PREMIUM } from '../theme/premium';
+import {
+  AssinaturaFuturistaOverlay,
+  AssinaturaFuturistaScroll,
+  AssinaturaFuturistaCard,
+  AssinaturaFuturistaHeader,
+  AssinaturaFuturistaMetaChip,
+  AssinaturaFuturistaCanvas,
+  AssinaturaFuturistaBtnRow,
+  AssinaturaFuturistaBtnGhost,
+  AssinaturaFuturistaBtnPrimary,
+} from './assinatura/AssinaturaFuturistaUi';
 
 type Props = {
   visible: boolean;
@@ -57,12 +60,12 @@ export function RubricaCaptureModal({
     }
   }, [visible, participante?.corredor, indice]);
 
-  const iniciarStroke = useCallback((event: GestureResponderEvent) => {
+  const iniciarStroke = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
     const { locationX, locationY } = event.nativeEvent;
     setStrokeAtual([{ x: locationX, y: locationY }]);
   }, []);
 
-  const moverStroke = useCallback((event: GestureResponderEvent) => {
+  const moverStroke = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
     const { locationX, locationY } = event.nativeEvent;
     setStrokeAtual((prev) => [...prev, { x: locationX, y: locationY }]);
   }, []);
@@ -93,147 +96,96 @@ export function RubricaCaptureModal({
   const mod = participante.prova ?? tipoProva;
   const modLabel = tituloTipoProva(mod);
   const temTraco = strokes.some((s) => s.length > 0) || strokeAtual.length > 0;
+  const tempoStr = formatMsByModality(mod === 'natacao' ? 'natacao' : 'corrida', participante.tempoMs);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={styles.overlay}>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.title, { color: theme.text }]}>Rúbrica do candidato</Text>
-          <Text style={[styles.sub, { color: theme.textMuted }]}>
-            Participante {indice + 1} de {total} · {modLabel}
-          </Text>
-          <Text style={[styles.linha, { color: theme.text }]}>
-            <Text style={styles.strong}>{participante.nome || '—'}</Text>
-            {participante.nip ? ` · NIP ${participante.nip}` : ''}
-          </Text>
-          <Text style={[styles.linha, { color: theme.textMuted }]}>
-            Tempo: {formatMsByModality(mod === 'natacao' ? 'natacao' : 'corrida', participante.tempoMs)}
-            {participante.notaTexto ? ` · Nota ${participante.notaTexto}` : ''}
-          </Text>
-          <Text style={[styles.hint, { color: theme.textMuted }]}>
-            Desenhe a assinatura abaixo. Será gravada na modalidade {modLabel} do cadastro.
-          </Text>
+      <AssinaturaFuturistaOverlay>
+        <AssinaturaFuturistaScroll>
+          <AssinaturaFuturistaCard accent="cyan">
+            <AssinaturaFuturistaHeader
+              kicker="CANDIDATO"
+              title="Assinatura do candidato"
+              subtitle={`Participante ${indice + 1} de ${total} · ${modLabel}`}
+              accent="cyan"
+            />
 
-          <View
-            style={[styles.canvasWrap, { borderColor: theme.border, backgroundColor: RUBRICA_COR_FUNDO }]}
-            onLayout={(e) => {
-              const w = e.nativeEvent.layout.width;
-              if (w > 0) setCanvasWidth(w);
-            }}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-            onResponderGrant={iniciarStroke}
-            onResponderMove={moverStroke}
-            onResponderRelease={finalizarStroke}
-            onResponderTerminate={finalizarStroke}
-          >
-            <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>
-              {strokes.map((stroke, idx) => (
-                <SvgPath
-                  key={`s-${idx}`}
-                  d={buildStrokePath(stroke)}
-                  stroke={RUBRICA_COR_TRACO}
-                  strokeWidth={2.5}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              ))}
-              {strokeAtual.length > 0 ? (
-                <SvgPath
-                  d={buildStrokePath(strokeAtual)}
-                  stroke={RUBRICA_COR_TRACO}
-                  strokeWidth={2.5}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              ) : null}
-            </Svg>
-          </View>
+            <AssinaturaFuturistaMetaChip
+              label="Militar"
+              value={`${participante.nome || '—'}${participante.nip ? ` · NIP ${participante.nip}` : ''}`}
+            />
+            <AssinaturaFuturistaMetaChip
+              label="Resultado"
+              value={`Tempo ${tempoStr}${participante.notaTexto ? ` · Nota ${participante.notaTexto}` : ''}`}
+            />
 
-          <TouchableOpacity onPress={limpar} style={[styles.btnSec, { borderColor: theme.border }]}>
-            <Text style={{ color: theme.text, fontWeight: '700' }}>Limpar</Text>
-          </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <TouchableOpacity onPress={onCancel} style={[styles.btnGhost, { borderColor: theme.border }]}>
-              <Text style={{ color: theme.textSecondary, fontWeight: '700' }}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onSkip} style={[styles.btnGhost, { borderColor: theme.border }]}>
-              <Text style={{ color: theme.textMuted, fontWeight: '600', fontSize: 12 }}>Pular</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={confirmar}
-              disabled={!temTraco}
-              style={[
-                styles.btnPrimary,
-                { backgroundColor: theme.primary, opacity: temTraco ? 1 : 0.45 },
-              ]}
+            <AssinaturaFuturistaCanvas
+              accent="cyan"
+              height={RUBRICA_NATIVA_ALTURA}
+              onLayout={(e) => {
+                const w = e.nativeEvent.layout.width;
+                if (w > 0) setCanvasWidth(w);
+              }}
+              canvasProps={{
+                onStartShouldSetResponder: () => true,
+                onMoveShouldSetResponder: () => true,
+                onResponderGrant: iniciarStroke,
+                onResponderMove: moverStroke,
+                onResponderRelease: finalizarStroke,
+                onResponderTerminate: finalizarStroke,
+              }}
             >
-              <Text style={styles.btnPrimaryText}>{ultimo ? 'Salvar sessão' : 'Próximo'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+              <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>
+                {strokes.map((stroke, idx) => (
+                  <SvgPath
+                    key={`s-${idx}`}
+                    d={buildStrokePath(stroke)}
+                    stroke={RUBRICA_COR_TRACO}
+                    strokeWidth={2.5}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ))}
+                {strokeAtual.length > 0 ? (
+                  <SvgPath
+                    d={buildStrokePath(strokeAtual)}
+                    stroke={RUBRICA_COR_TRACO}
+                    strokeWidth={2.5}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ) : null}
+              </Svg>
+            </AssinaturaFuturistaCanvas>
+
+            <AssinaturaFuturistaBtnRow>
+              <AssinaturaFuturistaBtnGhost label="Limpar" onPress={limpar} />
+              <AssinaturaFuturistaBtnGhost label="Cancelar" onPress={onCancel} flex />
+              {Platform.OS === 'web' ? null : (
+                <AssinaturaFuturistaBtnGhost label="Pular" onPress={onSkip} />
+              )}
+              <AssinaturaFuturistaBtnPrimary
+                label={ultimo ? 'Salvar sessão' : 'Próximo'}
+                onPress={confirmar}
+                disabled={!temTraco}
+                accent="cyan"
+                flex
+              />
+            </AssinaturaFuturistaBtnRow>
+            {Platform.OS === 'web' ? (
+              <View style={{ marginTop: 8 }}>
+                <TouchableOpacity onPress={onSkip} accessibilityLabel="Pular assinatura">
+                  <Text style={{ color: theme.textMuted, fontWeight: '600', fontSize: 12, textAlign: 'center' }}>
+                    Pular este participante
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </AssinaturaFuturistaCard>
+        </AssinaturaFuturistaScroll>
+      </AssinaturaFuturistaOverlay>
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  card: {
-    maxWidth: 520,
-    width: '100%',
-    alignSelf: 'center',
-    borderRadius: PREMIUM.radiusLg,
-    borderWidth: 1,
-    padding: 18,
-  },
-  title: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
-  sub: { fontSize: 12, fontWeight: '600', marginBottom: 8 },
-  linha: { fontSize: 14, marginBottom: 4 },
-  strong: { fontWeight: '800' },
-  hint: { fontSize: 12, lineHeight: 17, marginBottom: 12 },
-  canvasWrap: {
-    width: '100%',
-    height: RUBRICA_NATIVA_ALTURA,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  btnSec: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-    marginBottom: 14,
-  },
-  footer: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  btnGhost: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-  },
-  btnPrimary: {
-    flex: 1,
-    minWidth: 120,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: PREMIUM.radiusMd,
-    alignItems: 'center',
-  },
-  btnPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-});

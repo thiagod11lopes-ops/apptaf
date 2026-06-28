@@ -53,6 +53,18 @@ import {
 import { ConfirmacaoExcluirPreCadastroModal } from '../components/sismav/ConfirmacaoExcluirPreCadastroModal';
 import { FluxoAssinaturaAplicadorModal } from '../components/sismav/FluxoAssinaturaAplicadorModal';
 import {
+  AssinaturaFuturistaOverlay,
+  AssinaturaFuturistaScroll,
+  AssinaturaFuturistaCard,
+  AssinaturaFuturistaHeader,
+  AssinaturaFuturistaMetaChip,
+  AssinaturaFuturistaCanvas,
+  AssinaturaFuturistaError,
+  AssinaturaFuturistaBtnRow,
+  AssinaturaFuturistaBtnGhost,
+  AssinaturaFuturistaBtnPrimary,
+} from '../components/assinatura/AssinaturaFuturistaUi';
+import {
   type ResultadoPermanenciaOpcao,
 } from '../components/PermanenciaTafPanel';
 import {
@@ -1916,16 +1928,13 @@ export default function AplicarTAFScreen() {
         onRequestClose={() => {}}
         accessibilityViewIsModal
       >
-        <View
-          style={[
-            styles.modalAssinaturaOverlay,
-            {
-              paddingHorizontal: horizontalPad,
-              paddingBottom: Math.max(insets.bottom, 16),
-            },
-          ]}
+        <AssinaturaFuturistaOverlay
+          style={{
+            paddingHorizontal: horizontalPad,
+            paddingBottom: Math.max(insets.bottom, 16),
+          }}
         >
-          <View style={styles.modalAssinaturaCenter}>
+          <AssinaturaFuturistaScroll>
             {(() => {
               const lista = listaResultadosRubricaNatacao;
               const participanteAtual = lista?.[indiceRubricaNatacao];
@@ -1942,48 +1951,45 @@ export default function AplicarTAFScreen() {
                       : 'Corrida';
               const temTracoRubrica =
                 rubricaStrokes.some((s) => s.length > 0) || rubricaStrokeAtual.length > 0;
-              return (
-                <View
-                  key={`rubrica-participante-${indiceRubricaNatacao}`}
-                  style={[
-                    styles.modalAssinaturaCard,
-                    { backgroundColor: theme.cardBg, borderColor: theme.border },
-                  ]}
-                >
-                  <Text style={[styles.modalAssinaturaTitulo, { color: theme.text }]}>
-                    Assinatura do candidato
-                  </Text>
-                  <Text style={[styles.modalAssinaturaSub, { color: theme.textSecondary }]}>
-                    Participante {indiceRubricaNatacao + 1} de {totalLista} · {tituloModalidade}
-                  </Text>
-                  <Text style={[styles.modalAssinaturaSub, { color: theme.textSecondary }]}>
-                    {participanteAtual.nome} — NIP {participanteAtual.nip || '—'} — Tempo{' '}
-                    {formatMsByModality(
-                      modProva === 'natacao' ? 'natacao' : 'corrida',
-                      participanteAtual.tempoMs,
-                    )}{' '}
-                    · Nota {textoNotaRubricaModal(participanteAtual)} — desenhe a rúbrica abaixo.
-                  </Text>
+              const tempoStr = formatMsByModality(
+                modProva === 'natacao' ? 'natacao' : 'corrida',
+                participanteAtual.tempoMs,
+              );
 
-                  <View
-                    style={[
-                      styles.modalAssinaturaCanvasWrap,
-                      { borderColor: theme.border, backgroundColor: RUBRICA_COR_FUNDO },
-                      Platform.OS === 'web'
-                        ? ({ touchAction: 'none', userSelect: 'none', cursor: 'crosshair' } as object)
-                        : null,
-                    ]}
+              return (
+                <AssinaturaFuturistaCard key={`rubrica-participante-${indiceRubricaNatacao}`} accent="cyan">
+                  <AssinaturaFuturistaHeader
+                    kicker="CANDIDATO"
+                    title="Assinatura do candidato"
+                    subtitle={`Participante ${indiceRubricaNatacao + 1} de ${totalLista} · ${tituloModalidade}`}
+                    accent="cyan"
+                  />
+
+                  <AssinaturaFuturistaMetaChip
+                    label="Militar"
+                    value={`${participanteAtual.nome} · NIP ${participanteAtual.nip || '—'}`}
+                  />
+                  <AssinaturaFuturistaMetaChip
+                    label="Resultado"
+                    value={`Tempo ${tempoStr} · Nota ${textoNotaRubricaModal(participanteAtual)}`}
+                  />
+
+                  <AssinaturaFuturistaCanvas
+                    accent="cyan"
+                    height={RUBRICA_NATIVA_ALTURA}
                     onLayout={(e) => {
                       const w = e.nativeEvent.layout.width;
                       if (w > 0) setRubricaCanvasWidth(w);
                     }}
-                    onStartShouldSetResponder={() => true}
-                    onMoveShouldSetResponder={() => true}
-                    onResponderTerminationRequest={() => false}
-                    onResponderGrant={iniciarRubricaStroke}
-                    onResponderMove={moverRubricaStroke}
-                    onResponderRelease={finalizarRubricaStroke}
-                    onResponderTerminate={finalizarRubricaStroke}
+                    canvasProps={{
+                      onStartShouldSetResponder: () => true,
+                      onMoveShouldSetResponder: () => true,
+                      onResponderTerminationRequest: () => false,
+                      onResponderGrant: iniciarRubricaStroke,
+                      onResponderMove: moverRubricaStroke,
+                      onResponderRelease: finalizarRubricaStroke,
+                      onResponderTerminate: finalizarRubricaStroke,
+                    }}
                   >
                     <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>
                       {rubricaStrokes.map((stroke, idx) => (
@@ -2008,46 +2014,30 @@ export default function AplicarTAFScreen() {
                         />
                       ) : null}
                     </Svg>
-                  </View>
+                  </AssinaturaFuturistaCanvas>
 
                   {erroRubricaNatacao ? (
-                    <Text style={[styles.modalAssinaturaErro, { color: theme.loss }]}>
-                      {erroRubricaNatacao}
-                    </Text>
+                    <AssinaturaFuturistaError message={erroRubricaNatacao} />
                   ) : null}
 
-                  <View style={styles.modalAssinaturaFooterBtns}>
-                    <TouchableOpacity
-                      accessibilityLabel="Limpar rúbrica"
-                      activeOpacity={0.88}
+                  <AssinaturaFuturistaBtnRow>
+                    <AssinaturaFuturistaBtnGhost
+                      label="Limpar"
                       onPress={limparRubricaNatacaoAtual}
-                      style={[styles.modalAssinaturaBtnSecundario, { borderColor: theme.border }]}
-                    >
-                      <Text style={{ color: theme.text, fontWeight: '700' }}>Limpar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      accessibilityLabel="Confirmar rúbrica do candidato"
-                      activeOpacity={0.88}
+                    />
+                    <AssinaturaFuturistaBtnPrimary
+                      label={indiceRubricaNatacao + 1 < totalLista ? 'Próximo' : 'Finalizar'}
                       onPress={confirmarRubricaNatacao}
                       disabled={!temTracoRubrica}
-                      style={[
-                        styles.modalAssinaturaBtnPrimaryFlex,
-                        {
-                          backgroundColor: theme.primary,
-                          opacity: temTracoRubrica ? 1 : 0.55,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.modalAssinaturaBtnPrimaryText, { color: theme.text }]}>
-                        {indiceRubricaNatacao + 1 < totalLista ? 'Próximo' : 'Finalizar'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                      accent="cyan"
+                      flex
+                    />
+                  </AssinaturaFuturistaBtnRow>
+                </AssinaturaFuturistaCard>
               );
             })()}
-          </View>
-        </View>
+          </AssinaturaFuturistaScroll>
+        </AssinaturaFuturistaOverlay>
       </Modal>
 
       <FluxoAssinaturaAplicadorModal
@@ -2449,84 +2439,6 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     left: 0,
     right: 0,
     height: 3,
-  },
-  modalAssinaturaOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 16,
-    ...(Platform.OS === 'web'
-      ? ({
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          overflow: 'hidden',
-          zIndex: 9999,
-        } as object)
-      : null),
-  },
-  modalAssinaturaCenter: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  modalAssinaturaCard: {
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 20,
-  },
-  modalAssinaturaTitulo: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  modalAssinaturaSub: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 16,
-  },
-  modalAssinaturaCanvasWrap: {
-    width: '100%',
-    height: RUBRICA_NATIVA_ALTURA,
-    borderRadius: 10,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 10,
-    flexShrink: 0,
-  },
-  modalAssinaturaErro: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  modalAssinaturaBtnSecundario: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalAssinaturaBtnPrimaryFlex: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  modalAssinaturaBtnPrimaryText: {
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  modalAssinaturaFooterBtns: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 10,
-    marginTop: 8,
   },
   modalTempoMensagemCadastro: {
     fontSize: 17,

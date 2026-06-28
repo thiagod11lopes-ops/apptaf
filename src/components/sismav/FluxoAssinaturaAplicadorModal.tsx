@@ -1,17 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
   TextInput,
   TouchableOpacity,
+  Text,
   Platform,
-  ScrollView,
   ActivityIndicator,
+  ScrollView,
   type GestureResponderEvent,
 } from 'react-native';
 import Svg, { Path as SvgPath } from 'react-native-svg';
+import { Modal } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getAllAplicadores, type AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import { verificarSenhaAplicador } from '../../utils/aplicadorSenha';
@@ -24,8 +22,23 @@ import {
   buildStrokePath,
   type RubricaStroke,
 } from '../../utils/rubricaSvgBuilder';
-import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../../utils/rubricaSvgNormalize';
+import { RUBRICA_COR_TRACO } from '../../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../../utils/rubricaConstants';
+import {
+  AssinaturaFuturistaOverlay,
+  AssinaturaFuturistaScroll,
+  AssinaturaFuturistaCard,
+  AssinaturaFuturistaHeader,
+  AssinaturaFuturistaMetaChip,
+  AssinaturaFuturistaCanvas,
+  AssinaturaFuturistaError,
+  AssinaturaFuturistaBtnRow,
+  AssinaturaFuturistaBtnGhost,
+  AssinaturaFuturistaBtnPrimary,
+  AssinaturaFuturistaFieldLabel,
+  assinaturaFuturistaInputStyle,
+  AssinaturaFuturistaSelectList,
+} from '../assinatura/AssinaturaFuturistaUi';
 
 function labelAplicador(item: AplicadorItemPersist): string {
   const posto = postoGradAplicador(item);
@@ -174,12 +187,12 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
         borderWidth: 1,
         borderStyle: 'solid',
         borderColor: theme.border,
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
         fontSize: 16,
         marginBottom: 12,
-        backgroundColor: theme.backgroundSecondary,
+        backgroundColor: theme.isDark ? 'rgba(2,6,23,0.45)' : 'rgba(255,255,255,0.65)',
         color: theme.text,
       }) as object,
     [theme],
@@ -187,35 +200,23 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => {}} accessibilityViewIsModal>
-      <View style={styles.overlay}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-            {etapa === 'senha' ? (
-              <Text style={[styles.titulo, { color: theme.text }]}>Assinatura do aplicador</Text>
-            ) : null}
-
+      <AssinaturaFuturistaOverlay>
+        <AssinaturaFuturistaScroll>
+          <AssinaturaFuturistaCard accent="violet">
             {etapa === 'senha' ? (
               <>
-                <Text style={[styles.sub, { color: theme.textSecondary }]}>
-                  Selecione o aplicador e informe a senha cadastrada. Em seguida, ele fará a rúbrica.
-                </Text>
+                <AssinaturaFuturistaHeader
+                  kicker="APLICADOR"
+                  title="Assinatura do aplicador"
+                  subtitle="Selecione o aplicador, informe a senha e desenhe a rúbrica."
+                  accent="violet"
+                />
 
-                <Text style={[styles.label, { color: theme.textSecondary }]}>Aplicador</Text>
+                <AssinaturaFuturistaFieldLabel>Aplicador</AssinaturaFuturistaFieldLabel>
                 {carregandoAplicadores ? (
-                  <View style={styles.loadingRow}>
-                    <ActivityIndicator size="small" color={theme.primary} />
-                    <Text style={[styles.sub, { color: theme.textSecondary, marginBottom: 0 }]}>
-                      Carregando aplicadores…
-                    </Text>
-                  </View>
+                  <ActivityIndicator size="small" color={theme.primary} style={{ marginBottom: 12 }} />
                 ) : aplicadores.length === 0 ? (
-                  <Text style={[styles.erro, { color: theme.loss }]}>
-                    Nenhum aplicador cadastrado. Cadastre no menu Aplicador.
-                  </Text>
+                  <AssinaturaFuturistaError message="Nenhum aplicador cadastrado. Cadastre no menu Aplicador." />
                 ) : Platform.OS === 'web' ? (
                   <select
                     value={aplicadorSelecionadoId}
@@ -230,41 +231,37 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
                     ))}
                   </select>
                 ) : (
-                  <ScrollView
-                    style={[
-                      styles.selectList,
-                      { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
-                    ]}
-                    nestedScrollEnabled
-                  >
-                    {aplicadores.map((item) => {
-                      const active = item.id === aplicadorSelecionadoId;
-                      return (
-                        <TouchableOpacity
-                          key={item.id}
-                          onPress={() => selecionarAplicador(item.id)}
-                          style={[
-                            styles.selectOption,
-                            active
-                              ? { backgroundColor: theme.primary }
-                              : { backgroundColor: theme.backgroundSecondary },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.selectOptionText,
-                              { color: active ? theme.text : theme.textSecondary },
-                            ]}
+                  <AssinaturaFuturistaSelectList>
+                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
+                      {aplicadores.map((item) => {
+                        const active = item.id === aplicadorSelecionadoId;
+                        return (
+                          <TouchableOpacity
+                            key={item.id}
+                            onPress={() => selecionarAplicador(item.id)}
+                            style={{
+                              paddingHorizontal: 14,
+                              paddingVertical: 12,
+                              backgroundColor: active ? theme.primary : 'transparent',
+                            }}
                           >
-                            {labelAplicador(item)}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
+                            <Text
+                              style={{
+                                fontSize: 15,
+                                fontWeight: '600',
+                                color: active ? theme.tokens.textOnPrimary : theme.textSecondary,
+                              }}
+                            >
+                              {labelAplicador(item)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </AssinaturaFuturistaSelectList>
                 )}
 
-                <Text style={[styles.label, { color: theme.textSecondary }]}>Senha</Text>
+                <AssinaturaFuturistaFieldLabel>Senha</AssinaturaFuturistaFieldLabel>
                 <TextInput
                   value={senha}
                   onChangeText={(t) => {
@@ -278,72 +275,59 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
                   autoCorrect={false}
                   editable={!!aplicadorSelecionadoId}
                   style={[
-                    styles.input,
-                    {
-                      borderColor: theme.border,
-                      backgroundColor: theme.backgroundSecondary,
-                      color: theme.text,
-                      opacity: aplicadorSelecionadoId ? 1 : 0.6,
-                    },
-                    Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {},
+                    ...assinaturaFuturistaInputStyle(theme),
+                    { opacity: aplicadorSelecionadoId ? 1 : 0.6 },
                   ]}
                 />
-                {erroSenha ? <Text style={[styles.erro, { color: theme.loss }]}>{erroSenha}</Text> : null}
-                <TouchableOpacity
+                {erroSenha ? <AssinaturaFuturistaError message={erroSenha} /> : null}
+
+                <AssinaturaFuturistaBtnPrimary
+                  label={verificando ? 'Verificando…' : 'Confirmar senha'}
                   onPress={() => void confirmarSenha()}
                   disabled={verificando || aplicadores.length === 0}
-                  style={[
-                    styles.btnPrimary,
-                    {
-                      backgroundColor: theme.primary,
-                      opacity: verificando || aplicadores.length === 0 ? 0.7 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.btnPrimaryText, { color: theme.text }]}>
-                    {verificando ? 'Verificando…' : 'Confirmar senha'}
-                  </Text>
-                </TouchableOpacity>
+                  loading={verificando}
+                  accent="violet"
+                />
               </>
             ) : (
               <>
-                <View style={styles.headerRow}>
-                  <Text style={[styles.titulo, styles.tituloComVoltar, { color: theme.text }]}>
-                    Assinatura do aplicador
-                  </Text>
-                  <TouchableOpacity
-                    accessibilityLabel="Voltar para senha do aplicador"
-                    onPress={() => {
-                      setEtapa('senha');
-                      setErroRubrica('');
-                    }}
-                    style={[styles.btnVoltarTopo, { borderColor: theme.border }]}
-                  >
-                    <Text style={{ color: theme.textSecondary, fontWeight: '700' }}>Voltar</Text>
-                  </TouchableOpacity>
-                </View>
+                <AssinaturaFuturistaHeader
+                  kicker="APLICADOR"
+                  title="Assinatura do aplicador"
+                  subtitle={
+                    aplicadorSelecionado
+                      ? `${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome}`
+                      : 'Desenhe a rúbrica do aplicador.'
+                  }
+                  accent="violet"
+                  onBack={() => {
+                    setEtapa('senha');
+                    setErroRubrica('');
+                  }}
+                />
 
-                <Text style={[styles.sub, { color: theme.textSecondary }]}>
-                  {aplicadorSelecionado
-                    ? `${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome} — desenhe a rúbrica abaixo.`
-                    : 'Desenhe a rúbrica do aplicador.'}
-                </Text>
+                {aplicadorSelecionado ? (
+                  <AssinaturaFuturistaMetaChip
+                    label="Identificação"
+                    value={`${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome} · NIP ${aplicadorSelecionado.nip || '—'}`}
+                  />
+                ) : null}
 
-                <View
-                  style={[
-                    styles.canvasWrap,
-                    { borderColor: theme.border, backgroundColor: RUBRICA_COR_FUNDO },
-                  ]}
+                <AssinaturaFuturistaCanvas
+                  accent="violet"
+                  height={RUBRICA_NATIVA_ALTURA}
                   onLayout={(e) => {
                     const w = e.nativeEvent.layout.width;
                     if (w > 0) setCanvasWidth(w);
                   }}
-                  onStartShouldSetResponder={() => true}
-                  onMoveShouldSetResponder={() => true}
-                  onResponderGrant={iniciarRubricaStroke}
-                  onResponderMove={moverRubricaStroke}
-                  onResponderRelease={finalizarRubricaStroke}
-                  onResponderTerminate={finalizarRubricaStroke}
+                  canvasProps={{
+                    onStartShouldSetResponder: () => true,
+                    onMoveShouldSetResponder: () => true,
+                    onResponderGrant: iniciarRubricaStroke,
+                    onResponderMove: moverRubricaStroke,
+                    onResponderRelease: finalizarRubricaStroke,
+                    onResponderTerminate: finalizarRubricaStroke,
+                  }}
                 >
                   <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>
                     {rubricaStrokes.map((stroke, idx) => (
@@ -368,132 +352,25 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
                       />
                     ) : null}
                   </Svg>
-                </View>
+                </AssinaturaFuturistaCanvas>
 
-                {erroRubrica ? <Text style={[styles.erro, { color: theme.loss }]}>{erroRubrica}</Text> : null}
+                {erroRubrica ? <AssinaturaFuturistaError message={erroRubrica} /> : null}
 
-                <View style={styles.footerBtns}>
-                  <TouchableOpacity
-                    accessibilityLabel="Limpar rúbrica"
-                    onPress={limparRubrica}
-                    style={[styles.btnSecundario, { borderColor: theme.border }]}
-                  >
-                    <Text style={{ color: theme.text, fontWeight: '700' }}>Limpar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    accessibilityLabel="Concluir assinatura do aplicador"
+                <AssinaturaFuturistaBtnRow>
+                  <AssinaturaFuturistaBtnGhost label="Limpar" onPress={limparRubrica} flex />
+                  <AssinaturaFuturistaBtnPrimary
+                    label="Concluir assinatura"
                     onPress={concluirAssinatura}
                     disabled={!temTracoRubrica}
-                    style={[
-                      styles.btnPrimaryFlex,
-                      {
-                        backgroundColor: theme.primary,
-                        opacity: temTracoRubrica ? 1 : 0.55,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.btnPrimaryText, { color: theme.text }]}>Concluir assinatura</Text>
-                  </TouchableOpacity>
-                </View>
+                    accent="violet"
+                    flex
+                  />
+                </AssinaturaFuturistaBtnRow>
               </>
             )}
-          </View>
-        </ScrollView>
-      </View>
+          </AssinaturaFuturistaCard>
+        </AssinaturaFuturistaScroll>
+      </AssinaturaFuturistaOverlay>
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 16,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  card: {
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 20,
-  },
-  titulo: { fontSize: 18, fontWeight: '800', marginBottom: 8 },
-  tituloComVoltar: { marginBottom: 0 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 8,
-  },
-  btnVoltarTopo: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  sub: { fontSize: 13, lineHeight: 19, marginBottom: 16 },
-  label: { fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  selectList: {
-    maxHeight: 160,
-    borderWidth: 1,
-    borderRadius: 10,
-    marginBottom: 12,
-  },
-  selectOption: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  selectOptionText: { fontSize: 15, fontWeight: '600' },
-  input: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  canvasWrap: {
-    width: '100%',
-    height: RUBRICA_NATIVA_ALTURA,
-    borderRadius: 10,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  btnSecundario: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  erro: { fontSize: 13, fontWeight: '600', marginBottom: 10, textAlign: 'center' },
-  btnPrimary: {
-    marginTop: 8,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  btnPrimaryFlex: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  btnPrimaryText: { fontWeight: '800', fontSize: 15 },
-  footerBtns: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 10,
-    marginTop: 8,
-  },
-});

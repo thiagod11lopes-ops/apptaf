@@ -9,6 +9,7 @@ import {
   calcularContagemPendencias,
   montarListaPendencias,
 } from '../../src/utils/pendenciasTafHistorico';
+import { listarResultadosGeralFromHistorico } from '../../src/utils/resultadoGeralHistorico';
 
 function cadastroBase(over: Partial<CadastroItemPersist> = {}): CadastroItemPersist {
   return {
@@ -73,5 +74,33 @@ describe('pendência corrida/caminhada substitutivas', () => {
     expect(contagem.corrida).toBe(0);
     const lista = montarListaPendencias(sessoes, cadastros);
     expect(lista[0]?.faltam).not.toContain('Corrida');
+  });
+
+  it('listarResultadosGeralFromHistorico: caminhada fica na coluna própria, não em corrida', () => {
+    const cadastros = [cadastroBase()];
+    const sessoes: SessaoAplicacaoTaf[] = [
+      {
+        id: 's1',
+        criadoEm: '2026-01-01T12:00:00.000Z',
+        dataAplicacao: '01/01/2026',
+        tipoProva: 'caminhada',
+        resultados: [
+          {
+            corredor: 1,
+            nome: 'Teste Silva',
+            nip: '12.3456.78',
+            tempoMs: 38 * 60 * 1000,
+            notaTexto: '100',
+            prova: 'caminhada',
+          },
+        ],
+      },
+    ];
+    const linhas = listarResultadosGeralFromHistorico(sessoes, cadastros);
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0]?.notaCaminhada).toBe('100');
+    expect(linhas[0]?.notaCorrida).toBe('—');
+    expect(linhas[0]?.situacaoCaminhada).toBe('Aprovado');
+    expect(linhas[0]?.situacaoCorrida).toBe('—');
   });
 });

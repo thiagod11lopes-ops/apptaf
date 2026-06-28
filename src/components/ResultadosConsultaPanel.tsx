@@ -30,6 +30,7 @@ import {
   filtrarCadastrosPorNipNome,
   mesclarRubricasNaLinha,
   temAvaliacaoCorrida,
+  temAvaliacaoCaminhada,
   temAvaliacaoNatacao,
   temAvaliacaoPermanencia,
   type ResultadoTafLinha,
@@ -466,6 +467,9 @@ export function ResultadosConsultaPanel() {
       {linhas.map((r) => {
         const cadastro = todosCadastros.find((c) => c.id === r.id);
         const podeExcluirCorrida = cadastro ? temAvaliacaoCorrida(cadastro) : r.notaCorrida !== '—';
+        const podeExcluirCaminhada = cadastro
+          ? temAvaliacaoCaminhada(cadastro)
+          : r.notaCaminhada !== '—';
         const podeExcluirNatacao = cadastro ? temAvaliacaoNatacao(cadastro) : r.notaNatacao !== '—';
         const podeExcluirPermanencia = cadastro
           ? temAvaliacaoPermanencia(cadastro)
@@ -521,6 +525,30 @@ export function ResultadosConsultaPanel() {
               </View>
               <Text style={[ts.caption, situacaoStyle(r.situacaoCorrida, theme)]}>
                 {r.situacaoCorrida}
+              </Text>
+            </ProvaComColunaRubrica>
+
+            <ProvaComColunaRubrica
+              titulo="Caminhada"
+              rubricaSvg={r.rubricaCaminhadaSvg}
+              headerRight={
+                podeExcluirCaminhada ? (
+                  <PressableScale
+                    onPress={() => abrirExclusao('caminhada')}
+                    style={[styles.trashBtn, { borderColor: theme.border }]}
+                    accessibilityLabel="Excluir resultado de caminhada"
+                  >
+                    <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                  </PressableScale>
+                ) : null
+              }
+            >
+              <View style={styles.provaRow}>
+                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCaminhada}</Text>
+              </View>
+              <Text style={[ts.caption, situacaoStyle(r.situacaoCaminhada, theme)]}>
+                {r.situacaoCaminhada}
               </Text>
             </ProvaComColunaRubrica>
 

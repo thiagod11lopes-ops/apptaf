@@ -51,6 +51,9 @@ export function buildResultadosTafHtml(
         <td class="nota">${escapeHtml(r.notaCorrida)}</td>
         <td>${escapeHtml(r.situacaoCorrida)}</td>
         <td class="col-rubrica">${celulaRubricaHtml(r.rubricaCorridaSvg)}</td>
+        <td class="nota">${escapeHtml(r.notaCaminhada)}</td>
+        <td>${escapeHtml(r.situacaoCaminhada)}</td>
+        <td class="col-rubrica">${celulaRubricaHtml(r.rubricaCaminhadaSvg)}</td>
         <td class="nota">${escapeHtml(r.notaNatacao)}</td>
         <td>${escapeHtml(r.situacaoNatacao)}</td>
         <td class="col-rubrica">${celulaRubricaHtml(r.rubricaNatacaoSvg)}</td>
@@ -75,7 +78,7 @@ export function buildResultadosTafHtml(
   </style>
 </head>
 <body>
-  <h1>Resultados TAF — Corrida, Natação e Permanência</h1>
+  <h1>Resultados TAF — Corrida, Caminhada, Natação e Permanência</h1>
   <p class="sub">${escapeHtml(subtitulo)} · Gerado em ${escapeHtml(dataStr)} · ${linhas.length} registro(s)</p>
   <table class="resultados-taf">
     <thead>
@@ -86,6 +89,9 @@ export function buildResultadosTafHtml(
         <th>Nota corrida</th>
         <th>Situação corrida</th>
         <th class="col-rubrica">Rúbrica</th>
+        <th>Nota caminhada</th>
+        <th>Situação caminhada</th>
+        <th class="col-rubrica">Rúbrica</th>
         <th>Nota natação</th>
         <th>Situação natação</th>
         <th class="col-rubrica">Rúbrica</th>
@@ -93,7 +99,7 @@ export function buildResultadosTafHtml(
         <th class="col-rubrica">Rúbrica</th>
       </tr>
     </thead>
-    <tbody>${rows || '<tr><td colspan="11">Nenhum registro</td></tr>'}</tbody>
+    <tbody>${rows || '<tr><td colspan="14">Nenhum registro</td></tr>'}</tbody>
   </table>
 </body>
 </html>`;

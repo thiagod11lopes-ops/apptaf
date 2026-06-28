@@ -3,6 +3,7 @@ import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb
 
 export type RubricasPorNip = {
   corrida?: string;
+  caminhada?: string;
   natacao?: string;
   permanencia?: string;
 };
@@ -22,6 +23,7 @@ export async function carregarRubricasDasSessoesPorNip(): Promise<Map<string, Ru
       const atual = map.get(key) ?? {};
       if (prova === 'natacao') atual.natacao = svg;
       else if (prova === 'permanencia') atual.permanencia = svg;
+      else if (prova === 'caminhada') atual.caminhada = svg;
       else atual.corrida = svg;
       map.set(key, atual);
     }
@@ -32,11 +34,13 @@ export async function carregarRubricasDasSessoesPorNip(): Promise<Map<string, Ru
 
 export function rubricasDoCadastro(c: {
   rubricaCorridaSvg?: string;
+  rubricaCaminhadaSvg?: string;
   rubricaNatacaoSvg?: string;
   rubricaPermanenciaSvg?: string;
 }): RubricasPorNip {
   return {
     corrida: c.rubricaCorridaSvg,
+    caminhada: c.rubricaCaminhadaSvg,
     natacao: c.rubricaNatacaoSvg,
     permanencia: c.rubricaPermanenciaSvg,
   };
@@ -48,6 +52,7 @@ export function mesclarRubricas(
 ): RubricasPorNip {
   return {
     corrida: cadastro.corrida ?? sessao?.corrida,
+    caminhada: cadastro.caminhada ?? sessao?.caminhada,
     natacao: cadastro.natacao ?? sessao?.natacao,
     permanencia: cadastro.permanencia ?? sessao?.permanencia,
   };

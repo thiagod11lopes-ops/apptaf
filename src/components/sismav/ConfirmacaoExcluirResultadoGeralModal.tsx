@@ -32,6 +32,10 @@ export function ConfirmacaoExcluirResultadoGeralModal({
   const modalidades = militar
     ? [
         { label: 'Corrida', ativo: temModalidade(militar.notaCorrida) || temModalidade(militar.situacaoCorrida) },
+        {
+          label: 'Caminhada',
+          ativo: temModalidade(militar.notaCaminhada) || temModalidade(militar.situacaoCaminhada),
+        },
         { label: 'Natação', ativo: temModalidade(militar.notaNatacao) || temModalidade(militar.situacaoNatacao) },
         {
           label: 'Permanência',
@@ -123,8 +127,8 @@ export function ConfirmacaoExcluirResultadoGeralModal({
           <View style={[styles.alertBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
             <ShieldAlert size={16} color={theme.loss} strokeWidth={2.2} />
             <Text style={[styles.alertText, { color: theme.textSecondary }]}>
-              O cadastro do militar será mantido. Apenas corrida, natação e permanência serão apagados do
-              histórico. Esta ação não pode ser desfeita.
+              O cadastro do militar será mantido. Apenas corrida, caminhada, natação e permanência serão
+              apagados do histórico. Esta ação não pode ser desfeita.
             </Text>
           </View>
         </View>

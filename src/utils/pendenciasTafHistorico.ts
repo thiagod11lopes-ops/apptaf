@@ -46,7 +46,7 @@ function aggPorCadastro(
 function itemFromAgg(
   agg: ReturnType<typeof agregarHistoricoPorParticipante>[number],
 ): PendenciaTafItem | null {
-  const temCorrida = !!agg.corrida;
+  const temCorrida = !!agg.corrida || !!agg.caminhada;
   const temNatacao = !!agg.natacao;
   const temPermanencia = !!agg.permanencia;
   if (temCorrida && temNatacao && temPermanencia) return null;
@@ -74,7 +74,8 @@ function itemFromCadastro(
   c: CadastroItemPersist,
   agg: ReturnType<typeof agregarHistoricoPorParticipante>[number] | undefined,
 ): PendenciaTafItem | null {
-  const temCorrida = !!agg?.corrida || temAvaliacaoCorridaOuCaminhada(c);
+  const temCorrida =
+    !!agg?.corrida || !!agg?.caminhada || temAvaliacaoCorridaOuCaminhada(c);
   const temNatacao = !!agg?.natacao;
   const temPermanencia = !!agg?.permanencia;
   if (temCorrida && temNatacao && temPermanencia) return null;

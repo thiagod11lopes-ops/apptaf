@@ -83,6 +83,7 @@ function rubricaSvgParticipante(
 
   const prova = r.prova ?? tipoProva;
   const c = busca.cadastro;
+  if (prova === 'caminhada') return c.rubricaCaminhadaSvg;
   if (prova === 'natacao') return c.rubricaNatacaoSvg;
   if (prova === 'permanencia') return c.rubricaPermanenciaSvg;
   return c.rubricaCorridaSvg;

@@ -9,6 +9,7 @@ import type { PendenciaParcialItem, ResultadoGeralItem } from './resultadoTafCad
 import {
   postoGradFromLinhaId,
   temAvaliacaoCaminhada,
+  temAvaliacaoCorrida,
   temAvaliacaoCorridaOuCaminhada,
 } from './resultadoTafCadastro';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
@@ -25,9 +26,14 @@ type AggRow = {
   nip: string;
   nome: string;
   corrida?: ModalidadeHistorico;
+  caminhada?: ModalidadeHistorico;
   natacao?: ModalidadeHistorico;
   permanencia?: ModalidadeHistorico;
 };
+
+function temRequisitoCorridaOuCaminhada(agg: AggRow): boolean {
+  return !!(agg.corrida || agg.caminhada);
+}
 
 function chaveParticipanteAnon(nip: string, nome: string): string {
   const d = nipDigitos(nip);
@@ -108,8 +114,10 @@ function atualizarIdentidade(agg: AggRow, r: ResultadoCorridaItem, cadastros: Ca
 
 function aggParaLinha(agg: AggRow): ResultadoGeralItem {
   const temCorrida = !!agg.corrida;
+  const temCaminhada = !!agg.caminhada;
   const temNatacao = !!agg.natacao;
   const temPerm = !!agg.permanencia;
+  const requisitoCorrida = temRequisitoCorridaOuCaminhada(agg);
 
   return {
     id: agg.id,
@@ -118,15 +126,18 @@ function aggParaLinha(agg: AggRow): ResultadoGeralItem {
     nome: agg.nome || '—',
     notaCorrida: temCorrida ? agg.corrida!.nota : '—',
     situacaoCorrida: temCorrida ? agg.corrida!.situacao : '—',
+    notaCaminhada: temCaminhada ? agg.caminhada!.nota : '—',
+    situacaoCaminhada: temCaminhada ? agg.caminhada!.situacao : '—',
     notaNatacao: temNatacao ? agg.natacao!.nota : '—',
     situacaoNatacao: temNatacao ? agg.natacao!.situacao : '—',
     permanenciaTempo: temPerm ? (agg.permanencia!.tempo ?? '—') : '—',
     situacaoPermanencia: temPerm ? agg.permanencia!.situacao : '—',
     rubricaCorridaSvg: agg.corrida?.rubricaSvg,
+    rubricaCaminhadaSvg: agg.caminhada?.rubricaSvg,
     rubricaNatacaoSvg: agg.natacao?.rubricaSvg,
     rubricaPermanenciaSvg: agg.permanencia?.rubricaSvg,
     statusTaf:
-      temCorrida && temNatacao && temPerm ? ('Completo' as const) : ('Parcial' as const),
+      requisitoCorrida && temNatacao && temPerm ? ('Completo' as const) : ('Parcial' as const),
   };
 }
 
@@ -167,7 +178,8 @@ export function agregarHistoricoPorParticipante(
       atualizarIdentidade(agg, r, cadastros);
       const slice = sliceFromResultado(tipo, r);
 
-      if (tipo === 'corrida' || tipo === 'caminhada') agg.corrida = slice;
+      if (tipo === 'corrida') agg.corrida = slice;
+      else if (tipo === 'caminhada') agg.caminhada = slice;
       else if (tipo === 'natacao') agg.natacao = slice;
       else if (tipo === 'permanencia') agg.permanencia = slice;
     }
@@ -176,7 +188,9 @@ export function agregarHistoricoPorParticipante(
   enriquecerCorridaCaminhadaFromCadastros(map, cadastros);
   enriquecerPermanenciaFromCadastros(map, cadastros);
 
-  return [...map.values()].filter((agg) => agg.corrida || agg.natacao || agg.permanencia);
+  return [...map.values()].filter(
+    (agg) => agg.corrida || agg.caminhada || agg.natacao || agg.permanencia,
+  );
 }
 
 function situacaoFromNotaCadastro(nota: string | undefined): string {
@@ -186,39 +200,56 @@ function situacaoFromNotaCadastro(nota: string | undefined): string {
   return 'Aprovado';
 }
 
+function findAggForCadastro(
+  map: Map<string, AggRow>,
+  c: CadastroItemPersist,
+): AggRow | undefined {
+  let agg = map.get(c.id);
+  if (!agg) {
+    const nipC = nipDigitos(c.nip);
+    if (nipC.length >= 8) {
+      for (const row of map.values()) {
+        if (nipDigitos(row.nip) === nipC) {
+          agg = row;
+          break;
+        }
+      }
+    }
+  }
+  return agg;
+}
+
 function enriquecerCorridaCaminhadaFromCadastros(
   map: Map<string, AggRow>,
   cadastros: CadastroItemPersist[],
 ): void {
   for (const c of cadastros) {
-    if (!temAvaliacaoCorridaOuCaminhada(c)) continue;
-
-    let agg = map.get(c.id);
-    if (!agg) {
-      const nipC = nipDigitos(c.nip);
-      if (nipC.length >= 8) {
-        for (const row of map.values()) {
-          if (nipDigitos(row.nip) === nipC) {
-            agg = row;
-            break;
-          }
-        }
-      }
-    }
+    const agg = findAggForCadastro(map, c);
     if (!agg) continue;
 
-    const notaAtual = (agg.corrida?.nota ?? '').trim();
-    if (notaAtual && notaAtual !== '—') continue;
+    if (temAvaliacaoCorrida(c)) {
+      const notaAtual = (agg.corrida?.nota ?? '').trim();
+      if (!notaAtual || notaAtual === '—') {
+        const nota = c.notaCorrida?.trim();
+        agg.corrida = {
+          nota: nota || '—',
+          situacao: situacaoFromNotaCadastro(nota),
+          rubricaSvg: c.rubricaCorridaSvg,
+        };
+      }
+    }
 
-    const temCaminhada = temAvaliacaoCaminhada(c);
-    const nota = (
-      temCaminhada ? c.notaCaminhada : c.notaCorrida
-    )?.trim();
-    agg.corrida = {
-      nota: nota || '—',
-      situacao: situacaoFromNotaCadastro(nota),
-      rubricaSvg: temCaminhada ? c.rubricaCaminhadaSvg : c.rubricaCorridaSvg,
-    };
+    if (temAvaliacaoCaminhada(c)) {
+      const notaAtual = (agg.caminhada?.nota ?? '').trim();
+      if (!notaAtual || notaAtual === '—') {
+        const nota = c.notaCaminhada?.trim();
+        agg.caminhada = {
+          nota: nota || '—',
+          situacao: situacaoFromNotaCadastro(nota),
+          rubricaSvg: c.rubricaCaminhadaSvg,
+        };
+      }
+    }
   }
 }
 
@@ -257,7 +288,7 @@ function enriquecerPermanenciaFromCadastros(
 }
 
 function aggParaPendenciaParcial(agg: AggRow): PendenciaParcialItem | null {
-  const temCorrida = !!agg.corrida;
+  const temCorrida = temRequisitoCorridaOuCaminhada(agg);
   const temNatacao = !!agg.natacao;
   const temPermanencia = !!agg.permanencia;
   const alguma = temCorrida || temNatacao || temPermanencia;
@@ -351,11 +382,11 @@ export function calcularResumoInicioTafFromHistorico(
   let completos = 0;
   let parcial = 0;
   for (const agg of aggs) {
-    const temCorrida = !!agg.corrida;
+    const requisitoCorrida = temRequisitoCorridaOuCaminhada(agg);
     const temNatacao = !!agg.natacao;
     const temPerm = !!agg.permanencia;
-    if (temCorrida && temNatacao && temPerm) completos += 1;
-    else if (temCorrida || temNatacao || temPerm) parcial += 1;
+    if (requisitoCorrida && temNatacao && temPerm) completos += 1;
+    else if (requisitoCorrida || temNatacao || temPerm || agg.corrida || agg.caminhada) parcial += 1;
   }
 
   const semTeste = cadastros.filter((c) => !cadastroNoHistorico(c, aggs)).length;

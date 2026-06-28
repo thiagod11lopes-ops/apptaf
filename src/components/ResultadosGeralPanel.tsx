@@ -34,6 +34,8 @@ function linhaCombinaBusca(item: ResultadoGeralItem, q: string, qDigits: string)
     item.statusTaf,
     item.notaCorrida,
     item.situacaoCorrida,
+    item.notaCaminhada,
+    item.situacaoCaminhada,
     item.notaNatacao,
     item.situacaoNatacao,
     item.permanenciaTempo,

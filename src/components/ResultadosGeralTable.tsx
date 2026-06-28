@@ -177,6 +177,35 @@ export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir }: 
         ],
       }),
       columnHelper.group({
+        id: 'caminhada',
+        header: 'Caminhada',
+        meta: { align: 'center' as const },
+        columns: [
+          columnHelper.accessor('notaCaminhada', {
+            header: 'Nota',
+            size: colSizes.nota,
+            enableSorting: true,
+            meta: { align: 'center' as const, groupStart: true },
+            cell: (info) => (
+              <SearchHighlightText text={info.getValue()} queryLower={buscaLower} style={cellBase} />
+            ),
+          }),
+          columnHelper.accessor('situacaoCaminhada', {
+            header: 'Situação',
+            size: colSizes.situacao,
+            enableSorting: true,
+            meta: { align: 'center' as const },
+            cell: (info) => (
+              <SearchHighlightText
+                text={info.getValue()}
+                queryLower={buscaLower}
+                style={[cellBase, { color: situacaoCor(info.getValue(), theme) }]}
+              />
+            ),
+          }),
+        ],
+      }),
+      columnHelper.group({
         id: 'natacao',
         header: 'Natação',
         meta: { align: 'center' as const },

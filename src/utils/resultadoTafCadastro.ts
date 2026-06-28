@@ -11,11 +11,14 @@ export type ResultadoTafLinha = {
   nome: string;
   notaCorrida: string;
   situacaoCorrida: string;
+  notaCaminhada: string;
+  situacaoCaminhada: string;
   notaNatacao: string;
   situacaoNatacao: string;
   permanenciaTempo: string;
   situacaoPermanencia: string;
   rubricaCorridaSvg?: string;
+  rubricaCaminhadaSvg?: string;
   rubricaNatacaoSvg?: string;
   rubricaPermanenciaSvg?: string;
 };
@@ -189,6 +192,7 @@ export function postoGradFromLinhaId(
 export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTafLinha {
   const t = tempos(c);
   const temCorrida = !!(t.corrida || (c.notaCorrida || '').trim());
+  const temCaminhada = !!(t.caminhada || (c.notaCaminhada || '').trim());
   const temNatacao = !!(t.natacao || (c.notaNatacao || '').trim());
   const temPerm = !!(resultadoPermanenciaCadastro(c) || t.permanencia);
 
@@ -199,11 +203,14 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
     nome: c.nome || '—',
     notaCorrida: temCorrida ? (c.notaCorrida || '—').trim() || '—' : '—',
     situacaoCorrida: situacaoDeNota(c.notaCorrida, temCorrida),
+    notaCaminhada: temCaminhada ? (c.notaCaminhada || '—').trim() || '—' : '—',
+    situacaoCaminhada: situacaoDeNota(c.notaCaminhada, temCaminhada),
     notaNatacao: temNatacao ? (c.notaNatacao || '—').trim() || '—' : '—',
     situacaoNatacao: situacaoDeNota(c.notaNatacao, temNatacao),
     permanenciaTempo: temPerm ? t.permanencia || '—' : '—',
     situacaoPermanencia: temPerm ? situacaoPermanencia(c) : '—',
     rubricaCorridaSvg: temCorrida ? c.rubricaCorridaSvg : undefined,
+    rubricaCaminhadaSvg: temCaminhada ? c.rubricaCaminhadaSvg : undefined,
     rubricaNatacaoSvg: temNatacao ? c.rubricaNatacaoSvg : undefined,
     rubricaPermanenciaSvg: temPerm ? c.rubricaPermanenciaSvg : undefined,
   };
@@ -213,6 +220,7 @@ export function mesclarRubricasNaLinha(
   linha: ResultadoTafLinha,
   rubricas: {
     corrida?: string;
+    caminhada?: string;
     natacao?: string;
     permanencia?: string;
   },
@@ -220,6 +228,7 @@ export function mesclarRubricasNaLinha(
   return {
     ...linha,
     rubricaCorridaSvg: linha.rubricaCorridaSvg ?? rubricas.corrida,
+    rubricaCaminhadaSvg: linha.rubricaCaminhadaSvg ?? rubricas.caminhada,
     rubricaNatacaoSvg: linha.rubricaNatacaoSvg ?? rubricas.natacao,
     rubricaPermanenciaSvg: linha.rubricaPermanenciaSvg ?? rubricas.permanencia,
   };

@@ -68,14 +68,14 @@ function MetaResultadoField({
   tone,
   theme,
   ui,
-  flexCell,
+  compact,
 }: {
   label: string;
   value: string;
   tone: 'tempo' | 'nota' | 'notaReprov';
   theme: ReturnType<typeof useTheme>['theme'];
   ui: ReturnType<typeof getUiColors>;
-  flexCell?: boolean;
+  compact?: boolean;
 }) {
   const valueColor =
     tone === 'notaReprov' ? theme.loss : tone === 'nota' ? theme.gain : ui.text;
@@ -108,16 +108,30 @@ function MetaResultadoField({
 
   return (
     <View
-      style={[styles.metaField, flexCell ? styles.metaFieldFlex : null, { borderColor }]}
+      style={[
+        styles.metaField,
+        compact ? styles.metaFieldCompact : null,
+        { borderColor },
+      ]}
       accessibilityLabel={`${label}: ${value}`}
     >
       <LinearGradient colors={[...gradientColors]} style={StyleSheet.absoluteFill} />
-      <Text style={[styles.metaLabel, { color: theme.textMuted }]}>{label}</Text>
+      <Text
+        style={[
+          styles.metaLabel,
+          compact ? styles.metaLabelCompact : null,
+          { color: theme.textMuted },
+        ]}
+      >
+        {label}
+      </Text>
       <Text
         style={[
           styles.metaValue,
+          compact ? styles.metaValueCompact : null,
           { color: valueColor },
           tone === 'notaReprov' ? styles.metaValueReprov : null,
+          tone === 'notaReprov' && compact ? styles.metaValueReprovCompact : null,
         ]}
         numberOfLines={1}
       >
@@ -227,7 +241,7 @@ export function TafProvaTempoModal({
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const ts = theme.textStyles;
-  const { participantStacked, isNativeMobile, modalBottomPad, horizontalPad } = useAplicarTafLayout();
+  const { isNativeMobile, modalBottomPad, horizontalPad } = useAplicarTafLayout();
 
   const tituloModal = `${tituloProva} preparada`;
   const glass = getAplicarTafGlass(theme);
@@ -286,29 +300,33 @@ export function TafProvaTempoModal({
               },
             ]}
           >
-            <View
-              style={[
-                styles.participantRow,
-                participantStacked ? styles.participantRowStacked : null,
-              ]}
-            >
-              <View
-                style={[
-                  styles.identityCol,
-                  participantStacked ? styles.identityColStacked : null,
-                ]}
-              >
+            <View style={styles.participantRow}>
+              <View style={[styles.identityCol, isNativeMobile ? styles.identityColCompact : null]}>
                 <View
                   style={[
                     styles.numBadge,
+                    isNativeMobile ? styles.numBadgeCompact : null,
                     { backgroundColor: theme.isDark ? 'rgba(34,197,94,0.2)' : PREMIUM.accentMuted },
                   ]}
                 >
-                  <Text style={[styles.numBadgeText, { color: theme.success }]}>{index + 1}</Text>
+                  <Text
+                    style={[
+                      styles.numBadgeText,
+                      isNativeMobile ? styles.numBadgeTextCompact : null,
+                      { color: theme.success },
+                    ]}
+                  >
+                    {index + 1}
+                  </Text>
                 </View>
                 <Text
-                  style={[styles.participantNome, { color: ui.text }]}
-                  numberOfLines={participantStacked ? 2 : 1}
+                  style={[
+                    styles.participantNome,
+                    isNativeMobile ? styles.participantNomeCompact : null,
+                    { color: ui.text },
+                  ]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
                 >
                   {nome}
                 </Text>
@@ -316,20 +334,12 @@ export function TafProvaTempoModal({
 
               {temChecks ? (
                 <>
-                  <View
-                    style={[
-                      participantStacked ? styles.rowDividerH : styles.rowDivider,
-                      { backgroundColor: theme.border },
-                    ]}
-                  />
+                  <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
                   <ScrollView
                     horizontal
                     nestedScrollEnabled
                     showsHorizontalScrollIndicator={isNativeMobile}
-                    style={[
-                      styles.checksTrack,
-                      participantStacked ? styles.checksTrackStacked : null,
-                    ]}
+                    style={[styles.checksTrack, isNativeMobile ? styles.checksTrackCompact : null]}
                     contentContainerStyle={styles.checksTrackContent}
                     keyboardShouldPersistTaps="handled"
                   >
@@ -380,18 +390,8 @@ export function TafProvaTempoModal({
 
               {mostrarTempo || mostrarNota ? (
                 <>
-                  <View
-                    style={[
-                      participantStacked ? styles.rowDividerH : styles.rowDivider,
-                      { backgroundColor: theme.border },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.metaStrip,
-                      participantStacked ? styles.metaStripStacked : null,
-                    ]}
-                  >
+                  <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
+                  <View style={styles.metaStrip}>
                     {mostrarTempo ? (
                       <MetaResultadoField
                         label="Tempo"
@@ -399,7 +399,7 @@ export function TafProvaTempoModal({
                         tone="tempo"
                         theme={theme}
                         ui={ui}
-                        flexCell={participantStacked}
+                        compact={isNativeMobile}
                       />
                     ) : null}
                     {mostrarNota ? (
@@ -409,7 +409,7 @@ export function TafProvaTempoModal({
                         tone={notaReprov ? 'notaReprov' : 'nota'}
                         theme={theme}
                         ui={ui}
-                        flexCell={participantStacked}
+                        compact={isNativeMobile}
                       />
                     ) : null}
                   </View>
@@ -599,81 +599,58 @@ const styles = StyleSheet.create({
   participantCard: {
     borderWidth: 1,
     borderRadius: PREMIUM.radiusMd,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginBottom: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    marginBottom: 2,
     overflow: 'hidden',
   },
   participantRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    minHeight: 36,
+    gap: 6,
+    minHeight: 34,
   },
   identityCol: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    flex: 1,
-    minWidth: 0,
+    gap: 5,
     flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '34%',
+  },
+  identityColCompact: {
+    maxWidth: '30%',
   },
   rowDivider: {
     width: 1,
     alignSelf: 'stretch',
     opacity: 0.55,
     marginVertical: 2,
+    flexShrink: 0,
   },
   checksTrack: {
-    flexGrow: 1,
-    flexShrink: 1,
-    maxWidth: Platform.OS === 'web' ? '46%' : '38%',
-    minWidth: 48,
-  },
-  participantRowStacked: {
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    gap: 8,
-  },
-  identityColStacked: {
-    width: '100%',
-    flex: 0,
-  },
-  rowDividerH: {
-    height: 1,
-    width: '100%',
-    opacity: 0.55,
-  },
-  checksTrackStacked: {
-    maxWidth: '100%',
-    width: '100%',
-    flexGrow: 0,
-  },
-  metaStripStacked: {
-    width: '100%',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  metaFieldFlex: {
     flex: 1,
-    minWidth: 0,
+    flexShrink: 1,
+    minWidth: 40,
+    maxWidth: Platform.OS === 'web' ? '46%' : undefined,
+  },
+  checksTrackCompact: {
+    flex: 1,
+    maxWidth: undefined,
   },
   checkOuterLarge: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 4,
   },
   checksTrackContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     paddingHorizontal: 2,
   },
   metaStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     flexShrink: 0,
   },
   numBadge: {
@@ -684,9 +661,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  numBadgeCompact: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+  },
   numBadgeText: {
     fontSize: 10,
     fontWeight: '900',
+  },
+  numBadgeTextCompact: {
+    fontSize: 9,
   },
   participantNome: {
     flex: 1,
@@ -694,6 +679,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 14,
+  },
+  participantNomeCompact: {
+    fontSize: 10,
+    lineHeight: 13,
   },
   metaField: {
     minWidth: 104,
@@ -715,11 +704,23 @@ const styles = StyleSheet.create({
           elevation: 2,
         }),
   },
+  metaFieldCompact: {
+    minWidth: 58,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingTop: 3,
+    paddingBottom: 4,
+    gap: 0,
+  },
   metaLabel: {
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
+  },
+  metaLabelCompact: {
+    fontSize: 8,
+    letterSpacing: 0.8,
   },
   metaValue: {
     fontSize: 20,
@@ -727,15 +728,22 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
     letterSpacing: 0.4,
   },
+  metaValueCompact: {
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
   metaValueReprov: {
     fontSize: 18,
+  },
+  metaValueReprovCompact: {
+    fontSize: 11,
   },
   checkOuter: {
     padding: 2,
   },
   checkBox: {
-    width: 32,
-    height: 32,
+    width: Platform.OS === 'web' ? 32 : 28,
+    height: Platform.OS === 'web' ? 32 : 28,
     borderRadius: 8,
     borderWidth: 2,
     alignItems: 'center',
@@ -753,8 +761,8 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   checkPermBox: {
-    width: 32,
-    height: 32,
+    width: Platform.OS === 'web' ? 32 : 28,
+    height: Platform.OS === 'web' ? 32 : 28,
     borderRadius: 8,
     borderWidth: 2,
     alignItems: 'center',

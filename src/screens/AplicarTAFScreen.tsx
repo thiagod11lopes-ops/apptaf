@@ -2186,45 +2186,83 @@ export default function AplicarTAFScreen() {
                   { borderColor: theme.border, backgroundColor: theme.isDark ? 'rgba(2,6,23,0.35)' : 'rgba(255,255,255,0.5)' },
                 ]}
               >
-                <View style={styles.nipRowHeader}>
-                  <View style={[styles.nipIndexBadge, { backgroundColor: theme.isDark ? 'rgba(56,189,248,0.18)' : PREMIUM.accentMuted }]}>
-                    <Text style={[styles.nipIndexText, { color: theme.primary }]}>{index + 1}</Text>
+                <View style={styles.nipFieldBlock}>
+                  <LabelNip color={ui.label} fontSize={11} fontWeight="800" />
+                  <View style={styles.nipInputRow}>
+                    <AplicarTafInput
+                      value={nip}
+                      onChangeText={(t) => atualizarNip(index, t)}
+                      placeholder="00.0000.00"
+                      keyboardType="number-pad"
+                      style={styles.inputNipFlex}
+                      autoCorrect={false}
+                      spellCheck={false}
+                      accessibilityLabel={`NIP do participante ${index + 1}`}
+                    />
+                    <TouchableOpacity
+                      accessibilityLabel={`Confirmar NIP do participante ${index + 1}`}
+                      activeOpacity={0.9}
+                      onPress={() => verificarNipNoCadastro(index)}
+                      style={styles.nipOkBtnWrap}
+                    >
+                      <LinearGradient
+                        colors={[theme.primary, '#6366f1']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.nipOkBtn}
+                      >
+                        <Text style={[styles.nipOkBtnText, { color: theme.tokens.textOnPrimary }]}>OK</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
                   </View>
-                  <LabelNip color={ui.label} fontSize={12} fontWeight="800" />
                 </View>
-                <View style={styles.nipInputRow}>
-                  <AplicarTafInput
-                    value={nip}
-                    onChangeText={(t) => atualizarNip(index, t)}
-                    placeholder="00.0000.00"
-                    keyboardType="number-pad"
-                    style={styles.inputNipFlex}
-                    autoCorrect={false}
-                    spellCheck={false}
-                    accessibilityLabel={`NIP do participante ${index + 1}`}
-                  />
-                  <TouchableOpacity
-                    accessibilityLabel={`Confirmar NIP do participante ${index + 1}`}
-                    activeOpacity={0.9}
-                    onPress={() => verificarNipNoCadastro(index)}
-                    style={styles.nipOkBtnWrap}
+
+                {fb?.tipo === 'ok' ? (
+                  <View
+                    style={[
+                      styles.militarIdentityCard,
+                      {
+                        borderColor: theme.isDark ? 'rgba(34,197,94,0.35)' : 'rgba(22,163,74,0.22)',
+                        backgroundColor: theme.isDark ? 'rgba(34,197,94,0.08)' : 'rgba(220,252,231,0.45)',
+                      },
+                    ]}
                   >
                     <LinearGradient
-                      colors={[theme.primary, '#6366f1']}
+                      colors={
+                        theme.isDark
+                          ? ['rgba(34,197,94,0.35)', 'rgba(56,189,248,0.2)']
+                          : ['rgba(34,197,94,0.55)', 'rgba(37,99,235,0.35)']
+                      }
                       start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.nipOkBtn}
-                    >
-                      <Text style={[styles.nipOkBtnText, { color: theme.tokens.textOnPrimary }]}>OK</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-                {fb?.tipo === 'ok' ? (
-                  <View style={styles.nomeCorredorBeside}>
-                    <Text style={styles.nomeCorredorBesideText} numberOfLines={2}>
-                      {fb.nomeMilitar} · {labelAtleta}{' '}
-                      <Text style={styles.numeroCorredor}>#{index + 1}</Text>
-                    </Text>
+                      end={{ x: 1, y: 0 }}
+                      style={styles.militarIdentityStripe}
+                    />
+                    <View style={styles.militarIdentityRow}>
+                      <View
+                        style={[
+                          styles.militarNumOrb,
+                          { backgroundColor: theme.isDark ? 'rgba(34,197,94,0.22)' : PREMIUM.accentMuted },
+                        ]}
+                      >
+                        <Text style={[styles.militarNumOrbText, { color: theme.success }]}>{index + 1}</Text>
+                      </View>
+                      <View style={styles.militarNomeCol}>
+                        <Text style={[styles.militarRoleLabel, { color: theme.textSecondary }]}>
+                          {labelAtleta}
+                        </Text>
+                        <Text style={[styles.militarNomeText, { color: ui.text }]} numberOfLines={2}>
+                          {fb.nomeMilitar}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.militarHashBadge,
+                          { backgroundColor: theme.isDark ? 'rgba(56,189,248,0.15)' : 'rgba(37,99,235,0.1)' },
+                        ]}
+                      >
+                        <Text style={[styles.militarHashText, { color: theme.primary }]}>#{index + 1}</Text>
+                      </View>
+                    </View>
                   </View>
                 ) : null}
                 {fb?.tipo === 'completar_dados' ? (
@@ -2514,40 +2552,27 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     borderRadius: PREMIUM.radiusMd + 2,
     padding: 12,
     marginBottom: 10,
-    gap: 8,
+    gap: 10,
   },
-  nipRowHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  nipIndexBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nipIndexText: {
-    fontSize: 12,
-    fontWeight: '900',
+  nipFieldBlock: {
+    gap: 6,
   },
   nipInputRow: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
     gap: 8,
   },
   nipOkBtnWrap: {
+    width: 56,
+    height: 48,
     borderRadius: PREMIUM.radiusMd + 2,
     overflow: 'hidden',
     flexShrink: 0,
   },
   nipOkBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 64,
   },
   nipOkBtnText: {
     fontSize: 14,
@@ -2558,21 +2583,62 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     flex: 1,
     minWidth: 0,
     marginTop: 0,
+    paddingVertical: 12,
   },
-  nomeCorredorBeside: {
+  militarIdentityCard: {
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    overflow: 'hidden',
+  },
+  militarIdentityStripe: {
+    height: 2,
     width: '100%',
   },
-  nomeCorredorBesideText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: ui.text,
-    lineHeight: 20,
+  militarIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  /** Número do corredor: o dobro do tamanho do texto ao lado, em verde */
-  numeroCorredor: {
-    fontSize: 26,
+  militarNumOrb: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  militarNumOrbText: {
+    fontSize: 16,
     fontWeight: '900',
-    color: theme.isDark ? ui.text : theme.success,
+  },
+  militarNomeCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  militarRoleLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  militarNomeText: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  militarHashBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    flexShrink: 0,
+  },
+  militarHashText: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.3,
   },
   feedbackOk: {
     marginTop: 8,

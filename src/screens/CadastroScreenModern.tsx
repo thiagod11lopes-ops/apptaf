@@ -12,8 +12,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useAuth } from '../contexts/AuthContext';
 import { X } from 'lucide-react-native';
-import { Card } from '../components/Card';
-import { AppHeader } from '../components/sismav/AppHeader';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
 import { CarregarPlanilhaCadastro } from '../components/CarregarPlanilhaCadastro';
 import { LabelNip } from '../components/LabelNip';
@@ -31,6 +29,7 @@ import {
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
+import { TafTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -281,7 +280,11 @@ export default function CadastroScreenModern() {
     <>
     <MobileScreenScaffold contentContainerStyle={styles.scrollContent}>
         <View style={styles.centerWrap}>
-          <AppHeader title="Cadastro" onBack={() => navigation.navigate('Home' as never)} />
+          <TafTabHeader
+            kicker="CENTRAL TAF"
+            title="Cadastro"
+            subtitle="Participantes e planilha"
+          />
 
           <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <TouchableOpacity
@@ -311,7 +314,7 @@ export default function CadastroScreenModern() {
           </View>
 
           {mostrarFormulario ? (
-            <Card elevated style={styles.formCard}>
+            <TafGlassPanel accent="cyan" style={styles.formCard}>
               <View style={styles.section}>
                 <FieldLabel>Categoria</FieldLabel>
 
@@ -565,7 +568,7 @@ export default function CadastroScreenModern() {
                   Atenção: faltam {faltantes.join(', ')}.
                 </Text>
               ) : null}
-            </Card>
+            </TafGlassPanel>
           ) : null}
 
           <View style={[styles.tableToggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
@@ -598,9 +601,9 @@ export default function CadastroScreenModern() {
           {mostrarTabela ? <View style={{ height: 16 }} /> : null}
 
           {mostrarTabela && podeImportarPdf ? (
-            <Card elevated style={styles.formCard}>
+            <TafGlassPanel accent="violet" style={styles.formCard}>
               <CarregarPlanilhaCadastro onImportComplete={recarregarCadastros} />
-            </Card>
+            </TafGlassPanel>
           ) : null}
 
           {mostrarTabela && podeImportarPdf ? <View style={{ height: 16 }} /> : null}

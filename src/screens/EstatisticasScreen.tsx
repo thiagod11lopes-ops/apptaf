@@ -6,11 +6,8 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useTheme } from '../contexts/ThemeContext';
-import { AppHeader } from '../components/sismav/AppHeader';
-import { Card } from '../components/Card';
+import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { calcularEstatisticasTaf } from '../utils/estatisticasTaf';
 import { StatSection } from '../components/estatisticas/StatSection';
@@ -19,12 +16,12 @@ import { KpiCard } from '../components/fintech/KpiCard';
 import { PillTabs } from '../components/fintech/PillTabs';
 import { MonoValue } from '../components/fintech/MonoValue';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
+import { TafTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
 
 type ViewTab = 'geral' | 'modalidade' | 'notas';
 
 export default function EstatisticasScreen() {
   const { theme } = useTheme();
-  const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ReturnType<typeof calcularEstatisticasTaf> | null>(null);
   const [tab, setTab] = useState<ViewTab>('geral');
@@ -57,19 +54,23 @@ export default function EstatisticasScreen() {
 
   return (
     <MobileScreenScaffold contentContainerStyle={[styles.scroll, maxWidth]}>
-        <AppHeader title="Estatísticas" onBack={() => navigation.goBack()} />
+        <TafTabHeader
+          kicker="CENTRAL TAF"
+          title="Estatísticas"
+          subtitle="Dashboard TAF · notas e desempenho"
+        />
 
         {loading ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={theme.gain} />
           </View>
         ) : !s || s.resumo.totalCadastros === 0 ? (
-            <Card>
+            <TafGlassPanel>
               <Text style={{ color: theme.text }}>
                 Nenhum cadastro no sistema. Cadastre participantes e registre resultados de TAF para
                 gerar estatísticas.
               </Text>
-            </Card>
+            </TafGlassPanel>
           ) : (
             <>
               <PillTabs<ViewTab>
@@ -87,7 +88,7 @@ export default function EstatisticasScreen() {
               </Text>
 
               {(tab === 'geral' || tab === 'modalidade') && (
-                <StatSection title="Resumo geral">
+                <StatSection title="Resumo geral" accent="cyan">
                   <View style={styles.kpiGrid}>
                     <KpiCard
                       label="Cadastros"
@@ -115,6 +116,7 @@ export default function EstatisticasScreen() {
                 <StatSection
                   title="Registros por modalidade"
                   subtitle="Cadastros com resultado em cada prova"
+                  accent="violet"
                 >
                   <View style={styles.kpiGrid}>
                     <KpiCard label="Corrida 2400 m" value={s.resumo.comCorrida} variant="gain" />

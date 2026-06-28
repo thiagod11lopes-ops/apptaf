@@ -37,38 +37,24 @@ export function MobileScreenScaffold({
     paddingBottom: scrollBottomPad,
   };
 
+  const inner = scroll ? (
+    <ScrollView
+      style={[styles.flex, style]}
+      contentContainerStyle={[padStyle, contentContainerStyle]}
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
+      showsVerticalScrollIndicator={false}
+    >
+      {children}
+    </ScrollView>
+  ) : (
+    <View style={[styles.flex, padStyle, contentContainerStyle, style]}>{children}</View>
+  );
+
   if (!isNativeMobileApp()) {
-    if (scroll) {
-      return (
-        <ScrollView
-          style={[styles.flex, style]}
-          contentContainerStyle={[padStyle, contentContainerStyle]}
-          keyboardShouldPersistTaps={keyboardShouldPersistTaps}
-          showsVerticalScrollIndicator={false}
-        >
-          {children}
-        </ScrollView>
-      );
-    }
-    return <View style={[styles.flex, padStyle, style]}>{children}</View>;
+    return inner;
   }
 
-  return (
-    <MobileGlassShell>
-      {scroll ? (
-        <ScrollView
-          style={[styles.flex, style]}
-          contentContainerStyle={[padStyle, contentContainerStyle]}
-          keyboardShouldPersistTaps={keyboardShouldPersistTaps}
-          showsVerticalScrollIndicator={false}
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        <View style={[styles.flex, padStyle, style]}>{children}</View>
-      )}
-    </MobileGlassShell>
-  );
+  return <MobileGlassShell>{inner}</MobileGlassShell>;
 }
 
 const styles = StyleSheet.create({

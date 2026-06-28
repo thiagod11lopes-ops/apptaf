@@ -10,8 +10,6 @@ import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ChevronRight, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { Card } from '../components/Card';
-import { AppHeader } from '../components/sismav/AppHeader';
 import { SubTabs } from '../components/sismav/SubTabs';
 import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoExcluirSessaoModal';
 import { PressableScale } from '../components/premium/PressableScale';
@@ -41,6 +39,7 @@ import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { PREMIUM } from '../theme/premium';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
+import { TafTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Resultados'>;
 type AbaResultados = 'historico' | 'consulta' | 'pendencia' | 'geral';
@@ -124,9 +123,10 @@ export default function ResultadosScreen() {
   return (
     <>
     <MobileScreenScaffold contentContainerStyle={styles.scroll}>
-        <AppHeader
+        <TafTabHeader
+          kicker="CENTRAL TAF"
           title="Resultados"
-          subtitle="Histórico · gerenciar resultados · resultado geral · pendências"
+          subtitle="Histórico · gerenciar · geral · pendências"
         />
 
         <SubTabs
@@ -143,35 +143,32 @@ export default function ResultadosScreen() {
         {aba === 'historico' ? (
           <>
             {historicoFiltroMilitar ? (
-              <View
-                style={[
-                  styles.filtroHistoricoBanner,
-                  { backgroundColor: theme.backgroundSecondary, borderColor: theme.border },
-                ]}
-              >
-                <View style={styles.filtroHistoricoTexto}>
-                  <Text style={[ts.label, { color: theme.primary }]}>Histórico do militar</Text>
-                  <Text style={[ts.body, { color: ui.text, marginTop: 4 }]}>
-                    {historicoFiltroMilitar.nome}
-                    {historicoFiltroMilitar.nip && historicoFiltroMilitar.nip !== '—'
-                      ? ` · NIP ${historicoFiltroMilitar.nip}`
-                      : ''}
-                  </Text>
-                  <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
-                    {sessoesHistoricoVisiveis.length} teste
-                    {sessoesHistoricoVisiveis.length !== 1 ? 's' : ''} registrado
-                    {sessoesHistoricoVisiveis.length !== 1 ? 's' : ''}
-                  </Text>
+              <TafGlassPanel accent="cyan" style={styles.filtroHistoricoBanner}>
+                <View style={styles.filtroHistoricoRow}>
+                  <View style={styles.filtroHistoricoTexto}>
+                    <Text style={[ts.label, { color: theme.primary }]}>Histórico do militar</Text>
+                    <Text style={[ts.body, { color: ui.text, marginTop: 4 }]}>
+                      {historicoFiltroMilitar.nome}
+                      {historicoFiltroMilitar.nip && historicoFiltroMilitar.nip !== '—'
+                        ? ` · NIP ${historicoFiltroMilitar.nip}`
+                        : ''}
+                    </Text>
+                    <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
+                      {sessoesHistoricoVisiveis.length} teste
+                      {sessoesHistoricoVisiveis.length !== 1 ? 's' : ''} registrado
+                      {sessoesHistoricoVisiveis.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={limparFiltroHistorico}
+                    style={[styles.limparFiltroBtn, { borderColor: theme.border }]}
+                    accessibilityLabel="Ver histórico completo"
+                    accessibilityRole="button"
+                  >
+                    <X size={18} color={theme.textSecondary} strokeWidth={2.4} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  onPress={limparFiltroHistorico}
-                  style={[styles.limparFiltroBtn, { borderColor: theme.border }]}
-                  accessibilityLabel="Ver histórico completo"
-                  accessibilityRole="button"
-                >
-                  <X size={18} color={theme.textSecondary} strokeWidth={2.4} />
-                </TouchableOpacity>
-              </View>
+              </TafGlassPanel>
             ) : null}
 
             {carregando ? (
@@ -187,7 +184,7 @@ export default function ResultadosScreen() {
             ) : null}
 
             {!carregando && sessoesHistoricoVisiveis.length === 0 ? (
-              <Card elevated style={styles.emptyCard}>
+              <TafGlassPanel style={styles.emptyCard}>
                 <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
                   {historicoFiltroMilitar
                     ? 'Nenhum teste registrado para este militar.'
@@ -198,7 +195,7 @@ export default function ResultadosScreen() {
                     ? 'Use Aplicar TAF ou o Registrador de TAF para registrar novas provas.'
                     : 'Use Aplicar TAF ou o Registrador de TAF; os resultados aparecerão aqui.'}
                 </Text>
-              </Card>
+              </TafGlassPanel>
             ) : null}
 
             {sessoesHistoricoVisiveis.map((sessao) => {
@@ -211,7 +208,7 @@ export default function ResultadosScreen() {
 
               return (
                 <View key={sessao.id} style={styles.itemPress}>
-                  <Card elevated style={styles.sessaoCard}>
+                  <TafGlassPanel style={styles.sessaoCard}>
                     <View style={styles.sessaoRow}>
                       <PressableScale
                         onPress={() => abrirSessao(sessao)}
@@ -246,7 +243,7 @@ export default function ResultadosScreen() {
                         </TouchableOpacity>
                       ) : null}
                     </View>
-                  </Card>
+                  </TafGlassPanel>
                 </View>
               );
             })}
@@ -308,7 +305,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   emptyCard: {
-    padding: 24,
+    marginBottom: 4,
   },
   emptyHint: {
     marginTop: 8,
@@ -345,13 +342,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   filtroHistoricoBanner: {
+    marginBottom: 14,
+  },
+  filtroHistoricoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    padding: 14,
-    borderRadius: PREMIUM.radiusLg,
-    borderWidth: 1,
-    marginBottom: 14,
   },
   filtroHistoricoTexto: {
     flex: 1,

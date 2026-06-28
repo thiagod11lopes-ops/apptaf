@@ -17,31 +17,38 @@ import { PREMIUM } from '../../../theme/premium';
 import { aplicarTafShared, getAplicarTafGlass } from './aplicarTafTheme';
 import { useAplicarTafLayout } from './useAplicarTafLayout';
 
-export function AplicarTafFlowHeader({
+export function AplicarTafTabHeader({
   title,
   subtitle,
+  kicker = 'CENTRAL TAF',
   onBack,
+  right,
 }: {
   title: string;
   subtitle?: string;
-  onBack: () => void;
+  kicker?: string;
+  onBack?: () => void;
+  right?: React.ReactNode;
 }) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
+  const glass = getAplicarTafGlass(theme);
 
   return (
     <View style={styles.headerWrap}>
-      <TouchableOpacity
-        accessibilityLabel="Voltar"
-        onPress={onBack}
-        activeOpacity={0.88}
-        style={[styles.backBtn, { borderColor: getAplicarTafGlass(theme).border }]}
-      >
-        <ChevronLeft size={22} color={ui.iconStrong} strokeWidth={2.5} />
-      </TouchableOpacity>
-      <View style={styles.headerTextCol}>
-        <Text style={[styles.headerKicker, { color: theme.primary }]}>CENTRAL TAF</Text>
+      {onBack ? (
+        <TouchableOpacity
+          accessibilityLabel="Voltar"
+          onPress={onBack}
+          activeOpacity={0.88}
+          style={[styles.backBtn, { borderColor: glass.border }]}
+        >
+          <ChevronLeft size={22} color={ui.iconStrong} strokeWidth={2.5} />
+        </TouchableOpacity>
+      ) : null}
+      <View style={[styles.headerTextCol, !onBack ? styles.headerTextColExpanded : null]}>
+        <Text style={[styles.headerKicker, { color: theme.primary }]}>{kicker}</Text>
         <Text
           style={[
             styles.headerTitle,
@@ -58,8 +65,21 @@ export function AplicarTafFlowHeader({
           <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>
         ) : null}
       </View>
+      {right ? <View style={styles.headerRight}>{right}</View> : null}
     </View>
   );
+}
+
+export function AplicarTafFlowHeader({
+  title,
+  subtitle,
+  onBack,
+}: {
+  title: string;
+  subtitle?: string;
+  onBack: () => void;
+}) {
+  return <AplicarTafTabHeader title={title} subtitle={subtitle} onBack={onBack} />;
 }
 
 export function AplicarTafGlassPanel({
@@ -291,6 +311,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 2,
+  },
+  headerTextColExpanded: {
+    paddingRight: 4,
+  },
+  headerRight: {
+    flexShrink: 0,
+    alignSelf: 'flex-start',
+    marginTop: 2,
   },
   headerKicker: {
     fontSize: 10,

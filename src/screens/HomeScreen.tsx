@@ -4,7 +4,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
-import { AppHeader } from '../components/sismav/AppHeader';
 import { SyncQuickOverlay } from '../components/sismav/SyncQuickOverlay';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { useSyncQuickOverlay } from '../hooks/useSyncQuickOverlay';
@@ -15,10 +14,8 @@ import {
   calcularResumoInicioTafFromHistorico,
   type ResumoInicioTafHistorico,
 } from '../utils/resultadoGeralHistorico';
-import { PREMIUM } from '../theme/premium';
-import { MobileGlassShell } from '../components/mobile/MobileGlassShell';
-import { useMobileLayout } from '../components/mobile/useMobileLayout';
-import { isNativeMobileApp } from '../components/mobile/MobileScreenScaffold';
+import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
+import { TafTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
 
 const tafImage = require('../../TAF1.png');
 
@@ -70,36 +67,24 @@ export default function HomeScreen() {
 
   useAuthDataReload(recarregarResumo);
 
-  const { horizontalPad } = useMobileLayout();
-  const nativeMobile = isNativeMobileApp();
+  return (
+    <MobileScreenScaffold scroll={false} style={styles.page} contentContainerStyle={styles.pageContent}>
+      <TafTabHeader
+        kicker="SISTEMA TAF"
+        title="Iniciar"
+        subtitle="Teste de Aptidão Física"
+        right={
+          <TopActionIcons
+            activeRoute="Home"
+            inline
+            onSyncPress={firebaseEnabled ? handleSyncPress : undefined}
+            syncPendingBadge={syncSaveIconState === 'pending' ? syncPendingTotal : 0}
+            syncSaveIconState={syncSaveIconState}
+          />
+        }
+      />
 
-  const frameShadow =
-    Platform.OS === 'web'
-      ? ({
-          boxShadow: theme.isDark
-            ? '0 8px 28px rgba(0,0,0,0.35)'
-            : '0 10px 32px rgba(15,23,42,0.08)',
-        } as object)
-      : {
-          shadowColor: '#0f172a',
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: theme.isDark ? 0.35 : 0.1,
-          shadowRadius: 14,
-          elevation: 6,
-        };
-
-  const body = (
-    <>
-      <View style={[styles.topSection, nativeMobile ? { paddingHorizontal: horizontalPad } : null]}>
-        <AppHeader title="TAF" subtitle="Teste de Aptidão Física" />
-        <TopActionIcons
-          activeRoute="Home"
-          inline
-          onSyncPress={firebaseEnabled ? handleSyncPress : undefined}
-          syncPendingBadge={syncSaveIconState === 'pending' ? syncPendingTotal : 0}
-          syncSaveIconState={syncSaveIconState}
-        />
-
+      <TafGlassPanel accent="cyan" style={styles.statsPanel}>
         <View style={styles.statsGrid}>
           <StatCard
             label="Cadastrados"
@@ -122,36 +107,30 @@ export default function HomeScreen() {
             variant="negative"
           />
         </View>
-      </View>
+      </TafGlassPanel>
 
-      <View
-        style={[
-          styles.imageFrame,
-          nativeMobile ? { marginHorizontal: horizontalPad } : null,
-          {
-            backgroundColor: theme.cardBg,
-            borderColor: theme.border,
-          },
-          frameShadow,
-        ]}
-      >
-        <Image
-          source={tafImage}
-          style={styles.tafImage}
-          resizeMode="cover"
-          accessibilityLabel="TAF"
-        />
-      </View>
+      <TafGlassPanel accent="violet" style={styles.imagePanel}>
+        <View
+          style={[
+            styles.imageFrame,
+            {
+              backgroundColor: theme.cardBg,
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <Image
+            source={tafImage}
+            style={styles.tafImage}
+            resizeMode="cover"
+            accessibilityLabel="TAF"
+          />
+        </View>
+      </TafGlassPanel>
 
       <SyncQuickOverlay visible={overlayVisible} />
-    </>
+    </MobileScreenScaffold>
   );
-
-  if (nativeMobile) {
-    return <MobileGlassShell>{body}</MobileGlassShell>;
-  }
-
-  return <View style={styles.page}>{body}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -159,26 +138,29 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: Platform.OS === 'web' ? ('100%' as unknown as number) : 0,
   },
-  topSection: {
-    paddingHorizontal: 20,
+  pageContent: {
+    flexGrow: 1,
     paddingTop: 6,
+    gap: 12,
+  },
+  statsPanel: {
     flexShrink: 0,
-    ...(Platform.OS === 'web' ? { overflow: 'visible' as const, zIndex: 10 } : null),
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 12,
+  },
+  imagePanel: {
+    flex: 1,
+    minHeight: Platform.OS === 'web' ? 380 : 220,
   },
   imageFrame: {
     flex: 1,
-    minHeight: Platform.OS === 'web' ? 380 : 0,
+    minHeight: Platform.OS === 'web' ? 340 : 180,
     width: '100%',
-    marginTop: 4,
-    marginBottom: 8,
     borderWidth: 1,
-    borderRadius: PREMIUM.radiusLg,
+    borderRadius: 14,
     overflow: 'hidden',
   },
   tafImage: {

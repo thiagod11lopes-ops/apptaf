@@ -2,16 +2,30 @@ import React, { ReactNode } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Card } from '../Card';
 import { useTheme } from '../../contexts/ThemeContext';
+import { isNativeMobileApp } from '../mobile/MobileScreenScaffold';
+import { TafGlassPanel, TafSectionHeader } from '../mobile/TafTabChrome';
 
 type Props = {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  accent?: 'cyan' | 'violet' | 'none';
 };
 
-export function StatSection({ title, subtitle, children }: Props) {
+export function StatSection({ title, subtitle, children, accent = 'none' }: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
+  const useTafChrome = isNativeMobileApp();
+
+  if (useTafChrome) {
+    return (
+      <TafGlassPanel accent={accent} style={styles.card}>
+        <TafSectionHeader title={title} subtitle={subtitle} />
+        <View style={styles.body}>{children}</View>
+      </TafGlassPanel>
+    );
+  }
+
   return (
     <Card style={styles.card} elevated>
       <Text style={ts.h2}>{title}</Text>

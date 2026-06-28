@@ -49,8 +49,6 @@ import {
   listPreCadastrosForSync,
   putPreCadastroRecord,
 } from '../db/preCadastroLocalDb';
-import { migrateDeviceDataOnLogin } from '../db/migration';
-import { migratePreCadastrosFromAppMeta } from '../db/preCadastroLocalDb';
 import { decideLastWriteWins, type LwwAction, type SyncRecord } from './lastWriteWins';
 import { markRecordSynced } from './recordMeta';
 import { isUnsyncedLocalStatus } from './syncStatus';
@@ -593,9 +591,6 @@ export type SyncPlanSnapshot = {
 };
 
 async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Promise<SyncPlanSnapshot> {
-  await migrateDeviceDataOnLogin(ownerUid);
-  await migratePreCadastrosFromAppMeta(ownerUid);
-
   const [localCad, localSess, localApp, localPre] = await Promise.all([
     listCadastrosForSync(ownerUid, true),
     listSessoesForSync(ownerUid, true),

@@ -5,6 +5,7 @@ import {
   userAplicadoresPath,
   userCadastroRubricasPath,
   userCadastrosPath,
+  userPreCadastrosPath,
   userSessaoRubricasPath,
   userSessoesPath,
 } from './firestorePaths';
@@ -18,6 +19,7 @@ export type WipeCloudCounts = {
   aplicadores: number;
   cadastroRubricas: number;
   sessaoRubricas: number;
+  preCadastros: number;
 };
 
 export type WipeCloudTeamResult = WipeCloudCounts & {
@@ -50,15 +52,17 @@ async function deleteAllInCollection(collectionPath: string): Promise<number> {
 
 /** Remove todos os cadastros, sessões, aplicadores e rubricas do usuário na nuvem. */
 export async function wipeCloudUserDataFirestore(uid: string): Promise<WipeCloudCounts> {
-  const [cadastros, sessoes, aplicadores, cadastroRubricas, sessaoRubricas] = await Promise.all([
+  const [cadastros, sessoes, aplicadores, cadastroRubricas, sessaoRubricas, preCadastros] =
+    await Promise.all([
     deleteAllInCollection(userCadastrosPath(uid)),
     deleteAllInCollection(userSessoesPath(uid)),
     deleteAllInCollection(userAplicadoresPath(uid)),
     deleteAllInCollection(userCadastroRubricasPath(uid)),
     deleteAllInCollection(userSessaoRubricasPath(uid)),
+    deleteAllInCollection(userPreCadastrosPath(uid)),
   ]);
 
-  return { cadastros, sessoes, aplicadores, cadastroRubricas, sessaoRubricas };
+  return { cadastros, sessoes, aplicadores, cadastroRubricas, sessaoRubricas, preCadastros };
 }
 
 /**

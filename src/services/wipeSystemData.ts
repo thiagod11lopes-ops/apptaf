@@ -8,11 +8,14 @@ import {
 } from './cloudDataCache';
 import { calcularResumoInicioTafFromHistorico } from '../utils/resultadoGeralHistorico';
 import { isFirebaseConfigured } from '../config/firebase';
-import { wipeOwnerData } from '../offline-first/db/localDb';
+import { wipeOwnerData, ANONYMOUS_OWNER } from '../offline-first/db/localDb';
 import { getTafDatabase, setMeta } from '../offline-first/db/tafDatabase';
+import { preCadastroMetaKey, removeAppMeta } from '../offline-first/db/appMeta';
 import { resetCloudSyncStatus, setCloudSyncResult } from './offline/cloudSyncActivity';
 import { syncEngine } from '../offline-first/sync/SyncEngine';
+import { syncManager } from '../offline-first/sync/SyncManager';
 import { systemState } from '../offline-first/sync/SystemState';
+import { invalidateRemoteSnapshotCache } from '../offline-first/sync/remoteSnapshotCache';
 import { clearPersistedStorageOwner } from './firebase/authUid';
 import { setLocalTeamWipeAck } from './applyTeamWipeIfNeeded';
 import type { WipeCloudTeamResult } from './firebase/wipeCloudDataFirestore';
@@ -42,14 +45,21 @@ export async function wipeSystemData(options: WipeSystemDataOptions): Promise<Wi
 
   if (uid) {
     await resetCloudDataCache(uid, resumo);
+    invalidateRemoteSnapshotCache();
     if (getTafDatabase()) {
       await wipeOwnerData(uid);
+      await wipeOwnerData(ANONYMOUS_OWNER);
       await setMeta(`migrated:${uid}`, '0');
       await syncEngine.resetAfterWipe(uid);
     }
+    await Promise.all([
+      removeAppMeta(preCadastroMetaKey(uid)),
+      removeAppMeta(preCadastroMetaKey('local')),
+    ]);
     clearPersistedStorageOwner();
     resetCloudSyncStatus();
     setCloudSyncResult(true);
+    await syncManager.afterSystemWipe(uid);
   } else {
     clearMemoryCloudCache();
   }

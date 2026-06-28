@@ -31,6 +31,7 @@ import {
   EMPTY_SYNC_PROGRESS,
 } from './syncUiState';
 import { estimateSyncQueueCounts } from './lastWriteWinsSync';
+import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
@@ -364,11 +365,11 @@ async function refreshCloudQueueEstimate(force = false, attempt = 0): Promise<vo
   }
 }
 
-function scheduleCloudQueueEstimate(): void {
+function scheduleCloudQueueEstimate(force = false): void {
   if (queueEstimateTimer) clearTimeout(queueEstimateTimer);
   queueEstimateTimer = setTimeout(() => {
     queueEstimateTimer = null;
-    void refreshCloudQueueEstimate();
+    void refreshCloudQueueEstimate(force);
   }, 1200);
 }
 
@@ -461,6 +462,7 @@ async function refreshCounters(pendingDownloads: number | null = counters.pendin
 async function applyCountersAfterSuccessfulSync(): Promise<void> {
   const uid = ownerUid ?? getCachedDataOwnerUid();
   if (!uid) return;
+  invalidateRemoteSnapshotCache();
   await refreshPendingSummary();
   counters = await buildSyncCounters(
     uid,
@@ -507,6 +509,7 @@ async function returnToOfflineMode(): Promise<void> {
   syncSteps = createInitialSyncSteps();
   errorStepId = null;
   uiPhase = 'offline';
+  invalidateRemoteSnapshotCache();
   await refreshPendingSummary();
   if (pendingSummary.total === 0) {
     const uid = ownerUid ?? getCachedDataOwnerUid();
@@ -515,7 +518,7 @@ async function returnToOfflineMode(): Promise<void> {
     }
   }
   if (syncAuthAvailable) {
-    scheduleCloudQueueEstimate();
+    startCloudDiffWatch();
   } else {
     counters = { ...counters, pendingDownloads: null };
   }
@@ -750,6 +753,19 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
   }
 }
 
+async function refreshAfterSystemWipe(dataOwnerUid: string): Promise<void> {
+  invalidateRemoteSnapshotCache();
+  ownerUid = dataOwnerUid;
+  pendingSummary = EMPTY_SUMMARY;
+  counters = { pendingUploads: 0, pendingDownloads: 0, syncedTotal: 0 };
+  uploadError = null;
+  uiPhase = 'offline';
+  notifyListeners();
+  if (syncAuthAvailable) {
+    await refreshCloudQueueEstimate(true);
+  }
+}
+
 export function isCloudReadActive(): boolean {
   return false;
 }
@@ -889,6 +905,10 @@ export const syncManager = {
     scheduleCloudQueueEstimate();
     notifyListeners();
     return summary;
+  },
+
+  async afterSystemWipe(dataOwnerUid: string): Promise<void> {
+    await refreshAfterSystemWipe(dataOwnerUid);
   },
 
   async shutdown(): Promise<void> {

@@ -2,6 +2,6 @@
 export const RUBRICA_NATIVA_LARGURA = 420;
 export const RUBRICA_NATIVA_ALTURA = 180;
 
-/** Exibição no PDF — compacta (≈42,5% da captura nativa). */
-export const RUBRICA_PDF_LARGURA = 179;
-export const RUBRICA_PDF_ALTURA = 77;
+/** Exibição no PDF — compacta (≈21% da captura nativa; metade do tamanho anterior). */
+export const RUBRICA_PDF_LARGURA = 90;
+export const RUBRICA_PDF_ALTURA = 39;

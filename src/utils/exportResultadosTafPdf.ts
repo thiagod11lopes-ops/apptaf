@@ -8,7 +8,7 @@ const PDF_A4_LANDSCAPE_WIDTH = 842;
 const PDF_A4_LANDSCAPE_HEIGHT = 595;
 
 /** Altura útil estimada por linha (rúbricas) em pontos — A4 paisagem. */
-const PDF_RESULTADOS_ROW_HEIGHT_PT = 85;
+const PDF_RESULTADOS_ROW_HEIGHT_PT = 50;
 const PDF_RESULTADOS_FIRST_PAGE_OVERHEAD_PT = 130;
 const PDF_RESULTADOS_PAGE_USABLE_PT = 514;
 const PDF_RESULTADOS_ROWS_FIRST_PAGE = Math.floor(

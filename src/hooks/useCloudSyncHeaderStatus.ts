@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { useAccountCloudLabel } from './useAccountCloudLabel';
@@ -13,10 +13,7 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
     online,
     appMode,
     uploadError,
-    syncUi,
   } = useOfflineSyncState();
-
-  const { cloudDiffWatch } = syncUi;
 
   const isOfflineMode = appMode === 'OFFLINE';
   const syncInProgress =
@@ -65,7 +62,7 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
     syncedWithCloud,
     receivingFromCloudOnly: false,
     statusHint,
-    cloudDiffFlashMessage: cloudDiffWatch.flashMessage,
+    cloudDiffFlashMessage: null,
     isOnlineAccount: isAuthenticated,
     usingCloudData: false,
   };

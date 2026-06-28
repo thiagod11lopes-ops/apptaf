@@ -137,23 +137,23 @@ let syncAuthAvailable = false;
 let queueEstimateInFlight = false;
 let queueEstimateTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudDiffWatchTimer: ReturnType<typeof setInterval> | null = null;
-let cloudDiffFlashTimer: ReturnType<typeof setTimeout> | null = null;
+let cloudDiffCyclePauseTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudDiffCountdownSec = 45;
-let cloudDiffFlashMessage: string | null = null;
+let cloudDiffCyclePaused = false;
 let cloudDiffCompareInFlight = false;
 export const CLOUD_DIFF_COUNTDOWN_SEC = 45;
-const CLOUD_DIFF_FLASH_SYNCED_MS = 2000;
-const CLOUD_DIFF_FLASH_NEEDS_SYNC_MS = 10_000;
+const CLOUD_DIFF_CYCLE_PAUSE_SYNCED_MS = 2000;
+const CLOUD_DIFF_CYCLE_PAUSE_NEEDS_SYNC_MS = 10_000;
 const listeners = new Set<Listener>();
 
 function buildCloudDiffWatch(): { countdownSec: number | null; flashMessage: string | null } {
   const watchEligible = syncAuthAvailable && mode === 'OFFLINE' && !syncInFlight;
   return {
     countdownSec:
-      watchEligible && !cloudDiffFlashMessage && !cloudDiffCompareInFlight
+      watchEligible && !cloudDiffCyclePaused && !cloudDiffCompareInFlight
         ? cloudDiffCountdownSec
         : null,
-    flashMessage: watchEligible ? cloudDiffFlashMessage : null,
+    flashMessage: null,
   };
 }
 
@@ -378,22 +378,23 @@ function stopCloudDiffWatch(): void {
     clearInterval(cloudDiffWatchTimer);
     cloudDiffWatchTimer = null;
   }
-  if (cloudDiffFlashTimer) {
-    clearTimeout(cloudDiffFlashTimer);
-    cloudDiffFlashTimer = null;
+  if (cloudDiffCyclePauseTimer) {
+    clearTimeout(cloudDiffCyclePauseTimer);
+    cloudDiffCyclePauseTimer = null;
   }
-  cloudDiffFlashMessage = null;
+  cloudDiffCyclePaused = false;
   cloudDiffCompareInFlight = false;
   cloudDiffCountdownSec = CLOUD_DIFF_COUNTDOWN_SEC;
 }
 
-function showCloudDiffFlash(message: string, durationMs: number): void {
-  cloudDiffFlashMessage = message;
+/** Pausa o cronômetro entre ciclos sem exibir mensagem na UI. */
+function scheduleCloudDiffCyclePause(durationMs: number): void {
+  cloudDiffCyclePaused = true;
   notifyListeners();
-  if (cloudDiffFlashTimer) clearTimeout(cloudDiffFlashTimer);
-  cloudDiffFlashTimer = setTimeout(() => {
-    cloudDiffFlashMessage = null;
-    cloudDiffFlashTimer = null;
+  if (cloudDiffCyclePauseTimer) clearTimeout(cloudDiffCyclePauseTimer);
+  cloudDiffCyclePauseTimer = setTimeout(() => {
+    cloudDiffCyclePaused = false;
+    cloudDiffCyclePauseTimer = null;
     cloudDiffCountdownSec = CLOUD_DIFF_COUNTDOWN_SEC;
     notifyListeners();
   }, durationMs);
@@ -408,12 +409,12 @@ async function runCloudDiffCycle(): Promise<void> {
     const pending =
       (counters.pendingUploads ?? 0) + (counters.pendingDownloads ?? 0);
     if (pending === 0) {
-      showCloudDiffFlash('Ok sincronizado', CLOUD_DIFF_FLASH_SYNCED_MS);
+      scheduleCloudDiffCyclePause(CLOUD_DIFF_CYCLE_PAUSE_SYNCED_MS);
     } else {
-      showCloudDiffFlash('clique em salvar para sincronizar', CLOUD_DIFF_FLASH_NEEDS_SYNC_MS);
+      scheduleCloudDiffCyclePause(CLOUD_DIFF_CYCLE_PAUSE_NEEDS_SYNC_MS);
     }
   } catch {
-    showCloudDiffFlash('clique em salvar para sincronizar', CLOUD_DIFF_FLASH_NEEDS_SYNC_MS);
+    scheduleCloudDiffCyclePause(CLOUD_DIFF_CYCLE_PAUSE_NEEDS_SYNC_MS);
   } finally {
     cloudDiffCompareInFlight = false;
     notifyListeners();
@@ -422,7 +423,7 @@ async function runCloudDiffCycle(): Promise<void> {
 
 function tickCloudDiffCountdown(): void {
   if (!syncAuthAvailable || syncInFlight || mode !== 'OFFLINE') return;
-  if (cloudDiffFlashMessage || cloudDiffCompareInFlight) return;
+  if (cloudDiffCyclePaused || cloudDiffCompareInFlight) return;
 
   if (!connectivityMonitor.canSync()) {
     if (cloudDiffCountdownSec !== CLOUD_DIFF_COUNTDOWN_SEC) {

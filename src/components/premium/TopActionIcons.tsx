@@ -180,8 +180,8 @@ const styles = StyleSheet.create({
   },
   rowInline: {
     gap: 10,
-    marginTop: 4,
-    marginBottom: 8,
+    marginTop: 2,
+    marginBottom: 4,
   },
   btn: {
     borderRadius: PREMIUM.radiusMd,

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   SafeAreaView,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Check, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
@@ -58,6 +59,69 @@ export type TafProvaTempoModalProps = {
   salvando: boolean;
   erroAplicar?: string;
 };
+
+function MetaResultadoField({
+  label,
+  value,
+  tone,
+  theme,
+  ui,
+}: {
+  label: string;
+  value: string;
+  tone: 'tempo' | 'nota' | 'notaReprov';
+  theme: ReturnType<typeof useTheme>['theme'];
+  ui: ReturnType<typeof getUiColors>;
+}) {
+  const valueColor =
+    tone === 'notaReprov' ? theme.loss : tone === 'nota' ? theme.gain : ui.text;
+
+  const gradientColors =
+    tone === 'notaReprov'
+      ? theme.isDark
+        ? (['rgba(239,68,68,0.18)', 'rgba(127,29,29,0.12)'] as const)
+        : (['rgba(254,226,226,0.95)', 'rgba(255,255,255,0.92)'] as const)
+      : tone === 'nota'
+        ? theme.isDark
+          ? (['rgba(34,197,94,0.16)', 'rgba(15,23,42,0.5)'] as const)
+          : (['rgba(220,252,231,0.95)', 'rgba(255,255,255,0.92)'] as const)
+        : theme.isDark
+          ? (['rgba(56,189,248,0.14)', 'rgba(99,102,241,0.1)'] as const)
+          : (['rgba(224,242,254,0.95)', 'rgba(255,255,255,0.92)'] as const);
+
+  const borderColor =
+    tone === 'notaReprov'
+      ? theme.isDark
+        ? 'rgba(239,68,68,0.45)'
+        : 'rgba(220,38,38,0.28)'
+      : tone === 'nota'
+        ? theme.isDark
+          ? 'rgba(34,197,94,0.4)'
+          : 'rgba(22,163,74,0.25)'
+        : theme.isDark
+          ? 'rgba(56,189,248,0.35)'
+          : 'rgba(37,99,235,0.22)';
+
+  return (
+    <View
+      style={[styles.metaField, { borderColor }]}
+      accessibilityLabel={`${label}: ${value}`}
+    >
+      <LinearGradient colors={[...gradientColors]} style={StyleSheet.absoluteFill} />
+      <Text style={[styles.metaLabel, { color: theme.textMuted }]}>{label}</Text>
+      <Text
+        style={[
+          styles.metaValue,
+          { color: valueColor },
+          tone === 'notaReprov' ? styles.metaValueReprov : null,
+        ]}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
 
 function CheckVolta({
   checked,
@@ -195,33 +259,22 @@ export function TafProvaTempoModal({
                 {nome}
               </Text>
               {mostrarTempo ? (
-                <View
-                  style={[
-                    styles.metaPill,
-                    { borderColor: theme.border, backgroundColor: theme.cardBg },
-                  ]}
-                >
-                  <Text style={[styles.metaPillValue, { color: ui.text }]}>{tempoStr}</Text>
-                </View>
+                <MetaResultadoField
+                  label="Tempo"
+                  value={tempoStr}
+                  tone="tempo"
+                  theme={theme}
+                  ui={ui}
+                />
               ) : null}
               {mostrarNota ? (
-                <View
-                  style={[
-                    styles.metaPill,
-                    { borderColor: theme.border, backgroundColor: theme.cardBg },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.metaPillValue,
-                      { color: notaReprov ? theme.loss : ui.text },
-                      notaReprov ? styles.notaReprov : null,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {nota}
-                  </Text>
-                </View>
+                <MetaResultadoField
+                  label="Nota"
+                  value={nota}
+                  tone={notaReprov ? 'notaReprov' : 'nota'}
+                  theme={theme}
+                  ui={ui}
+                />
               ) : null}
             </View>
 
@@ -416,6 +469,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'wrap',
   },
   numBadge: {
     width: 18,
@@ -434,21 +488,40 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 14,
   },
-  metaPill: {
+  metaField: {
+    minWidth: 52,
     borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 3,
-    minWidth: 40,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingTop: 4,
+    paddingBottom: 5,
     alignItems: 'center',
+    overflow: 'hidden',
+    gap: 1,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0 2px 10px rgba(15,23,42,0.08)' } as object)
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 6,
+          elevation: 2,
+        }),
   },
-  metaPillValue: {
-    fontSize: 9,
-    fontWeight: '800',
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
-  notaReprov: {
+  metaLabel: {
     fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  metaValue: {
+    fontSize: 10,
+    fontWeight: '900',
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    letterSpacing: 0.2,
+  },
+  metaValueReprov: {
+    fontSize: 9,
   },
   checksRow: {
     flexDirection: 'row',

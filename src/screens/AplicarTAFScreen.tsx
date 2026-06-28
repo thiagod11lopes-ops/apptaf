@@ -20,7 +20,6 @@ import {
   Modal,
   SafeAreaView,
   GestureResponderEvent,
-  useWindowDimensions,
 } from 'react-native';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
@@ -29,7 +28,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { PREMIUM } from '../theme/premium';
-import { tableAvailableWidth } from '../theme/tableLayout';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { LandscapeOrientationModal } from '../components/sismav/LandscapeOrientationModal';
@@ -40,9 +38,12 @@ import {
 import { ConfirmacaoExcluirPreCadastroModal } from '../components/sismav/ConfirmacaoExcluirPreCadastroModal';
 import { FluxoAssinaturaAplicadorModal } from '../components/sismav/FluxoAssinaturaAplicadorModal';
 import {
-  PermanenciaTafPanel,
   type ResultadoPermanenciaOpcao,
 } from '../components/PermanenciaTafPanel';
+import {
+  TafProvaTempoModal,
+  type TafProvaTempoModalProva,
+} from '../components/taf/TafProvaTempoModal';
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { addSessaoAplicacao, getAllSessoesAplicacao, getSessaoAplicacaoById, updateSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
@@ -71,8 +72,6 @@ import {
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
-import { Check } from 'lucide-react-native';
-import { TafCronometroPanel } from '../components/taf/TafCronometroPanel';
 import {
   aplicarTafTrialReducer,
   initialTrialTableState,
@@ -585,39 +584,6 @@ export default function AplicarTAFScreen() {
     temposMilitaresMs,
     chegadaNatacao,
   ]);
-
-  const larguraMinTabela = useMemo(() => {
-    const wVolta = 40;
-    const wNomeInline = 128;
-    const wTempo = 82;
-    const wNota = 64;
-    const wAtleta = 56;
-    if (tipoProva === 'natacao') {
-      const wChegada = 40;
-      let w = wAtleta + wNomeInline + wChegada + 16;
-      if (mostrarColunaTempo) w += wTempo;
-      if (mostrarColunaNotaNatacao) w += wNota;
-      return w;
-    }
-    let w = wAtleta + wNomeInline + nColunasVoltas * wVolta + 16;
-    if (mostrarColunaTempo) w += wTempo;
-    if (mostrarColunaNotaCorrida) w += wNota;
-    if (mostrarColunaNotaCaminhada) w += wNota;
-    return w;
-  }, [
-    tipoProva,
-    nColunasVoltas,
-    mostrarColunaTempo,
-    mostrarColunaNotaCorrida,
-    mostrarColunaNotaCaminhada,
-    mostrarColunaNotaNatacao,
-  ]);
-
-  const { width: screenWidth } = useWindowDimensions();
-  const larguraTabela = useMemo(
-    () => Math.max(tableAvailableWidth(screenWidth), larguraMinTabela),
-    [screenWidth, larguraMinTabela],
-  );
 
   /** Todos com tempo registrado (corrida: última volta; natação: chegada). */
   const todosIntegrantesComTempoRegistrado = useMemo(() => {
@@ -1734,16 +1700,47 @@ export default function AplicarTAFScreen() {
           ? 'Caminhante'
           : 'Corredor';
 
-  const participantesPermanencia = useMemo(
+  const nomesParticipantesModal = useMemo(
     () =>
       Array.from({ length: nParticipantesConfirmado }, (_, index) => {
         const fb = nipFeedbackLinhas[index];
-        return {
-          index,
-          nome: fb?.tipo === 'ok' ? fb.nomeMilitar : `Participante ${index + 1}`,
-        };
+        return fb?.tipo === 'ok' ? fb.nomeMilitar : '—';
       }),
     [nParticipantesConfirmado, nipFeedbackLinhas],
+  );
+
+  const todosMarcadosPermanencia = useMemo(
+    () =>
+      nParticipantesConfirmado > 0 &&
+      Array.from({ length: nParticipantesConfirmado }, (_, i) => i).every(
+        (i) =>
+          resultadoPermanenciaLinhas[i] === 'aprovado' ||
+          resultadoPermanenciaLinhas[i] === 'reprovado',
+      ),
+    [nParticipantesConfirmado, resultadoPermanenciaLinhas],
+  );
+
+  const podeAplicarModal =
+    corridaEtapa === 'tabela_permanencia'
+      ? todosMarcadosPermanencia
+      : todosIntegrantesComTempoRegistrado;
+
+  const mostrarNotaModal =
+    mostrarColunaNotaCorrida || mostrarColunaNotaCaminhada || mostrarColunaNotaNatacao;
+
+  const getNotaModal = useCallback(
+    (index: number) => {
+      if (tipoProva === 'corrida') return notaCorridaPorLinha[index] ?? '—';
+      if (tipoProva === 'caminhada') return notaCaminhadaPorLinha[index] ?? '—';
+      if (tipoProva === 'natacao') return notaNatacaoPorLinha[index] ?? '—';
+      return '—';
+    },
+    [tipoProva, notaCorridaPorLinha, notaCaminhadaPorLinha, notaNatacaoPorLinha],
+  );
+
+  const isNotaReprovadoModal = useCallback(
+    (index: number) => getNotaModal(index) === 'REPROVADO',
+    [getNotaModal],
   );
 
   return (
@@ -2343,355 +2340,55 @@ export default function AplicarTAFScreen() {
             </View>
           </Card>
         ) : null}
-
-        {mostrarProvas && corridaEtapa === 'tabela_permanencia' ? (
-          <Card elevated style={styles.formCard}>
-            <View style={styles.section}>
-              <TouchableOpacity
-                accessibilityLabel="Voltar para edição dos NIPs"
-                activeOpacity={0.85}
-                onPress={voltarDeTabelaParaNips}
-                style={styles.btnVoltarCadastro}
-              >
-                <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
-              </TouchableOpacity>
-              <Text style={[ts.label, styles.labelText]}>Permanência preparada</Text>
-              <PermanenciaTafPanel
-                participantes={participantesPermanencia}
-                resultados={resultadoPermanenciaLinhas}
-                onToggleResultado={togglePermanenciaResultado}
-                tempoExibido={tempoExibido}
-                cronometroEstado={cronometroEstado}
-                cronometroPausadoTexto={cronometroPausadoTexto}
-                onCronometroPausadoTextoChange={onCronometroPausadoTextoChange}
-                onBlurCronometroPausado={onBlurCronometroPausado}
-                onIniciarCronometro={iniciarCronometroCorrida}
-                onPararCronometro={pararCronometroCorrida}
-                onPausarCronometro={pausarCronometroCorrida}
-                onContinuarCronometro={continuarCronometroCorrida}
-                onAplicarResultado={() => {
-                  void onCadastrarPermanencia();
-                }}
-                salvando={salvandoResultadosCorrida}
-                erroAplicar={erroPermanencia}
-              />
-            </View>
-          </Card>
-        ) : null}
-
-        {mostrarProvas && corridaEtapa === 'tabela_corrida' ? (
-          <Card elevated style={styles.formCard}>
-            <View style={styles.section}>
-            <TouchableOpacity
-              accessibilityLabel="Voltar para edição dos NIPs"
-              activeOpacity={0.85}
-              onPress={voltarDeTabelaParaNips}
-              style={styles.btnVoltarCadastro}
-            >
-              <Text style={[ts.caption, { color: theme.textSecondary }]}>← Voltar</Text>
-            </TouchableOpacity>
-
-            <Text style={[ts.label, styles.labelText]}>
-              {tipoProva === 'natacao'
-                ? 'Natação preparada'
-                : tipoProva === 'caminhada'
-                  ? 'Caminhada preparada'
-                  : 'Corrida preparada'}
-            </Text>
-
-            {isProvaComVoltas(tipoProva) ? (
-              <>
-                <Text style={[ts.label, styles.labelText]}>Número de Voltas</Text>
-                <TextInput
-                  value={numeroVoltas}
-                  onChangeText={onChangeNumeroVoltas}
-                  placeholder="0"
-                  placeholderTextColor={ui.placeholder}
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  style={[
-                    styles.input,
-                    styles.campoVoltasInput,
-                    { borderColor: inputBorder, backgroundColor: inputBg, color: inputTextColor },
-                  ]}
-                  autoCorrect={false}
-                  spellCheck={false}
-                  accessibilityLabel={
-                    tipoProva === 'caminhada'
-                      ? 'Número de voltas da caminhada'
-                      : 'Número de voltas da corrida'
-                  }
-                />
-              </>
-            ) : null}
-
-            <ScrollView
-              horizontal
-              nestedScrollEnabled
-              showsHorizontalScrollIndicator
-              style={styles.tabelaScrollHorizontal}
-            >
-              <View
-                style={[
-                  styles.tabelaCard,
-                  {
-                    borderColor: inputBorder,
-                    backgroundColor: inputBg,
-                    width: larguraTabela,
-                    minWidth: larguraMinTabela,
-                  },
-                ]}
-              >
-                <View style={styles.tabelaHeaderRow}>
-                  <Text style={[styles.tabelaHeaderCell, styles.tabelaColCorredor]}>{labelAtleta}</Text>
-                  {tipoProva === 'natacao' ? (
-                    <View style={styles.tabelaGrupoNomeVoltas}>
-                      <Text style={[styles.tabelaHeaderCell, styles.tabelaColNomeInline]}>Nome</Text>
-                      <Text
-                        style={[
-                          styles.tabelaHeaderCell,
-                          styles.tabelaHeaderChegada,
-                          styles.tabelaColChegadaInline,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        Marcar Chegada
-                      </Text>
-                    </View>
-                  ) : nColunasVoltas > 0 ? (
-                    <View style={styles.tabelaGrupoNomeVoltas}>
-                      <Text style={[styles.tabelaHeaderCell, styles.tabelaColNomeInline]}>Nome</Text>
-                      {Array.from({ length: nColunasVoltas }, (_, v) => (
-                        <Text
-                          key={`h-volta-${v}`}
-                          style={[
-                            styles.tabelaHeaderCell,
-                            styles.tabelaHeaderVolta,
-                            styles.tabelaColVolta,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          V{v + 1}
-                        </Text>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text style={[styles.tabelaHeaderCell, styles.tabelaColNome]}>Nome</Text>
-                  )}
-                  {mostrarColunaTempo ? (
-                    <Text style={[styles.tabelaHeaderCell, styles.tabelaColTempo]} numberOfLines={1}>
-                      Tempo
-                    </Text>
-                  ) : null}
-                  {mostrarColunaNotaCorrida ? (
-                    <Text style={[styles.tabelaHeaderCell, styles.tabelaColNota]} numberOfLines={1}>
-                      Nota
-                    </Text>
-                  ) : null}
-                  {mostrarColunaNotaCaminhada ? (
-                    <Text style={[styles.tabelaHeaderCell, styles.tabelaColNota]} numberOfLines={1}>
-                      Nota
-                    </Text>
-                  ) : null}
-                  {mostrarColunaNotaNatacao ? (
-                    <Text style={[styles.tabelaHeaderCell, styles.tabelaColNota]} numberOfLines={1}>
-                      Nota
-                    </Text>
-                  ) : null}
-                </View>
-                {Array.from({ length: nParticipantesConfirmado }, (_, index) => {
-                  const fb = nipFeedbackLinhas[index];
-                  const nome = fb?.tipo === 'ok' ? fb.nomeMilitar : '—';
-                  const marcadoChegada = chegadaNatacao[index] ?? false;
-                  return (
-                    <View
-                      key={index}
-                      style={[
-                        styles.tabelaDataRow,
-                        index > 0 ? { borderTopWidth: 1, borderTopColor: ui.rowBorder } : null,
-                      ]}
-                    >
-                      <View style={[styles.tabelaCell, styles.tabelaColCorredor]}>
-                        <Text style={styles.tabelaNumeroVerde}>{index + 1}</Text>
-                      </View>
-                      {tipoProva === 'natacao' ? (
-                        <View style={styles.tabelaGrupoNomeVoltas}>
-                          <Text
-                            style={[styles.tabelaCellText, styles.tabelaColNomeInline]}
-                            numberOfLines={2}
-                          >
-                            {nome}
-                          </Text>
-                          <View style={[styles.tabelaColChegadaInline, styles.tabelaCelulaCheck]}>
-                            <TouchableOpacity
-                              accessibilityRole="checkbox"
-                              accessibilityState={{ checked: marcadoChegada }}
-                              accessibilityLabel={`Marcar chegada, ${labelAtleta} ${index + 1}`}
-                              activeOpacity={0.85}
-                              onPress={() => toggleMarcarChegadaNatacao(index)}
-                              style={styles.checkVoltaOuter}
-                            >
-                              <View
-                                style={[
-                                  styles.checkVoltaBox,
-                                  marcadoChegada ? styles.checkVoltaBoxOn : styles.checkVoltaBoxOff,
-                                ]}
-                              >
-                                {marcadoChegada ? (
-                                  <Check size={11} color="#FFFFFF" strokeWidth={2.5} />
-                                ) : null}
-                              </View>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ) : nColunasVoltas > 0 ? (
-                        <View style={styles.tabelaGrupoNomeVoltas}>
-                          <Text
-                            style={[styles.tabelaCellText, styles.tabelaColNomeInline]}
-                            numberOfLines={2}
-                          >
-                            {nome}
-                          </Text>
-                          {Array.from({ length: nColunasVoltas }, (__, v) => {
-                            const marcado = checksVoltas[index]?.[v] ?? false;
-                            return (
-                              <View
-                                key={`d-volta-${index}-${v}`}
-                                style={[styles.tabelaColVolta, styles.tabelaCelulaCheck]}
-                              >
-                                <TouchableOpacity
-                                  accessibilityRole="checkbox"
-                                  accessibilityState={{ checked: marcado }}
-                                  accessibilityLabel={`Volta ${v + 1}, participante ${index + 1}`}
-                                  activeOpacity={0.85}
-                                  onPress={() => toggleCheckVolta(index, v)}
-                                  style={styles.checkVoltaOuter}
-                                >
-                                  <View
-                                    style={[
-                                      styles.checkVoltaBox,
-                                      marcado ? styles.checkVoltaBoxOn : styles.checkVoltaBoxOff,
-                                    ]}
-                                  >
-                                    {marcado ? (
-                                      <Check size={11} color="#FFFFFF" strokeWidth={2.5} />
-                                    ) : null}
-                                  </View>
-                                </TouchableOpacity>
-                              </View>
-                            );
-                          })}
-                        </View>
-                      ) : (
-                        <Text style={[styles.tabelaCellText, styles.tabelaColNome]} numberOfLines={2}>
-                          {nome}
-                        </Text>
-                      )}
-                      {mostrarColunaTempo ? (
-                        <View style={[styles.tabelaColTempo, styles.tabelaCelulaTempo]}>
-                          <Text
-                            style={[styles.tabelaCellText, styles.tabelaTempoText]}
-                            numberOfLines={1}
-                          >
-                            {temposMilitaresMs[index] != null
-                              ? formatMs(temposMilitaresMs[index]!)
-                              : '—'}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {mostrarColunaNotaCorrida ? (
-                        <View style={[styles.tabelaColNota, styles.tabelaCelulaTempo]}>
-                          <Text
-                            style={[
-                              styles.tabelaCellText,
-                              styles.tabelaNotaText,
-                              notaCorridaPorLinha[index] === 'REPROVADO' ? styles.tabelaNotaRepro : null,
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {notaCorridaPorLinha[index] ?? '—'}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {mostrarColunaNotaCaminhada ? (
-                        <View style={[styles.tabelaColNota, styles.tabelaCelulaTempo]}>
-                          <Text
-                            style={[
-                              styles.tabelaCellText,
-                              styles.tabelaNotaText,
-                              notaCaminhadaPorLinha[index] === 'REPROVADO'
-                                ? styles.tabelaNotaRepro
-                                : null,
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {notaCaminhadaPorLinha[index] ?? '—'}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {mostrarColunaNotaNatacao ? (
-                        <View style={[styles.tabelaColNota, styles.tabelaCelulaTempo]}>
-                          <Text
-                            style={[
-                              styles.tabelaCellText,
-                              styles.tabelaNotaText,
-                              notaNatacaoPorLinha[index] === 'REPROVADO' ? styles.tabelaNotaRepro : null,
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {notaNatacaoPorLinha[index] ?? '—'}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  );
-                })}
-              </View>
-            </ScrollView>
-
-            <TafCronometroPanel
-              tituloProva={tituloProvaCurta}
-              tempoExibido={tempoExibido}
-              estado={cronometroEstado}
-              pausadoTexto={cronometroPausadoTexto}
-              onPausadoTextoChange={onCronometroPausadoTextoChange}
-              onBlurPausado={onBlurCronometroPausado}
-              onIniciar={iniciarCronometroCorrida}
-              onParar={pararCronometroCorrida}
-              onPausar={pausarCronometroCorrida}
-              onContinuar={continuarCronometroCorrida}
-              footer={
-                todosIntegrantesComTempoRegistrado ? (
-                  <TouchableOpacity
-                    accessibilityLabel={`Aplicar resultado da ${tituloProvaCurta.toLowerCase()}`}
-                    activeOpacity={0.85}
-                    onPress={() => {
-                      void onCadastrarResultados();
-                    }}
-                    disabled={salvandoResultadosCorrida}
-                    style={[
-                      styles.btnOkNip,
-                      styles.btnAplicarResultadoCronometro,
-                      { backgroundColor: theme.primary },
-                      salvandoResultadosCorrida ? styles.btnIniciarDisabled : null,
-                    ]}
-                  >
-                    {salvandoResultadosCorrida ? (
-                      <ActivityIndicator color={theme.tokens.textOnPrimary} />
-                    ) : (
-                      <Text style={[ts.body, styles.btnText, { color: theme.tokens.textOnPrimary }]}>
-                        Aplicar Resultado
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                ) : null
-              }
-            />
-          </View>
-          </Card>
-        ) : null}
         </View>
       </ScrollView>
+
+      <TafProvaTempoModal
+        visible={mostrarProvas && modalProvaTempoVisible}
+        onClose={voltarDeTabelaParaNips}
+        prova={provaModalTipo}
+        tituloProva={tituloProvaCurta}
+        labelAtleta={labelAtleta}
+        tempoExibido={tempoExibido}
+        cronometroEstado={cronometroEstado}
+        cronometroPausadoTexto={cronometroPausadoTexto}
+        onCronometroPausadoTextoChange={onCronometroPausadoTextoChange}
+        onBlurCronometroPausado={onBlurCronometroPausado}
+        onIniciarCronometro={iniciarCronometroCorrida}
+        onPararCronometro={pararCronometroCorrida}
+        onPausarCronometro={pausarCronometroCorrida}
+        onContinuarCronometro={continuarCronometroCorrida}
+        cronometroHint={
+          corridaEtapa === 'tabela_permanencia' ? 'Limite da prova: 10:00' : undefined
+        }
+        numeroVoltas={numeroVoltas}
+        onChangeNumeroVoltas={onChangeNumeroVoltas}
+        nColunasVoltas={nColunasVoltas}
+        nParticipantes={nParticipantesConfirmado}
+        nomesParticipantes={nomesParticipantesModal}
+        checksVoltas={checksVoltas}
+        chegadaNatacao={chegadaNatacao}
+        onToggleVolta={toggleCheckVolta}
+        onToggleChegada={toggleMarcarChegadaNatacao}
+        temposMilitaresMs={temposMilitaresMs}
+        formatMs={formatMs}
+        mostrarTempo={mostrarColunaTempo}
+        mostrarNota={mostrarNotaModal}
+        getNota={getNotaModal}
+        isNotaReprovado={isNotaReprovadoModal}
+        resultadosPermanencia={resultadoPermanenciaLinhas}
+        onTogglePermanencia={togglePermanenciaResultado}
+        podeAplicar={podeAplicarModal}
+        onAplicar={() => {
+          if (corridaEtapa === 'tabela_permanencia') {
+            void onCadastrarPermanencia();
+          } else {
+            void onCadastrarResultados();
+          }
+        }}
+        salvando={salvandoResultadosCorrida}
+        erroAplicar={corridaEtapa === 'tabela_permanencia' ? erroPermanencia : undefined}
+      />
     </SafeAreaView>
   );
 }

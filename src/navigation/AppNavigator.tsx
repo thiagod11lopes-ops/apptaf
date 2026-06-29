@@ -43,7 +43,10 @@ export default function AppNavigator() {
     activeRoute === 'Cadastro' ||
     activeRoute === 'AplicarTAF' ||
     activeRoute === 'Resultados' ||
-    activeRoute === 'Estatisticas'
+    activeRoute === 'Estatisticas' ||
+    activeRoute === 'Normas' ||
+    activeRoute === 'AplicacaoTAF' ||
+    activeRoute === 'CadastroAplicador'
       ? 8
       : tafImersivo
         ? 4

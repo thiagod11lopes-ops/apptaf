@@ -1,51 +1,13 @@
-import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Platform,
-  Pressable,
-  useWindowDimensions,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-  type Header,
-  type SortingState,
-} from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ArrowUpDown, History, Pencil, Trash2 } from 'lucide-react-native';
-import { PressableScale } from './premium/PressableScale';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { History, Pencil, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { SearchHighlightText } from './SearchHighlightText';
+import { LabelNip } from './LabelNip';
 import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
-import { escalarLargurasColunas, tableAvailableWidth } from '../theme/tableLayout';
-
-const COL = {
-  postoGrad: 76,
-  nip: 112,
-  nome: 168,
-  status: 88,
-  nota: 62,
-  situacao: 84,
-  acoes: 108,
-} as const;
-
-const columnHelper = createColumnHelper<ResultadoGeralItem>();
-
-/** Largura real do cabeçalho (grupos = soma das colunas folha). */
-function larguraHeader(header: Header<ResultadoGeralItem, unknown>): number {
-  if (header.subHeaders.length > 0) {
-    return header.subHeaders.reduce((sum, sub) => sum + sub.getSize(), 0);
-  }
-  return header.getSize();
-}
+import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 
 function situacaoCor(situacao: string, theme: { gain: string; loss: string; textMuted: string }) {
   if (situacao === 'Aprovado') return theme.gain;
@@ -53,23 +15,64 @@ function situacaoCor(situacao: string, theme: { gain: string; loss: string; text
   return theme.textMuted;
 }
 
-function StatusBadge({ status }: { status: 'Completo' | 'Parcial' }) {
+function StatusChip({ status }: { status: 'Completo' | 'Parcial' }) {
   const { theme } = useTheme();
   const completo = status === 'Completo';
   const warn = theme.tokens.warning500;
+
   return (
     <View
       style={[
-        styles.statusBadge,
+        styles.statusChip,
         {
-          backgroundColor: completo ? theme.gainMuted : 'rgba(245, 158, 11, 0.14)',
           borderColor: completo ? theme.gain : warn,
+          backgroundColor: completo ? theme.gainMuted : 'rgba(245, 158, 11, 0.12)',
         },
       ]}
     >
-      <Text style={[styles.statusBadgeText, { color: completo ? theme.gain : warn }]}>
-        {status}
-      </Text>
+      <Text style={[styles.statusChipText, { color: completo ? theme.gain : warn }]}>{status}</Text>
+    </View>
+  );
+}
+
+function ModalityBlock({
+  label,
+  nota,
+  situacao,
+  buscaLower,
+}: {
+  label: string;
+  nota: string;
+  situacao: string;
+  buscaLower: string;
+}) {
+  const { theme } = useTheme();
+  const ui = getUiColors(theme);
+  const glass = getAplicarTafGlass(theme);
+
+  return (
+    <View style={[styles.modalityBlock, { borderColor: glass.border }]}>
+      <Text style={[styles.modalityKicker, { color: theme.primary }]}>{label}</Text>
+      <View style={styles.modalityValues}>
+        <View style={styles.modalityValueRow}>
+          <Text style={[styles.modalityLabel, { color: theme.textMuted }]}>NOTA</Text>
+          <SearchHighlightText
+            text={nota}
+            queryLower={buscaLower}
+            style={[styles.modalityValue, { color: ui.text }]}
+            numberOfLines={1}
+          />
+        </View>
+        <View style={styles.modalityValueRow}>
+          <Text style={[styles.modalityLabel, { color: theme.textMuted }]}>SIT.</Text>
+          <SearchHighlightText
+            text={situacao}
+            queryLower={buscaLower}
+            style={[styles.modalityValue, { color: situacaoCor(situacao, theme) }]}
+            numberOfLines={1}
+          />
+        </View>
+      </View>
     </View>
   );
 }
@@ -82,490 +85,242 @@ type Props = {
   onVerHistorico?: (item: ResultadoGeralItem) => void;
 };
 
-export function ResultadosGeralTable({ data, buscaLower, onEditar, onExcluir, onVerHistorico }: Props) {
+export function ResultadosGeralTable({
+  data,
+  buscaLower,
+  onEditar,
+  onExcluir,
+  onVerHistorico,
+}: Props) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const { width: screenWidth } = useWindowDimensions();
-  const { larguras: colSizes } = useMemo(
-    () => escalarLargurasColunas(COL, tableAvailableWidth(screenWidth)),
-    [screenWidth],
-  );
-
-  const cellBase = useMemo(
-    () => [styles.cell, { color: ui.text }],
-    [ui.text],
-  );
-
-  const columns = useMemo(
-    () => [
-      columnHelper.accessor('postoGrad', {
-        header: 'Posto/Grad.',
-        size: colSizes.postoGrad,
-        enableSorting: true,
-        meta: { align: 'left' as const },
-        cell: (info) => (
-          <SearchHighlightText
-            text={info.getValue()}
-            queryLower={buscaLower}
-            style={cellBase}
-            numberOfLines={1}
-          />
-        ),
-      }),
-      columnHelper.accessor('nip', {
-        header: 'NIP',
-        size: colSizes.nip,
-        enableSorting: true,
-        meta: { align: 'left' as const },
-        cell: (info) => (
-          <SearchHighlightText
-            text={info.getValue()}
-            queryLower={buscaLower}
-            style={[cellBase, styles.nipCell]}
-            numberOfLines={1}
-          />
-        ),
-      }),
-      columnHelper.accessor('nome', {
-        header: 'Nome',
-        size: colSizes.nome,
-        enableSorting: true,
-        meta: { align: 'left' as const },
-        cell: (info) => (
-          <SearchHighlightText
-            text={info.getValue()}
-            queryLower={buscaLower}
-            style={cellBase}
-            numberOfLines={2}
-          />
-        ),
-      }),
-      columnHelper.accessor('statusTaf', {
-        header: 'Status',
-        size: colSizes.status,
-        enableSorting: true,
-        meta: { align: 'center' as const },
-        cell: (info) => <StatusBadge status={info.getValue()} />,
-      }),
-      columnHelper.group({
-        id: 'corrida',
-        header: 'Corrida',
-        meta: { align: 'center' as const },
-        columns: [
-          columnHelper.accessor('notaCorrida', {
-            header: 'Nota',
-            size: colSizes.nota,
-            enableSorting: true,
-            meta: { align: 'center' as const, groupStart: true },
-            cell: (info) => (
-              <SearchHighlightText text={info.getValue()} queryLower={buscaLower} style={cellBase} />
-            ),
-          }),
-          columnHelper.accessor('situacaoCorrida', {
-            header: 'Situação',
-            size: colSizes.situacao,
-            enableSorting: true,
-            meta: { align: 'center' as const },
-            cell: (info) => (
-              <SearchHighlightText
-                text={info.getValue()}
-                queryLower={buscaLower}
-                style={[cellBase, { color: situacaoCor(info.getValue(), theme) }]}
-              />
-            ),
-          }),
-        ],
-      }),
-      columnHelper.group({
-        id: 'caminhada',
-        header: 'Caminhada',
-        meta: { align: 'center' as const },
-        columns: [
-          columnHelper.accessor('notaCaminhada', {
-            header: 'Nota',
-            size: colSizes.nota,
-            enableSorting: true,
-            meta: { align: 'center' as const, groupStart: true },
-            cell: (info) => (
-              <SearchHighlightText text={info.getValue()} queryLower={buscaLower} style={cellBase} />
-            ),
-          }),
-          columnHelper.accessor('situacaoCaminhada', {
-            header: 'Situação',
-            size: colSizes.situacao,
-            enableSorting: true,
-            meta: { align: 'center' as const },
-            cell: (info) => (
-              <SearchHighlightText
-                text={info.getValue()}
-                queryLower={buscaLower}
-                style={[cellBase, { color: situacaoCor(info.getValue(), theme) }]}
-              />
-            ),
-          }),
-        ],
-      }),
-      columnHelper.group({
-        id: 'natacao',
-        header: 'Natação',
-        meta: { align: 'center' as const },
-        columns: [
-          columnHelper.accessor('notaNatacao', {
-            header: 'Nota',
-            size: colSizes.nota,
-            enableSorting: true,
-            meta: { align: 'center' as const, groupStart: true },
-            cell: (info) => (
-              <SearchHighlightText text={info.getValue()} queryLower={buscaLower} style={cellBase} />
-            ),
-          }),
-          columnHelper.accessor('situacaoNatacao', {
-            header: 'Situação',
-            size: colSizes.situacao,
-            enableSorting: true,
-            meta: { align: 'center' as const },
-            cell: (info) => (
-              <SearchHighlightText
-                text={info.getValue()}
-                queryLower={buscaLower}
-                style={[cellBase, { color: situacaoCor(info.getValue(), theme) }]}
-              />
-            ),
-          }),
-        ],
-      }),
-      columnHelper.group({
-        id: 'permanencia',
-        header: 'Permanência',
-        meta: { align: 'center' as const },
-        columns: [
-          columnHelper.accessor('situacaoPermanencia', {
-            header: 'Situação',
-            size: colSizes.situacao,
-            enableSorting: true,
-            meta: { align: 'center' as const, groupStart: true },
-            cell: (info) => (
-              <SearchHighlightText
-                text={info.getValue()}
-                queryLower={buscaLower}
-                style={[cellBase, { color: situacaoCor(info.getValue(), theme) }]}
-              />
-            ),
-          }),
-        ],
-      }),
-      columnHelper.display({
-        id: 'acoes',
-        header: 'Ações',
-        size: colSizes.acoes,
-        meta: { align: 'center' as const },
-        cell: (info) => (
-          <View style={styles.acoesRow}>
-            <PressableScale
-              onPress={() => onVerHistorico?.(info.row.original)}
-              style={[styles.acaoBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
-              accessibilityLabel={`Ver histórico de testes de ${info.row.original.nome}`}
-            >
-              <History size={15} color={theme.primary} strokeWidth={2.2} />
-            </PressableScale>
-            <PressableScale
-              onPress={() => onEditar?.(info.row.original)}
-              style={[styles.acaoBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
-              accessibilityLabel={`Editar resultados de ${info.row.original.nome}`}
-            >
-              <Pencil size={15} color={theme.primary} strokeWidth={2.2} />
-            </PressableScale>
-            <PressableScale
-              onPress={() => onExcluir?.(info.row.original)}
-              style={[styles.acaoBtn, styles.acaoBtnDanger, { borderColor: theme.loss }]}
-              accessibilityLabel={`Excluir resultados de ${info.row.original.nome}`}
-            >
-              <Trash2 size={15} color={theme.loss} strokeWidth={2.2} />
-            </PressableScale>
-          </View>
-        ),
-      }),
-    ],
-    [buscaLower, cellBase, theme, onEditar, onExcluir, onVerHistorico, colSizes],
-  );
-
-  const table = useReactTable({
-    data,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
-
-  const tableWidth = Math.max(
-    tableAvailableWidth(screenWidth),
-    table.getAllLeafColumns().reduce((sum, col) => sum + col.getSize(), 0),
-  );
-  const headerGroups = table.getHeaderGroups();
-  const isSubHeaderRow = (depth: number) => depth === headerGroups.length - 1;
-
-  const renderSortIcon = (columnId: string, canSort: boolean) => {
-    if (!canSort) return null;
-    const col = table.getColumn(columnId);
-    const sorted = col?.getIsSorted();
-    const Icon = sorted === 'asc' ? ArrowUp : sorted === 'desc' ? ArrowDown : ArrowUpDown;
-    return <Icon size={12} color="rgba(255,255,255,0.85)" strokeWidth={2.5} style={styles.sortIcon} />;
-  };
+  const glass = getAplicarTafGlass(theme);
 
   return (
-    <View
-      style={[
-        styles.tableShell,
-        {
-          borderColor: theme.border,
-          backgroundColor: theme.surface,
-        },
-        Platform.OS === 'web'
-          ? ({ boxShadow: 'none', overflowX: 'hidden' } as object)
-          : null,
-      ]}
-    >
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator
-        nestedScrollEnabled
-        bounces={false}
-        style={styles.tableScroll}
-        contentContainerStyle={[styles.tableScrollContent, { width: tableWidth }]}
-      >
-        <View style={[styles.tableFrame, { width: tableWidth }]}>
-          <LinearGradient
-            colors={[...theme.tokens.gradientPrimaryBtn]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.headerBlock, { width: tableWidth }]}
-          >
-            {headerGroups.map((headerGroup) => (
-              <View
-                key={headerGroup.id}
-                style={[
-                  styles.headerRow,
-                  { width: tableWidth },
-                  isSubHeaderRow(headerGroup.depth) ? styles.headerSubRow : null,
-                ]}
-              >
-                {headerGroup.headers.map((header) => {
-                  const meta = header.column.columnDef.meta as
-                    | { align?: 'left' | 'center'; groupStart?: boolean }
-                    | undefined;
-                  const w = larguraHeader(header);
-                  const isPlaceholder = header.isPlaceholder;
-                  const subRow = isSubHeaderRow(headerGroup.depth);
-
-                  return (
-                    <Pressable
-                      key={header.id}
-                      onPress={
-                        header.column.getCanSort()
-                          ? () => header.column.toggleSorting()
-                          : undefined
-                      }
-                      style={[
-                        styles.headerCellWrap,
-                        {
-                          width: w,
-                          flexShrink: 0,
-                        },
-                        meta?.align === 'center' ? styles.colCenter : null,
-                        subRow && meta?.groupStart ? styles.colGroupDivider : null,
-                      ]}
-                      accessibilityRole={header.column.getCanSort() ? 'button' : undefined}
-                    >
-                      {isPlaceholder ? null : (
-                        <View style={styles.headerLabelRow}>
-                          <Text
-                            style={subRow ? styles.headerSubCell : styles.headerCell}
-                            numberOfLines={2}
-                          >
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                          </Text>
-                          {!isPlaceholder && header.column.getCanSort()
-                            ? renderSortIcon(header.column.id, true)
-                            : null}
-                        </View>
-                      )}
-                    </Pressable>
-                  );
-                })}
+    <View style={styles.modernList}>
+      {data.map((item) => (
+        <View
+          key={item.id}
+          style={[
+            styles.modernRow,
+            {
+              borderColor: glass.border,
+              backgroundColor: theme.isDark ? 'rgba(2,6,23,0.42)' : 'rgba(255,255,255,0.55)',
+            },
+          ]}
+        >
+          <View style={styles.modernRowHeader}>
+            <View style={styles.modernRowHeaderText}>
+              <SearchHighlightText
+                text={item.nome}
+                queryLower={buscaLower}
+                style={[styles.modernName, { color: ui.text }]}
+                numberOfLines={2}
+              />
+              <View style={styles.modernChipRow}>
+                <View style={[styles.modernChip, { borderColor: glass.border }]}>
+                  <SearchHighlightText
+                    text={item.postoGrad}
+                    queryLower={buscaLower}
+                    style={[styles.modernChipText, { color: ui.text }]}
+                    numberOfLines={1}
+                  />
+                </View>
+                <StatusChip status={item.statusTaf} />
               </View>
-            ))}
-          </LinearGradient>
-
-          {table.getRowModel().rows.map((row, index) => {
-            const zebra = index % 2 === 1;
-            return (
-              <View
-                key={row.id}
-                style={[
-                  styles.dataRow,
-                  { width: tableWidth, borderBottomColor: theme.border },
-                  zebra ? { backgroundColor: theme.backgroundSecondary } : null,
-                ]}
+            </View>
+            <View style={styles.modernActions}>
+              <TouchableOpacity
+                accessibilityLabel={`Ver histórico de ${item.nome}`}
+                onPress={() => onVerHistorico?.(item)}
+                style={[styles.modernIconBtn, { borderColor: glass.border }]}
               >
-                {row.getVisibleCells().map((cell) => {
-                  const meta = cell.column.columnDef.meta as
-                    | { align?: 'left' | 'center'; groupStart?: boolean }
-                    | undefined;
-                  return (
-                    <View
-                      key={cell.id}
-                      style={[
-                        styles.bodyCell,
-                        {
-                          width: cell.column.getSize(),
-                          flexShrink: 0,
-                        },
-                        meta?.align === 'center' ? styles.colCenter : null,
-                        meta?.groupStart ? styles.colGroupDividerBody : null,
-                      ]}
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </View>
-                  );
-                })}
-              </View>
-            );
-          })}
+                <History size={17} color={theme.primary} strokeWidth={2.5} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityLabel={`Editar resultados de ${item.nome}`}
+                onPress={() => onEditar?.(item)}
+                style={[styles.modernIconBtn, { borderColor: glass.border }]}
+              >
+                <Pencil size={17} color={theme.primary} strokeWidth={2.5} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityLabel={`Excluir resultados de ${item.nome}`}
+                onPress={() => onExcluir?.(item)}
+                style={[styles.modernIconBtn, styles.modernIconBtnDanger]}
+              >
+                <Trash2 size={17} color={theme.loss} strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={[styles.modernDivider, { backgroundColor: glass.border }]} />
+
+          <View style={styles.modernMetaGrid}>
+            <View style={styles.modernMetaItem}>
+              <LabelNip color={theme.textMuted} fontSize={9} fontWeight="800" />
+              <SearchHighlightText
+                text={item.nip}
+                queryLower={buscaLower}
+                style={[styles.modernMetaValue, { color: ui.text }]}
+                numberOfLines={1}
+              />
+            </View>
+            <View style={styles.modernMetaItem}>
+              <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>STATUS TAF</Text>
+              <Text style={[styles.modernMetaValue, { color: ui.text }]}>{item.statusTaf}</Text>
+            </View>
+          </View>
+
+          <View style={[styles.modernDivider, styles.modernDividerLight, { backgroundColor: glass.border }]} />
+
+          <View style={styles.modalityGrid}>
+            <ModalityBlock
+              label="CORRIDA"
+              nota={item.notaCorrida}
+              situacao={item.situacaoCorrida}
+              buscaLower={buscaLower}
+            />
+            <ModalityBlock
+              label="CAMINHADA"
+              nota={item.notaCaminhada}
+              situacao={item.situacaoCaminhada}
+              buscaLower={buscaLower}
+            />
+            <ModalityBlock
+              label="NATAÇÃO"
+              nota={item.notaNatacao}
+              situacao={item.situacaoNatacao}
+              buscaLower={buscaLower}
+            />
+            <ModalityBlock
+              label="PERMANÊNCIA"
+              nota={item.permanenciaTempo}
+              situacao={item.situacaoPermanencia}
+              buscaLower={buscaLower}
+            />
+          </View>
         </View>
-      </ScrollView>
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tableShell: {
-    width: '100%',
-    maxWidth: '100%',
-    alignSelf: 'stretch',
-    overflow: 'hidden',
+  modernList: { gap: 10 },
+  modernRow: {
+    borderWidth: 1,
     borderRadius: PREMIUM.radiusLg,
+    padding: 14,
+    overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0 8px 24px rgba(15,23,42,0.06)' } as object)
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.08,
+          shadowRadius: 14,
+          elevation: 4,
+        }),
+  },
+  modernRowHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  modernRowHeaderText: { flex: 1, minWidth: 0, gap: 8 },
+  modernName: {
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+    lineHeight: 21,
+  },
+  modernChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
+  modernChip: {
     borderWidth: 1,
-  },
-  tableScroll: {
-    maxWidth: '100%',
-    overflow: 'hidden',
-  },
-  tableScrollContent: {
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  tableFrame: {
-    overflow: 'hidden',
-    backgroundColor: 'transparent',
-  },
-  headerBlock: {
-    overflow: 'hidden',
-    borderTopLeftRadius: PREMIUM.radiusLg - 1,
-    borderTopRightRadius: PREMIUM.radiusLg - 1,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  headerSubRow: {
-    paddingTop: 0,
-    paddingBottom: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.25)',
-  },
-  headerCellWrap: {
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    overflow: 'hidden',
-  },
-  headerLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    flexWrap: 'wrap',
-  },
-  headerCell: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-  },
-  headerSubCell: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.92)',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-  },
-  sortIcon: {
-    marginLeft: 2,
-  },
-  dataRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 11,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  bodyCell: {
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    overflow: 'hidden',
-  },
-  colCenter: { alignItems: 'center' },
-  colGroupDivider: {
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: 'rgba(255,255,255,0.22)',
-  },
-  colGroupDividerBody: {
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: 'rgba(17,24,39,0.1)',
-  },
-  cell: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 16,
-  },
-  nipCell: {
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'ui-monospace, monospace',
-    }),
-    fontSize: 11,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
     borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  modernChipText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  statusChip: {
     borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  acoesRow: {
-    flexDirection: 'row',
+  statusChipText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  modernActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
+  modernIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modernIconBtnDanger: {
+    borderColor: 'rgba(220,38,38,0.25)',
+    backgroundColor: 'rgba(220,38,38,0.08)',
+  },
+  modernDivider: { height: 1, marginVertical: 12, opacity: 0.85 },
+  modernDividerLight: { marginVertical: 10 },
+  modernMetaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  modernMetaItem: {
+    flexGrow: 1,
+    flexBasis: '40%',
+    minWidth: 120,
+    gap: 4,
+  },
+  modernMetaLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+  },
+  modernMetaValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  modalityGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  modalityBlock: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    minWidth: 140,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    padding: 10,
     gap: 6,
   },
-  acaoBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  modalityKicker: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.1,
   },
-  acaoBtnDanger: {
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  modalityValues: { gap: 4 },
+  modalityValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modalityLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    width: 32,
+  },
+  modalityValue: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    minWidth: 0,
   },
 });

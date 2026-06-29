@@ -8,9 +8,8 @@ import {
   Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Search, Users } from 'lucide-react-native';
+import { Search } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { Card } from './Card';
 import { ResultadosGeralTable } from './ResultadosGeralTable';
 import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
@@ -24,6 +23,8 @@ import { nipDigitos } from '../utils/nipFormat';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
+import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
+import { TafGlassPanel, TafSectionHeader } from './mobile/TafTabChrome';
 
 const MIN_BUSCA = 3;
 
@@ -58,6 +59,7 @@ export function ResultadosGeralPanel({
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
+  const glass = getAplicarTafGlass(theme);
 
   const [lista, setLista] = useState<ResultadoGeralItem[]>([]);
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
@@ -152,98 +154,83 @@ export function ResultadosGeralPanel({
 
   const buscaAtiva = filtroBusca.trim().length >= MIN_BUSCA;
 
-  const inputStyle = useMemo(
-    () => [
-      styles.searchInput,
-      { color: ui.text },
-      Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {},
-    ],
-    [ui.text],
-  );
-
   return (
     <View style={styles.wrap}>
-      <Text style={[ts.bodySecondary, styles.intro, { color: theme.textSecondary }]}>
-        Visão consolidada das provas registradas no Aplicar TAF e no Registrador de TAF. Modalidades
-        ausentes aparecem como &quot;—&quot;.
-      </Text>
-
-      <View
-        style={[
-          styles.searchShell,
-          {
-            backgroundColor: ui.inputBg,
-            borderColor: buscaAtiva ? theme.primary : theme.border,
-          },
-          Platform.OS === 'web' && buscaAtiva
-            ? ({ boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.18)' } as object)
-            : undefined,
-        ]}
-      >
-        <Search size={20} color={buscaAtiva ? theme.primary : ui.searchIcon} strokeWidth={2.4} />
-        <TextInput
-          value={filtroBusca}
-          onChangeText={setFiltroBusca}
-          placeholder="Buscar NIP, nome ou resultado (mín. 3 caracteres)…"
-          placeholderTextColor={ui.placeholder}
-          style={inputStyle}
-          autoCorrect={false}
-          spellCheck={false}
-          autoCapitalize="none"
-          accessibilityLabel="Buscar na tabela de resultado geral"
+      <TafGlassPanel accent="cyan" style={styles.panel}>
+        <TafSectionHeader
+          kicker="CONSOLIDADO"
+          title="Resultado Geral"
+          subtitle="Provas registradas no Aplicar TAF e no Registrador de TAF"
         />
-      </View>
 
-      {filtroBusca.trim().length > 0 && filtroBusca.trim().length < MIN_BUSCA ? (
-        <Text style={[ts.caption, styles.hintBusca, { color: theme.textMuted }]}>
-          Digite pelo menos {MIN_BUSCA} caracteres para filtrar a tabela.
-        </Text>
-      ) : null}
+        <View style={styles.searchRow}>
+          <View
+            style={[
+              styles.searchWrap,
+              {
+                borderColor: buscaAtiva ? theme.primary : glass.border,
+                backgroundColor: glass.highlight,
+              },
+            ]}
+          >
+            <Search size={18} color={theme.primary} strokeWidth={2.5} />
+            <TextInput
+              value={filtroBusca}
+              onChangeText={setFiltroBusca}
+              placeholder="Buscar NIP, nome ou resultado (mín. 3 caracteres)…"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.searchInput,
+                { color: ui.text, backgroundColor: 'transparent' },
+                Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null,
+              ]}
+              autoCorrect={false}
+              spellCheck={false}
+              autoCapitalize="none"
+              accessibilityLabel="Buscar na tabela de resultado geral"
+            />
+          </View>
+        </View>
 
-      <View style={styles.statsRow}>
-        <Users size={16} color={theme.primary} strokeWidth={2.2} />
-        <Text style={[ts.caption, { color: theme.textMuted }]}>
+        {filtroBusca.trim().length > 0 && filtroBusca.trim().length < MIN_BUSCA ? (
+          <Text style={[ts.caption, styles.hintBusca, { color: theme.textMuted }]}>
+            Digite pelo menos {MIN_BUSCA} caracteres para filtrar.
+          </Text>
+        ) : null}
+
+        <Text style={[styles.resultCount, { color: theme.textMuted }]}>
           {buscaAtiva
             ? `${linhasVisiveis.length} de ${lista.length} militar${lista.length !== 1 ? 'es' : ''}`
             : `${lista.length} militar${lista.length !== 1 ? 'es' : ''} no histórico`}
-          {' · '}
-          Toque no cabeçalho para ordenar · ícones: histórico, editar ou excluir
         </Text>
-      </View>
 
-      {carregando ? (
-        <ActivityIndicator color={theme.primary} style={styles.loader} />
-      ) : null}
+        {carregando ? (
+          <ActivityIndicator color={theme.primary} style={styles.loader} />
+        ) : null}
 
-      {!carregando && lista.length === 0 ? (
-        <Card elevated style={styles.emptyCard}>
-          <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
-            Nenhuma sessão no histórico ainda.
+        {!carregando && lista.length === 0 ? (
+          <Text style={[styles.tableEmpty, { color: theme.textSecondary }]}>
+            Nenhuma sessão no histórico ainda. Aplique provas em Aplicar TAF ou cadastre sessões no
+            histórico; os dados consolidados aparecerão aqui.
           </Text>
-          <Text style={[ts.caption, styles.emptyHint, { color: theme.textMuted, textAlign: 'center' }]}>
-            Aplique provas em Aplicar TAF ou cadastre sessões no histórico; os dados consolidados
-            aparecerão aqui.
-          </Text>
-        </Card>
-      ) : null}
+        ) : null}
 
-      {!carregando && lista.length > 0 && buscaAtiva && linhasVisiveis.length === 0 ? (
-        <Card elevated style={styles.emptyCard}>
-          <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
+        {!carregando && lista.length > 0 && buscaAtiva && linhasVisiveis.length === 0 ? (
+          <Text style={[styles.tableEmpty, { color: theme.textSecondary }]}>
             Nenhum resultado para &quot;{filtroBusca.trim()}&quot;.
           </Text>
-        </Card>
-      ) : null}
+        ) : null}
 
-      {!carregando && linhasVisiveis.length > 0 ? (
-        <ResultadosGeralTable
-          data={linhasVisiveis}
-          buscaLower={buscaLower}
-          onVerHistorico={abrirHistorico}
-          onEditar={abrirEdicao}
-          onExcluir={setMilitarParaExcluir}
-        />
-      ) : null}
+        {!carregando && linhasVisiveis.length > 0 ? (
+          <ResultadosGeralTable
+            data={linhasVisiveis}
+            buscaLower={buscaLower}
+            onVerHistorico={abrirHistorico}
+            onEditar={abrirEdicao}
+            onExcluir={setMilitarParaExcluir}
+          />
+        ) : null}
+      </TafGlassPanel>
 
       <EditarResultadoTafModal
         visible={!!cadastroEmEdicao}
@@ -269,33 +256,45 @@ export function ResultadosGeralPanel({
 
 const styles = StyleSheet.create({
   wrap: tableFullWidthStyle,
-  intro: { marginBottom: 14, lineHeight: 20 },
-  searchShell: {
+  panel: {
+    marginBottom: 8,
+  },
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: PREMIUM.radiusLg,
-    borderWidth: 1.5,
-    marginBottom: 8,
+    marginBottom: 10,
+  },
+  searchWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd + 2,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    paddingVertical: 0,
+    paddingVertical: Platform.select({ ios: 8, default: 6 }),
   },
-  hintBusca: { marginBottom: 10, marginLeft: 4 },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  hintBusca: { marginBottom: 8 },
+  resultCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
     marginBottom: 12,
-    marginLeft: 2,
-    flexWrap: 'wrap',
+    textTransform: 'uppercase',
   },
-  loader: { marginVertical: 28 },
-  emptyCard: { padding: 22 },
-  emptyHint: { marginTop: 8, lineHeight: 18 },
+  tableEmpty: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  loader: { marginVertical: 24 },
 });

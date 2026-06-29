@@ -18,9 +18,11 @@ type Props = {
 const logoMb = require('../../../Logomb.png');
 
 const LOGO = 448;
-const STROKE = 8;
+const STROKE = 5;
+/** Anel ~80% do quadro da logo — colado ao contorno visível da imagem. */
+const RING_DIAMETER = LOGO * 0.8;
 const RING_SIZE = LOGO;
-const RADIUS = RING_SIZE / 2 - STROKE / 2;
+const RADIUS = RING_DIAMETER / 2 - STROKE / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const ARC_VISIBLE = CIRCUMFERENCE * 0.28;
 const ARC_GAP = CIRCUMFERENCE - ARC_VISIBLE;

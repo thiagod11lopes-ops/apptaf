@@ -383,8 +383,8 @@ export function TafProvaTempoModal({
           >
             <View
               style={[
-                styles.participantRow,
-                isCorridaCaminhada ? styles.participantRowAdaptive : null,
+                styles.participantTopRow,
+                isCorridaCaminhada ? styles.participantTopRowAdaptive : null,
               ]}
             >
               <View
@@ -392,6 +392,7 @@ export function TafProvaTempoModal({
                   styles.identityCol,
                   isNativeMobile && !isCorridaCaminhada ? styles.identityColCompact : null,
                   isCorridaCaminhada ? styles.identityColAdaptive : null,
+                  temChecks ? styles.identityColWithChecksBelow : null,
                 ]}
               >
                 <View
@@ -422,62 +423,6 @@ export function TafProvaTempoModal({
                   {nome}
                 </Text>
               </View>
-
-              {temChecks ? (
-                <>
-                  <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-                  <ScrollView
-                    horizontal
-                    nestedScrollEnabled
-                    showsHorizontalScrollIndicator={isNativeMobile}
-                    style={[styles.checksTrack, isNativeMobile ? styles.checksTrackCompact : null]}
-                    contentContainerStyle={styles.checksTrackContent}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {prova === 'permanencia' && onTogglePermanencia ? (
-                      <>
-                        <CheckPermanenciaModal
-                          label="Aprovado"
-                          checked={resultadosPermanencia[index] === 'aprovado'}
-                          variant="aprovado"
-                          touchLarge={isNativeMobile}
-                          onPress={() => onTogglePermanencia(index, 'aprovado')}
-                        />
-                        <CheckPermanenciaModal
-                          label="Reprovado"
-                          checked={resultadosPermanencia[index] === 'reprovado'}
-                          variant="reprovado"
-                          touchLarge={isNativeMobile}
-                          onPress={() => onTogglePermanencia(index, 'reprovado')}
-                        />
-                      </>
-                    ) : null}
-
-                    {prova === 'natacao' && onToggleChegada ? (
-                      <CheckVolta
-                        checked={chegadaNatacao[index] ?? false}
-                        a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
-                        touchLarge={isNativeMobile}
-                        onPress={() => onToggleChegada(index)}
-                      />
-                    ) : null}
-
-                    {(prova === 'corrida' || prova === 'caminhada') &&
-                    nColunasVoltasAtivas > 0 &&
-                    onToggleVolta
-                      ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
-                          <CheckVolta
-                            key={`volta-${index}-${v}`}
-                            checked={checksVoltas[index]?.[v] ?? false}
-                            a11y={`Volta ${v + 1}, participante ${index + 1}`}
-                            touchLarge={isNativeMobile}
-                            onPress={() => onToggleVolta(index, v)}
-                          />
-                        ))
-                      : null}
-                  </ScrollView>
-                </>
-              ) : null}
 
               {mostrarTempo || mostrarNota ? (
                 <>
@@ -514,6 +459,59 @@ export function TafProvaTempoModal({
                 </>
               ) : null}
             </View>
+
+            {temChecks ? (
+              <ScrollView
+                horizontal
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={isNativeMobile}
+                style={styles.checksRowBelow}
+                contentContainerStyle={styles.checksTrackContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {prova === 'permanencia' && onTogglePermanencia ? (
+                  <>
+                    <CheckPermanenciaModal
+                      label="Aprovado"
+                      checked={resultadosPermanencia[index] === 'aprovado'}
+                      variant="aprovado"
+                      touchLarge={isNativeMobile}
+                      onPress={() => onTogglePermanencia(index, 'aprovado')}
+                    />
+                    <CheckPermanenciaModal
+                      label="Reprovado"
+                      checked={resultadosPermanencia[index] === 'reprovado'}
+                      variant="reprovado"
+                      touchLarge={isNativeMobile}
+                      onPress={() => onTogglePermanencia(index, 'reprovado')}
+                    />
+                  </>
+                ) : null}
+
+                {prova === 'natacao' && onToggleChegada ? (
+                  <CheckVolta
+                    checked={chegadaNatacao[index] ?? false}
+                    a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
+                    touchLarge={isNativeMobile}
+                    onPress={() => onToggleChegada(index)}
+                  />
+                ) : null}
+
+                {(prova === 'corrida' || prova === 'caminhada') &&
+                nColunasVoltasAtivas > 0 &&
+                onToggleVolta
+                  ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
+                      <CheckVolta
+                        key={`volta-${index}-${v}`}
+                        checked={checksVoltas[index]?.[v] ?? false}
+                        a11y={`Volta ${v + 1}, participante ${index + 1}`}
+                        touchLarge={isNativeMobile}
+                        onPress={() => onToggleVolta(index, v)}
+                      />
+                    ))
+                  : null}
+              </ScrollView>
+            ) : null}
           </View>
         );
       })}
@@ -698,19 +696,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: PREMIUM.radiusMd,
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 6,
     marginBottom: 2,
     overflow: 'visible',
+    gap: 6,
   },
-  participantRow: {
+  participantTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     minHeight: 34,
   },
-  participantRowAdaptive: {
+  participantTopRowAdaptive: {
     alignItems: 'flex-start',
-    paddingVertical: 2,
   },
   identityCol: {
     flexDirection: 'row',
@@ -732,6 +730,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingTop: 1,
   },
+  identityColWithChecksBelow: {
+    flex: 1,
+    maxWidth: undefined,
+  },
   participantNomeAdaptive: {
     flexShrink: 0,
     flexGrow: 1,
@@ -745,16 +747,10 @@ const styles = StyleSheet.create({
     marginVertical: 2,
     flexShrink: 0,
   },
-  checksTrack: {
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 36,
-    maxWidth: Platform.OS === 'web' ? '46%' : undefined,
-    alignSelf: 'center',
-  },
-  checksTrackCompact: {
-    flex: 1,
-    maxWidth: undefined,
+  checksRowBelow: {
+    width: '100%',
+    flexGrow: 0,
+    flexShrink: 0,
   },
   checkOuterLarge: {
     padding: 4,

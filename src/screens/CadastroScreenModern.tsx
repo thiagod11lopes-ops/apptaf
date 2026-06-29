@@ -633,6 +633,7 @@ export default function CadastroScreenModern() {
             <CadastroPlanilhaBlock
               cadastros={cadastros}
               cardGlassEnabled={false}
+              tableTitle="Planilha de Cadastro"
               showActions
               onEdit={handleEditar}
               onRequestDelete={(c) => setExcluirId(c.id)}

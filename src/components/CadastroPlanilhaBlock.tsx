@@ -7,6 +7,9 @@ import { Card } from './Card';
 import { LabelNip } from './LabelNip';
 import { LabelSO } from './LabelSO';
 import { LabelSvgText } from './LabelSvgText';
+import { TafGlassPanel, TafSectionHeader } from './mobile/TafTabChrome';
+import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
+import { PREMIUM } from '../theme/premium';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { idadeDisplayFromDataNascimento } from '../utils/idadeFromDataNascimento';
 import { textoNotaCorridaFromCadastro } from '../taf/corrida2400Nota';
@@ -307,19 +310,32 @@ export function CadastroPlanilhaBlock({
   const unselectedBg = ui.unselectedBg;
   const labelInk = ui.text;
   const segmentInk = (active: boolean) => (active ? '#FFFFFF' : ui.text);
+  const glass = getAplicarTafGlass(theme);
+  const useModernCadastro = !isAplicacaoTaf;
 
-  /** Borda esquerda entre colunas da planilha. */
+  const renderPostoGradCell = useCallback(
+    (c: CadastroItemPersist, textStyle: object) => {
+      if (c.categoria === 'Oficiais') {
+        return highlightText(c.oficial || '-', buscaLower, textStyle, 1);
+      }
+      if (c.praca === 'SO') {
+        return <LabelSO color={labelInk} fontSize={13} fontWeight={900} />;
+      }
+      return highlightText(c.praca || '-', buscaLower, textStyle, 1);
+    },
+    [buscaLower, highlightText, labelInk],
+  );
+
+  /** Borda esquerda entre colunas da planilha (Registrador TAF). */
   const colSep = (showLeftDivider: boolean) =>
     showLeftDivider
       ? ([styles.tableCol, styles.tableColDivider, { borderLeftColor: ui.colDivider }] as const)
       : styles.tableCol;
 
-  return (
-    <Card glass={cardGlassEnabled} style={styles.tableCard}>
-      <Text style={[styles.tableTitle, { color: ui.text }]}>{tableTitle}</Text>
-
+  const planilhaBody = (
+    <>
       {cadastros.length === 0 ? (
-        <Text style={[styles.tableEmpty, { color: ui.text }]}>{emptyMessageWhenNoData}</Text>
+        <Text style={[styles.tableEmpty, { color: theme.textSecondary }]}>{emptyMessageWhenNoData}</Text>
       ) : (
         <View>
           {isAplicacaoTaf ? (
@@ -333,16 +349,25 @@ export function CadastroPlanilhaBlock({
             />
           ) : (
             <View style={styles.searchRow}>
-              <View style={[styles.searchWrap, { borderColor: theme.border, backgroundColor: ui.inputBg }]}>
-                <Search size={18} color={ui.searchIcon} strokeWidth={2.5} />
+              <View
+                style={[
+                  styles.searchWrap,
+                  useModernCadastro ? styles.searchWrapModern : null,
+                  {
+                    borderColor: useModernCadastro ? glass.border : theme.border,
+                    backgroundColor: useModernCadastro ? glass.highlight : ui.inputBg,
+                  },
+                ]}
+              >
+                <Search size={18} color={theme.primary} strokeWidth={2.5} />
                 <TextInput
                   value={filtroBusca}
                   onChangeText={setFiltroBusca}
-                  placeholder="Digite para filtrar..."
-                  placeholderTextColor={ui.placeholder}
+                  placeholder="Buscar por nome, NIP ou posto..."
+                  placeholderTextColor={theme.textMuted}
                   style={[
                     styles.searchInput,
-                    { borderColor: theme.border, color: ui.text, backgroundColor: ui.inputBg },
+                    { color: ui.text, backgroundColor: 'transparent' },
                   ]}
                   autoCorrect={false}
                   spellCheck={false}
@@ -358,15 +383,16 @@ export function CadastroPlanilhaBlock({
                 onPress={() => setModalErrosNipAberto(true)}
                 style={[
                   styles.filterBtn,
+                  useModernCadastro ? styles.filterBtnModern : null,
                   {
-                    borderColor: errosNipCount > 0 ? theme.loss : theme.border,
-                    backgroundColor: errosNipCount > 0 ? 'rgba(220,38,38,0.08)' : ui.inputBg,
+                    borderColor: errosNipCount > 0 ? theme.loss : glass.border,
+                    backgroundColor: errosNipCount > 0 ? 'rgba(220,38,38,0.08)' : glass.highlight,
                   },
                 ]}
               >
                 <ListFilter
                   size={20}
-                  color={errosNipCount > 0 ? theme.loss : ui.searchIcon}
+                  color={errosNipCount > 0 ? theme.loss : theme.textSecondary}
                   strokeWidth={2.5}
                 />
                 {errosNipCount > 0 ? (
@@ -379,17 +405,10 @@ export function CadastroPlanilhaBlock({
           )}
 
           {!isAplicacaoTaf ? (
-          <View style={styles.filtersWrap}>
+          <View style={[styles.filtersWrap, useModernCadastro ? styles.filtersWrapModern : null]}>
             <View style={styles.filterBlock}>
-              <LabelSvgText
-                text="Categoria"
-                color={ui.label}
-                fontSize={12}
-                fontWeight={800}
-                width={100}
-                height={18}
-              />
-              <View style={styles.segmented}>
+              <Text style={[styles.filterKicker, { color: theme.primary }]}>CATEGORIA</Text>
+              <View style={[styles.segmented, { borderColor: glass.border }]}>
                 {(['Todos', 'Oficiais', 'Praças'] as const).map((opt) => {
                   const active = filtroCategoria === opt;
                   return (
@@ -401,34 +420,14 @@ export function CadastroPlanilhaBlock({
                         active ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
                       ]}
                     >
-                      {opt === 'Todos' ? (
-                        <LabelSvgText
-                          text="Todos"
-                          color={segmentInk(active)}
-                          fontSize={12}
-                          fontWeight={800}
-                          width={70}
-                          height={18}
-                        />
-                      ) : opt === 'Oficiais' ? (
-                        <LabelSvgText
-                          text="Oficiais"
-                          color={segmentInk(active)}
-                          fontSize={12}
-                          fontWeight={800}
-                          width={90}
-                          height={18}
-                        />
-                      ) : (
-                        <LabelSvgText
-                          text="Praças"
-                          color={segmentInk(active)}
-                          fontSize={12}
-                          fontWeight={800}
-                          width={70}
-                          height={18}
-                        />
-                      )}
+                      <Text
+                        style={[
+                          styles.segmentBtnText,
+                          { color: segmentInk(active) },
+                        ]}
+                      >
+                        {opt}
+                      </Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -437,15 +436,7 @@ export function CadastroPlanilhaBlock({
 
             {filtroCategoria !== 'Todos' ? (
               <View style={styles.filterBlock}>
-                <LabelSvgText
-                  text="Posto / Graduação"
-                  color={ui.label}
-                  fontSize={12}
-                  fontWeight={800}
-                  width={170}
-                  height={18}
-                />
-
+                <Text style={[styles.filterKicker, { color: theme.primary }]}>POSTO / GRADUAÇÃO</Text>
                 <View style={styles.filterOptionsGrid}>
                   {postoGradOptions.map((opt) => {
                     const active = filtroPostoGrad === opt;
@@ -455,20 +446,19 @@ export function CadastroPlanilhaBlock({
                         onPress={() => setFiltroPostoGrad(opt)}
                         style={[
                           styles.filterOptionBtn,
-                          active ? { backgroundColor: selectedBg } : { backgroundColor: unselectedBg },
+                          useModernCadastro ? styles.filterOptionBtnModern : null,
+                          {
+                            borderColor: active ? theme.primary : glass.border,
+                            backgroundColor: active ? selectedBg : glass.highlight,
+                          },
                         ]}
                       >
                         {opt === 'SO' ? (
                           <LabelSO color={segmentInk(active)} fontSize={12} fontWeight={900} />
                         ) : (
-                          <LabelSvgText
-                            text={opt}
-                            color={segmentInk(active)}
-                            fontSize={12}
-                            fontWeight={800}
-                            width={90}
-                            height={18}
-                          />
+                          <Text style={[styles.filterOptionText, { color: segmentInk(active) }]}>
+                            {opt}
+                          </Text>
                         )}
                       </TouchableOpacity>
                     );
@@ -479,8 +469,89 @@ export function CadastroPlanilhaBlock({
           </View>
           ) : null}
 
+          {useModernCadastro ? (
+            <Text style={[styles.resultCount, { color: theme.textMuted }]}>
+              {cadastrosFiltradosComBusca.length} de {cadastros.length} cadastro
+              {cadastros.length !== 1 ? 's' : ''}
+            </Text>
+          ) : null}
+
           {cadastrosFiltradosComBusca.length === 0 ? (
-            <Text style={[styles.tableEmpty, { color: ui.text }]}>Nenhum resultado encontrado.</Text>
+            <Text style={[styles.tableEmpty, { color: theme.textSecondary }]}>Nenhum resultado encontrado.</Text>
+          ) : useModernCadastro ? (
+            <View style={styles.modernList}>
+              {cadastrosFiltradosComBusca.map((c) => (
+                <View
+                  key={c.id}
+                  style={[
+                    styles.modernRow,
+                    {
+                      borderColor: glass.border,
+                      backgroundColor: theme.isDark ? 'rgba(2,6,23,0.42)' : 'rgba(255,255,255,0.55)',
+                    },
+                  ]}
+                >
+                  <View style={styles.modernRowHeader}>
+                    <View style={styles.modernRowHeaderText}>
+                      {highlightText(c.nome || '-', buscaLower, styles.modernName, 2)}
+                      <View style={styles.modernChipRow}>
+                        <View
+                          style={[
+                            styles.modernChip,
+                            { borderColor: theme.primary, backgroundColor: theme.accentMuted },
+                          ]}
+                        >
+                          <Text style={[styles.modernChipText, { color: theme.primary }]}>
+                            {c.categoria}
+                          </Text>
+                        </View>
+                        <View style={[styles.modernChip, { borderColor: glass.border }]}>
+                          {renderPostoGradCell(c, [styles.modernChipText, { color: ui.text }])}
+                        </View>
+                      </View>
+                    </View>
+                    {showActions && onEdit && onRequestDelete ? (
+                      <View style={styles.modernActions}>
+                        <TouchableOpacity
+                          accessibilityLabel="Editar cadastro"
+                          onPress={() => onEdit(c)}
+                          style={[styles.modernIconBtn, { borderColor: glass.border }]}
+                        >
+                          <Pencil size={17} color={theme.primary} strokeWidth={2.5} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          accessibilityLabel="Excluir cadastro"
+                          onPress={() => onRequestDelete(c)}
+                          style={[styles.modernIconBtn, styles.modernIconBtnDanger]}
+                        >
+                          <Trash2 size={17} color={theme.loss} strokeWidth={2.5} />
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={[styles.modernDivider, { backgroundColor: glass.border }]} />
+                  <View style={styles.modernMetaGrid}>
+                    <View style={styles.modernMetaItem}>
+                      <LabelNip color={theme.textMuted} fontSize={9} fontWeight="800" />
+                      {highlightText(c.nip || '-', buscaLower, styles.modernMetaValue, 1)}
+                    </View>
+                    <View style={styles.modernMetaItem}>
+                      <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>IDADE</Text>
+                      {highlightText(
+                        idadeDisplayFromDataNascimento(c.dataNascimento),
+                        buscaLower,
+                        styles.modernMetaValue,
+                        1,
+                      )}
+                    </View>
+                    <View style={styles.modernMetaItem}>
+                      <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>GÊNERO</Text>
+                      {highlightText(generoPlanilhaLabel(c), buscaLower, styles.modernMetaValue, 1)}
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
           ) : (
             <View>
               <View
@@ -498,7 +569,7 @@ export function CadastroPlanilhaBlock({
                   <LabelSvgText text="Posto / Graduação" color={labelInk} fontSize={12} fontWeight={800} width={160} height={18} />
                 </View>
                 <View style={[colSep(true), { flex: 1, paddingHorizontal: 4 }]}>
-                  <LabelNip color={labelInk} fontSize={12} fontWeight={800} />
+                  <LabelNip color={labelInk} fontSize={12} fontWeight="800" />
                 </View>
                 <View style={[colSep(true), { flex: 2 }]}>
                   <LabelSvgText text="Nome" color={labelInk} fontSize={12} fontWeight={800} width={90} height={18} />
@@ -665,6 +736,26 @@ export function CadastroPlanilhaBlock({
           onCorrigido={(atualizado) => onCadastroCorrigido?.(atualizado)}
         />
       ) : null}
+    </>
+  );
+
+  if (useModernCadastro) {
+    return (
+      <TafGlassPanel accent="cyan" style={styles.tableCardModern}>
+        <TafSectionHeader
+          kicker="PLANILHA"
+          title={tableTitle}
+          subtitle={`${cadastros.length} cadastro${cadastros.length !== 1 ? 's' : ''} no sistema`}
+        />
+        {planilhaBody}
+      </TafGlassPanel>
+    );
+  }
+
+  return (
+    <Card glass={cardGlassEnabled} style={styles.tableCard}>
+      <Text style={[styles.tableTitle, { color: ui.text }]}>{tableTitle}</Text>
+      {planilhaBody}
     </Card>
   );
 }
@@ -675,8 +766,90 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 20,
   },
+  tableCardModern: {
+    ...tableFullWidthStyle,
+    marginBottom: 8,
+  },
   tableTitle: { fontSize: 14, fontWeight: '800', color: '#111827', marginBottom: 10 },
-  tableEmpty: { fontSize: 13, fontWeight: '700', color: '#6B7280' },
+  tableEmpty: { fontSize: 13, fontWeight: '700', marginTop: 4 },
+  resultCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    marginBottom: 10,
+    textTransform: 'uppercase',
+  },
+  modernList: { gap: 10 },
+  modernRow: {
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusLg,
+    padding: 14,
+    overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0 8px 24px rgba(15,23,42,0.06)' } as object)
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.08,
+          shadowRadius: 14,
+          elevation: 4,
+        }),
+  },
+  modernRowHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  modernRowHeaderText: { flex: 1, minWidth: 0, gap: 8 },
+  modernName: {
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+    lineHeight: 21,
+  },
+  modernChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  modernChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  modernChipText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  modernActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
+  modernIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modernIconBtnDanger: {
+    borderColor: 'rgba(220,38,38,0.25)',
+    backgroundColor: 'rgba(220,38,38,0.08)',
+  },
+  modernDivider: { height: 1, marginVertical: 12, opacity: 0.85 },
+  modernMetaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  modernMetaItem: {
+    flexGrow: 1,
+    flexBasis: '28%',
+    minWidth: 96,
+    gap: 4,
+  },
+  modernMetaLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+  },
+  modernMetaValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
   tableHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -705,7 +878,21 @@ const styles = StyleSheet.create({
   highlightText: { fontWeight: '900' },
 
   filtersWrap: { marginBottom: 10, gap: 12 },
+  filtersWrapModern: { marginBottom: 4 },
   filterBlock: { gap: 8 },
+  filterKicker: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  segmentBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  filterOptionText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
   filterOptionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -716,25 +903,26 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  filterOptionBtnModern: {
+    borderRadius: PREMIUM.radiusMd,
   },
 
   segmented: {
     flexDirection: 'row',
-    borderRadius: 14,
+    borderRadius: PREMIUM.radiusMd + 2,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
     overflow: 'hidden',
   },
-  segmentBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
+  segmentBtn: { flex: 1, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' },
 
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   searchWrap: {
     flex: 1,
@@ -742,20 +930,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.12)',
-    borderRadius: 12,
+    borderRadius: PREMIUM.radiusMd + 2,
     paddingHorizontal: 12,
     paddingVertical: 4,
-    backgroundColor: 'rgba(255,255,255,0.70)',
+  },
+  searchWrapModern: {
+    paddingVertical: 6,
   },
   filterBtn: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: PREMIUM.radiusMd + 2,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+  },
+  filterBtnModern: {
+    width: 46,
+    height: 46,
   },
   filterBadge: {
     position: 'absolute',

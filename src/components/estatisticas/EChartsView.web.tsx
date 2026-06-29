@@ -1,61 +1,91 @@
-import React, { useEffect, useRef } from 'react';
-import * as echarts from 'echarts/core';
-import { BarChart, LineChart, PieChart, RadarChart, HeatmapChart, GaugeChart } from 'echarts/charts';
-import {
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  VisualMapComponent,
-  RadarComponent,
-} from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
-import type { EChartsCoreOption } from 'echarts/core';
+import React, { useEffect, useRef, useState } from 'react';
+import type { ChartOption } from '../../utils/estatisticasChartTypes';
 
-echarts.use([
-  BarChart,
-  LineChart,
-  PieChart,
-  RadarChart,
-  HeatmapChart,
-  GaugeChart,
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  VisualMapComponent,
-  RadarComponent,
-  CanvasRenderer,
-]);
+type EChartsInstance = {
+  setOption: (option: ChartOption, opts?: { notMerge?: boolean }) => void;
+  resize: () => void;
+  dispose: () => void;
+};
 
 type Props = {
-  option: EChartsCoreOption;
+  option: ChartOption;
   height?: number;
   isDark?: boolean;
 };
 
+async function loadEchartsModule(): Promise<{
+  init: (
+    el: HTMLElement,
+    theme?: string,
+    opts?: { renderer?: string },
+  ) => EChartsInstance;
+}> {
+  const mod = await import('echarts');
+  const echarts = (mod as { default?: typeof mod }).default ?? mod;
+  return echarts as {
+    init: (
+      el: HTMLElement,
+      theme?: string,
+      opts?: { renderer?: string },
+    ) => EChartsInstance;
+  };
+}
+
 export function EChartsView({ option, height = 280, isDark = false }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const chartRef = useRef<echarts.ECharts | null>(null);
+  const chartRef = useRef<EChartsInstance | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    const chart = echarts.init(el, isDark ? 'dark' : undefined, { renderer: 'canvas' });
-    chartRef.current = chart;
-    chart.setOption(option, { notMerge: true });
+    let disposed = false;
+    let cleanupResize = () => {};
 
-    const onResize = () => chart.resize();
-    window.addEventListener('resize', onResize);
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null;
-    ro?.observe(el);
+    void (async () => {
+      try {
+        const echarts = await loadEchartsModule();
+        if (disposed || !containerRef.current) return;
+
+        const chart = echarts.init(el, isDark ? 'dark' : undefined, { renderer: 'canvas' });
+        chartRef.current = chart;
+        chart.setOption(option, { notMerge: true });
+
+        const onResize = () => chart.resize();
+        window.addEventListener('resize', onResize);
+        const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null;
+        ro?.observe(el);
+        cleanupResize = () => {
+          window.removeEventListener('resize', onResize);
+          ro?.disconnect();
+        };
+      } catch (e) {
+        if (!disposed) {
+          setError(e instanceof Error ? e.message : 'Não foi possível carregar o gráfico.');
+        }
+      }
+    })();
 
     return () => {
-      window.removeEventListener('resize', onResize);
-      ro?.disconnect();
-      chart.dispose();
+      disposed = true;
+      cleanupResize();
+      chartRef.current?.dispose();
       chartRef.current = null;
     };
   }, [option, isDark]);
+
+  useEffect(() => {
+    chartRef.current?.setOption(option, { notMerge: true });
+  }, [option]);
+
+  if (error) {
+    return (
+      <div style={{ padding: 16, color: '#b91c1c', fontSize: 13, textAlign: 'center' }}>
+        {error}
+      </div>
+    );
+  }
 
   return (
     <div

@@ -1,5 +1,5 @@
-import type { EChartsCoreOption } from 'echarts/core';
-import type { EstatisticasTafCompletas } from '../utils/estatisticasTaf';
+import type { EstatisticasTafCompletas } from './estatisticasTaf';
+import type { ChartOption } from './estatisticasChartTypes';
 
 export type ChartThemeColors = {
   isDark: boolean;
@@ -43,8 +43,8 @@ function baseGrid(isDark: boolean) {
 export function buildEstatisticasChartOptions(
   s: EstatisticasTafCompletas,
   c: ChartThemeColors,
-): { id: string; title: string; subtitle?: string; option: EChartsCoreOption; height: number }[] {
-  const charts: { id: string; title: string; subtitle?: string; option: EChartsCoreOption; height: number }[] = [];
+): { id: string; title: string; subtitle?: string; option: ChartOption; height: number }[] {
+  const charts: { id: string; title: string; subtitle?: string; option: ChartOption; height: number }[] = [];
 
   const pie = (title: string, items: { name: string; value: number }[], height = 300) => ({
     id: title,
@@ -67,7 +67,7 @@ export function buildEstatisticasChartOptions(
           },
         },
       ],
-    } satisfies EChartsCoreOption,
+    },
     height,
   });
 
@@ -163,7 +163,7 @@ export function buildEstatisticasChartOptions(
           label: { show: true, position: 'right', color: c.textMuted, fontWeight: 700 },
         },
       ],
-    } satisfies EChartsCoreOption,
+    },
   });
 
   charts.push(

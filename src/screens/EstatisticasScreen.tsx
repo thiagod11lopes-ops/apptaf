@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,6 @@ import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb
 import { calcularEstatisticasTaf, META_CONCLUSAO_TAF_PCT } from '../utils/estatisticasTaf';
 import { StatSection } from '../components/estatisticas/StatSection';
 import { StatBarChart } from '../components/estatisticas/StatBarChart';
-import { EstatisticasGraficosPanel } from '../components/estatisticas/EstatisticasGraficosPanel';
 import { KpiCard } from '../components/fintech/KpiCard';
 import { PillTabs } from '../components/fintech/PillTabs';
 import { MonoValue } from '../components/fintech/MonoValue';
@@ -22,6 +21,12 @@ import { TafCenteredTabHeader, TafGlassPanel } from '../components/mobile/TafTab
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 
 type ViewTab = 'geral' | 'modalidade' | 'notas' | 'graficos';
+
+const EstatisticasGraficosPanel = lazy(() =>
+  import('../components/estatisticas/EstatisticasGraficosPanel').then((m) => ({
+    default: m.EstatisticasGraficosPanel,
+  })),
+);
 
 function pctHint(val: number | null, suffix = '%'): string | undefined {
   if (val == null) return undefined;
@@ -97,7 +102,17 @@ export default function EstatisticasScreen() {
             Dashboard TAF · notas recalculadas pela norma (sexo, idade, tempo).
           </Text>
 
-          {tab === 'graficos' ? <EstatisticasGraficosPanel stats={s} /> : null}
+          {tab === 'graficos' ? (
+            <Suspense
+              fallback={
+                <View style={styles.centered}>
+                  <ActivityIndicator size="large" color={theme.gain} />
+                </View>
+              }
+            >
+              <EstatisticasGraficosPanel stats={s} />
+            </Suspense>
+          ) : null}
 
           {(tab === 'geral' || tab === 'modalidade') && (
             <StatSection title="Resumo geral" accent="cyan">

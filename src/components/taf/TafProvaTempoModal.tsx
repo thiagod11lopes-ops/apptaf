@@ -25,19 +25,21 @@ export type TafProvaTempoModalProva = 'corrida' | 'caminhada' | 'natacao' | 'per
 
 type MetaFieldScale = 'normal' | 'compact' | 'minimal';
 
-/** Escala Tempo/Nota conforme comprimento do nome (corrida/caminhada). */
+/** Escala Tempo/Nota conforme comprimento do nome e colunas de volta (corrida/caminhada). */
 function resolveMetaScaleForNome(
   nome: string,
   mostrarTempo: boolean,
   mostrarNota: boolean,
-  isNativeMobile: boolean,
+  nColunasVoltas: number,
 ): MetaFieldScale {
   const len = nome.trim().length;
   const dualMeta = mostrarTempo && mostrarNota;
+  const voltasPressure = nColunasVoltas >= 10 ? 8 : nColunasVoltas >= 6 ? 5 : nColunasVoltas >= 3 ? 2 : 0;
+  const effectiveLen = len + voltasPressure;
 
-  if (len >= 34 || (dualMeta && len >= 24)) return 'minimal';
-  if (len >= 22 || (dualMeta && len >= 16)) return 'compact';
-  if (isNativeMobile || len >= 14) return 'compact';
+  if (effectiveLen >= 26 || (dualMeta && effectiveLen >= 16)) return 'minimal';
+  if (effectiveLen >= 16 || (dualMeta && effectiveLen >= 10)) return 'compact';
+  if (len >= 10 || dualMeta) return 'compact';
   return 'normal';
 }
 
@@ -160,8 +162,8 @@ function MetaResultadoField({
           tone === 'notaReprov' && isMinimal ? styles.metaValueReprovMinimal : null,
         ]}
         numberOfLines={1}
-        adjustsFontSizeToFit={isMinimal}
-        minimumFontScale={0.75}
+        adjustsFontSizeToFit={isCompact}
+        minimumFontScale={0.65}
       >
         {value}
       </Text>
@@ -320,11 +322,15 @@ export function TafProvaTempoModal({
         const isCorridaCaminhada = prova === 'corrida' || prova === 'caminhada';
         const metaScale: MetaFieldScale =
           isCorridaCaminhada && (mostrarTempo || mostrarNota)
-            ? resolveMetaScaleForNome(nome, mostrarTempo, mostrarNota, isNativeMobile)
+            ? resolveMetaScaleForNome(
+                nome,
+                mostrarTempo,
+                mostrarNota,
+                nColunasVoltasAtivas,
+              )
             : isNativeMobile
               ? 'compact'
               : 'normal';
-        const nomeLongo = nome.trim().length >= 18;
 
         return (
           <View
@@ -337,12 +343,17 @@ export function TafProvaTempoModal({
               },
             ]}
           >
-            <View style={styles.participantRow}>
+            <View
+              style={[
+                styles.participantRow,
+                isCorridaCaminhada ? styles.participantRowAdaptive : null,
+              ]}
+            >
               <View
                 style={[
                   styles.identityCol,
-                  isNativeMobile ? styles.identityColCompact : null,
-                  isCorridaCaminhada && (mostrarTempo || mostrarNota) ? styles.identityColAdaptive : null,
+                  isNativeMobile && !isCorridaCaminhada ? styles.identityColCompact : null,
+                  isCorridaCaminhada ? styles.identityColAdaptive : null,
                 ]}
               >
                 <View
@@ -365,12 +376,10 @@ export function TafProvaTempoModal({
                 <Text
                   style={[
                     styles.participantNome,
-                    isNativeMobile ? styles.participantNomeCompact : null,
-                    isCorridaCaminhada && nomeLongo ? styles.participantNomeLong : null,
+                    isNativeMobile && !isCorridaCaminhada ? styles.participantNomeCompact : null,
+                    isCorridaCaminhada ? styles.participantNomeAdaptive : null,
                     { color: ui.text },
                   ]}
-                  numberOfLines={nomeLongo ? 2 : 1}
-                  ellipsizeMode="tail"
                 >
                   {nome}
                 </Text>
@@ -439,6 +448,8 @@ export function TafProvaTempoModal({
                     style={[
                       styles.metaStrip,
                       isCorridaCaminhada ? styles.metaStripAdaptive : null,
+                      metaScale === 'minimal' ? styles.metaStripMinimal : null,
+                      metaScale === 'compact' ? styles.metaStripCompact : null,
                     ]}
                   >
                     {mostrarTempo ? (
@@ -659,6 +670,10 @@ const styles = StyleSheet.create({
     gap: 6,
     minHeight: 34,
   },
+  participantRowAdaptive: {
+    alignItems: 'flex-start',
+    paddingVertical: 2,
+  },
   identityCol: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -672,12 +687,18 @@ const styles = StyleSheet.create({
   },
   identityColAdaptive: {
     flex: 1,
-    flexShrink: 1,
+    flexShrink: 0,
     minWidth: 0,
     maxWidth: undefined,
+    alignSelf: 'stretch',
+    alignItems: 'flex-start',
+    paddingTop: 1,
   },
-  participantNomeLong: {
-    lineHeight: 13,
+  participantNomeAdaptive: {
+    flexShrink: 0,
+    flexGrow: 1,
+    flexBasis: 'auto',
+    lineHeight: 14,
   },
   rowDivider: {
     width: 1,
@@ -689,8 +710,9 @@ const styles = StyleSheet.create({
   checksTrack: {
     flex: 1,
     flexShrink: 1,
-    minWidth: 40,
+    minWidth: 36,
     maxWidth: Platform.OS === 'web' ? '46%' : undefined,
+    alignSelf: 'center',
   },
   checksTrackCompact: {
     flex: 1,
@@ -712,8 +734,17 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   metaStripAdaptive: {
-    flexShrink: 3,
+    flexShrink: 1,
+    flexGrow: 0,
     minWidth: 0,
+    alignSelf: 'center',
+  },
+  metaStripCompact: {
+    maxWidth: 118,
+  },
+  metaStripMinimal: {
+    maxWidth: 86,
+    gap: 3,
   },
   numBadge: {
     width: 22,
@@ -768,18 +799,20 @@ const styles = StyleSheet.create({
         }),
   },
   metaFieldCompact: {
-    minWidth: 52,
+    minWidth: 48,
+    flex: 1,
     borderRadius: 12,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingTop: 3,
     paddingBottom: 4,
     gap: 0,
   },
   metaFieldMinimal: {
-    minWidth: 40,
-    maxWidth: 72,
+    minWidth: 34,
+    maxWidth: 64,
+    flex: 1,
     borderRadius: 10,
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     paddingTop: 2,
     paddingBottom: 3,
     gap: 0,

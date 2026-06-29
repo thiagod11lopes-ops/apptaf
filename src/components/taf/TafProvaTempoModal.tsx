@@ -362,14 +362,22 @@ export function TafProvaTempoModal({
             onToggleVolta != null);
 
         const isCorridaCaminhada = prova === 'corrida' || prova === 'caminhada';
+        const isNatacao = prova === 'natacao';
         const isPermanencia = prova === 'permanencia';
+        /** Corrida, caminhada e natação compartilham o mesmo layout de card preparado. */
+        const isProvaLayoutPreparado = isCorridaCaminhada || isNatacao;
+        const colunasChecksLayout = isCorridaCaminhada
+          ? nColunasVoltasAtivas
+          : isNatacao && temChecks
+            ? 1
+            : 0;
         const metaScale: MetaFieldScale =
-          isCorridaCaminhada && (mostrarTempo || mostrarNota)
+          isProvaLayoutPreparado && (mostrarTempo || mostrarNota)
             ? resolveMetaScaleForNome(
                 nome,
                 mostrarTempo,
                 mostrarNota,
-                nColunasVoltasAtivas,
+                colunasChecksLayout,
               )
             : isNativeMobile
               ? 'compact'
@@ -389,16 +397,16 @@ export function TafProvaTempoModal({
             <View
               style={[
                 styles.participantTopRow,
-                isCorridaCaminhada ? styles.participantTopRowAdaptive : null,
+                isProvaLayoutPreparado ? styles.participantTopRowAdaptive : null,
               ]}
             >
               <View
                 style={[
                   styles.identityCol,
-                  isNativeMobile && !isCorridaCaminhada && !isPermanencia
+                  isNativeMobile && !isProvaLayoutPreparado && !isPermanencia
                     ? styles.identityColCompact
                     : null,
-                  isCorridaCaminhada ? styles.identityColAdaptive : null,
+                  isProvaLayoutPreparado ? styles.identityColAdaptive : null,
                   isPermanencia ? styles.identityColPermanencia : null,
                   temChecks && !isPermanencia ? styles.identityColWithChecksBelow : null,
                 ]}
@@ -423,10 +431,10 @@ export function TafProvaTempoModal({
                 <Text
                   style={[
                     styles.participantNome,
-                    isNativeMobile && !isCorridaCaminhada && !isPermanencia
+                    isNativeMobile && !isProvaLayoutPreparado && !isPermanencia
                       ? styles.participantNomeCompact
                       : null,
-                    isCorridaCaminhada ? styles.participantNomeAdaptive : null,
+                    isProvaLayoutPreparado ? styles.participantNomeAdaptive : null,
                     isPermanencia ? styles.participantNomePermanencia : null,
                     { color: ui.text },
                   ]}
@@ -442,7 +450,7 @@ export function TafProvaTempoModal({
                 <View
                   style={[
                     styles.metaStrip,
-                    isCorridaCaminhada ? styles.metaStripAdaptive : null,
+                    isProvaLayoutPreparado ? styles.metaStripAdaptive : null,
                   ]}
                 >
                     {mostrarTempo ? (
@@ -453,7 +461,7 @@ export function TafProvaTempoModal({
                         theme={theme}
                         ui={ui}
                         scale={metaScale}
-                        adaptive={isCorridaCaminhada}
+                        adaptive={isProvaLayoutPreparado}
                       />
                     ) : null}
                     {mostrarNota ? (
@@ -464,7 +472,7 @@ export function TafProvaTempoModal({
                         theme={theme}
                         ui={ui}
                         scale={metaScale}
-                        adaptive={isCorridaCaminhada}
+                        adaptive={isProvaLayoutPreparado}
                       />
                     ) : null}
                 </View>

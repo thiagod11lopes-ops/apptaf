@@ -43,6 +43,32 @@ function resolveMetaScaleForNome(
   return 'normal';
 }
 
+/** Largura do chip Tempo/Nota conforme o texto exibido (sem reticências). */
+function resolveMetaFieldWidth(value: string, scale: MetaFieldScale): number {
+  const text = value.trim() || '—';
+  const charW = scale === 'minimal' ? 6.8 : scale === 'compact' ? 8.2 : 11.5;
+  const pad = scale === 'minimal' ? 14 : scale === 'compact' ? 18 : 30;
+  const floor = scale === 'minimal' ? 36 : scale === 'compact' ? 46 : 88;
+  return Math.max(floor, Math.ceil(text.length * charW + pad));
+}
+
+/** Fonte do valor conforme comprimento — reduz antes de truncar. */
+function resolveMetaValueFontSize(value: string, scale: MetaFieldScale): number {
+  const len = (value.trim() || '—').length;
+  const base = scale === 'minimal' ? 10 : scale === 'compact' ? 12 : 20;
+  const min = scale === 'minimal' ? 7 : scale === 'compact' ? 8 : 11;
+  if (len <= 5) return base;
+  if (len <= 7) return Math.max(min, base - 2);
+  if (len <= 9) return Math.max(min, base - 3);
+  return min;
+}
+
+function resolveMetaReprovFontSize(value: string, scale: MetaFieldScale, baseSize: number): number {
+  const len = value.trim().length;
+  if (len <= 6) return baseSize;
+  return Math.max(scale === 'minimal' ? 7 : 8, baseSize - 1);
+}
+
 export type TafProvaTempoModalProps = {
   visible: boolean;
   onClose: () => void;
@@ -89,6 +115,7 @@ function MetaResultadoField({
   theme,
   ui,
   scale = 'normal',
+  adaptive = false,
 }: {
   label: string;
   value: string;
@@ -96,6 +123,7 @@ function MetaResultadoField({
   theme: ReturnType<typeof useTheme>['theme'];
   ui: ReturnType<typeof getUiColors>;
   scale?: MetaFieldScale;
+  adaptive?: boolean;
 }) {
   const valueColor =
     tone === 'notaReprov' ? theme.loss : tone === 'nota' ? theme.gain : ui.text;
@@ -128,6 +156,11 @@ function MetaResultadoField({
 
   const isCompact = scale === 'compact' || scale === 'minimal';
   const isMinimal = scale === 'minimal';
+  const fieldWidth = adaptive ? resolveMetaFieldWidth(value, scale) : undefined;
+  let valueFontSize = adaptive ? resolveMetaValueFontSize(value, scale) : undefined;
+  if (valueFontSize != null && tone === 'notaReprov') {
+    valueFontSize = resolveMetaReprovFontSize(value, scale, valueFontSize);
+  }
 
   return (
     <View
@@ -135,6 +168,10 @@ function MetaResultadoField({
         styles.metaField,
         isCompact ? styles.metaFieldCompact : null,
         isMinimal ? styles.metaFieldMinimal : null,
+        adaptive ? styles.metaFieldAdaptive : null,
+        adaptive && fieldWidth != null
+          ? { width: fieldWidth, minWidth: fieldWidth, maxWidth: fieldWidth }
+          : null,
         { borderColor },
       ]}
       accessibilityLabel={`${label}: ${value}`}
@@ -147,7 +184,6 @@ function MetaResultadoField({
           isMinimal ? styles.metaLabelMinimal : null,
           { color: theme.textMuted },
         ]}
-        numberOfLines={1}
       >
         {label}
       </Text>
@@ -156,14 +192,16 @@ function MetaResultadoField({
           styles.metaValue,
           isCompact ? styles.metaValueCompact : null,
           isMinimal ? styles.metaValueMinimal : null,
+          valueFontSize != null ? { fontSize: valueFontSize } : null,
           { color: valueColor },
           tone === 'notaReprov' ? styles.metaValueReprov : null,
           tone === 'notaReprov' && isCompact ? styles.metaValueReprovCompact : null,
           tone === 'notaReprov' && isMinimal ? styles.metaValueReprovMinimal : null,
+          tone === 'notaReprov' && valueFontSize != null ? { fontSize: valueFontSize } : null,
         ]}
-        numberOfLines={1}
-        adjustsFontSizeToFit={isCompact}
-        minimumFontScale={0.65}
+        numberOfLines={adaptive ? undefined : 1}
+        adjustsFontSizeToFit={!adaptive && isCompact}
+        minimumFontScale={0.35}
       >
         {value}
       </Text>
@@ -448,8 +486,6 @@ export function TafProvaTempoModal({
                     style={[
                       styles.metaStrip,
                       isCorridaCaminhada ? styles.metaStripAdaptive : null,
-                      metaScale === 'minimal' ? styles.metaStripMinimal : null,
-                      metaScale === 'compact' ? styles.metaStripCompact : null,
                     ]}
                   >
                     {mostrarTempo ? (
@@ -460,6 +496,7 @@ export function TafProvaTempoModal({
                         theme={theme}
                         ui={ui}
                         scale={metaScale}
+                        adaptive={isCorridaCaminhada}
                       />
                     ) : null}
                     {mostrarNota ? (
@@ -470,6 +507,7 @@ export function TafProvaTempoModal({
                         theme={theme}
                         ui={ui}
                         scale={metaScale}
+                        adaptive={isCorridaCaminhada}
                       />
                     ) : null}
                   </View>
@@ -662,7 +700,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     marginBottom: 2,
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   participantRow: {
     flexDirection: 'row',
@@ -734,17 +772,10 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   metaStripAdaptive: {
-    flexShrink: 1,
+    flexShrink: 0,
     flexGrow: 0,
     minWidth: 0,
     alignSelf: 'center',
-  },
-  metaStripCompact: {
-    maxWidth: 118,
-  },
-  metaStripMinimal: {
-    maxWidth: 86,
-    gap: 3,
   },
   numBadge: {
     width: 22,
@@ -800,7 +831,6 @@ const styles = StyleSheet.create({
   },
   metaFieldCompact: {
     minWidth: 48,
-    flex: 1,
     borderRadius: 12,
     paddingHorizontal: 6,
     paddingTop: 3,
@@ -809,13 +839,16 @@ const styles = StyleSheet.create({
   },
   metaFieldMinimal: {
     minWidth: 34,
-    maxWidth: 64,
-    flex: 1,
     borderRadius: 10,
     paddingHorizontal: 4,
     paddingTop: 2,
     paddingBottom: 3,
     gap: 0,
+  },
+  metaFieldAdaptive: {
+    flexShrink: 0,
+    overflow: 'visible',
+    alignItems: 'center',
   },
   metaLabel: {
     fontSize: 16,

@@ -34,6 +34,19 @@ export type CadastroItemPersist = {
   rubricaNatacaoSvg?: string;
   rubricaCaminhadaSvg?: string;
   rubricaPermanenciaSvg?: string;
+  /** Fuzileiros Navais — flexões e abdominais */
+  repsFlexaoBarra?: number;
+  notaFlexaoBarra?: string;
+  dataTafFlexaoBarra?: string;
+  repsFlexaoSolo?: number;
+  notaFlexaoSolo?: string;
+  dataTafFlexaoSolo?: string;
+  repsAbdominalRemador?: number;
+  notaAbdominalRemador?: string;
+  dataTafAbdominalRemador?: string;
+  tempoAbdominalPrancha?: string;
+  notaAbdominalPrancha?: string;
+  dataTafAbdominalPrancha?: string;
   /** Unix ms — usado na sincronização offline (mais recente prevalece). */
   updatedAt?: number;
 };

@@ -5,7 +5,17 @@ export type ResultadoCorridaItem = {
   nome: string;
   tempoMs: number;
   nip: string;
-  prova?: 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
+  prova?:
+    | 'corrida'
+    | 'natacao'
+    | 'permanencia'
+    | 'caminhada'
+    | 'flexao_barra'
+    | 'flexao_solo'
+    | 'abdominal_remador'
+    | 'abdominal_prancha';
+  /** Repetições ou tempo textual (provas FN). */
+  desempenhoTexto?: string;
   notaTexto?: string;
   noraTexto?: string;
   reprovacaoTexto?: string;

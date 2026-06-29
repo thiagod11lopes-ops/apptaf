@@ -1,18 +1,24 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Waves, Timer, Footprints, type LucideIcon } from 'lucide-react-native';
+import {
+  Waves,
+  Timer,
+  Dumbbell,
+  Activity,
+  Shield,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
 import { getAplicarTafGlass } from './aplicarTafTheme';
 import { useAplicarTafLayout } from './useAplicarTafLayout';
 import { CorridaRunnerIcon } from './CorridaRunnerIcon';
-
-type ProvaId = 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
+import type { TipoProvaTAF } from '../../../taf/tafProvaTypes';
 
 type ProvaConfig = {
-  id: ProvaId;
+  id: TipoProvaTAF;
   label: string;
   icon: LucideIcon | 'corrida-runner';
   colors: [string, string];
@@ -39,18 +45,68 @@ const PERMANENCIA: ProvaConfig = {
 const CAMINHADA: ProvaConfig = {
   id: 'caminhada',
   label: 'Caminhada',
-  icon: Footprints,
+  icon: Activity,
   colors: ['#059669', '#14b8a6'],
 };
 
-/** Linha 1: Corrida + Natação · Linha 2: Permanência + Caminhada */
-const PROVA_ROWS: [ProvaConfig, ProvaConfig][] = [
+const CORRIDA_3200: ProvaConfig = {
+  id: 'corrida',
+  label: 'Corrida 3200 m',
+  icon: 'corrida-runner',
+  colors: ['#4a5c38', '#6b5c45'],
+};
+const NATACAO_100: ProvaConfig = {
+  id: 'natacao',
+  label: 'Natação 100 m',
+  icon: Waves,
+  colors: ['#3d4a28', '#5c4a32'],
+};
+const PERMANENCIA_NAVAL: ProvaConfig = {
+  id: 'permanencia',
+  label: 'Permanência',
+  icon: Timer,
+  colors: ['#556B2F', '#4a5530'],
+};
+const FLEXAO_BARRA: ProvaConfig = {
+  id: 'flexao_barra',
+  label: 'Flexão na barra',
+  icon: Dumbbell,
+  colors: ['#3a4d28', '#5a6b42'],
+};
+const FLEXAO_SOLO: ProvaConfig = {
+  id: 'flexao_solo',
+  label: 'Flexão no solo',
+  icon: Dumbbell,
+  colors: ['#4a5530', '#7a6344'],
+};
+const ABDOMINAL_REMADOR: ProvaConfig = {
+  id: 'abdominal_remador',
+  label: 'Abdominal remador',
+  icon: Activity,
+  colors: ['#2a3320', '#556B2F'],
+};
+const ABDOMINAL_PRANCHA: ProvaConfig = {
+  id: 'abdominal_prancha',
+  label: 'Abdominal prancha',
+  icon: Shield,
+  colors: ['#3d4a28', '#6b5842'],
+};
+
+const PROVA_ROWS_PADRAO: ProvaConfig[][] = [
   [CORRIDA, NATACAO],
   [PERMANENCIA, CAMINHADA],
 ];
 
+const PROVA_ROWS_NAVAL: ProvaConfig[][] = [
+  [CORRIDA_3200, NATACAO_100],
+  [PERMANENCIA_NAVAL, FLEXAO_BARRA],
+  [FLEXAO_SOLO, ABDOMINAL_REMADOR],
+  [ABDOMINAL_PRANCHA],
+];
+
 type Props = {
-  onSelect: (id: ProvaId) => void;
+  variant?: 'padrao' | 'naval';
+  onSelect: (id: TipoProvaTAF) => void;
 };
 
 function ProvaTile({
@@ -60,13 +116,15 @@ function ProvaTile({
   glass,
   ui,
   theme,
+  fullWidth,
 }: {
   prova: ProvaConfig;
-  onSelect: (id: ProvaId) => void;
+  onSelect: (id: TipoProvaTAF) => void;
   isNativeMobile: boolean;
   glass: ReturnType<typeof getAplicarTafGlass>;
   ui: ReturnType<typeof getUiColors>;
   theme: ReturnType<typeof useTheme>['theme'];
+  fullWidth?: boolean;
 }) {
   const Icon = prova.icon !== 'corrida-runner' ? prova.icon : null;
 
@@ -75,7 +133,7 @@ function ProvaTile({
       accessibilityLabel={prova.label}
       activeOpacity={0.9}
       onPress={() => onSelect(prova.id)}
-      style={styles.tileWrap}
+      style={[styles.tileWrap, fullWidth ? styles.tileWrapFull : null]}
     >
       <View
         style={[
@@ -116,15 +174,16 @@ function ProvaTile({
   );
 }
 
-export function AplicarTafProvaSelector({ onSelect }: Props) {
+export function AplicarTafProvaSelector({ variant = 'padrao', onSelect }: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const glass = getAplicarTafGlass(theme);
   const { isNativeMobile } = useAplicarTafLayout();
+  const rows = variant === 'naval' ? PROVA_ROWS_NAVAL : PROVA_ROWS_PADRAO;
 
   return (
     <View style={styles.grid}>
-      {PROVA_ROWS.map((row, rowIndex) => (
+      {rows.map((row, rowIndex) => (
         <View key={`prova-row-${rowIndex}`} style={styles.row}>
           {row.map((prova) => (
             <ProvaTile
@@ -135,6 +194,7 @@ export function AplicarTafProvaSelector({ onSelect }: Props) {
               glass={glass}
               ui={ui}
               theme={theme}
+              fullWidth={row.length === 1}
             />
           ))}
         </View>
@@ -154,6 +214,10 @@ const styles = StyleSheet.create({
   tileWrap: {
     flex: 1,
     minWidth: 0,
+  },
+  tileWrapFull: {
+    flex: 1,
+    maxWidth: '100%',
   },
   tile: {
     borderWidth: 1,

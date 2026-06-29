@@ -1,7 +1,15 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 
-export type TipoProvaAplicada = 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
+export type TipoProvaAplicada =
+  | 'corrida'
+  | 'natacao'
+  | 'permanencia'
+  | 'caminhada'
+  | 'flexao_barra'
+  | 'flexao_solo'
+  | 'abdominal_remador'
+  | 'abdominal_prancha';
 
 export type SessaoAplicacaoTaf = {
   id: string;
@@ -217,6 +225,14 @@ export function tituloTipoProva(tipo: TipoProvaAplicada): string {
       return 'Permanência';
     case 'caminhada':
       return 'Caminhada';
+    case 'flexao_barra':
+      return 'Flexão na barra';
+    case 'flexao_solo':
+      return 'Flexão no solo';
+    case 'abdominal_remador':
+      return 'Abdominal remador';
+    case 'abdominal_prancha':
+      return 'Abdominal prancha';
     default:
       return 'Corrida';
   }

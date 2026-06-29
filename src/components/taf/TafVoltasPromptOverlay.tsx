@@ -227,8 +227,9 @@ const styles = StyleSheet.create({
     zIndex: 40,
     elevation: 40,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingHorizontal: 20,
+    paddingTop: 16,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,

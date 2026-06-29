@@ -21,7 +21,6 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onPreCadastro }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <Text style={[styles.kicker, { color: theme.primary }]}>MODO DE OPERAÇÃO</Text>
       <View style={styles.grid}>
         <TouchableOpacity
           accessibilityLabel="Iniciar TAF"
@@ -96,13 +95,6 @@ const styles = StyleSheet.create({
   wrap: {
     width: '100%',
     marginBottom: 8,
-    gap: 10,
-  },
-  kicker: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.3,
-    paddingHorizontal: 2,
   },
   grid: {
     gap: 12,

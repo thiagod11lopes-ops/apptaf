@@ -12,6 +12,7 @@ type Props = {
 const HIDE_ON: (keyof RootStackParamList)[] = [
   'Home',
   'Cadastro',
+  'AplicarTAF',
   'Configuracoes',
   'CadastrarResultados',
   'Login',

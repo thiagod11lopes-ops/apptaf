@@ -32,6 +32,7 @@ import { PREMIUM } from '../theme/premium';
 import { AplicarTafShell } from '../components/taf/aplicar/AplicarTafShell';
 import {
   AplicarTafFlowHeader,
+  AplicarTafCenteredTabHeader,
   AplicarTafGlassPanel,
   AplicarTafSectionHeader,
   AplicarTafBackLink,
@@ -45,6 +46,7 @@ import {
   PRE_CADASTRO_ACCENTS,
 } from '../components/taf/aplicar/AplicarTafPreCadastroCard';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
+import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -2055,11 +2057,19 @@ export default function AplicarTAFScreen() {
         scrollEnabled={!modalRubricaNatacaoVisible}
       >
         <View style={styles.centerWrap}>
-          <AplicarTafFlowHeader
-            title={flowHeader.title}
-            subtitle={flowHeader.subtitle}
-            onBack={() => navigation.goBack()}
-          />
+          {!mostrarProvas && !mostrarListaPreCadastro ? (
+            <AplicarTafCenteredTabHeader
+              title={flowHeader.title}
+              subtitle={flowHeader.subtitle}
+              footer={<TopActionIcons activeRoute="AplicarTAF" inline centered />}
+            />
+          ) : (
+            <AplicarTafFlowHeader
+              title={flowHeader.title}
+              subtitle={flowHeader.subtitle}
+              onBack={() => navigation.goBack()}
+            />
+          )}
 
           {!mostrarProvas && !mostrarListaPreCadastro ? (
             <AplicarTafHomeLauncher onIniciarTaf={iniciarTaf} onPreCadastro={abrirListaPreCadastro} />

@@ -20,20 +20,62 @@ import { useAplicarTafLayout } from './useAplicarTafLayout';
 export function AplicarTafTabHeader({
   title,
   subtitle,
-  kicker = 'CENTRAL TAF',
+  kicker,
   onBack,
   right,
+  centered = false,
 }: {
   title: string;
   subtitle?: string;
   kicker?: string;
   onBack?: () => void;
   right?: React.ReactNode;
+  centered?: boolean;
 }) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
   const glass = getAplicarTafGlass(theme);
+
+  if (centered) {
+    return (
+      <View style={styles.headerCenteredWrap}>
+        <View style={styles.headerCenteredText}>
+          <Text
+            style={[
+              styles.headerTitle,
+              styles.headerTitleCentered,
+              {
+                color: ui.text,
+                fontSize: isNarrowPhone ? 26 : isNativeMobile ? 28 : 30,
+                lineHeight: isNarrowPhone ? 30 : isNativeMobile ? 32 : 34,
+              },
+            ]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
+            {title}
+          </Text>
+          <LinearGradient
+            colors={[theme.primary, '#6366f1']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.headerTitleRule}
+          />
+          {subtitle ? (
+            <Text
+              style={[styles.headerSubtitle, styles.headerSubtitleCentered, { color: theme.textSecondary }]}
+              numberOfLines={3}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+        {right ? <View style={styles.headerCenteredFooter}>{right}</View> : null}
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.headerWrap, right ? styles.headerWrapWithRight : null]}>
@@ -48,9 +90,11 @@ export function AplicarTafTabHeader({
         </TouchableOpacity>
       ) : null}
       <View style={[styles.headerTextCol, !onBack ? styles.headerTextColExpanded : null]}>
-        <Text style={[styles.headerKicker, { color: theme.primary }]} numberOfLines={1}>
-          {kicker}
-        </Text>
+        {kicker ? (
+          <Text style={[styles.headerKicker, { color: theme.primary }]} numberOfLines={1}>
+            {kicker}
+          </Text>
+        ) : null}
         <Text
           style={[
             styles.headerTitle,
@@ -90,6 +134,18 @@ export function AplicarTafFlowHeader({
   onBack: () => void;
 }) {
   return <AplicarTafTabHeader title={title} subtitle={subtitle} onBack={onBack} />;
+}
+
+export function AplicarTafCenteredTabHeader({
+  title,
+  subtitle,
+  footer,
+}: {
+  title: string;
+  subtitle?: string;
+  footer?: React.ReactNode;
+}) {
+  return <AplicarTafTabHeader title={title} subtitle={subtitle} centered right={footer} />;
 }
 
 export function AplicarTafGlassPanel({
@@ -309,6 +365,39 @@ const styles = StyleSheet.create({
   },
   headerWrapWithRight: {
     marginBottom: 20,
+  },
+  headerCenteredWrap: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+    paddingHorizontal: 8,
+    ...(Platform.OS === 'web' ? ({ overflow: 'visible' as const, zIndex: 10 } as object) : null),
+  },
+  headerTitleRule: {
+    width: 32,
+    height: 2,
+    borderRadius: 2,
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  headerCenteredText: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 4,
+  },
+  headerCenteredFooter: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  headerTitleCentered: {
+    textAlign: 'center',
+    width: '100%',
+  },
+  headerSubtitleCentered: {
+    textAlign: 'center',
+    width: '100%',
+    marginTop: 6,
   },
   backBtn: {
     width: 44,

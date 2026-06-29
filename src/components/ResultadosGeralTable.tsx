@@ -37,31 +37,51 @@ function StatusChip({ status }: { status: 'Completo' | 'Parcial' }) {
   );
 }
 
+function temCorridaConcluida(item: ResultadoGeralItem): boolean {
+  const nota = (item.notaCorrida || '').trim();
+  if (nota && nota !== '—') return true;
+  return item.situacaoCorrida === 'Aprovado' || item.situacaoCorrida === 'Reprovado';
+}
+
 function ModalityBlock({
   label,
   nota,
   situacao,
   buscaLower,
+  dispensavel = false,
 }: {
   label: string;
   nota: string;
   situacao: string;
   buscaLower: string;
+  dispensavel?: boolean;
 }) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const glass = getAplicarTafGlass(theme);
 
   return (
-    <View style={[styles.modalityBlock, { borderColor: glass.border }]}>
-      <Text style={[styles.modalityKicker, { color: theme.primary }]}>{label}</Text>
-      <View style={styles.modalityValues}>
+    <View
+      style={[
+        styles.modalityBlock,
+        {
+          borderColor: dispensavel ? theme.loss : glass.border,
+          backgroundColor: dispensavel ? 'rgba(220, 38, 38, 0.1)' : undefined,
+        },
+      ]}
+    >
+      <Text
+        style={[styles.modalityKicker, { color: dispensavel ? theme.loss : theme.primary }]}
+      >
+        {label}
+      </Text>
+      <View style={[styles.modalityValues, dispensavel && styles.modalityValuesFaded]}>
         <View style={styles.modalityValueRow}>
           <Text style={[styles.modalityLabel, { color: theme.textMuted }]}>NOTA</Text>
           <SearchHighlightText
             text={nota}
             queryLower={buscaLower}
-            style={[styles.modalityValue, { color: ui.text }]}
+            style={[styles.modalityValue, { color: dispensavel ? theme.loss : ui.text }]}
             numberOfLines={1}
           />
         </View>
@@ -70,11 +90,21 @@ function ModalityBlock({
           <SearchHighlightText
             text={situacao}
             queryLower={buscaLower}
-            style={[styles.modalityValue, { color: situacaoCor(situacao, theme) }]}
+            style={[
+              styles.modalityValue,
+              { color: dispensavel ? theme.loss : situacaoCor(situacao, theme) },
+            ]}
             numberOfLines={1}
           />
         </View>
       </View>
+      {dispensavel ? (
+        <View style={styles.dispensavelOverlay} pointerEvents="none">
+          <View style={[styles.dispensavelStripe, { backgroundColor: theme.loss }]}>
+            <Text style={styles.dispensavelText}>Dispensável</Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -180,6 +210,7 @@ export function ResultadosGeralTable({
               nota={item.notaCaminhada}
               situacao={item.situacaoCaminhada}
               buscaLower={buscaLower}
+              dispensavel={temCorridaConcluida(item)}
             />
             <ModalityBlock
               label="NATAÇÃO"
@@ -287,6 +318,32 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     padding: 10,
     gap: 6,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  modalityValuesFaded: {
+    opacity: 0.32,
+  },
+  dispensavelOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(220, 38, 38, 0.08)',
+  },
+  dispensavelStripe: {
+    transform: [{ rotate: '-14deg' }],
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    borderRadius: 4,
+    minWidth: '88%',
+    alignItems: 'center',
+  },
+  dispensavelText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   modalityKicker: {
     fontSize: 9,

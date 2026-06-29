@@ -4,7 +4,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { SidebarNav } from './SidebarNav';
-import { LogombWatermark } from '../mobile/LogombWatermark';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = {
@@ -47,7 +46,7 @@ export function AppShell({ children, activeRoute, fullWidth }: Props) {
           {...(Platform.OS === 'web' ? { className: 'app-main-scroll' as never } : {})}
         >
           <LinearGradient
-            colors={[...t.gradientAppBg]}
+            colors={['transparent', 'transparent']}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={[styles.main, fullWidth && styles.mainFull]}
@@ -55,7 +54,6 @@ export function AppShell({ children, activeRoute, fullWidth }: Props) {
               ? { className: `app-main${fullWidth ? ' app-main--full' : ''}` as never }
               : {})}
           >
-            <LogombWatermark />
             <View style={styles.mainContent}>{children}</View>
           </LinearGradient>
         </ScrollView>

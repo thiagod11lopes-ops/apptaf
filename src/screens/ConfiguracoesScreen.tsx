@@ -17,7 +17,7 @@ export default function ConfiguracoesScreen() {
   const ts = theme.textStyles;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <Header title="Configurações" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Card elevated>

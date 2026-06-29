@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { GlassBottomBar } from '../components/premium/GlassBottomBar';
 import { SettingsTopButton } from '../components/premium/SettingsTopButton';
 import { AppShell } from '../components/sismav/AppShell';
+import { AppBackdrop } from '../components/mobile/AppBackdrop';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { navigationRef, getCurrentRouteName, navigateTab } from './navigationRef';
 import { AuthLoginRouteGate } from './AuthLoginRouteGate';
@@ -79,7 +80,9 @@ export default function AppNavigator() {
       onStateChange={syncRoute}
     >
       <AuthLoginRouteGate />
-      <View style={[styles.shell, { backgroundColor: 'transparent' }]}>
+      <View style={styles.shell}>
+        <AppBackdrop />
+        <View style={styles.shellForeground}>
         <AppShell
           activeRoute={activeRoute}
           fullWidth={activeRoute === 'Cadastro' || activeRoute === 'CadastroAplicador' || activeRoute === 'AplicarTAF'}
@@ -130,6 +133,7 @@ export default function AppNavigator() {
         </AppShell>
         <SettingsTopButton activeRoute={activeRoute} />
         <GlassBottomBar activeRoute={activeRoute} />
+        </View>
       </View>
     </NavigationContainer>
   );
@@ -142,5 +146,11 @@ const styles = StyleSheet.create({
     height: '100%',
     minHeight: 0,
     overflow: Platform.OS === 'web' ? 'hidden' : 'visible',
+    position: 'relative',
+    backgroundColor: 'transparent',
+  },
+  shellForeground: {
+    flex: 1,
+    zIndex: 1,
   },
 });

@@ -43,7 +43,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
   const returnTo = route.params?.returnTo ?? 'AplicarTAF';
   const aplicadorAssinatura = route.params?.aplicadorAssinatura;
   const [exportandoPdf, setExportandoPdf] = useState(false);
-  const grayBg = theme.background;
+  const grayBg = 'transparent';
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = theme.border;
 

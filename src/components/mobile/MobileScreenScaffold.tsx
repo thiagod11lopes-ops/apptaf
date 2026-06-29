@@ -22,7 +22,7 @@ export function isNativeMobileApp() {
   return Platform.OS === 'ios' || Platform.OS === 'android';
 }
 
-/** Shell glass + padding responsivo para abas principais no Android/iOS. */
+/** Padding responsivo; fundo global via AppBackdrop no AppNavigator. */
 export function MobileScreenScaffold({
   children,
   scroll = true,
@@ -49,10 +49,6 @@ export function MobileScreenScaffold({
   ) : (
     <View style={[styles.flex, padStyle, contentContainerStyle, style]}>{children}</View>
   );
-
-  if (!isNativeMobileApp()) {
-    return inner;
-  }
 
   return <MobileGlassShell>{inner}</MobileGlassShell>;
 }

@@ -56,7 +56,7 @@ function AppRoot() {
 
   if (adminHistorico) {
     return (
-      <View style={[styles.appRoot, { backgroundColor: theme.background }]}>
+      <View style={[styles.appRoot, { backgroundColor: 'transparent' }]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <AdminHistoricoApp />
       </View>
@@ -64,7 +64,7 @@ function AppRoot() {
   }
 
   return (
-    <View style={[styles.appRoot, { backgroundColor: theme.background }]}>
+    <View style={[styles.appRoot, { backgroundColor: 'transparent' }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <PhoneFrameShell>
         <AppNavigator />

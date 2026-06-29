@@ -11,7 +11,7 @@ export default function NormasScreen() {
   const navigation = useNavigation();
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <View style={styles.headerWrap}>
         <AppHeader title="Normas" subtitle="CGCFN-108" onBack={() => navigation.goBack()} />
       </View>

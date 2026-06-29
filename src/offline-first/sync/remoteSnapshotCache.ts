@@ -6,7 +6,6 @@ import { getCachedLoginUid } from '../../services/firebase/authUid';
 import {
   getAllAplicadoresFirestore,
   getAllCadastrosFirestoreLight,
-  getAllPreCadastrosFirestore,
   getAllSessoesFirestoreLight,
 } from './firebase/FirebaseGateway';
 
@@ -68,11 +67,10 @@ export async function fetchRemoteCollectionsSnapshot(
   const fresh = peekRemoteSnapshotCache(ownerUid);
   if (!force && fresh) return fresh;
 
-  const [remoteCad, remoteSess, remoteApp, remotePre] = await Promise.all([
+  const [remoteCad, remoteSess, remoteApp] = await Promise.all([
     fetchRemoteCollection('cadastros', ownerUid, () => getAllCadastrosFirestoreLight(ownerUid)),
     fetchRemoteCollection('sessoes', ownerUid, () => getAllSessoesFirestoreLight(ownerUid)),
     fetchRemoteCollection('aplicadores', ownerUid, () => getAllAplicadoresFirestore(ownerUid)),
-    fetchRemoteCollection('pre_cadastros', ownerUid, () => getAllPreCadastrosFirestore(ownerUid)),
   ]);
 
   cached = {
@@ -81,7 +79,7 @@ export async function fetchRemoteCollectionsSnapshot(
     remoteCad,
     remoteSess,
     remoteApp,
-    remotePre,
+    remotePre: [],
   };
   return cached;
 }

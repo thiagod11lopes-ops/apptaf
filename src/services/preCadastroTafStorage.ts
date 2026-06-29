@@ -2,6 +2,7 @@ import { getCachedDataOwnerUid, getCachedLoginUid, waitForAuthenticatedUid } fro
 import {
   listPreCadastros,
   migratePreCadastrosFromAppMeta,
+  ensurePreCadastrosLocalOnly,
   preCadastroRecordToTaf,
   savePreCadastroRecord,
   softDeletePreCadastroRecord,
@@ -33,6 +34,7 @@ async function resolveOwnerUid(): Promise<string> {
 export async function getAllPreCadastrosTaf(): Promise<PreCadastroTaf[]> {
   const ownerUid = await resolveOwnerUid();
   await migratePreCadastrosFromAppMeta(ownerUid);
+  await ensurePreCadastrosLocalOnly(ownerUid);
   const rows = await listPreCadastros(ownerUid);
   return rows.map(preCadastroRecordToTaf);
 }

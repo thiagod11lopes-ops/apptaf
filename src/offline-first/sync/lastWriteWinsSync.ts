@@ -46,9 +46,10 @@ import {
   putSessaoRecord,
 } from '../db/localDb';
 import {
-  listPreCadastrosForSync,
   putPreCadastroRecord,
 } from '../db/preCadastroLocalDb';
+import { listPreCadastros } from '../db/preCadastroLocalDb';
+import { isCloudSyncCollection } from './preCadastroLocalOnly';
 import { decideLastWriteWins, type LwwAction, type SyncRecord } from './lastWriteWins';
 import { markRecordSynced } from './recordMeta';
 import { isUnsyncedLocalStatus } from './syncStatus';
@@ -257,6 +258,7 @@ async function reconcileIdenticalUnsyncedLocals<TLocal extends SyncRecord, TRemo
   remoteRows: TRemote[],
   toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
 ): Promise<number> {
+  if (!isCloudSyncCollection(collection)) return 0;
   const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
   const loginUid = getCachedLoginUid();
   let reconciled = 0;
@@ -273,8 +275,6 @@ async function reconcileIdenticalUnsyncedLocals<TLocal extends SyncRecord, TRemo
       await putCadastroRecord(merged as CadastroRecord);
     } else if (collection === 'sessoes') {
       await putSessaoRecord(merged as SessaoRecord);
-    } else if (collection === 'pre_cadastros') {
-      await putPreCadastroRecord(merged as PreCadastroRecord);
     } else {
       await putAplicadorRecord(merged as AplicadorRecord);
     }
@@ -315,6 +315,7 @@ async function flushRemainingPendingRecords(
 
   let processed = 0;
   for (const item of pending.items) {
+    if (!isCloudSyncCollection(item.collection)) continue;
     const local = item.record as SyncRecord;
     if (!isUnsyncedLocalStatus(local.syncStatus)) continue;
 
@@ -400,8 +401,6 @@ async function flushRemainingPendingRecords(
           await putCadastroRecord(merged as CadastroRecord);
         } else if (item.collection === 'sessoes') {
           await putSessaoRecord(merged as SessaoRecord);
-        } else if (item.collection === 'pre_cadastros') {
-          await putPreCadastroRecord(merged as PreCadastroRecord);
         } else {
           await putAplicadorRecord(merged as AplicadorRecord);
         }
@@ -433,8 +432,6 @@ async function persistSyncedLocal<T extends SyncRecord>(
     await putCadastroRecord(synced as CadastroRecord);
   } else if (collection === 'sessoes') {
     await putSessaoRecord(synced as SessaoRecord);
-  } else if (collection === 'pre_cadastros') {
-    await putPreCadastroRecord(synced as PreCadastroRecord);
   } else {
     await putAplicadorRecord(synced as AplicadorRecord);
   }
@@ -527,8 +524,6 @@ async function downloadRecord(
     await putCadastroRecord(merged as CadastroRecord);
   } else if (collection === 'sessoes') {
     await putSessaoRecord(merged as SessaoRecord);
-  } else if (collection === 'pre_cadastros') {
-    await putPreCadastroRecord(merged as PreCadastroRecord);
   } else {
     await putAplicadorRecord(merged as AplicadorRecord);
   }
@@ -544,6 +539,10 @@ async function executePlanItem(
   deletionAudits: DeletionAuditEntry[],
   rubricCaches?: DownloadRubricCaches,
 ): Promise<void> {
+  if (!isCloudSyncCollection(item.collection)) {
+    stats.ignored += 1;
+    return;
+  }
   const upload = uploadFns[item.collection];
 
   if (item.action === 'upload' && item.local) {
@@ -592,63 +591,44 @@ export type SyncPlanSnapshot = {
 };
 
 async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Promise<SyncPlanSnapshot> {
-  const [localCad, localSess, localApp, localPre] = await Promise.all([
+  const [localCad, localSess, localApp] = await Promise.all([
     listCadastrosForSync(ownerUid, true),
     listSessoesForSync(ownerUid, true),
     listAplicadoresForSync(ownerUid, true),
-    listPreCadastrosForSync(ownerUid, true),
   ]);
 
   const remoteSnapshot = await fetchRemoteCollectionsSnapshot(ownerUid, forceRemote);
-  const { remoteCad, remoteSess, remoteApp, remotePre } = remoteSnapshot;
+  const { remoteCad, remoteSess, remoteApp } = remoteSnapshot;
+  const remotePre: PreCadastroRecord[] = [];
 
   await reconcileIdenticalUnsyncedLocals('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
   await reconcileIdenticalUnsyncedLocals('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
   await reconcileIdenticalUnsyncedLocals('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
-  await reconcileIdenticalUnsyncedLocals(
-    'pre_cadastros',
-    ownerUid,
-    localPre,
-    remotePre,
-    remoteToPreCadastroRecord,
-  );
 
-  const [localCadFresh, localSessFresh, localAppFresh, localPreFresh] = await Promise.all([
+  const [localCadFresh, localSessFresh, localAppFresh] = await Promise.all([
     listCadastrosForSync(ownerUid, true),
     listSessoesForSync(ownerUid, true),
     listAplicadoresForSync(ownerUid, true),
-    listPreCadastrosForSync(ownerUid, true),
   ]);
 
   const cadPlanFresh = buildSyncPlan('cadastros', ownerUid, localCadFresh, remoteCad, remoteToCadastroRecord);
   const sessPlanFresh = buildSyncPlan('sessoes', ownerUid, localSessFresh, remoteSess, remoteToSessaoRecord);
   const appPlanFresh = buildSyncPlan('aplicadores', ownerUid, localAppFresh, remoteApp, remoteToAplicadorRecord);
-  const prePlanFresh = buildSyncPlan(
-    'pre_cadastros',
-    ownerUid,
-    localPreFresh,
-    remotePre,
-    remoteToPreCadastroRecord,
-  );
 
-  const fullPlan = [
-    ...cadPlanFresh.plan,
-    ...sessPlanFresh.plan,
-    ...appPlanFresh.plan,
-    ...prePlanFresh.plan,
-  ];
+  const fullPlan = [...cadPlanFresh.plan, ...sessPlanFresh.plan, ...appPlanFresh.plan];
   const downloadItems = fullPlan.filter((p) => p.action === 'download');
   const uploadItems = fullPlan
     .filter((p) => p.action === 'upload')
     .filter((p) => !(isAuthorizedMemberSession() && p.collection === 'aplicadores'));
+
+  const localPre = await listPreCadastros(ownerUid);
 
   return {
     downloadItems,
     uploadItems,
     plannedUploads: uploadItems.length,
     plannedDownloads: downloadItems.length,
-    totalIgnored:
-      cadPlanFresh.ignored + sessPlanFresh.ignored + appPlanFresh.ignored + prePlanFresh.ignored,
+    totalIgnored: cadPlanFresh.ignored + sessPlanFresh.ignored + appPlanFresh.ignored,
     localCad,
     localSess,
     localApp,
@@ -679,7 +659,6 @@ export async function estimateSyncQueueCounts(
     ...(isAuthorizedMemberSession()
       ? [{ extraDownloads: 0, extraUploads: 0 }]
       : [countActivePresenceDrift(plan.localApp, plan.remoteApp, remoteToAplicadorRecord, ownerUid)]),
-    countActivePresenceDrift(plan.localPre, plan.remotePre, remoteToPreCadastroRecord, ownerUid),
     countBusinessContentDrift('cadastros', plan.localCad, plan.remoteCad, remoteToCadastroRecord, ownerUid),
     countBusinessContentDrift('sessoes', plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),
   ];

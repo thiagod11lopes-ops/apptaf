@@ -4,6 +4,7 @@ import {
   tituloTipoProva,
   type TipoProvaAplicada,
 } from '../../services/resultadosAplicadosIndexedDb';
+import { isCloudSyncCollection } from './preCadastroLocalOnly';
 
 export type SyncQueueCategory = {
   key: string;
@@ -16,11 +17,10 @@ export type SyncQueueBreakdown = {
   categories: SyncQueueCategory[];
 };
 
-const COLLECTION_LABELS: Record<CollectionName, string> = {
+const COLLECTION_LABELS: Partial<Record<CollectionName, string>> = {
   cadastros: 'Cadastro',
   sessoes: 'Resultado',
   aplicadores: 'Aplicador',
-  pre_cadastros: 'Pré-cadastro',
 };
 
 type TipoProvaLike = TipoProvaAplicada | string | undefined;
@@ -39,11 +39,6 @@ export type DownloadPlanItem = {
 function resultadoLabel(tipoProva: TipoProvaLike): string {
   if (!tipoProva) return 'Resultado';
   return tituloTipoProva(tipoProva as TipoProvaAplicada);
-}
-
-function preCadastroLabel(tipoProva: TipoProvaLike): string {
-  if (!tipoProva) return 'Pré-cadastro';
-  return `Pré-cadastro · ${tituloTipoProva(tipoProva as TipoProvaAplicada)}`;
 }
 
 function bumpCategory(map: Map<string, SyncQueueCategory>, key: string, label: string): void {
@@ -75,17 +70,15 @@ function finalizeBreakdown(categories: SyncQueueCategory[], total: number): Sync
 }
 
 function addItemToMap(map: Map<string, SyncQueueCategory>, collection: CollectionName, record?: BreakdownRecord): void {
+  if (!isCloudSyncCollection(collection)) return;
   if (collection === 'sessoes') {
     const tipo = record?.tipoProva;
     bumpCategory(map, `sessoes:${tipo ?? 'unknown'}`, resultadoLabel(tipo));
     return;
   }
-  if (collection === 'pre_cadastros') {
-    const tipo = record?.tipoProva;
-    bumpCategory(map, `pre:${tipo ?? 'unknown'}`, preCadastroLabel(tipo));
-    return;
-  }
-  bumpCategory(map, collection, COLLECTION_LABELS[collection]);
+  const label = COLLECTION_LABELS[collection];
+  if (!label) return;
+  bumpCategory(map, collection, label);
 }
 
 /** Detalha o que será enviado para a nuvem (dados locais pendentes). */

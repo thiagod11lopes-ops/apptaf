@@ -68,11 +68,10 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
   let pre_cadastros = 0;
 
   for (const uid of owners) {
-    const [cadRows, sessRows, appRows, preRows] = await Promise.all([
+    const [cadRows, sessRows, appRows] = await Promise.all([
       db.cadastros.where('ownerUid').equals(uid).toArray(),
       db.sessoes.where('ownerUid').equals(uid).toArray(),
       db.aplicadores.where('ownerUid').equals(uid).toArray(),
-      db.preCadastros.where('ownerUid').equals(uid).toArray(),
     ]);
 
     for (const row of cadRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
@@ -95,13 +94,6 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
       seen.add(key);
       items.push(toPendingItem('aplicadores', row));
       aplicadores += 1;
-    }
-    for (const row of preRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
-      const key = `pre_cadastros:${row.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      items.push(toPendingItem('pre_cadastros', row));
-      pre_cadastros += 1;
     }
   }
 

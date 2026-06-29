@@ -1,15 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { buildDownloadBreakdown, buildUploadBreakdown } from '../../src/offline-first/sync/syncQueueBreakdown';
+import { isCloudSyncCollection } from '../../src/offline-first/sync/preCadastroLocalOnly';
 import type { PendingSyncSummary } from '../../src/offline-first/sync/pendingSyncItems';
+
+describe('preCadastroLocalOnly', () => {
+  it('exclui pre_cadastros da sincronização com nuvem', () => {
+    expect(isCloudSyncCollection('cadastros')).toBe(true);
+    expect(isCloudSyncCollection('sessoes')).toBe(true);
+    expect(isCloudSyncCollection('pre_cadastros')).toBe(false);
+  });
+});
 
 describe('syncQueueBreakdown', () => {
   it('agrupa envios por tipo de dado', () => {
     const summary: PendingSyncSummary = {
-      total: 4,
+      total: 3,
       cadastros: 1,
       sessoes: 2,
       aplicadores: 0,
-      pre_cadastros: 1,
+      pre_cadastros: 0,
       items: [
         {
           collection: 'cadastros',
@@ -41,23 +50,13 @@ describe('syncQueueBreakdown', () => {
           syncStatus: 'local',
           record: { id: 's2', tipoProva: 'corrida' } as never,
         },
-        {
-          collection: 'pre_cadastros',
-          id: 'p1',
-          createdAt: 1,
-          updatedAt: 1,
-          version: 1,
-          deviceId: 'd',
-          syncStatus: 'local',
-          record: { id: 'p1', tipoProva: 'permanencia' } as never,
-        },
       ],
     };
 
     const breakdown = buildUploadBreakdown(summary);
-    expect(breakdown.total).toBe(4);
+    expect(breakdown.total).toBe(3);
     expect(breakdown.categories.map((c) => c.label)).toEqual(
-      expect.arrayContaining(['Cadastro', 'Natação', 'Corrida', 'Pré-cadastro · Permanência']),
+      expect.arrayContaining(['Cadastro', 'Natação', 'Corrida']),
     );
   });
 
@@ -73,5 +72,18 @@ describe('syncQueueBreakdown', () => {
 
     expect(breakdown.categories.find((c) => c.label === 'Natação')?.count).toBe(2);
     expect(breakdown.categories.find((c) => c.label === 'Cadastro')?.count).toBe(1);
+  });
+
+  it('ignora pre_cadastros no breakdown de envio', () => {
+    const summary: PendingSyncSummary = {
+      total: 0,
+      cadastros: 0,
+      sessoes: 0,
+      aplicadores: 0,
+      pre_cadastros: 0,
+      items: [],
+    };
+    const breakdown = buildUploadBreakdown(summary);
+    expect(breakdown.categories.some((c) => c.label.includes('Pré-cadastro'))).toBe(false);
   });
 });

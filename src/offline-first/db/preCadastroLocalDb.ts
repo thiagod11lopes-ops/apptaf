@@ -4,7 +4,7 @@ import { getTafDatabase } from './tafDatabase';
 import { getDeviceId } from '../deviceId';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { ensureRecordMeta } from '../sync/recordMeta';
-import { syncStatusForOperation } from '../sync/syncStatus';
+import { STATUS_SYNCED } from '../sync/syncStatus';
 import {
   hydrateAppMetaFromIndexedDb,
   preCadastroMetaKey,
@@ -13,22 +13,6 @@ import {
 } from './appMeta';
 
 const ANONYMOUS_OWNER = '__local__';
-
-function mergePreCadastrosById(
-  targetOwnerUid: string,
-  batches: PreCadastroRecord[][],
-): PreCadastroRecord[] {
-  const map = new Map<string, PreCadastroRecord>();
-  for (const batch of batches) {
-    for (const row of batch) {
-      const existing = map.get(row.id);
-      if (!existing || row.updatedAt >= existing.updatedAt) {
-        map.set(row.id, { ...row, ownerUid: targetOwnerUid });
-      }
-    }
-  }
-  return [...map.values()];
-}
 
 export async function toPreCadastroRecord(
   item: PreCadastroTaf,
@@ -47,7 +31,7 @@ export async function toPreCadastroRecord(
     deviceId,
     userId,
     updatedBy: userId ?? deviceId,
-    syncStatus: syncStatusForOperation(operation),
+    syncStatus: STATUS_SYNCED,
     deleted: false,
     lastModifiedBy: deviceId,
   };
@@ -60,22 +44,18 @@ export async function listPreCadastros(
 ): Promise<PreCadastroRecord[]> {
   const db = getTafDatabase();
   if (!db) return [];
+  const deviceId = await getDeviceId();
   const rows = await db.preCadastros.where('ownerUid').equals(ownerUid).toArray();
-  const filtered = includeDeleted ? rows : rows.filter((r) => !r.deleted);
+  const filtered = rows.filter((r) => r.deviceId === deviceId && (includeDeleted || !r.deleted));
   return filtered.sort((a, b) => b.criadoEm - a.criadoEm);
 }
 
+/** Pré-cadastro não sincroniza — retorna vazio para o motor LWW. */
 export async function listPreCadastrosForSync(
-  ownerUid: string,
-  includeDeleted = false,
+  _ownerUid: string,
+  _includeDeleted = false,
 ): Promise<PreCadastroRecord[]> {
-  const loginUid = getCachedLoginUid();
-  const sources = [ownerUid, ANONYMOUS_OWNER];
-  if (loginUid && loginUid !== ownerUid && !sources.includes(loginUid)) {
-    sources.push(loginUid);
-  }
-  const batches = await Promise.all(sources.map((uid) => listPreCadastros(uid, includeDeleted)));
-  return mergePreCadastrosById(ownerUid, batches);
+  return [];
 }
 
 export async function putPreCadastroRecord(record: PreCadastroRecord): Promise<void> {
@@ -109,15 +89,33 @@ export async function savePreCadastroRecord(
 export async function softDeletePreCadastroRecord(
   id: string,
   ownerUid: string,
-  userId: string | null,
+  _userId: string | null,
 ): Promise<void> {
   const db = getTafDatabase();
   if (!db) return;
   const existing = await db.preCadastros.get(id);
   if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
-  const { bumpRecordMeta } = await import('../sync/recordMeta');
-  const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');
-  await putPreCadastroRecord(record);
+  const deviceId = await getDeviceId();
+  if (existing.deviceId !== deviceId) return;
+  await db.preCadastros.delete(id);
+}
+
+/** Marca registros legados como locais e remove soft-deletes antigos neste aparelho. */
+export async function ensurePreCadastrosLocalOnly(ownerUid: string): Promise<void> {
+  const db = getTafDatabase();
+  if (!db) return;
+  const deviceId = await getDeviceId();
+  const rows = await db.preCadastros.where('ownerUid').equals(ownerUid).toArray();
+  for (const row of rows) {
+    if (row.deviceId !== deviceId) continue;
+    if (row.deleted) {
+      await db.preCadastros.delete(row.id);
+      continue;
+    }
+    if (row.syncStatus !== STATUS_SYNCED) {
+      await putPreCadastroRecord({ ...row, syncStatus: STATUS_SYNCED });
+    }
+  }
 }
 
 export function preCadastroRecordToTaf(record: PreCadastroRecord): PreCadastroTaf {
@@ -129,7 +127,7 @@ export function preCadastroRecordToTaf(record: PreCadastroRecord): PreCadastroTa
   };
 }
 
-/** Migra fila legada do Dexie meta → tabela preCadastros com sync. */
+/** Migra fila legada do Dexie meta → tabela preCadastros locais. */
 export async function migratePreCadastrosFromAppMeta(ownerUid: string): Promise<number> {
   await hydrateAppMetaFromIndexedDb();
   const userId = getCachedLoginUid();

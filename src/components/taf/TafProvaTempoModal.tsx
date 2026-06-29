@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,6 +20,7 @@ import { getAplicarTafBackdrop, getAplicarTafGlass } from './aplicar/aplicarTafT
 import { useAplicarTafLayout } from './aplicar/useAplicarTafLayout';
 import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPanel';
 import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
+import { LogombWatermark } from '../mobile/LogombWatermark';
 import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
 
 export type TafProvaTempoModalProva = 'corrida' | 'caminhada' | 'natacao' | 'permanencia';
@@ -319,6 +321,14 @@ export function TafProvaTempoModal({
   const glass = getAplicarTafGlass(theme);
 
   const [voltasConfirmadas, setVoltasConfirmadas] = useState(false);
+  const [modalLayout, setModalLayout] = useState({ width: 0, height: 0 });
+
+  const onModalLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      setModalLayout({ width, height });
+    }
+  }, []);
 
   useEffect(() => {
     if (!visible) setVoltasConfirmadas(false);
@@ -543,12 +553,22 @@ export function TafProvaTempoModal({
       onRequestClose={onClose}
       accessibilityViewIsModal
     >
-      <View style={styles.modalRoot}>
+      <View style={styles.modalRoot} onLayout={onModalLayout}>
         <LinearGradient
           colors={[...getAplicarTafBackdrop(theme)]}
           locations={[0, 0.4, 0.75, 1]}
           style={StyleSheet.absoluteFill}
         />
+        {modalLayout.width > 0 && modalLayout.height > 0 ? (
+          <View style={styles.modalLogoLayer} pointerEvents="none">
+            <LogombWatermark
+              containerWidth={modalLayout.width}
+              containerHeight={modalLayout.height}
+              sizeMultiplier={2}
+            />
+          </View>
+        ) : null}
+        <View style={styles.modalForeground}>
         <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
           <View style={[styles.header, { borderBottomColor: glass.border }]}>
             <View style={styles.headerTextCol}>
@@ -647,6 +667,7 @@ export function TafProvaTempoModal({
           />
         ) : null}
       </SafeAreaView>
+        </View>
       </View>
     </Modal>
   );
@@ -655,6 +676,15 @@ export function TafProvaTempoModal({
 const styles = StyleSheet.create({
   modalRoot: {
     flex: 1,
+    position: 'relative',
+  },
+  modalLogoLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+  },
+  modalForeground: {
+    flex: 1,
+    zIndex: 2,
   },
   safe: {
     flex: 1,

@@ -33,6 +33,7 @@ export function AplicarTafTabHeader({
   centered?: boolean;
 }) {
   const { theme } = useTheme();
+  const ts = theme.textStyles;
   const ui = getUiColors(theme);
   const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
   const glass = getAplicarTafGlass(theme);
@@ -43,12 +44,11 @@ export function AplicarTafTabHeader({
         <View style={styles.headerCenteredText}>
           <Text
             style={[
-              styles.headerTitle,
+              ts.brandTitle,
               styles.headerTitleCentered,
               {
-                color: ui.text,
-                fontSize: isNarrowPhone ? 26 : isNativeMobile ? 28 : 30,
-                lineHeight: isNarrowPhone ? 30 : isNativeMobile ? 32 : 34,
+                fontSize: isNarrowPhone ? 26 : 28,
+                lineHeight: isNarrowPhone ? 32 : 34,
               },
             ]}
             numberOfLines={2}
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
   headerSubtitleCentered: {
     textAlign: 'center',
     width: '100%',
-    marginTop: 6,
+    marginTop: 4,
   },
   backBtn: {
     width: 44,

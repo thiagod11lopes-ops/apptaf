@@ -3,6 +3,7 @@ import { View, Platform, StyleSheet, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { useTheme } from '../../contexts/ThemeContext';
+import { AppBackdrop } from '../mobile/AppBackdrop';
 
 type Props = {
   children: React.ReactNode;
@@ -66,7 +67,12 @@ export function PhoneFrameShell({ children }: Props) {
   }, [isDark, isWeb, theme.tokens.bg, usePhoneFrame]);
 
   if (!usePhoneFrame) {
-    return <View style={[styles.fill, { backgroundColor: 'transparent' }]}>{children}</View>;
+    return (
+      <View style={[styles.fill, { backgroundColor: 'transparent' }]}>
+        <AppBackdrop />
+        <View style={[styles.fill, styles.fillAboveBackdrop]}>{children}</View>
+      </View>
+    );
   }
 
   return (
@@ -97,9 +103,10 @@ export function PhoneFrameShell({ children }: Props) {
           <View style={styles.titaniumHighlight} />
           <View style={styles.bezelRing}>
             <View style={[styles.screenClip, { backgroundColor: 'transparent' }]}>
+              <AppBackdrop />
               <DynamicIsland />
               <ScrollView
-                style={styles.screenScroll}
+                style={[styles.screenScroll, styles.screenScrollTransparent]}
                 contentContainerStyle={styles.screenScrollContent}
                 showsVerticalScrollIndicator
                 nestedScrollEnabled
@@ -123,6 +130,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     minHeight: Platform.OS === 'web' ? ('100vh' as unknown as number) : undefined,
+  },
+  fillAboveBackdrop: {
+    zIndex: 1,
+    backgroundColor: 'transparent',
   },
   desktopOuter: {
     flex: 1,
@@ -224,6 +235,9 @@ const styles = StyleSheet.create({
   screenScroll: {
     flex: 1,
     minHeight: 0,
+  },
+  screenScrollTransparent: {
+    backgroundColor: 'transparent',
   },
   screenScrollContent: {
     flexGrow: 1,

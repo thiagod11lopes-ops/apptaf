@@ -7,7 +7,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { GlassBottomBar } from '../components/premium/GlassBottomBar';
 import { SettingsTopButton } from '../components/premium/SettingsTopButton';
 import { AppShell } from '../components/sismav/AppShell';
-import { AppBackdrop } from '../components/mobile/AppBackdrop';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { navigationRef, getCurrentRouteName, navigateTab } from './navigationRef';
 import { AuthLoginRouteGate } from './AuthLoginRouteGate';
@@ -64,8 +63,8 @@ export default function AppNavigator() {
     colors: {
       ...DefaultTheme.colors,
       primary: theme.primary,
-      background: theme.background,
-      card: theme.surface,
+      background: 'transparent',
+      card: 'transparent',
       text: theme.text,
       border: theme.border,
       notification: theme.primary,
@@ -81,7 +80,6 @@ export default function AppNavigator() {
     >
       <AuthLoginRouteGate />
       <View style={styles.shell}>
-        <AppBackdrop />
         <View style={styles.shellForeground}>
         <AppShell
           activeRoute={activeRoute}
@@ -152,5 +150,6 @@ const styles = StyleSheet.create({
   shellForeground: {
     flex: 1,
     zIndex: 1,
+    backgroundColor: 'transparent',
   },
 });

@@ -1823,7 +1823,7 @@ export default function AplicarTAFScreen() {
     }
     return {
       title: 'Aplicar TAF',
-      subtitle: 'Central de condução de provas com cronômetro integrado',
+      subtitle: 'Provas com cronômetro integrado',
     };
   }, [
     mostrarListaPreCadastro,

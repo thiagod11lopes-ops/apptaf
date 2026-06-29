@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, ClipboardList, Sparkles, Anchor } from 'lucide-react-native';
+import { Ship, ClipboardList, Sparkles, Anchor } from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
@@ -41,7 +41,7 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onIniciarTafNaval, onPreC
           >
             <View style={styles.tileBody}>
               <View style={styles.iconRing}>
-                <Play size={26} color="#fff" strokeWidth={2.4} fill="#fff" />
+                <Ship size={26} color="#fff" strokeWidth={2.4} />
               </View>
               <View style={styles.textCol}>
                 <Text style={[styles.tileTitlePrimary, isNarrowPhone ? styles.tileTitleCompact : null]}>

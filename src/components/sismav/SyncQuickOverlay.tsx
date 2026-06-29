@@ -17,9 +17,9 @@ type Props = {
 
 const logoMb = require('../../../Logomb.png');
 
-const OUTER = 384;
-const LOGO = 224;
-const STROKE = 6;
+const OUTER = 768;
+const LOGO = 448;
+const STROKE = 10;
 const RADIUS = (OUTER - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const ARC_VISIBLE = CIRCUMFERENCE * 0.28;

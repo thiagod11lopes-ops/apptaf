@@ -48,7 +48,9 @@ function AppRoot() {
         typeof window !== 'undefined' && window.location.pathname.startsWith('/apptaf')
           ? '/apptaf'
           : '';
-      navigator.serviceWorker.register(`${base}/sw.js`).catch(() => undefined);
+      void navigator.serviceWorker
+        .register(`${base}/sw.js`, { scope: `${base}/` })
+        .catch(() => undefined);
     }
     body.style.backgroundColor = theme.tokens.bg;
     html.classList.toggle('dark', isDark);

@@ -73,9 +73,125 @@ fs.writeFileSync(
 // Evita Jekyll no GitHub Pages (senão o README vira a página inicial)
 fs.writeFileSync(path.join(distDir, '.nojekyll'), '');
 
-const swSrc = path.resolve('public/sw.js');
-if (fs.existsSync(swSrc)) {
-  fs.copyFileSync(swSrc, path.join(distDir, 'sw.js'));
+function walkDistFiles(dir, relBase = '') {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'sw.js') continue;
+    const rel = relBase ? `${relBase}/${entry.name}` : entry.name;
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...walkDistFiles(abs, rel));
+    } else {
+      out.push(`${prefix}/${rel.replace(/\\/g, '/')}`);
+    }
+  }
+  return out;
 }
 
-console.log('patch-web-dist: OK', prefix);
+const precacheUrls = [
+  `${prefix}/`,
+  `${prefix}/index.html`,
+  `${prefix}/manifest.webmanifest`,
+  `${prefix}/favicon.ico`,
+  ...walkDistFiles(distDir),
+].filter((url, index, arr) => arr.indexOf(url) === index);
+
+const swSource = `/* eslint-disable no-restricted-globals */
+/* Gerado por scripts/patch-web-dist.mjs — não editar em dist/ */
+const CACHE = 'taf-app-shell-${Date.now()}';
+const BASE = '${prefix}';
+
+const PRECACHE_URLS = ${JSON.stringify(precacheUrls, null, 2)};
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches
+      .open(CACHE)
+      .then((cache) =>
+        Promise.allSettled(
+          PRECACHE_URLS.map((url) =>
+            cache.add(new Request(url, { cache: 'reload' })).catch(() => undefined),
+          ),
+        ),
+      )
+      .then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+function isSameOrigin(url) {
+  try {
+    return new URL(url).origin === self.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+function isNavigation(request) {
+  return request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html');
+}
+
+function shellFallback() {
+  return caches.match(BASE + '/index.html').then((hit) => hit || caches.match(BASE + '/'));
+}
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  const { request } = event;
+  const url = request.url;
+
+  if (!isSameOrigin(url)) return;
+
+  if (isNavigation(request)) {
+    event.respondWith(
+      shellFallback().then(
+        (cached) =>
+          cached ||
+          fetch(request)
+            .then((response) => {
+              if (response && response.status === 200) {
+                const clone = response.clone();
+                caches.open(CACHE).then((cache) => cache.put(BASE + '/index.html', clone));
+              }
+              return response;
+            })
+            .catch(() => shellFallback()),
+      ),
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => cached);
+    }),
+  );
+});
+`;
+
+fs.writeFileSync(path.join(distDir, 'sw.js'), swSource);
+
+const swSrc = path.resolve('public/sw.js');
+if (fs.existsSync(swSrc)) {
+  // Mantém public/sw.js como referência para dev; produção usa o gerado acima.
+}
+
+console.log('patch-web-dist: OK', prefix, `(${precacheUrls.length} assets no SW)`);

@@ -150,13 +150,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const applyLocalOfflineSession = (): void => {
       const owner = getCachedDataOwnerUid();
-      setUser(null);
-      setIsAuthorizedMember(false);
+      const profile = readPersistedAuthProfile();
+      const loginUid = profile?.uid ?? getCachedLoginUid();
+      setUser(profile);
+      setIsAuthorizedMember(Boolean(loginUid && owner && loginUid !== owner));
       setDataOwnerUid(owner);
-      setAuthUidState(null, owner, true);
-      clearPersistedAuthProfile();
-      setAuthReady(true);
+      setAuthUidState(loginUid, owner, true);
       void systemState.setOfflineMode();
+      setAuthReady(true);
     };
 
     const confirmSignedOut = (): void => {
@@ -165,6 +166,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled || auth.currentUser) return;
         if (isFirebaseAuthRedirectReturn()) return;
         setIsSessionLoading(false);
+
+        const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        const owner = getCachedDataOwnerUid();
+        const profile = readPersistedAuthProfile();
+        if (offline && (owner || profile)) {
+          setUser(profile);
+          const loginUid = profile?.uid ?? getCachedLoginUid();
+          setIsAuthorizedMember(Boolean(loginUid && owner && loginUid !== owner));
+          setDataOwnerUid(owner);
+          setAuthUidState(loginUid, owner, true);
+          void systemState.setOfflineMode();
+          setAuthReady(true);
+          return;
+        }
+
         applyLocalOfflineSession();
       })();
     };
@@ -187,8 +203,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else if (isFirebaseAuthRedirectReturn()) {
         setAuthReady(true);
       } else if (owner) {
-        setAuthUidState(null, owner, true);
+        const profile = readPersistedAuthProfile();
+        const loginUid = profile?.uid ?? getCachedLoginUid();
+        setUser(profile);
+        setIsAuthorizedMember(Boolean(loginUid && owner && loginUid !== owner));
+        setAuthUidState(loginUid, owner, true);
         setAuthReady(true);
+        await syncManager.bindSession(owner);
+        syncManager.setAuthAvailable(Boolean(auth.currentUser));
       } else {
         applyLocalOfflineSession();
       }

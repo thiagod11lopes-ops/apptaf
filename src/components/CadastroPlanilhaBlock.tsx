@@ -16,9 +16,14 @@ import { textoNotaCorridaFromCadastro } from '../taf/corrida2400Nota';
 import { textoNotaNatacaoFromCadastro } from '../taf/natacaoNota';
 import { formatTempoNatacaoParaExibicao } from '../taf/tafTimeFormat';
 import { TafPlanilhaFiltrosBar } from './TafPlanilhaFiltrosBar';
+import { ResultadosGeralTable } from './ResultadosGeralTable';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
 import { tableFullWidthStyle } from '../theme/tableLayout';
+import {
+  cadastroComTafCompleto,
+  cadastroParaLinhaResultado,
+} from '../utils/resultadoTafCadastro';
 import {
   type FiltroModalidadeTaf,
   temRegistroModalidade,
@@ -174,6 +179,20 @@ export function CadastroPlanilhaBlock({
     if (isAplicacaoTaf && q.length > 0 && q.length < 3) return '';
     return q;
   }, [filtroBusca, isAplicacaoTaf]);
+
+  const registrosTafCards = useMemo(
+    () =>
+      cadastrosFiltradosComBusca.map((c) => ({
+        ...cadastroParaLinhaResultado(c),
+        statusTaf: cadastroComTafCompleto(c) ? ('Completo' as const) : ('Parcial' as const),
+      })),
+    [cadastrosFiltradosComBusca],
+  );
+
+  const totalRegistrosTaf = useMemo(
+    () => cadastros.filter((c) => temRegistroModalidade(c, 'Todos')).length,
+    [cadastros],
+  );
 
   const cellTextStyle = useMemo(
     () => [styles.tableCell, { color: ui.text }],
@@ -478,6 +497,8 @@ export function CadastroPlanilhaBlock({
 
           {cadastrosFiltradosComBusca.length === 0 ? (
             <Text style={[styles.tableEmpty, { color: theme.textSecondary }]}>Nenhum resultado encontrado.</Text>
+          ) : isAplicacaoTaf ? (
+            <ResultadosGeralTable data={registrosTafCards} buscaLower={buscaLower} />
           ) : useModernCadastro ? (
             <View style={styles.modernList}>
               {cadastrosFiltradosComBusca.map((c) => (
@@ -739,13 +760,15 @@ export function CadastroPlanilhaBlock({
     </>
   );
 
-  if (useModernCadastro) {
+  if (useModernCadastro || isAplicacaoTaf) {
+    const registroCount = isAplicacaoTaf ? totalRegistrosTaf : cadastros.length;
+    const registroLabel = isAplicacaoTaf ? 'registro' : 'cadastro';
     return (
       <TafGlassPanel accent="cyan" style={styles.tableCardModern}>
         <TafSectionHeader
           kicker="PLANILHA"
           title={tableTitle}
-          subtitle={`${cadastros.length} cadastro${cadastros.length !== 1 ? 's' : ''} no sistema`}
+          subtitle={`${registroCount} ${registroLabel}${registroCount !== 1 ? 's' : ''} no sistema`}
         />
         {planilhaBody}
       </TafGlassPanel>

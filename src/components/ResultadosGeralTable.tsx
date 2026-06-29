@@ -153,29 +153,37 @@ export function ResultadosGeralTable({
                 <StatusChip status={item.statusTaf} />
               </View>
             </View>
-            <View style={styles.modernActions}>
-              <TouchableOpacity
-                accessibilityLabel={`Ver histórico de ${item.nome}`}
-                onPress={() => onVerHistorico?.(item)}
-                style={[styles.modernIconBtn, { borderColor: glass.border }]}
-              >
-                <History size={17} color={theme.primary} strokeWidth={2.5} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel={`Editar resultados de ${item.nome}`}
-                onPress={() => onEditar?.(item)}
-                style={[styles.modernIconBtn, { borderColor: glass.border }]}
-              >
-                <Pencil size={17} color={theme.primary} strokeWidth={2.5} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel={`Excluir resultados de ${item.nome}`}
-                onPress={() => onExcluir?.(item)}
-                style={[styles.modernIconBtn, styles.modernIconBtnDanger]}
-              >
-                <Trash2 size={17} color={theme.loss} strokeWidth={2.5} />
-              </TouchableOpacity>
-            </View>
+            {(onVerHistorico || onEditar || onExcluir) ? (
+              <View style={styles.modernActions}>
+                {onVerHistorico ? (
+                  <TouchableOpacity
+                    accessibilityLabel={`Ver histórico de ${item.nome}`}
+                    onPress={() => onVerHistorico(item)}
+                    style={[styles.modernIconBtn, { borderColor: glass.border }]}
+                  >
+                    <History size={17} color={theme.primary} strokeWidth={2.5} />
+                  </TouchableOpacity>
+                ) : null}
+                {onEditar ? (
+                  <TouchableOpacity
+                    accessibilityLabel={`Editar resultados de ${item.nome}`}
+                    onPress={() => onEditar(item)}
+                    style={[styles.modernIconBtn, { borderColor: glass.border }]}
+                  >
+                    <Pencil size={17} color={theme.primary} strokeWidth={2.5} />
+                  </TouchableOpacity>
+                ) : null}
+                {onExcluir ? (
+                  <TouchableOpacity
+                    accessibilityLabel={`Excluir resultados de ${item.nome}`}
+                    onPress={() => onExcluir(item)}
+                    style={[styles.modernIconBtn, styles.modernIconBtnDanger]}
+                  >
+                    <Trash2 size={17} color={theme.loss} strokeWidth={2.5} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
           </View>
 
           <View style={[styles.modernDivider, { backgroundColor: glass.border }]} />

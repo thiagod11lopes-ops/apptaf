@@ -397,7 +397,7 @@ export function TafProvaTempoModal({
             <View
               style={[
                 styles.participantTopRow,
-                isProvaLayoutPreparado ? styles.participantTopRowAdaptive : null,
+                isProvaLayoutPreparado || isPermanencia ? styles.participantTopRowAdaptive : null,
               ]}
             >
               <View
@@ -406,9 +406,8 @@ export function TafProvaTempoModal({
                   isNativeMobile && !isProvaLayoutPreparado && !isPermanencia
                     ? styles.identityColCompact
                     : null,
-                  isProvaLayoutPreparado ? styles.identityColAdaptive : null,
-                  isPermanencia ? styles.identityColPermanencia : null,
-                  temChecks && !isPermanencia ? styles.identityColWithChecksBelow : null,
+                  isProvaLayoutPreparado || isPermanencia ? styles.identityColAdaptive : null,
+                  temChecks ? styles.identityColWithChecksBelow : null,
                 ]}
               >
                 <View
@@ -434,13 +433,9 @@ export function TafProvaTempoModal({
                     isNativeMobile && !isProvaLayoutPreparado && !isPermanencia
                       ? styles.participantNomeCompact
                       : null,
-                    isProvaLayoutPreparado ? styles.participantNomeAdaptive : null,
-                    isPermanencia ? styles.participantNomePermanencia : null,
+                    isProvaLayoutPreparado || isPermanencia ? styles.participantNomeAdaptive : null,
                     { color: ui.text },
                   ]}
-                  numberOfLines={isPermanencia ? 1 : undefined}
-                  adjustsFontSizeToFit={isPermanencia}
-                  minimumFontScale={isPermanencia ? 0.55 : undefined}
                 >
                   {nome}
                 </Text>
@@ -759,17 +754,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
     maxWidth: undefined,
-  },
-  identityColPermanencia: {
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 0,
-    maxWidth: undefined,
-    alignItems: 'center',
-  },
-  participantNomePermanencia: {
-    flex: 1,
-    minWidth: 0,
   },
   participantNomeAdaptive: {
     flexShrink: 0,

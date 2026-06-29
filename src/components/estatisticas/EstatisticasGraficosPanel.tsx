@@ -1,12 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import type { EstatisticasTafCompletas } from '../../utils/estatisticasTaf';
 import { buildEstatisticasChartOptions } from '../../utils/estatisticasChartOptions';
 import { EChartsView } from './EChartsView';
 import { StatSection } from './StatSection';
-import { TafGlassPanel } from '../mobile/TafTabChrome';
 import { GraficosExemploIconButton, GraficosExemploModal } from './GraficosExemploModal';
 
 type Props = {
@@ -33,25 +32,6 @@ export function EstatisticasGraficosPanel({ stats }: Props) {
       }),
     [stats, isDark, ui.text, theme],
   );
-
-  if (Platform.OS !== 'web') {
-    return (
-      <>
-        <View style={styles.leadRow}>
-          <Text style={[theme.textStyles.bodySecondary, styles.lead, { color: theme.textSecondary, flex: 1 }]}>
-            A aba Gráficos com Apache ECharts está disponível na versão web.
-          </Text>
-          <GraficosExemploIconButton onPress={() => setExemplosAbertos(true)} />
-        </View>
-        <TafGlassPanel accent="violet">
-          <Text style={[theme.textStyles.body, { color: ui.text, textAlign: 'center' }]}>
-            Abra o TAF no navegador para visualizar todos os gráficos interativos.
-          </Text>
-        </TafGlassPanel>
-        <GraficosExemploModal visible={exemplosAbertos} onClose={() => setExemplosAbertos(false)} />
-      </>
-    );
-  }
 
   return (
     <>
@@ -94,8 +74,5 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
     padding: 8,
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0 12px 40px rgba(15,23,42,0.08)' } as object)
-      : null),
   },
 });

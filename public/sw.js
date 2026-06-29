@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-globals */
-const CACHE = 'taf-app-shell-v1';
+const CACHE = 'taf-app-shell-v2';
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
@@ -14,13 +14,35 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+function isAppBundle(url) {
+  return url.includes('/_expo/static/js/') || url.includes('/_expo/static/css/');
+}
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  const { url } = event.request;
+
+  if (isAppBundle(url)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200 && url.startsWith(self.location.origin)) {
+            const clone = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const network = fetch(event.request)
         .then((response) => {
-          if (response && response.status === 200 && event.request.url.startsWith(self.location.origin)) {
+          if (response && response.status === 200 && url.startsWith(self.location.origin)) {
             const clone = response.clone();
             caches.open(CACHE).then((cache) => cache.put(event.request, clone));
           }

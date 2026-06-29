@@ -15,7 +15,6 @@ import { PREMIUM } from '../../theme/premium';
 import { buildEstatisticasChartDemoOptions } from '../../utils/estatisticasChartOptions';
 import { EChartsView } from './EChartsView';
 import { StatSection } from './StatSection';
-import { TafGlassPanel } from '../mobile/TafTabChrome';
 
 type Props = {
   visible: boolean;
@@ -67,28 +66,20 @@ export function GraficosExemploModal({ visible, onClose }: Props) {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {Platform.OS !== 'web' ? (
-              <TafGlassPanel accent="violet">
-                <Text style={[theme.textStyles.body, { color: ui.text, textAlign: 'center' }]}>
-                  Os gráficos interativos de exemplo estão disponíveis na versão web do TAF.
-                </Text>
-              </TafGlassPanel>
-            ) : (
-              demoCharts.map((chart) => (
-                <StatSection
-                  key={chart.id}
-                  title={chart.title}
-                  subtitle={chart.subtitle}
-                  accent="violet"
+            {demoCharts.map((chart) => (
+              <StatSection
+                key={chart.id}
+                title={chart.title}
+                subtitle={chart.subtitle}
+                accent="violet"
+              >
+                <View
+                  style={[styles.chartShell, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
                 >
-                  <View
-                    style={[styles.chartShell, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
-                  >
-                    <EChartsView option={chart.option} height={chart.height} isDark={isDark} />
-                  </View>
-                </StatSection>
-              ))
-            )}
+                  <EChartsView option={chart.option} height={chart.height} isDark={isDark} />
+                </View>
+              </StatSection>
+            ))}
           </ScrollView>
         </View>
       </View>

@@ -1,32 +1,39 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '../../contexts/ThemeContext';
+import React, { useMemo } from 'react';
+import { Platform, StyleSheet } from 'react-native';
+import { WebView } from 'react-native-webview';
+import type { ChartOption } from '../../utils/estatisticasChartTypes';
+import { buildEchartsWebViewHtml } from '../../utils/echartsWebViewHtml';
 
 type Props = {
-  option: unknown;
+  option: ChartOption;
   height?: number;
   isDark?: boolean;
 };
 
-/** Fallback nativo — gráficos ECharts disponíveis na versão web. */
-export function EChartsView(_props: Props) {
-  const { theme } = useTheme();
+export function EChartsView({ option, height = 280, isDark = false }: Props) {
+  const html = useMemo(
+    () => buildEchartsWebViewHtml(option, height, isDark),
+    [option, height, isDark],
+  );
+
   return (
-    <View style={[styles.wrap, { borderColor: theme.border }]}>
-      <Text style={[theme.textStyles.caption, { color: theme.textMuted, textAlign: 'center' }]}>
-        Gráficos interativos disponíveis na versão web do aplicativo.
-      </Text>
-    </View>
+    <WebView
+      originWhitelist={['*']}
+      source={{ html, baseUrl: 'https://taf.local' }}
+      style={[styles.webview, { height }]}
+      scrollEnabled={false}
+      showsVerticalScrollIndicator={false}
+      showsHorizontalScrollIndicator={false}
+      androidLayerType="hardware"
+      cacheEnabled={false}
+      incognito={Platform.OS === 'android'}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    padding: 20,
-    borderWidth: 1,
-    borderRadius: 12,
-    minHeight: 120,
-    alignItems: 'center',
-    justifyContent: 'center',
+  webview: {
+    width: '100%',
+    backgroundColor: 'transparent',
   },
 });

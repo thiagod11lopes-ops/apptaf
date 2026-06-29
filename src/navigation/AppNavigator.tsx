@@ -38,7 +38,8 @@ export default function AppNavigator() {
   const [activeRoute, setActiveRoute] = useState<keyof RootStackParamList>('Home');
   const tafImersivo =
     activeRoute === 'AplicarTAF' && (hideSidebarForLandscape || isLandscape);
-  const topChromeExtra = activeRoute === 'Home' ? 8 : tafImersivo ? 4 : 52;
+  const topChromeExtra =
+    activeRoute === 'Home' || activeRoute === 'Cadastro' ? 8 : tafImersivo ? 4 : 52;
   const topChromePad =
     useSidebarShell && !tafImersivo
       ? Math.max(insets.top, 8) + 8

@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   TextInput,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,7 +30,9 @@ import {
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
-import { TafTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { TopActionIcons } from '../components/premium/TopActionIcons';
+import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -82,8 +85,8 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 export default function CadastroScreenModern() {
   const { theme, fontsLoaded } = useTheme();
+  const { isNarrowPhone } = useAplicarTafLayout();
   const { isAuthorizedMember, isBoss } = useAuth();
-  const navigation = useNavigation();
   const ts = theme.textStyles;
   const regularFont = fontFamily('regular', fontsLoaded);
   const boldFont = fontFamily('bold', fontsLoaded);
@@ -280,11 +283,29 @@ export default function CadastroScreenModern() {
     <>
     <MobileScreenScaffold contentContainerStyle={styles.scrollContent}>
         <View style={styles.centerWrap}>
-          <TafTabHeader
-            kicker="CENTRAL TAF"
-            title="Cadastro"
-            subtitle="Participantes e planilha"
-          />
+          <View style={styles.headerBlock}>
+            <View style={styles.titleBlock}>
+              <Text
+                style={[
+                  theme.textStyles.brandTitle,
+                  styles.titleCenter,
+                  { fontSize: isNarrowPhone ? 26 : 28 },
+                ]}
+              >
+                Cadastro
+              </Text>
+              <LinearGradient
+                colors={[theme.primary, '#6366f1']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.titleRule}
+              />
+              <Text style={[styles.subtitleCenter, { color: theme.textSecondary }]}>
+                Participantes e planilha
+              </Text>
+            </View>
+            <TopActionIcons activeRoute="Cadastro" inline centered />
+          </View>
 
           <View style={[styles.toggleStack, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <TouchableOpacity
@@ -710,6 +731,38 @@ export default function CadastroScreenModern() {
 const styles = StyleSheet.create({
   scrollContent: { paddingVertical: 12 },
   centerWrap: { flex: 1, alignItems: 'stretch' },
+  headerBlock: {
+    width: '100%',
+    flexShrink: 0,
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    ...(Platform.OS === 'web' ? { overflow: 'visible' as const, zIndex: 10 } : null),
+  },
+  titleBlock: {
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  titleCenter: {
+    textAlign: 'center',
+    width: '100%',
+  },
+  titleRule: {
+    width: 32,
+    height: 2,
+    borderRadius: 2,
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  subtitleCenter: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    textAlign: 'center',
+    width: '100%',
+    marginTop: 4,
+  },
   formCard: {
     width: '100%',
     maxWidth: 720,

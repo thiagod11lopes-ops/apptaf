@@ -425,14 +425,12 @@ export function TafProvaTempoModal({
               </View>
 
               {mostrarTempo || mostrarNota ? (
-                <>
-                  <View style={[styles.rowDivider, { backgroundColor: theme.border }]} />
-                  <View
-                    style={[
-                      styles.metaStrip,
-                      isCorridaCaminhada ? styles.metaStripAdaptive : null,
-                    ]}
-                  >
+                <View
+                  style={[
+                    styles.metaStrip,
+                    isCorridaCaminhada ? styles.metaStripAdaptive : null,
+                  ]}
+                >
                     {mostrarTempo ? (
                       <MetaResultadoField
                         label="Tempo"
@@ -455,8 +453,7 @@ export function TafProvaTempoModal({
                         adaptive={isCorridaCaminhada}
                       />
                     ) : null}
-                  </View>
-                </>
+                </View>
               ) : null}
             </View>
 
@@ -704,8 +701,10 @@ const styles = StyleSheet.create({
   participantTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 6,
     minHeight: 34,
+    width: '100%',
   },
   participantTopRowAdaptive: {
     alignItems: 'flex-start',
@@ -723,7 +722,7 @@ const styles = StyleSheet.create({
   },
   identityColAdaptive: {
     flex: 1,
-    flexShrink: 0,
+    flexShrink: 1,
     minWidth: 0,
     maxWidth: undefined,
     alignSelf: 'stretch',
@@ -732,6 +731,8 @@ const styles = StyleSheet.create({
   },
   identityColWithChecksBelow: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     maxWidth: undefined,
   },
   participantNomeAdaptive: {
@@ -764,14 +765,18 @@ const styles = StyleSheet.create({
   metaStrip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 4,
     flexShrink: 0,
+    marginLeft: 'auto',
+    alignSelf: 'center',
   },
   metaStripAdaptive: {
     flexShrink: 0,
     flexGrow: 0,
     minWidth: 0,
-    alignSelf: 'center',
+    marginLeft: 'auto',
+    alignSelf: 'flex-start',
   },
   numBadge: {
     width: 22,

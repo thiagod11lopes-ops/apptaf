@@ -10,7 +10,7 @@ import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ChevronRight, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { SubTabs } from '../components/sismav/SubTabs';
+import { ResultadosNavTabs } from '../components/resultados/ResultadosNavTabs';
 import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoExcluirSessaoModal';
 import { PressableScale } from '../components/premium/PressableScale';
 import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
@@ -130,16 +130,7 @@ export default function ResultadosScreen() {
           footer={<TopActionIcons activeRoute="Resultados" inline centered />}
         />
 
-        <SubTabs
-          options={[
-            { id: 'historico', label: 'Histórico' },
-            { id: 'consulta', label: 'Gerenciar Resultados' },
-            { id: 'geral', label: 'Resultado Geral' },
-            { id: 'pendencia', label: 'Pendência' },
-          ]}
-          value={aba}
-          onChange={mudarAba}
-        />
+        <ResultadosNavTabs value={aba} onChange={mudarAba} />
 
         {aba === 'historico' ? (
           <>

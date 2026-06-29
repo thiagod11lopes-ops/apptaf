@@ -1,4 +1,5 @@
-import type { SyncStepId, SyncStepState } from './syncSteps';
+import type { SyncQueueBreakdown } from './syncQueueBreakdown';
+import { EMPTY_SYNC_QUEUE_BREAKDOWN } from './syncQueueBreakdown';
 import { createInitialSyncSteps } from './syncSteps';
 
 export type SyncUiPhase =
@@ -33,6 +34,8 @@ export type SyncCountersState = {
   pendingUploads: number;
   pendingDownloads: number | null;
   syncedTotal: number;
+  uploadBreakdown: SyncQueueBreakdown;
+  downloadBreakdown: SyncQueueBreakdown;
 };
 
 export type SyncDirectionPhase = 'preparing' | 'download' | 'upload' | 'finalize' | null;
@@ -82,6 +85,8 @@ export const EMPTY_COUNTERS: SyncCountersState = {
   pendingUploads: 0,
   pendingDownloads: null,
   syncedTotal: 0,
+  uploadBreakdown: EMPTY_SYNC_QUEUE_BREAKDOWN,
+  downloadBreakdown: EMPTY_SYNC_QUEUE_BREAKDOWN,
 };
 
 export const EMPTY_CLOUD_DIFF_WATCH: CloudDiffWatchState = {

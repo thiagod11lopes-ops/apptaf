@@ -68,6 +68,7 @@ import {
 } from './deletionGarbageCollection';
 import type { SyncStepId } from './syncSteps';
 import { getPendingSyncItems } from './pendingSyncItems';
+import { buildDownloadBreakdown, type SyncQueueBreakdown } from './syncQueueBreakdown';
 import {
   buildDownloadRubricCaches,
   type DownloadRubricCaches,
@@ -663,7 +664,11 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
 export async function estimateSyncQueueCounts(
   ownerUid: string,
   forceRemote = false,
-): Promise<{ pendingUploads: number; pendingDownloads: number }> {
+): Promise<{
+  pendingUploads: number;
+  pendingDownloads: number;
+  downloadBreakdown: SyncQueueBreakdown;
+}> {
   const plan = await buildSyncPlanSnapshot(ownerUid, forceRemote);
   let pendingUploads = plan.plannedUploads;
   let pendingDownloads = plan.plannedDownloads;
@@ -683,7 +688,9 @@ export async function estimateSyncQueueCounts(
     pendingUploads = Math.max(pendingUploads, drift.extraUploads);
   }
 
-  return { pendingUploads, pendingDownloads };
+  const downloadBreakdown = buildDownloadBreakdown(plan.downloadItems, pendingDownloads);
+
+  return { pendingUploads, pendingDownloads, downloadBreakdown };
 }
 
 async function runPlanPhase(

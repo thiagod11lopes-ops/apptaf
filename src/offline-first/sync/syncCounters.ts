@@ -1,12 +1,11 @@
 import { getTafDatabase } from '../db/tafDatabase';
 import { STATUS_SYNCED } from './syncStatus';
 import { getLastSuccessfulSyncAudit } from './syncAudit';
+import type { SyncQueueBreakdown } from './syncQueueBreakdown';
+import { EMPTY_SYNC_QUEUE_BREAKDOWN } from './syncQueueBreakdown';
+import type { SyncCountersState } from './syncUiState';
 
-export type SyncCounters = {
-  pendingUploads: number;
-  pendingDownloads: number | null;
-  syncedTotal: number;
-};
+export type SyncCounters = SyncCountersState;
 
 export async function getSyncedRecordCount(ownerUid: string): Promise<number> {
   const db = getTafDatabase();
@@ -42,7 +41,17 @@ export async function buildSyncCounters(
   ownerUid: string,
   pendingUploads: number,
   pendingDownloads: number | null = null,
-): Promise<SyncCounters> {
+  options?: {
+    uploadBreakdown?: SyncQueueBreakdown;
+    downloadBreakdown?: SyncQueueBreakdown;
+  },
+): Promise<SyncCountersState> {
   const syncedTotal = await getSyncedRecordCount(ownerUid);
-  return { pendingUploads, pendingDownloads, syncedTotal };
+  return {
+    pendingUploads,
+    pendingDownloads,
+    syncedTotal,
+    uploadBreakdown: options?.uploadBreakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN,
+    downloadBreakdown: options?.downloadBreakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN,
+  };
 }

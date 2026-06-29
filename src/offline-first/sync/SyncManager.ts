@@ -13,6 +13,8 @@ import { registerAuthorizedMemberLogin } from './firebase/FirebaseGateway';
 import { probeFirestoreConnectivityDetailed } from './firebase/FirebaseGateway';
 import type { SyncAuditEntry } from './syncAudit';
 import { buildSyncCounters, getLastSyncTimestamp } from './syncCounters';
+import { buildUploadBreakdown } from './syncQueueBreakdown';
+import { EMPTY_SYNC_QUEUE_BREAKDOWN } from './syncQueueBreakdown';
 import type { SyncCountersState } from './syncUiState';
 import {
   advanceStep,
@@ -343,6 +345,8 @@ async function refreshCloudQueueEstimate(force = false, attempt = 0): Promise<vo
       ...counters,
       pendingUploads: pendingSummary.total,
       pendingDownloads: estimate.pendingDownloads,
+      uploadBreakdown: buildUploadBreakdown(pendingSummary),
+      downloadBreakdown: estimate.downloadBreakdown,
     };
     notifyListeners();
   } catch (error) {
@@ -456,7 +460,10 @@ function startCloudDiffWatch(): void {
 async function refreshCounters(pendingDownloads: number | null = counters.pendingDownloads): Promise<void> {
   const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
   if (uid === ANONYMOUS_OWNER) return;
-  counters = await buildSyncCounters(uid, pendingSummary.total, pendingDownloads);
+  counters = await buildSyncCounters(uid, pendingSummary.total, pendingDownloads, {
+    uploadBreakdown: buildUploadBreakdown(pendingSummary),
+    downloadBreakdown: counters.downloadBreakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN,
+  });
   notifyListeners();
 }
 
@@ -469,6 +476,13 @@ async function applyCountersAfterSuccessfulSync(): Promise<void> {
     uid,
     pendingSummary.total,
     pendingSummary.total === 0 ? 0 : counters.pendingDownloads,
+    {
+      uploadBreakdown: buildUploadBreakdown(pendingSummary),
+      downloadBreakdown:
+        pendingSummary.total === 0
+          ? EMPTY_SYNC_QUEUE_BREAKDOWN
+          : counters.downloadBreakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN,
+    },
   );
   notifyListeners();
 }
@@ -758,7 +772,13 @@ async function refreshAfterSystemWipe(dataOwnerUid: string): Promise<void> {
   invalidateRemoteSnapshotCache();
   ownerUid = dataOwnerUid;
   pendingSummary = EMPTY_SUMMARY;
-  counters = { pendingUploads: 0, pendingDownloads: 0, syncedTotal: 0 };
+  counters = {
+    pendingUploads: 0,
+    pendingDownloads: 0,
+    syncedTotal: 0,
+    uploadBreakdown: EMPTY_SYNC_QUEUE_BREAKDOWN,
+    downloadBreakdown: EMPTY_SYNC_QUEUE_BREAKDOWN,
+  };
   uploadError = null;
   uiPhase = 'offline';
   notifyListeners();

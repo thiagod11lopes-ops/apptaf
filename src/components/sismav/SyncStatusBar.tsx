@@ -6,6 +6,7 @@ import { useOfflineSyncState } from '../../contexts/OfflineSyncContext';
 import { PressableScale } from '../premium/PressableScale';
 import { PREMIUM } from '../../theme/premium';
 import { SyncHistoryModal } from './SyncHistoryModal';
+import { SyncQueueDetailModal } from './SyncQueueDetailModal';
 import {
   formatDurationSeconds,
   formatLastSyncLabel,
@@ -82,10 +83,13 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
   const { firebaseEnabled, isAuthenticated, authReady } = useAuth();
   const { syncUi, retrySync } = useOfflineSyncState();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [queueDetail, setQueueDetail] = useState<'download' | 'upload' | null>(null);
 
   const loggedIn = authReady && isAuthenticated;
   const pendingUploads = syncUi.counters.pendingUploads;
   const pendingDownloads = syncUi.counters.pendingDownloads;
+  const uploadBreakdown = syncUi.counters.uploadBreakdown;
+  const downloadBreakdown = syncUi.counters.downloadBreakdown;
 
   const preparing =
     syncUi.isSyncing &&
@@ -106,6 +110,17 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
     }
     setHistoryOpen(true);
   }, [syncUi.isSyncing]);
+
+  const openQueueDetail = useCallback(
+    (direction: 'download' | 'upload') => {
+      if (syncUi.isSyncing) return;
+      if (Platform.OS === 'web') {
+        (document.activeElement as HTMLElement | null)?.blur?.();
+      }
+      setQueueDetail(direction);
+    },
+    [syncUi.isSyncing],
+  );
 
   if (!firebaseEnabled) return null;
 
@@ -146,18 +161,36 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
 
           <View style={styles.statusCluster}>
             <View style={styles.queueBadges}>
-              <View style={[styles.queueBadge, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+              <PressableScale
+                onPress={() => openQueueDetail('download')}
+                disabled={syncUi.isSyncing}
+                style={[
+                  styles.queueBtn,
+                  { backgroundColor: theme.cardBg, borderColor: theme.border, opacity: syncUi.isSyncing ? 0.55 : 1 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Receber da nuvem, ${formatQueueCount(pendingDownloads)} atualização(ões). Toque para ver detalhes`}
+              >
                 <Text style={[ts.caption, { color: theme.textSecondary }]}>⬇</Text>
                 <Text style={[styles.queueValue, { color: theme.text }]}>
                   {formatQueueCount(pendingDownloads)}
                 </Text>
-              </View>
-              <View style={[styles.queueBadge, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+              </PressableScale>
+              <PressableScale
+                onPress={() => openQueueDetail('upload')}
+                disabled={syncUi.isSyncing}
+                style={[
+                  styles.queueBtn,
+                  { backgroundColor: theme.cardBg, borderColor: theme.border, opacity: syncUi.isSyncing ? 0.55 : 1 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Enviar para a nuvem, ${formatQueueCount(pendingUploads)} alteração(ões). Toque para ver detalhes`}
+              >
                 <Text style={[ts.caption, { color: theme.textSecondary }]}>⬆</Text>
                 <Text style={[styles.queueValue, { color: theme.text }]}>
                   {formatQueueCount(pendingUploads)}
                 </Text>
-              </View>
+              </PressableScale>
             </View>
 
             {syncUi.isSyncing ? (
@@ -166,10 +199,9 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
           </View>
         </View>
 
-        <View style={styles.queueLegend}>
-          <Text style={[ts.caption, { color: theme.textMuted }]}>⬇ receber da nuvem</Text>
-          <Text style={[ts.caption, { color: theme.textMuted }]}>⬆ enviar para nuvem</Text>
-        </View>
+        <Text style={[ts.caption, { color: theme.textMuted, textAlign: 'right' }]}>
+          Toque nos números para ver o que será sincronizado (Cadastro, Corrida, Natação, etc.)
+        </Text>
 
         {!loggedIn ? (
           <View style={[styles.blockedBanner, { backgroundColor: '#fef3c7', borderColor: '#ca8a04' }]}>
@@ -252,6 +284,21 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
       </View>
 
       <SyncHistoryModal visible={historyOpen} onClose={() => setHistoryOpen(false)} />
+
+      <SyncQueueDetailModal
+        visible={queueDetail === 'download'}
+        direction="download"
+        breakdown={downloadBreakdown}
+        totalLabel={formatQueueCount(pendingDownloads)}
+        onClose={() => setQueueDetail(null)}
+      />
+      <SyncQueueDetailModal
+        visible={queueDetail === 'upload'}
+        direction="upload"
+        breakdown={uploadBreakdown}
+        totalLabel={formatQueueCount(pendingUploads)}
+        onClose={() => setQueueDetail(null)}
+      />
     </>
   );
 }
@@ -302,27 +349,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
   },
-  queueBadge: {
+  queueBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minWidth: 44,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 52,
     justifyContent: 'center',
   },
   queueValue: {
     fontSize: 15,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
-  },
-  queueLegend: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 16,
-    flexWrap: 'wrap',
   },
   progressPanel: {
     gap: 12,

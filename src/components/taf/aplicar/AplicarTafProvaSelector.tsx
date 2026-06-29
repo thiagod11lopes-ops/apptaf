@@ -1,27 +1,27 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Activity, Waves, Timer } from 'lucide-react-native';
+import { Waves, Timer, Footprints, type LucideIcon } from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
 import { getAplicarTafGlass } from './aplicarTafTheme';
 import { useAplicarTafLayout } from './useAplicarTafLayout';
-import { CaminhadaRunnerIcon } from './CaminhadaRunnerIcon';
+import { CorridaRunnerIcon } from './CorridaRunnerIcon';
 
 type ProvaId = 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
 
 type ProvaConfig = {
   id: ProvaId;
   label: string;
-  icon: typeof Activity | 'runner';
+  icon: LucideIcon | 'corrida-runner';
   colors: [string, string];
 };
 
 const CORRIDA: ProvaConfig = {
   id: 'corrida',
   label: 'Corrida',
-  icon: Activity,
+  icon: 'corrida-runner',
   colors: ['#2563eb', '#38bdf8'],
 };
 const NATACAO: ProvaConfig = {
@@ -39,7 +39,7 @@ const PERMANENCIA: ProvaConfig = {
 const CAMINHADA: ProvaConfig = {
   id: 'caminhada',
   label: 'Caminhada',
-  icon: 'runner',
+  icon: Footprints,
   colors: ['#059669', '#14b8a6'],
 };
 
@@ -68,7 +68,7 @@ function ProvaTile({
   ui: ReturnType<typeof getUiColors>;
   theme: ReturnType<typeof useTheme>['theme'];
 }) {
-  const Icon = prova.icon !== 'runner' ? prova.icon : null;
+  const Icon = prova.icon !== 'corrida-runner' ? prova.icon : null;
 
   return (
     <TouchableOpacity
@@ -99,7 +99,7 @@ function ProvaTile({
           {Icon ? (
             <Icon size={22} color="#fff" strokeWidth={2.3} />
           ) : (
-            <CaminhadaRunnerIcon size={22} color="#fff" strokeWidth={2.3} />
+            <CorridaRunnerIcon size={22} color="#fff" strokeWidth={2.3} />
           )}
         </LinearGradient>
         <Text style={[styles.label, { color: ui.text }]}>{prova.label}</Text>

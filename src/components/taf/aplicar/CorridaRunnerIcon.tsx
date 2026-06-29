@@ -8,7 +8,7 @@ type Props = {
 };
 
 /** Silhueta de corredor em movimento — estilo stroke moderno alinhado ao Lucide. */
-export function CaminhadaRunnerIcon({
+export function CorridaRunnerIcon({
   size = 24,
   color = '#fff',
   strokeWidth = 2.3,

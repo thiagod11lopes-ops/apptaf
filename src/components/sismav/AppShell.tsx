@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { SidebarNav } from './SidebarNav';
+import { LogombWatermark } from '../mobile/LogombWatermark';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = {
@@ -54,7 +55,8 @@ export function AppShell({ children, activeRoute, fullWidth }: Props) {
               ? { className: `app-main${fullWidth ? ' app-main--full' : ''}` as never }
               : {})}
           >
-            {children}
+            <LogombWatermark />
+            <View style={styles.mainContent}>{children}</View>
           </LinearGradient>
         </ScrollView>
         <View style={[styles.footer, { borderTopColor: theme.border }]}>
@@ -102,10 +104,17 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     padding: 24,
     minHeight: Platform.OS === 'web' ? ('100%' as unknown as number) : undefined,
+    position: 'relative',
+    overflow: 'hidden',
   },
   mainFull: {
     maxWidth: undefined,
     alignSelf: 'stretch',
+  },
+  mainContent: {
+    flex: 1,
+    width: '100%',
+    zIndex: 1,
   },
   footer: {
     paddingVertical: 12,

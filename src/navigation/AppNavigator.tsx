@@ -106,7 +106,7 @@ export default function AppNavigator() {
             name="CadastrarResultados"
             component={CadastrarResultadosScreen}
             options={{
-              contentStyle: { flex: 1, paddingBottom: 0, backgroundColor: theme.background },
+              contentStyle: { flex: 1, paddingBottom: 0, backgroundColor: 'transparent' },
             }}
           />
           <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
@@ -115,14 +115,14 @@ export default function AppNavigator() {
             name="Configuracoes"
             component={ConfiguracoesScreen}
             options={{
-              contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: theme.background },
+              contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: 'transparent' },
             }}
           />
           <Stack.Screen
             name="Login"
             component={LoginScreen}
             options={{
-              contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: theme.background },
+              contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: 'transparent' },
             }}
           />
           </Stack.Navigator>

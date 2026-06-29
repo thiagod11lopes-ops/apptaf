@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getMobileAppBackdrop, mobileAppShared } from './mobileAppTheme';
+import { LogombWatermark } from './LogombWatermark';
 
 type Props = {
   children: React.ReactNode;
@@ -20,6 +21,7 @@ export function MobileGlassShell({ children }: Props) {
         locations={[0, 0.35, 0.7, 1]}
         style={StyleSheet.absoluteFill}
       />
+      <LogombWatermark />
       <View
         style={[
           mobileAppShared.orbLarge,
@@ -52,7 +54,7 @@ export function MobileGlassShell({ children }: Props) {
         style={styles.gridSheen}
         pointerEvents="none"
       />
-      {children}
+      <View style={styles.content}>{children}</View>
     </View>
   );
 }
@@ -61,6 +63,10 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     position: 'relative',
+  },
+  content: {
+    flex: 1,
+    zIndex: 2,
   },
   orbTop: {
     top: -120,

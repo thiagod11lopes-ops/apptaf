@@ -3,6 +3,7 @@ import { View, Platform, StyleSheet, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { useTheme } from '../../contexts/ThemeContext';
+import { LogombWatermark } from '../mobile/LogombWatermark';
 
 type Props = {
   children: React.ReactNode;
@@ -67,7 +68,10 @@ export function PhoneFrameShell({ children }: Props) {
 
   if (!usePhoneFrame) {
     return (
-      <View style={[styles.fill, { backgroundColor: theme.background }]}>{children}</View>
+      <View style={[styles.fill, { backgroundColor: theme.background }]}>
+        <LogombWatermark />
+        <View style={styles.fill}>{children}</View>
+      </View>
     );
   }
 
@@ -99,6 +103,7 @@ export function PhoneFrameShell({ children }: Props) {
           <View style={styles.titaniumHighlight} />
           <View style={styles.bezelRing}>
             <View style={[styles.screenClip, { backgroundColor: theme.background }]}>
+              <LogombWatermark />
               <DynamicIsland />
               <ScrollView
                 style={styles.screenScroll}

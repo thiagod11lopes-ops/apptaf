@@ -4,11 +4,9 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Search } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { ResultadosGeralTable } from './ResultadosGeralTable';
 import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
@@ -24,7 +22,7 @@ import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
-import { TafGlassPanel, TafSectionHeader } from './mobile/TafTabChrome';
+import { TafGlassPanel } from './mobile/TafTabChrome';
 
 const MIN_BUSCA = 3;
 
@@ -156,81 +154,71 @@ export function ResultadosGeralPanel({
 
   return (
     <View style={styles.wrap}>
-      <TafGlassPanel accent="cyan" style={styles.panel}>
-        <TafSectionHeader
-          kicker="CONSOLIDADO"
-          title="Resultado Geral"
-          subtitle="Provas registradas no Aplicar TAF e no Registrador de TAF"
-        />
-
-        <View style={styles.searchRow}>
-          <View
+      <View style={styles.searchRow}>
+        <View
+          style={[
+            styles.searchWrap,
+            {
+              borderColor: buscaAtiva ? theme.primary : glass.border,
+              backgroundColor: glass.highlight,
+            },
+          ]}
+        >
+          <TextInput
+            value={filtroBusca}
+            onChangeText={setFiltroBusca}
+            placeholder="Buscar NIP, nome ou resultado (mín. 3 caracteres)…"
+            placeholderTextColor={theme.textMuted}
             style={[
-              styles.searchWrap,
-              {
-                borderColor: buscaAtiva ? theme.primary : glass.border,
-                backgroundColor: glass.highlight,
-              },
+              styles.searchInput,
+              { color: ui.text, backgroundColor: 'transparent' },
+              Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null,
             ]}
-          >
-            <Search size={18} color={theme.primary} strokeWidth={2.5} />
-            <TextInput
-              value={filtroBusca}
-              onChangeText={setFiltroBusca}
-              placeholder="Buscar NIP, nome ou resultado (mín. 3 caracteres)…"
-              placeholderTextColor={theme.textMuted}
-              style={[
-                styles.searchInput,
-                { color: ui.text, backgroundColor: 'transparent' },
-                Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null,
-              ]}
-              autoCorrect={false}
-              spellCheck={false}
-              autoCapitalize="none"
-              accessibilityLabel="Buscar na tabela de resultado geral"
-            />
-          </View>
+            autoCorrect={false}
+            spellCheck={false}
+            autoCapitalize="none"
+            accessibilityLabel="Buscar na tabela de resultado geral"
+          />
         </View>
+      </View>
 
-        {filtroBusca.trim().length > 0 && filtroBusca.trim().length < MIN_BUSCA ? (
-          <Text style={[ts.caption, styles.hintBusca, { color: theme.textMuted }]}>
-            Digite pelo menos {MIN_BUSCA} caracteres para filtrar.
-          </Text>
-        ) : null}
-
-        <Text style={[styles.resultCount, { color: theme.textMuted }]}>
-          {buscaAtiva
-            ? `${linhasVisiveis.length} de ${lista.length} militar${lista.length !== 1 ? 'es' : ''}`
-            : `${lista.length} militar${lista.length !== 1 ? 'es' : ''} no histórico`}
+      {filtroBusca.trim().length > 0 && filtroBusca.trim().length < MIN_BUSCA ? (
+        <Text style={[ts.caption, styles.hintBusca, { color: theme.textMuted }]}>
+          Digite pelo menos {MIN_BUSCA} caracteres para filtrar.
         </Text>
+      ) : null}
 
-        {carregando ? (
-          <ActivityIndicator color={theme.primary} style={styles.loader} />
-        ) : null}
+      {carregando ? (
+        <Text style={[ts.caption, { color: theme.textMuted, textAlign: 'center' }]}>
+          Carregando…
+        </Text>
+      ) : null}
 
-        {!carregando && lista.length === 0 ? (
-          <Text style={[styles.tableEmpty, { color: theme.textSecondary }]}>
-            Nenhuma sessão no histórico ainda. Aplique provas em Aplicar TAF ou cadastre sessões no
-            histórico; os dados consolidados aparecerão aqui.
+      {!carregando && lista.length === 0 ? (
+        <TafGlassPanel style={styles.emptyCard}>
+          <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
+            Nenhum resultado consolidado ainda.
           </Text>
-        ) : null}
+        </TafGlassPanel>
+      ) : null}
 
-        {!carregando && lista.length > 0 && buscaAtiva && linhasVisiveis.length === 0 ? (
-          <Text style={[styles.tableEmpty, { color: theme.textSecondary }]}>
+      {!carregando && lista.length > 0 && buscaAtiva && linhasVisiveis.length === 0 ? (
+        <TafGlassPanel style={styles.emptyCard}>
+          <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
             Nenhum resultado para &quot;{filtroBusca.trim()}&quot;.
           </Text>
-        ) : null}
+        </TafGlassPanel>
+      ) : null}
 
-        {!carregando && linhasVisiveis.length > 0 ? (
-          <ResultadosGeralTable
-            data={linhasVisiveis}
-            buscaLower={buscaLower}
-            onVerHistorico={abrirHistorico}
-            onEditar={abrirEdicao}
-            onExcluir={setMilitarParaExcluir}
-          />
-        ) : null}
-      </TafGlassPanel>
+      {!carregando && linhasVisiveis.length > 0 ? (
+        <ResultadosGeralTable
+          data={linhasVisiveis}
+          buscaLower={buscaLower}
+          onVerHistorico={abrirHistorico}
+          onEditar={abrirEdicao}
+          onExcluir={setMilitarParaExcluir}
+        />
+      ) : null}
 
       <EditarResultadoTafModal
         visible={!!cadastroEmEdicao}
@@ -256,20 +244,13 @@ export function ResultadosGeralPanel({
 
 const styles = StyleSheet.create({
   wrap: tableFullWidthStyle,
-  panel: {
-    marginBottom: 8,
-  },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 10,
+    marginBottom: 14,
   },
   searchWrap: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
     borderWidth: 1,
     borderRadius: PREMIUM.radiusMd + 2,
     paddingHorizontal: 12,
@@ -281,20 +262,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     paddingVertical: Platform.select({ ios: 8, default: 6 }),
   },
-  hintBusca: { marginBottom: 8 },
-  resultCount: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    marginBottom: 12,
-    textTransform: 'uppercase',
-  },
-  tableEmpty: {
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 19,
-    textAlign: 'center',
-    paddingVertical: 8,
-  },
-  loader: { marginVertical: 24 },
+  hintBusca: { marginBottom: 12, textAlign: 'center' },
+  emptyCard: { marginBottom: 4 },
 });

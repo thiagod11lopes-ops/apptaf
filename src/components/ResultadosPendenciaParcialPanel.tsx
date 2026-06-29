@@ -6,12 +6,11 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FileText, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { Card } from './Card';
 import { PressableScale } from './premium/PressableScale';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
@@ -27,6 +26,8 @@ import { exportPendenciasTafPdf } from '../utils/exportPendenciasTafPdf';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
+import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
+import { TafGlassPanel } from './mobile/TafTabChrome';
 
 const FILTROS: FiltroPendenciaTaf[] = ['total', 'corrida', 'natacao', 'permanencia'];
 
@@ -120,6 +121,7 @@ export function ResultadosPendenciaParcialPanel() {
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const t = theme.tokens;
+  const glass = getAplicarTafGlass(theme);
 
   const [lista, setLista] = useState<PendenciaTafItem[]>([]);
   const [contagem, setContagem] = useState<Record<FiltroPendenciaTaf, number>>({
@@ -173,51 +175,31 @@ export function ResultadosPendenciaParcialPanel() {
 
   return (
     <View style={styles.wrap}>
-      <Text style={[ts.bodySecondary, styles.intro, { color: theme.textSecondary }]}>
-        Filtre as pendências por modalidade. Os números indicam quantos militares ainda não
-        concluíram cada etapa do TAF (corrida, natação e permanência).
-      </Text>
-
-      <View
-        style={[
-          styles.filtrosShell,
-          { borderColor: theme.border },
-          Platform.OS === 'web' ? ({ boxShadow: t.shadowMd } as object) : undefined,
-        ]}
-      >
-        <LinearGradient
-          colors={theme.isDark ? ['#0f172a', '#1e293b'] : ['#f8fafc', '#eef2ff']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.filtrosGradient}
-        >
-          <View style={styles.filtrosHeader}>
-            <AlertCircle size={18} color={theme.primary} strokeWidth={2.5} />
-            <Text style={[ts.label, styles.filtrosTitle, { color: ui.text }]}>Filtrar pendências</Text>
+      <TafGlassPanel style={styles.filtrosPanel}>
+        {carregando ? (
+          <Text style={[ts.caption, { color: theme.textMuted, textAlign: 'center' }]}>
+            Carregando…
+          </Text>
+        ) : (
+          <View style={[styles.filtrosRow, { borderColor: glass.border }]}>
+            {FILTROS.map((id) => (
+              <FiltroPendenciaBtn
+                key={id}
+                id={id}
+                count={contagem[id]}
+                active={filtro === id}
+                onPress={() => setFiltro(id)}
+              />
+            ))}
           </View>
-
-          {carregando ? (
-            <ActivityIndicator color={theme.primary} style={styles.loaderFiltros} />
-          ) : (
-            <View style={styles.filtrosGrid}>
-              {FILTROS.map((id) => (
-                <FiltroPendenciaBtn
-                  key={id}
-                  id={id}
-                  count={contagem[id]}
-                  active={filtro === id}
-                  onPress={() => setFiltro(id)}
-                />
-              ))}
-            </View>
-          )}
-        </LinearGradient>
-      </View>
+        )}
+      </TafGlassPanel>
 
       {!carregando && listaFiltrada.length > 0 ? (
-        <PressableScale
+        <TouchableOpacity
           onPress={() => void gerarPdf()}
           disabled={gerandoPdf}
+          activeOpacity={0.88}
           style={[styles.pdfBtnOuter, { opacity: gerandoPdf ? 0.7 : 1 }]}
         >
           <LinearGradient
@@ -234,92 +216,73 @@ export function ResultadosPendenciaParcialPanel() {
             {gerandoPdf ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <>
-                <FileText size={18} color="#FFFFFF" strokeWidth={2.4} />
-                <Text style={styles.pdfBtnText}>Gerar PDF</Text>
-                <Text style={styles.pdfBtnHint}>
-                  {listaFiltrada.length} militar{listaFiltrada.length !== 1 ? 'es' : ''} ·{' '}
-                  {FILTRO_PENDENCIA_LABEL[filtro]}
-                </Text>
-              </>
+              <Text style={styles.pdfBtnText}>Gerar PDF</Text>
             )}
           </LinearGradient>
-        </PressableScale>
+        </TouchableOpacity>
       ) : null}
 
-      {carregando ? <ActivityIndicator color={theme.primary} style={styles.loader} /> : null}
-
       {!carregando && listaFiltrada.length === 0 ? (
-        <Card elevated style={styles.emptyCard}>
+        <TafGlassPanel style={styles.emptyCard}>
           <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
             Nenhuma pendência neste filtro.
           </Text>
-          <Text style={[ts.caption, styles.emptyHint, { color: theme.textMuted, textAlign: 'center' }]}>
-            {filtro === 'total'
-              ? 'Todos os militares concluíram as três modalidades ou ainda não há cadastros.'
-              : `Não há militares pendentes em ${FILTRO_PENDENCIA_LABEL[filtro].toLowerCase()}.`}
-          </Text>
-        </Card>
-      ) : null}
-
-      {!carregando && listaFiltrada.length > 0 ? (
-        <Text style={[ts.caption, styles.contador, { color: theme.textMuted }]}>
-          {listaFiltrada.length} militar{listaFiltrada.length !== 1 ? 'es' : ''} ·{' '}
-          {FILTRO_PENDENCIA_LABEL[filtro]}
-        </Text>
+        </TafGlassPanel>
       ) : null}
 
       {listaFiltrada.map((item) => (
-        <Card key={item.id} elevated style={styles.itemCard}>
-          <View style={styles.itemTop}>
-            <View style={{ flex: 1 }}>
-              <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
-              <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{item.nip}</Text>
-            </View>
-            <View
-              style={[
-                styles.situacaoBadge,
-                {
-                  backgroundColor:
-                    item.situacao === 'Sem teste' ? theme.backgroundSecondary : theme.lossMuted,
-                  borderColor: item.situacao === 'Sem teste' ? theme.border : theme.loss,
-                },
-              ]}
-            >
-              <Text
+        <View key={item.id} style={styles.itemPress}>
+          <TafGlassPanel style={styles.itemCard}>
+            <View style={styles.itemTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
+                <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{item.nip}</Text>
+              </View>
+              <View
                 style={[
-                  ts.caption,
+                  styles.situacaoBadge,
                   {
-                    color: item.situacao === 'Sem teste' ? theme.textMuted : theme.loss,
-                    fontWeight: '800',
-                    fontSize: 10,
+                    backgroundColor:
+                      item.situacao === 'Sem teste' ? theme.backgroundSecondary : theme.lossMuted,
+                    borderColor: item.situacao === 'Sem teste' ? theme.border : theme.loss,
                   },
                 ]}
               >
-                {item.situacao}
-              </Text>
+                <Text
+                  style={[
+                    ts.caption,
+                    {
+                      color: item.situacao === 'Sem teste' ? theme.textMuted : theme.loss,
+                      fontWeight: '800',
+                      fontSize: 10,
+                    },
+                  ]}
+                >
+                  {item.situacao}
+                </Text>
+              </View>
             </View>
-          </View>
 
-          <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
-          <Text style={[ts.body, { color: ui.text, fontWeight: '700', marginBottom: 4 }]}>
-            {item.nome}
-          </Text>
+            <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
+            <Text style={[ts.body, { color: ui.text, fontWeight: '700', marginBottom: 4 }]}>
+              {item.nome}
+            </Text>
 
-          <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 10 }]}>
-            {item.postoGrad} · {item.categoria}
-          </Text>
+            <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 10 }]}>
+              {item.postoGrad} · {item.categoria}
+            </Text>
 
-          <View style={styles.chipsRow}>
-            <ChipModalidade label="Corrida" ok={item.temCorrida} />
-            <ChipModalidade label="Natação" ok={item.temNatacao} />
-            <ChipModalidade label="Permanência" ok={item.temPermanencia} />
-          </View>
+            <View style={styles.chipsRow}>
+              <ChipModalidade label="Corrida" ok={item.temCorrida} />
+              <ChipModalidade label="Natação" ok={item.temNatacao} />
+              <ChipModalidade label="Permanência" ok={item.temPermanencia} />
+            </View>
 
-          <Text style={[ts.caption, styles.faltaLabel, { color: theme.loss }]}>
-            Falta: {item.faltam.join(', ')}
-          </Text>
-        </Card>
+            <Text style={[ts.caption, styles.faltaLabel, { color: theme.loss }]}>
+              Falta: {item.faltam.join(', ')}
+            </Text>
+          </TafGlassPanel>
+        </View>
       ))}
     </View>
   );
@@ -327,28 +290,10 @@ export function ResultadosPendenciaParcialPanel() {
 
 const styles = StyleSheet.create({
   wrap: tableFullWidthStyle,
-  intro: { marginBottom: 14, lineHeight: 20 },
-  filtrosShell: {
-    borderRadius: PREMIUM.radiusXl,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  filtrosGradient: {
-    padding: 16,
-  },
-  filtrosHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  filtrosPanel: {
     marginBottom: 14,
   },
-  filtrosTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    textTransform: 'none',
-  },
-  filtrosGrid: {
+  filtrosRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
@@ -369,13 +314,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    minHeight: 88,
+    minHeight: 72,
   },
   filtroBtnInactive: {
     borderWidth: 1,
   },
   filtroCount: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '900',
     color: '#111827',
     fontVariant: ['tabular-nums'],
@@ -389,18 +334,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 14,
   },
-  loaderFiltros: { marginVertical: 20 },
   pdfBtnOuter: {
     marginBottom: 14,
     borderRadius: PREMIUM.radiusLg,
     overflow: 'hidden',
   },
   pdfBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: PREMIUM.radiusLg,
@@ -410,18 +351,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
-  pdfBtnHint: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 11,
-    fontWeight: '600',
-    width: '100%',
-    textAlign: 'center',
-  },
-  loader: { marginVertical: 24 },
-  emptyCard: { padding: 20 },
-  emptyHint: { marginTop: 8, lineHeight: 18 },
-  contador: { marginBottom: 10, textAlign: 'center', fontWeight: '700' },
-  itemCard: { padding: 16, marginBottom: 12 },
+  emptyCard: { marginBottom: 4 },
+  itemPress: { marginBottom: 12 },
+  itemCard: tableFullWidthStyle,
   itemTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',

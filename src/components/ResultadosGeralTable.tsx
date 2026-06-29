@@ -1,13 +1,15 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { History, Pencil, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { SearchHighlightText } from './SearchHighlightText';
 import { LabelNip } from './LabelNip';
 import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
 import { PREMIUM } from '../theme/premium';
+import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
+import { TafGlassPanel } from './mobile/TafTabChrome';
 
 function situacaoCor(situacao: string, theme: { gain: string; loss: string; textMuted: string }) {
   if (situacao === 'Aprovado') return theme.gain;
@@ -99,16 +101,8 @@ export function ResultadosGeralTable({
   return (
     <View style={styles.modernList}>
       {data.map((item) => (
-        <View
-          key={item.id}
-          style={[
-            styles.modernRow,
-            {
-              borderColor: glass.border,
-              backgroundColor: theme.isDark ? 'rgba(2,6,23,0.42)' : 'rgba(255,255,255,0.55)',
-            },
-          ]}
-        >
+        <View key={item.id} style={styles.itemPress}>
+          <TafGlassPanel style={styles.modernRow}>
           <View style={styles.modernRowHeader}>
             <View style={styles.modernRowHeaderText}>
               <SearchHighlightText
@@ -200,6 +194,7 @@ export function ResultadosGeralTable({
               buscaLower={buscaLower}
             />
           </View>
+          </TafGlassPanel>
         </View>
       ))}
     </View>
@@ -207,21 +202,14 @@ export function ResultadosGeralTable({
 }
 
 const styles = StyleSheet.create({
-  modernList: { gap: 10 },
+  modernList: {},
+  itemPress: {
+    marginBottom: 12,
+  },
   modernRow: {
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusLg,
+    ...tableFullWidthStyle,
     padding: 14,
-    overflow: 'hidden',
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0 8px 24px rgba(15,23,42,0.06)' } as object)
-      : {
-          shadowColor: '#0f172a',
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.08,
-          shadowRadius: 14,
-          elevation: 4,
-        }),
+    gap: 0,
   },
   modernRowHeader: {
     flexDirection: 'row',

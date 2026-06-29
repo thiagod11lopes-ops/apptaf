@@ -13,7 +13,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useAuth } from '../contexts/AuthContext';
-import { X, Pencil, Trash2 } from 'lucide-react-native';
+import { X } from 'lucide-react-native';
 import { Card } from '../components/Card';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { LabelNip } from '../components/LabelNip';
@@ -24,9 +24,11 @@ import {
   type AplicadorItemPersist,
 } from '../services/aplicadoresIndexedDb';
 import { aplicadorRepository } from '../offline-first/repositories/AplicadorRepository';
-import { hashAplicadorSenha } from '../utils/aplicadorSenha';
+import { hashAplicadorSenha, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../utils/aplicadorSenha';
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
+import { AplicadoresCadastradosTable } from '../components/AplicadoresCadastradosTable';
+import { TafGlassPanel } from '../components/mobile/TafTabChrome';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -39,11 +41,6 @@ function formatNipInput(value: string) {
   if (digits.length <= 2) return a;
   if (digits.length <= 6) return `${a}.${digits.slice(2)}`;
   return `${a}.${b}.${c}`;
-}
-
-function postoGradLabel(item: AplicadorItemPersist): string {
-  if (item.categoria === 'Oficiais') return item.oficial || '-';
-  return item.praca || '-';
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -95,6 +92,12 @@ export default function CadastroAplicadorScreen() {
     if (!nip.trim()) faltantesAgora.push('NIP');
     if (!nome.trim()) faltantesAgora.push('Nome');
     if (!editandoId && !senha.trim()) faltantesAgora.push('Senha');
+    if (!editandoId && senha.trim() && !isSenhaAplicadorValid(senha)) {
+      faltantesAgora.push('Senha (4 números)');
+    }
+    if (editandoId && senha.trim() && !isSenhaAplicadorValid(senha)) {
+      faltantesAgora.push('Senha (4 números)');
+    }
     if (categoria === 'Oficiais' && !oficialSelecionado.trim()) faltantesAgora.push('Oficial');
     if (categoria === 'Praças' && !pracaSelecionada.trim()) faltantesAgora.push('Graduação');
 
@@ -123,7 +126,7 @@ export default function CadastroAplicadorScreen() {
     let senhaPlano = anterior?.senha;
     if (senha.trim()) {
       senhaHash = await hashAplicadorSenha(senha);
-      senhaPlano = senha.trim();
+      senhaPlano = formatSenhaAplicadorInput(senha);
     }
 
     const novo: AplicadorItemPersist = {
@@ -439,16 +442,18 @@ export default function CadastroAplicadorScreen() {
               </View>
 
               <View style={styles.section}>
-                <FieldLabel>{editandoId ? 'Senha (deixe vazio para manter)' : 'Senha'}</FieldLabel>
+                <FieldLabel>{editandoId ? 'Senha (deixe vazio para manter)' : 'Senha (4 números)'}</FieldLabel>
                 <TextInput
                   value={senha}
-                  onChangeText={setSenha}
-                  placeholder={editandoId ? 'Nova senha (opcional)' : 'Senha do aplicador'}
+                  onChangeText={(t) => setSenha(formatSenhaAplicadorInput(t))}
+                  placeholder={editandoId ? 'Nova senha (opcional)' : '0000'}
                   placeholderTextColor={theme.textMuted}
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
                   autoComplete="off"
+                  keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                  maxLength={4}
                   style={[
                     styles.input,
                     {
@@ -524,94 +529,22 @@ export default function CadastroAplicadorScreen() {
           </View>
 
           {mostrarTabela ? (
-            <Card elevated style={styles.formCard}>
-              <Text style={[ts.h3, { color: theme.text, marginBottom: 12 }]}>Aplicadores cadastrados</Text>
+            <>
               {aplicadores.length === 0 ? (
-                <Text style={[ts.bodySecondary, { color: theme.textSecondary, textAlign: 'center' }]}>
-                  Nenhum aplicador cadastrado ainda.
-                </Text>
+                <TafGlassPanel style={styles.formCard}>
+                  <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
+                    Nenhum aplicador cadastrado ainda.
+                  </Text>
+                </TafGlassPanel>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator>
-                  <View style={[styles.tabelaCard, { borderColor: theme.border }]}>
-                    <View style={[styles.tabelaHeaderRow, { borderBottomColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
-                      {(
-                        isBoss
-                          ? ['Posto/Grad.', 'NIP', 'Nome', 'Categoria', 'Senha', 'Ações']
-                          : ['Posto/Grad.', 'NIP', 'Nome', 'Categoria', 'Ações']
-                      ).map((col) => (
-                        <Text
-                          key={col}
-                          style={[
-                            styles.tabelaHeaderCell,
-                            {
-                              color: theme.textSecondary,
-                              width:
-                                col === 'Ações'
-                                  ? 80
-                                  : col === 'Nome'
-                                    ? 160
-                                    : col === 'Senha'
-                                      ? 100
-                                      : 90,
-                            },
-                          ]}
-                        >
-                          {col}
-                        </Text>
-                      ))}
-                    </View>
-                    {[...aplicadores]
-                      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-                      .map((item) => (
-                        <View
-                          key={item.id}
-                          style={[styles.tabelaDataRow, { borderBottomColor: theme.borderSubtle }]}
-                        >
-                          <Text style={[styles.tabelaCellText, { color: theme.text, width: 90 }]}>
-                            {postoGradLabel(item)}
-                          </Text>
-                          <Text style={[styles.tabelaCellText, { color: theme.text, width: 90 }]}>
-                            {item.nip || '-'}
-                          </Text>
-                          <Text style={[styles.tabelaCellText, { color: theme.text, width: 160 }]} numberOfLines={2}>
-                            {item.nome}
-                          </Text>
-                          <Text style={[styles.tabelaCellText, { color: theme.text, width: 90 }]}>
-                            {item.categoria}
-                          </Text>
-                          {isBoss ? (
-                            <Text style={[styles.tabelaCellText, { color: theme.text, width: 100 }]}>
-                              {item.senha?.trim() || '—'}
-                            </Text>
-                          ) : null}
-                          <View style={[styles.acoesRow, { width: 80 }]}>
-                            {isBoss ? (
-                              <>
-                                <TouchableOpacity
-                                  accessibilityLabel="Editar aplicador"
-                                  onPress={() => handleEditar(item)}
-                                  style={styles.acaoBtn}
-                                >
-                                  <Pencil size={16} color={theme.primary} strokeWidth={2} />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  accessibilityLabel="Excluir aplicador"
-                                  onPress={() => setExcluirId(item.id)}
-                                  style={styles.acaoBtn}
-                                >
-                                  <Trash2 size={16} color={dangerColor} strokeWidth={2} />
-                                </TouchableOpacity>
-                              </>
-                            ) : (
-                              <Text style={[styles.tabelaCellText, { color: theme.textMuted }]}>—</Text>
-                            )}
-                          </View>
-                        </View>
-                      ))}
-                  </View>
-                </ScrollView>
+                <AplicadoresCadastradosTable
+                  data={aplicadores}
+                  isBoss={isBoss}
+                  onEditar={handleEditar}
+                  onExcluir={(item) => setExcluirId(item.id)}
+                />
               )}
-            </Card>
+            </>
           ) : null}
             </>
           ) : null}

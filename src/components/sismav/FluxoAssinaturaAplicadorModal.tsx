@@ -12,7 +12,7 @@ import Svg, { Path as SvgPath } from 'react-native-svg';
 import { Modal } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getAllAplicadores, type AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
-import { verificarSenhaAplicador } from '../../utils/aplicadorSenha';
+import { verificarSenhaAplicador, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../../utils/aplicadorSenha';
 import {
   postoGradAplicador,
   type AplicadorAssinaturaResumo,
@@ -107,6 +107,10 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
     }
     if (!senha.trim()) {
       setErroSenha('Informe a senha do aplicador.');
+      return;
+    }
+    if (!isSenhaAplicadorValid(senha)) {
+      setErroSenha('A senha deve ter exatamente 4 números.');
       return;
     }
     if (!aplicadorSelecionado.senhaHash) {
@@ -265,14 +269,16 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
                 <TextInput
                   value={senha}
                   onChangeText={(t) => {
-                    setSenha(t);
+                    setSenha(formatSenhaAplicadorInput(t));
                     setErroSenha('');
                   }}
-                  placeholder="Digite a senha do aplicador"
+                  placeholder="0000"
                   placeholderTextColor={theme.textMuted}
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
+                  keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                  maxLength={4}
                   editable={!!aplicadorSelecionadoId}
                   style={[
                     ...assinaturaFuturistaInputStyle(theme),

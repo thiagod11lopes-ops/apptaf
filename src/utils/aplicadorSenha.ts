@@ -1,8 +1,15 @@
 import * as Crypto from 'expo-crypto';
 import type { AplicadorItemPersist } from '../services/aplicadoresIndexedDb';
+import {
+  formatSenhaAplicadorInput,
+  isSenhaAplicadorValid,
+  SENHA_APLICADOR_LENGTH,
+} from './aplicadorSenhaFormat';
+
+export { formatSenhaAplicadorInput, isSenhaAplicadorValid, SENHA_APLICADOR_LENGTH };
 
 export async function hashAplicadorSenha(senha: string): Promise<string> {
-  const normalizada = senha.trim();
+  const normalizada = formatSenhaAplicadorInput(senha);
   return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, normalizada);
 }
 

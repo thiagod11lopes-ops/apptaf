@@ -4,18 +4,15 @@ import {
   Text,
   StyleSheet,
   Platform,
-  SafeAreaView,
-  ScrollView,
   TouchableOpacity,
   TextInput,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useAuth } from '../contexts/AuthContext';
 import { X } from 'lucide-react-native';
 import { Card } from '../components/Card';
-import { AppHeader } from '../components/sismav/AppHeader';
 import { LabelNip } from '../components/LabelNip';
 import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
@@ -28,7 +25,9 @@ import { hashAplicadorSenha, formatSenhaAplicadorInput, isSenhaAplicadorValid } 
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
 import { AplicadoresCadastradosTable } from '../components/AplicadoresCadastradosTable';
-import { TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
+import { TafCenteredTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { TopActionIcons } from '../components/premium/TopActionIcons';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -51,7 +50,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 export default function CadastroAplicadorScreen() {
   const { theme, fontsLoaded } = useTheme();
   const { isBoss } = useAuth();
-  const navigation = useNavigation();
   const ts = theme.textStyles;
   const regularFont = fontFamily('regular', fontsLoaded);
 
@@ -232,18 +230,13 @@ export default function CadastroAplicadorScreen() {
   const successColor = theme.gain;
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: 'transparent' }]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.centerWrap}>
-          <AppHeader
-            title="Aplicador de TAF"
-            subtitle="Cadastro de aplicador de teste físico"
-            onBack={() => navigation.navigate('Home' as never)}
-          />
+    <>
+      <MobileScreenScaffold contentContainerStyle={styles.scrollContent}>
+        <TafCenteredTabHeader
+          title="Aplicador"
+          subtitle="Cadastro de aplicador de teste físico"
+          footer={<TopActionIcons activeRoute="CadastroAplicador" inline centered />}
+        />
 
           {isBoss && erroNuvem ? (
             <Text style={[ts.caption, styles.warnText, { color: dangerColor, marginBottom: 12 }]}>
@@ -548,8 +541,7 @@ export default function CadastroAplicadorScreen() {
           ) : null}
             </>
           ) : null}
-        </View>
-      </ScrollView>
+      </MobileScreenScaffold>
 
       {excluirId ? (
         <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)' }]}>
@@ -629,14 +621,12 @@ export default function CadastroAplicadorScreen() {
           </View>
         </View>
       ) : null}
-    </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, position: 'relative' },
-  scrollContent: { paddingHorizontal: 16, paddingVertical: 16 },
-  centerWrap: { flex: 1, alignItems: 'stretch' },
+  scrollContent: { paddingTop: 4, gap: 4 },
   cloudHint: {
     width: '100%',
     maxWidth: 720,

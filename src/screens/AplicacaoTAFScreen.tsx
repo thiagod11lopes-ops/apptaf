@@ -4,18 +4,17 @@ import {
   Text,
   StyleSheet,
   Platform,
-  SafeAreaView,
-  ScrollView,
   TouchableOpacity,
   TextInput,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { Check, X } from 'lucide-react-native';
-import { AppHeader } from '../components/sismav/AppHeader';
+import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
+import { TafCenteredTabHeader } from '../components/mobile/TafTabChrome';
+import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
 import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { addSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
@@ -41,7 +40,6 @@ export default function AplicacaoTAFScreen() {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const styles = useMemo(() => createAplicacaoTafStyles(theme, ui), [theme, ui]);
-  const navigation = useNavigation();
 
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
   const [modalBuscaAberto, setModalBuscaAberto] = useState(false);
@@ -60,7 +58,6 @@ export default function AplicacaoTAFScreen() {
   const [resultadoNatacaoOpcao, setResultadoNatacaoOpcao] = useState<'aprovado' | 'reprovado' | null>(null);
   const [erroNatacao, setErroNatacao] = useState('');
 
-  const grayBg = theme.background;
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = theme.border;
   const inputBg = ui.inputBg;
@@ -243,14 +240,13 @@ export default function AplicacaoTAFScreen() {
   }, [cadastroAposTempos, resultadoNatacaoOpcao, fecharModalNatacao]);
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.centerWrap}>
-          <AppHeader title="Registrador de TAF" onBack={() => navigation.navigate('Home' as never)} />
+    <>
+      <MobileScreenScaffold contentContainerStyle={styles.scrollContent}>
+        <TafCenteredTabHeader
+          title="Registrador de TAF"
+          subtitle="Registrar resultados manualmente no cadastro"
+          footer={<TopActionIcons activeRoute="AplicacaoTAF" inline centered />}
+        />
 
           <View style={styles.aplicarBtnWrap}>
             <TouchableOpacity
@@ -275,8 +271,7 @@ export default function AplicacaoTAFScreen() {
             emptyMessageWhenNoData="Nenhum cadastro ainda. Cadastre militares na página de Cadastro."
             showActions={false}
           />
-        </View>
-      </ScrollView>
+      </MobileScreenScaffold>
 
       {modalBuscaAberto ? (
         <View style={styles.modalOverlay}>
@@ -528,15 +523,13 @@ export default function AplicacaoTAFScreen() {
           </View>
         </View>
       ) : null}
-    </SafeAreaView>
+    </>
   );
 }
 
 function createAplicacaoTafStyles(theme: AppTheme, ui: UiColors) {
   return StyleSheet.create({
-  safe: { flex: 1, position: 'relative' },
-  scrollContent: { paddingHorizontal: 16, paddingVertical: 10 },
-  centerWrap: { flex: 1, alignItems: 'stretch' },
+  scrollContent: { paddingTop: 4, gap: 4 },
   aplicarBtnWrap: {
     width: '100%',
     maxWidth: '100%',

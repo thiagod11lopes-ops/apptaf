@@ -37,7 +37,7 @@ export function LogombWatermark({
     const availW = Math.max(0, width - EDGE_INSET * 2);
     const availH = Math.max(0, height - EDGE_INSET * 2);
     const base = Math.min(availW, availH);
-    return Math.min(base * sizeMultiplier, availW, availH);
+    return base * sizeMultiplier;
   }, [height, sizeMultiplier, width]);
 
   if (logoSize <= 0) return null;

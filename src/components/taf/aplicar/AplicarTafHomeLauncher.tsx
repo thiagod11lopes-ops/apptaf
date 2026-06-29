@@ -28,7 +28,7 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onIniciarTafNaval, onPreC
     <View style={styles.wrap}>
       <View style={styles.grid}>
         <TouchableOpacity
-          accessibilityLabel="Iniciar TAF"
+          accessibilityLabel="Iniciar TAF Armada"
           activeOpacity={0.92}
           onPress={onIniciarTaf}
           style={[styles.tileWrap, Platform.OS === 'web' ? ({ boxShadow: '0 16px 40px rgba(37,99,235,0.28)' } as object) : null]}
@@ -45,7 +45,7 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onIniciarTafNaval, onPreC
               </View>
               <View style={styles.textCol}>
                 <Text style={[styles.tileTitlePrimary, isNarrowPhone ? styles.tileTitleCompact : null]}>
-                  Iniciar TAF
+                  Iniciar TAF Armada
                 </Text>
                 <Text style={styles.tileSubPrimary}>Prova ao vivo com cronômetro</Text>
               </View>
@@ -55,7 +55,7 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onIniciarTafNaval, onPreC
         </TouchableOpacity>
 
         <TouchableOpacity
-          accessibilityLabel="Iniciar TAF Naval"
+          accessibilityLabel="Iniciar TAF CFN"
           activeOpacity={0.92}
           onPress={onIniciarTafNaval}
           style={[styles.tileWrap, Platform.OS === 'web' ? ({ boxShadow: NAVAL_CAMO_SHADOW } as object) : null]}
@@ -74,7 +74,7 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onIniciarTafNaval, onPreC
               </View>
               <View style={styles.textCol}>
                 <Text style={[styles.tileTitleNaval, isNarrowPhone ? styles.tileTitleCompact : null]}>
-                  Iniciar TAF Naval
+                  Iniciar TAF CFN
                 </Text>
                 <Text style={styles.tileSubNaval}>Provas dos Fuzileiros Navais</Text>
               </View>

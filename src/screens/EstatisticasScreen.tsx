@@ -96,11 +96,14 @@ export default function EstatisticasScreen() {
             ]}
             value={tab}
             onChange={setTab}
+            centered
           />
 
-          <Text style={[ts.bodySecondary, styles.lead]}>
-            Dashboard TAF · notas recalculadas pela norma (sexo, idade, tempo).
-          </Text>
+          {tab !== 'graficos' ? (
+            <Text style={[ts.bodySecondary, styles.lead]}>
+              Dashboard TAF · notas recalculadas pela norma (sexo, idade, tempo).
+            </Text>
+          ) : null}
 
           {tab === 'graficos' ? (
             <Suspense

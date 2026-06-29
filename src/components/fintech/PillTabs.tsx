@@ -7,10 +7,11 @@ type Props<T extends string> = {
   options: PillOption<T>[];
   value: T;
   onChange: (id: T) => void;
+  centered?: boolean;
 };
 
 /** Mantém API legada; visual SISMAV via SubTabs. */
-export function PillTabs<T extends string>({ options, value, onChange }: Props<T>) {
+export function PillTabs<T extends string>({ options, value, onChange, centered }: Props<T>) {
   const subOptions: SubTabOption<T>[] = options;
-  return <SubTabs options={subOptions} value={value} onChange={onChange} />;
+  return <SubTabs options={subOptions} value={value} onChange={onChange} centered={centered} />;
 }

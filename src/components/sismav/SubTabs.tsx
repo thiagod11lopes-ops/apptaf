@@ -12,21 +12,25 @@ type Props<T extends string> = {
   options: SubTabOption<T>[];
   value: T;
   onChange: (id: T) => void;
+  /** Centraliza a faixa de abas quando couber na largura da tela. */
+  centered?: boolean;
 };
 
-export function SubTabs<T extends string>({ options, value, onChange }: Props<T>) {
+export function SubTabs<T extends string>({ options, value, onChange, centered = false }: Props<T>) {
   const { theme } = useTheme();
   const t = theme.tokens;
   const glass = getMobileAppGlass(theme);
   const useGlass = isNativeMobileApp();
 
   return (
+    <View style={[styles.outer, centered && styles.outerCentered]}>
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       style={styles.scroll}
       contentContainerStyle={[
         styles.container,
+        centered && styles.containerCentered,
         {
           backgroundColor: useGlass ? glass.bg : theme.surface,
           borderColor: useGlass ? glass.border : theme.border,
@@ -81,17 +85,23 @@ export function SubTabs<T extends string>({ options, value, onChange }: Props<T>
         );
       })}
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { marginBottom: 16 },
+  outer: { width: '100%' },
+  outerCentered: { alignItems: 'center' },
+  scroll: { marginBottom: 16, maxWidth: '100%' },
   container: {
     flexDirection: 'row',
     gap: 6,
     padding: 6,
     borderRadius: 12,
     borderWidth: 1,
+  },
+  containerCentered: {
+    alignSelf: 'center',
   },
   btnWrap: { borderRadius: 10 },
   btn: {

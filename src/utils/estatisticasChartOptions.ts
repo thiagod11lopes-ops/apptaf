@@ -1,5 +1,6 @@
 import type { EstatisticasTafCompletas } from './estatisticasTaf';
 import type { ChartOption } from './estatisticasChartTypes';
+import { criarEstatisticasTafDemonstracao, GRAFICOS_DEMO_IDS } from './estatisticasTafDemo';
 
 export type ChartThemeColors = {
   isDark: boolean;
@@ -460,4 +461,18 @@ export function buildEstatisticasChartOptions(
   });
 
   return charts;
+}
+
+export type EstatisticasChartDef = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  option: ChartOption;
+  height: number;
+};
+
+export function buildEstatisticasChartDemoOptions(c: ChartThemeColors): EstatisticasChartDef[] {
+  return buildEstatisticasChartOptions(criarEstatisticasTafDemonstracao(), c).filter((chart) =>
+    GRAFICOS_DEMO_IDS.has(chart.id),
+  );
 }

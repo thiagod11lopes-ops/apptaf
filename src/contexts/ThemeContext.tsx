@@ -37,6 +37,21 @@ function applyDomTheme(mode: ThemeMode) {
   document.documentElement.classList.toggle('dark', mode === 'dark');
 }
 
+/** Lê preferência já persistida (localStorage legado) antes da hidratação async. */
+function resolveInitialThemeMode(): ThemeMode {
+  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+    for (const key of ['taf-theme-mode', '@taf-meta:ui:themeMode']) {
+      const stored = localStorage.getItem(key);
+      if (stored === 'light' || stored === 'dark') return stored;
+    }
+  }
+  return 'dark';
+}
+
+if (Platform.OS === 'web') {
+  applyDomTheme(resolveInitialThemeMode());
+}
+
 export function ThemeProvider({
   children,
   fontsLoaded = true,
@@ -44,7 +59,7 @@ export function ThemeProvider({
   children: ReactNode;
   fontsLoaded?: boolean;
 }) {
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('light');
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(resolveInitialThemeMode);
 
   useEffect(() => {
     void (async () => {

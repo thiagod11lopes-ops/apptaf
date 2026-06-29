@@ -11,7 +11,7 @@ import { SyncStatusBar } from '../components/sismav/SyncStatusBar';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function ConfiguracoesScreen() {
-  const { theme, isDark, toggleTheme } = useTheme();
+  const { theme, isDark, setThemeMode } = useTheme();
   const { isBoss, isAuthenticated, firebaseEnabled } = useAuth();
   const navigation = useNavigation();
   const ts = theme.textStyles;
@@ -25,14 +25,15 @@ export default function ConfiguracoesScreen() {
             <View style={styles.rowText}>
               <Text style={ts.h2}>Aparência</Text>
               <Text style={[ts.caption, styles.gap]}>
-                {isDark ? 'Modo escuro suave · melhor leitura' : 'Modo claro'}
+                {isDark ? 'Modo escuro · padrão ao iniciar' : 'Modo claro ativo'}
               </Text>
             </View>
             <Switch
-              value={isDark}
-              onValueChange={toggleTheme}
-              trackColor={{ false: '#D4D4DE', true: theme.accentMuted }}
-              thumbColor={isDark ? theme.primary : '#FFFFFF'}
+              value={!isDark}
+              onValueChange={(modoClaro) => setThemeMode(modoClaro ? 'light' : 'dark')}
+              accessibilityLabel="Ativar modo claro"
+              trackColor={{ false: theme.border, true: theme.accentMuted }}
+              thumbColor={!isDark ? theme.primary : '#FFFFFF'}
             />
           </View>
         </Card>
@@ -75,7 +76,7 @@ export default function ConfiguracoesScreen() {
         ) : null}
 
         <Text style={[ts.caption, styles.footer]}>
-          Design SISMAV · tema claro/escuro com persistência local.
+          Design SISMAV · modo escuro por padrão · preferência salva localmente.
         </Text>
       </ScrollView>
     </View>

@@ -445,7 +445,8 @@ export default function CadastroAplicadorScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   autoComplete="off"
-                  keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
                   maxLength={4}
                   style={[
                     styles.input,

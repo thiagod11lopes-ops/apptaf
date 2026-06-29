@@ -277,7 +277,8 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
-                  keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
                   maxLength={4}
                   editable={!!aplicadorSelecionadoId}
                   style={[

@@ -17,10 +17,10 @@ type Props = {
 
 const logoMb = require('../../../Logomb.png');
 
-const OUTER = 768;
 const LOGO = 448;
-const STROKE = 10;
-const RADIUS = (OUTER - STROKE) / 2;
+const STROKE = 8;
+const RING_SIZE = LOGO;
+const RADIUS = RING_SIZE / 2 - STROKE / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const ARC_VISIBLE = CIRCUMFERENCE * 0.28;
 const ARC_GAP = CIRCUMFERENCE - ARC_VISIBLE;
@@ -50,7 +50,7 @@ export function SyncQuickOverlay({ visible }: Props) {
     );
   }, [visible, spin, pulse]);
 
-  const logoStyle = useAnimatedStyle(() => ({
+  const coreStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }],
   }));
 
@@ -58,59 +58,57 @@ export function SyncQuickOverlay({ visible }: Props) {
     transform: [{ rotate: `${spin.value}deg` }],
   }));
 
-  const trackColor = theme.isDark ? 'rgba(148,163,184,0.2)' : 'rgba(148,163,184,0.24)';
+  const trackColor = theme.isDark ? 'rgba(148,163,184,0.22)' : 'rgba(148,163,184,0.26)';
 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
       <View style={styles.backdrop} pointerEvents="none">
-        <View style={styles.shell}>
-          <Animated.View style={[styles.ringLayer, ringStyle]}>
-            <Svg width={OUTER} height={OUTER}>
+        <Animated.View
+          style={[
+            styles.core,
+            coreStyle,
+            Platform.OS === 'web'
+              ? ({ filter: 'drop-shadow(0 0 28px rgba(56,189,248,0.35))' } as object)
+              : {
+                  shadowColor: '#38bdf8',
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.45,
+                  shadowRadius: 24,
+                  elevation: 12,
+                },
+          ]}
+        >
+          <Animated.View style={[styles.ringLayer, ringStyle]} pointerEvents="none">
+            <Svg width={RING_SIZE} height={RING_SIZE}>
               <Circle
-                cx={OUTER / 2}
-                cy={OUTER / 2}
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
                 r={RADIUS}
                 stroke={trackColor}
                 strokeWidth={STROKE}
                 fill="none"
               />
               <Circle
-                cx={OUTER / 2}
-                cy={OUTER / 2}
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
                 r={RADIUS}
                 stroke={theme.primary}
                 strokeWidth={STROKE}
                 fill="none"
                 strokeLinecap="round"
                 strokeDasharray={`${ARC_VISIBLE} ${ARC_GAP}`}
-                transform={`rotate(-90 ${OUTER / 2} ${OUTER / 2})`}
+                transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
               />
             </Svg>
           </Animated.View>
 
-          <Animated.View
-            style={[
-              styles.logoWrap,
-              logoStyle,
-              Platform.OS === 'web'
-                ? ({ filter: 'drop-shadow(0 0 28px rgba(56,189,248,0.35))' } as object)
-                : {
-                    shadowColor: '#38bdf8',
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: 0.45,
-                    shadowRadius: 24,
-                    elevation: 12,
-                  },
-            ]}
-          >
-            <Image
-              source={logoMb}
-              style={styles.logo}
-              resizeMode="contain"
-              accessibilityLabel="Marinha do Brasil"
-            />
-          </Animated.View>
-        </View>
+          <Image
+            source={logoMb}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="Marinha do Brasil"
+          />
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -126,23 +124,14 @@ const styles = StyleSheet.create({
       ? ({ backdropFilter: 'blur(14px)' } as object)
       : null),
   },
-  shell: {
-    width: OUTER,
-    height: OUTER,
+  core: {
+    width: RING_SIZE,
+    height: RING_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   ringLayer: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoWrap: {
-    width: LOGO,
-    height: LOGO,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
   },
   logo: {
     width: LOGO,

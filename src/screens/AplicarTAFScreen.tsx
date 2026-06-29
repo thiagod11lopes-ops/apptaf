@@ -258,6 +258,7 @@ export default function AplicarTAFScreen() {
   const inputTextColor = ui.text;
   const [mostrarListaPreCadastro, setMostrarListaPreCadastro] = useState(false);
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
+  const [modoTafNaval, setModoTafNaval] = useState(false);
   const [listaPreCadastros, setListaPreCadastros] = useState<PreCadastroTaf[]>([]);
   const [preCadastroParaExcluir, setPreCadastroParaExcluir] = useState<PreCadastroTaf | null>(null);
   const [excluindoPreCadastro, setExcluindoPreCadastro] = useState(false);
@@ -1546,6 +1547,7 @@ export default function AplicarTAFScreen() {
     void recarregarListaPreCadastros().then(() => {
       setMostrarListaPreCadastro(true);
       setModoPreCadastro(false);
+      setModoTafNaval(false);
       setMostrarProvas(false);
     });
   }, [recarregarListaPreCadastros]);
@@ -1553,6 +1555,7 @@ export default function AplicarTAFScreen() {
   const voltarInicioAplicarTaf = useCallback(() => {
     setMostrarListaPreCadastro(false);
     setModoPreCadastro(false);
+    setModoTafNaval(false);
     setMostrarProvas(false);
     setCorridaEtapa('menu');
   }, []);
@@ -1561,6 +1564,7 @@ export default function AplicarTAFScreen() {
     tipoProvaRef.current = null;
     resetCronometroCorrida();
     setModoPreCadastro(true);
+    setModoTafNaval(false);
     setMostrarListaPreCadastro(false);
     setMostrarProvas(true);
     setTipoProva(null);
@@ -1700,6 +1704,30 @@ export default function AplicarTAFScreen() {
 
   const iniciarTaf = useCallback(() => {
     setModoPreCadastro(false);
+    setModoTafNaval(false);
+    setMostrarListaPreCadastro(false);
+    tipoProvaRef.current = null;
+    resetCronometroCorrida();
+    setMostrarProvas(true);
+    setTipoProva(null);
+    setCorridaEtapa('menu');
+    setNumeroParticipantesCorrida('');
+    setErroParticipantes('');
+    setNParticipantesConfirmado(0);
+    setNipsParticipantes([]);
+    setNipFeedbackLinhas([]);
+    nipsRepeticaoAutorizadaRef.current = new Set();
+    setModalTesteExistente(null);
+    setNumeroVoltas('');
+    setResultadoPermanenciaLinhas([]);
+    setModalPermanenciaFinalizadaVisible(false);
+    setErroPermanencia('');
+    dispatchTrial({ type: 'resetAll' });
+  }, [resetCronometroCorrida]);
+
+  const iniciarTafNaval = useCallback(() => {
+    setModoPreCadastro(false);
+    setModoTafNaval(true);
     setMostrarListaPreCadastro(false);
     tipoProvaRef.current = null;
     resetCronometroCorrida();
@@ -1802,10 +1830,12 @@ export default function AplicarTAFScreen() {
     if (mostrarProvas) {
       if (corridaEtapa === 'menu') {
         return {
-          title: modoPreCadastro ? 'Nova prova' : 'Modalidades',
+          title: modoPreCadastro ? 'Nova prova' : modoTafNaval ? 'TAF Naval' : 'Modalidades',
           subtitle: modoPreCadastro
             ? 'Selecione a atividade do pré-cadastro'
-            : 'Escolha a prova que será aplicada agora',
+            : modoTafNaval
+              ? 'Provas dos Fuzileiros Navais — CGCFN-108'
+              : 'Escolha a prova que será aplicada agora',
         };
       }
       if (corridaEtapa === 'participantes') {
@@ -1830,6 +1860,7 @@ export default function AplicarTAFScreen() {
     mostrarProvas,
     corridaEtapa,
     modoPreCadastro,
+    modoTafNaval,
     tituloProvaCurta,
     nParticipantesConfirmado,
   ]);
@@ -2072,7 +2103,11 @@ export default function AplicarTAFScreen() {
           )}
 
           {!mostrarProvas && !mostrarListaPreCadastro ? (
-            <AplicarTafHomeLauncher onIniciarTaf={iniciarTaf} onPreCadastro={abrirListaPreCadastro} />
+            <AplicarTafHomeLauncher
+              onIniciarTaf={iniciarTaf}
+              onIniciarTafNaval={iniciarTafNaval}
+              onPreCadastro={abrirListaPreCadastro}
+            />
           ) : null}
 
           {mostrarListaPreCadastro ? (

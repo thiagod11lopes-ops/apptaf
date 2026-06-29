@@ -16,7 +16,8 @@ import { KpiCard } from '../components/fintech/KpiCard';
 import { PillTabs } from '../components/fintech/PillTabs';
 import { MonoValue } from '../components/fintech/MonoValue';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
-import { TafTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { TafCenteredTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { TopActionIcons } from '../components/premium/TopActionIcons';
 
 type ViewTab = 'geral' | 'modalidade' | 'notas';
 
@@ -54,10 +55,10 @@ export default function EstatisticasScreen() {
 
   return (
     <MobileScreenScaffold contentContainerStyle={[styles.scroll, maxWidth]}>
-        <TafTabHeader
-          kicker="CENTRAL TAF"
+        <TafCenteredTabHeader
           title="Estatísticas"
           subtitle="Dashboard TAF · notas e desempenho"
+          footer={<TopActionIcons activeRoute="Estatisticas" inline centered />}
         />
 
         {loading ? (

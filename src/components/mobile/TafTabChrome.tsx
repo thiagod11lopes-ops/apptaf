@@ -1,6 +1,7 @@
 /** Componentes visuais das abas — mesmo design ultramoderno da aba Aplicar. */
 export {
   AplicarTafTabHeader as TafTabHeader,
+  AplicarTafCenteredTabHeader as TafCenteredTabHeader,
   AplicarTafGlassPanel as TafGlassPanel,
   AplicarTafSectionHeader as TafSectionHeader,
   AplicarTafPrimaryButton as TafPrimaryButton,

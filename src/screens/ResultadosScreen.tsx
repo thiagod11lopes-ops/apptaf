@@ -39,7 +39,8 @@ import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { PREMIUM } from '../theme/premium';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
-import { TafTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { TafCenteredTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { TopActionIcons } from '../components/premium/TopActionIcons';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Resultados'>;
 type AbaResultados = 'historico' | 'consulta' | 'pendencia' | 'geral';
@@ -123,10 +124,10 @@ export default function ResultadosScreen() {
   return (
     <>
     <MobileScreenScaffold contentContainerStyle={styles.scroll}>
-        <TafTabHeader
-          kicker="CENTRAL TAF"
+        <TafCenteredTabHeader
           title="Resultados"
           subtitle="Histórico · gerenciar · geral · pendências"
+          footer={<TopActionIcons activeRoute="Resultados" inline centered />}
         />
 
         <SubTabs

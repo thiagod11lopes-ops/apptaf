@@ -39,7 +39,11 @@ export default function AppNavigator() {
   const tafImersivo =
     activeRoute === 'AplicarTAF' && (hideSidebarForLandscape || isLandscape);
   const topChromeExtra =
-    activeRoute === 'Home' || activeRoute === 'Cadastro' || activeRoute === 'AplicarTAF'
+    activeRoute === 'Home' ||
+    activeRoute === 'Cadastro' ||
+    activeRoute === 'AplicarTAF' ||
+    activeRoute === 'Resultados' ||
+    activeRoute === 'Estatisticas'
       ? 8
       : tafImersivo
         ? 4

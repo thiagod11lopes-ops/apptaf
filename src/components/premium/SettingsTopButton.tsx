@@ -13,6 +13,8 @@ const HIDE_ON: (keyof RootStackParamList)[] = [
   'Home',
   'Cadastro',
   'AplicarTAF',
+  'Resultados',
+  'Estatisticas',
   'Configuracoes',
   'CadastrarResultados',
   'Login',

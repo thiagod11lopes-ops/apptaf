@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ChartOption } from '../../utils/estatisticasChartTypes';
+import { loadEchartsFromCdn } from '../../utils/loadEchartsFromCdn';
 
 type EChartsInstance = {
   setOption: (option: ChartOption, opts?: { notMerge?: boolean }) => void;
@@ -13,28 +14,11 @@ type Props = {
   isDark?: boolean;
 };
 
-async function loadEchartsModule(): Promise<{
-  init: (
-    el: HTMLElement,
-    theme?: string,
-    opts?: { renderer?: string },
-  ) => EChartsInstance;
-}> {
-  const mod = await import('echarts');
-  const echarts = (mod as { default?: typeof mod }).default ?? mod;
-  return echarts as {
-    init: (
-      el: HTMLElement,
-      theme?: string,
-      opts?: { renderer?: string },
-    ) => EChartsInstance;
-  };
-}
-
 export function EChartsView({ option, height = 280, isDark = false }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<EChartsInstance | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -45,7 +29,9 @@ export function EChartsView({ option, height = 280, isDark = false }: Props) {
 
     void (async () => {
       try {
-        const echarts = await loadEchartsModule();
+        setLoading(true);
+        setError(null);
+        const echarts = await loadEchartsFromCdn();
         if (disposed || !containerRef.current) return;
 
         const chart = echarts.init(el, isDark ? 'dark' : undefined, { renderer: 'canvas' });
@@ -64,6 +50,8 @@ export function EChartsView({ option, height = 280, isDark = false }: Props) {
         if (!disposed) {
           setError(e instanceof Error ? e.message : 'Não foi possível carregar o gráfico.');
         }
+      } finally {
+        if (!disposed) setLoading(false);
       }
     })();
 
@@ -90,7 +78,14 @@ export function EChartsView({ option, height = 280, isDark = false }: Props) {
   return (
     <div
       ref={containerRef}
-      style={{ width: '100%', height, borderRadius: 12, overflow: 'hidden' }}
+      style={{
+        width: '100%',
+        height,
+        borderRadius: 12,
+        overflow: 'hidden',
+        opacity: loading ? 0.45 : 1,
+        transition: 'opacity 0.2s ease',
+      }}
     />
   );
 }

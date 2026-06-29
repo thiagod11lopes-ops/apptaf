@@ -250,7 +250,10 @@ function CheckPermanenciaModal({
   variant: 'aprovado' | 'reprovado';
   touchLarge?: boolean;
 }) {
+  const { theme } = useTheme();
   const onStyle = variant === 'aprovado' ? styles.checkPermOnAprov : styles.checkPermOnReprov;
+  const labelColor = variant === 'aprovado' ? '#15803D' : theme.loss;
+
   return (
     <TouchableOpacity
       accessibilityRole="checkbox"
@@ -259,11 +262,12 @@ function CheckPermanenciaModal({
       activeOpacity={0.85}
       onPress={onPress}
       hitSlop={touchLarge ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined}
-      style={[styles.checkPermOuter, touchLarge ? styles.checkOuterLarge : null]}
+      style={[styles.checkPermRow, touchLarge ? styles.checkOuterLarge : null]}
     >
       <View style={[styles.checkPermBox, checked ? onStyle : styles.checkPermOff]}>
         {checked ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
       </View>
+      <Text style={[styles.checkPermLabel, { color: labelColor }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -358,6 +362,7 @@ export function TafProvaTempoModal({
             onToggleVolta != null);
 
         const isCorridaCaminhada = prova === 'corrida' || prova === 'caminhada';
+        const isPermanencia = prova === 'permanencia';
         const metaScale: MetaFieldScale =
           isCorridaCaminhada && (mostrarTempo || mostrarNota)
             ? resolveMetaScaleForNome(
@@ -390,9 +395,12 @@ export function TafProvaTempoModal({
               <View
                 style={[
                   styles.identityCol,
-                  isNativeMobile && !isCorridaCaminhada ? styles.identityColCompact : null,
+                  isNativeMobile && !isCorridaCaminhada && !isPermanencia
+                    ? styles.identityColCompact
+                    : null,
                   isCorridaCaminhada ? styles.identityColAdaptive : null,
-                  temChecks ? styles.identityColWithChecksBelow : null,
+                  isPermanencia ? styles.identityColPermanencia : null,
+                  temChecks && !isPermanencia ? styles.identityColWithChecksBelow : null,
                 ]}
               >
                 <View
@@ -415,10 +423,16 @@ export function TafProvaTempoModal({
                 <Text
                   style={[
                     styles.participantNome,
-                    isNativeMobile && !isCorridaCaminhada ? styles.participantNomeCompact : null,
+                    isNativeMobile && !isCorridaCaminhada && !isPermanencia
+                      ? styles.participantNomeCompact
+                      : null,
                     isCorridaCaminhada ? styles.participantNomeAdaptive : null,
+                    isPermanencia ? styles.participantNomePermanencia : null,
                     { color: ui.text },
                   ]}
+                  numberOfLines={isPermanencia ? 1 : undefined}
+                  adjustsFontSizeToFit={isPermanencia}
+                  minimumFontScale={isPermanencia ? 0.55 : undefined}
                 >
                   {nome}
                 </Text>
@@ -462,8 +476,11 @@ export function TafProvaTempoModal({
                 horizontal
                 nestedScrollEnabled
                 showsHorizontalScrollIndicator={isNativeMobile}
-                style={styles.checksRowBelow}
-                contentContainerStyle={styles.checksTrackContent}
+                style={[styles.checksRowBelow, isPermanencia ? styles.checksRowPermanencia : null]}
+                contentContainerStyle={[
+                  styles.checksTrackContent,
+                  isPermanencia ? styles.checksTrackPermanencia : null,
+                ]}
                 keyboardShouldPersistTaps="handled"
               >
                 {prova === 'permanencia' && onTogglePermanencia ? (
@@ -735,6 +752,17 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: undefined,
   },
+  identityColPermanencia: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: undefined,
+    alignItems: 'center',
+  },
+  participantNomePermanencia: {
+    flex: 1,
+    minWidth: 0,
+  },
   participantNomeAdaptive: {
     flexShrink: 0,
     flexGrow: 1,
@@ -761,6 +789,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 2,
+  },
+  checksTrackPermanencia: {
+    gap: 18,
+    paddingVertical: 2,
+  },
+  checksRowPermanencia: {
+    flexGrow: 0,
   },
   metaStrip: {
     flexDirection: 'row',
@@ -907,8 +942,17 @@ const styles = StyleSheet.create({
     borderColor: '#15803D',
     backgroundColor: '#15803D',
   },
-  checkPermOuter: {
-    padding: 2,
+  checkPermRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 2,
+    paddingRight: 4,
+  },
+  checkPermLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.1,
   },
   checkPermBox: {
     width: Platform.OS === 'web' ? 32 : 28,

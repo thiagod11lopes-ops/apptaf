@@ -939,17 +939,18 @@ export const syncManager = {
       return { ok: false, dismissed: 0, error: 'Sessão não vinculada.' };
     }
     try {
+      await syncEngine.preparePendingOwner(uid);
       const dismissed = await dismissPendingCadastroUploads(uid);
+      invalidateRemoteSnapshotCache();
       await refreshPendingSummary();
-      counters = {
-        ...counters,
-        pendingUploads: pendingSummary.total,
+      counters = await buildSyncCounters(uid, pendingSummary.total, counters.pendingDownloads, {
         uploadBreakdown: buildUploadBreakdown(pendingSummary),
-      };
+        downloadBreakdown: counters.downloadBreakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN,
+      });
       notifyDataChanged();
       notifyListeners();
-      if (syncAuthAvailable) {
-        scheduleCloudQueueEstimate(true);
+      if (syncAuthAvailable && connectivityMonitor.canSync()) {
+        await refreshCloudQueueEstimate(true);
       }
       return { ok: true, dismissed };
     } catch (error) {

@@ -148,8 +148,14 @@ export async function dismissPendingCadastroUploads(ownerUid: string): Promise<n
 
     const synced = pending.map((row) => markRecordSynced(row, loginUid));
     await db.cadastros.bulkPut(synced);
-    await syncQueue.clearPendingForCollection(uid, 'cadastros');
     dismissed += synced.length;
+  }
+
+  const queueOwners = new Set<string>([...owners, ownerUid]);
+  const loginUidForQueue = getCachedLoginUid();
+  if (loginUidForQueue) queueOwners.add(loginUidForQueue);
+  for (const queueOwner of queueOwners) {
+    await syncQueue.clearPendingForCollection(queueOwner, 'cadastros');
   }
 
   if (dismissed > 0) {

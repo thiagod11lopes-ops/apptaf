@@ -1,7 +1,7 @@
 import { getCachedDataOwnerUid, getCachedLoginUid } from '../../services/firebase/authUid';
 import { getFirebaseAuth } from '../../config/firebase';
 import { connectivityMonitor } from './ConnectivityMonitor';
-import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
+import { getPendingSyncItems, dismissPendingCadastroUploads, type PendingSyncSummary } from './pendingSyncItems';
 import { syncEngine, notifyDataChanged } from './SyncEngine';
 import { ANONYMOUS_OWNER } from '../db/localDb';
 import { systemState } from './SystemState';
@@ -100,6 +100,7 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
   items: [],
   total: 0,
   cadastros: 0,
+  cadastrosDispensaveis: 0,
   sessoes: 0,
   aplicadores: 0,
   pre_cadastros: 0,
@@ -926,6 +927,36 @@ export const syncManager = {
     scheduleCloudQueueEstimate();
     notifyListeners();
     return summary;
+  },
+
+  /** Dispensa envio de cadastros pendentes (marca como sincronizados localmente). */
+  async dismissCadastroUploads(): Promise<{ ok: boolean; dismissed: number; error?: string }> {
+    if (syncInFlight) {
+      return { ok: false, dismissed: 0, error: 'Aguarde a sincronização em andamento terminar.' };
+    }
+    const uid = ownerUid ?? getCachedDataOwnerUid();
+    if (!uid) {
+      return { ok: false, dismissed: 0, error: 'Sessão não vinculada.' };
+    }
+    try {
+      const dismissed = await dismissPendingCadastroUploads(uid);
+      await refreshPendingSummary();
+      counters = {
+        ...counters,
+        pendingUploads: pendingSummary.total,
+        uploadBreakdown: buildUploadBreakdown(pendingSummary),
+      };
+      notifyDataChanged();
+      notifyListeners();
+      if (syncAuthAvailable) {
+        scheduleCloudQueueEstimate(true);
+      }
+      return { ok: true, dismissed };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await syncLogger.warn('sync-manager', `Falha ao dispensar cadastros: ${message}`);
+      return { ok: false, dismissed: 0, error: message };
+    }
   },
 
   async afterSystemWipe(dataOwnerUid: string): Promise<void> {

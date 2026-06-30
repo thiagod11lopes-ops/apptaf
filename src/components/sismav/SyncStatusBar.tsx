@@ -81,7 +81,7 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const { firebaseEnabled, isAuthenticated, authReady } = useAuth();
-  const { syncUi, retrySync } = useOfflineSyncState();
+  const { syncUi, retrySync, dismissCadastroUploads, pendingSummary } = useOfflineSyncState();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [queueDetail, setQueueDetail] = useState<'download' | 'upload' | null>(null);
 
@@ -90,6 +90,7 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
   const pendingDownloads = syncUi.counters.pendingDownloads;
   const uploadBreakdown = syncUi.counters.uploadBreakdown;
   const downloadBreakdown = syncUi.counters.downloadBreakdown;
+  const pendingCadastros = pendingSummary.cadastrosDispensaveis;
 
   const preparing =
     syncUi.isSyncing &&
@@ -297,6 +298,9 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
         direction="upload"
         breakdown={uploadBreakdown}
         totalLabel={formatQueueCount(pendingUploads)}
+        pendingCadastros={pendingCadastros}
+        isSyncing={syncUi.isSyncing}
+        onDismissCadastroUploads={dismissCadastroUploads}
         onClose={() => setQueueDetail(null)}
       />
     </>

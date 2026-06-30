@@ -41,6 +41,7 @@ type OfflineSyncContextType = {
   syncUi: SyncUiState;
   startSyncFromToggle: () => Promise<{ ok: boolean; error?: string }>;
   retrySync: () => Promise<{ ok: boolean; error?: string }>;
+  dismissCadastroUploads: () => Promise<{ ok: boolean; dismissed: number; error?: string }>;
   /** @deprecated use startSyncFromToggle */
   enterOnlineMode: () => Promise<{ ok: boolean; error?: string }>;
   /** @deprecated */
@@ -117,6 +118,10 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     return syncManager.retrySync(verifyAuthenticatedOnly);
   }, [hasValidSession]);
 
+  const dismissCadastroUploads = useCallback(async () => {
+    return syncManager.dismissCadastroUploads();
+  }, []);
+
   const enterOnlineMode = startSyncFromToggle;
 
   const confirmManualSync = useCallback(async () => {
@@ -184,6 +189,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       syncUi,
       startSyncFromToggle,
       retrySync,
+      dismissCadastroUploads,
       enterOnlineMode,
       confirmManualSync,
       cancelOnlineMode,
@@ -208,6 +214,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       syncUi,
       startSyncFromToggle,
       retrySync,
+      dismissCadastroUploads,
       enterOnlineMode,
       confirmManualSync,
       cancelOnlineMode,

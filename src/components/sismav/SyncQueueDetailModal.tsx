@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { CloudDownload, CloudUpload } from 'lucide-react-native';
 import { ModernModal } from './ModernModal';
+import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { SyncQueueBreakdown } from '../../offline-first/sync/syncQueueBreakdown';
 
@@ -12,6 +13,9 @@ type Props = {
   direction: Direction;
   breakdown: SyncQueueBreakdown;
   totalLabel: string | null;
+  pendingCadastros?: number;
+  isSyncing?: boolean;
+  onDismissCadastroUploads?: () => Promise<{ ok: boolean; dismissed: number; error?: string }>;
   onClose: () => void;
 };
 
@@ -20,6 +24,9 @@ export function SyncQueueDetailModal({
   direction,
   breakdown,
   totalLabel,
+  pendingCadastros = 0,
+  isSyncing = false,
+  onDismissCadastroUploads,
   onClose,
 }: Props) {
   const { theme } = useTheme();
@@ -29,12 +36,82 @@ export function SyncQueueDetailModal({
   const subtitle = isDownload
     ? 'Tipos de atualização que serão baixados deste dispositivo:'
     : 'Tipos de alteração local que serão enviados para a nuvem:';
+  const [dismissing, setDismissing] = useState(false);
+
+  const confirmDismissCadastros = useCallback(() => {
+    if (!onDismissCadastroUploads || pendingCadastros <= 0 || isSyncing || dismissing) return;
+
+    const countLabel = pendingCadastros.toLocaleString('pt-BR');
+    Alert.alert(
+      'Dispensar envio de cadastros?',
+      `${countLabel} cadastro(s) serão marcados como já sincronizados neste aparelho, sem envio à nuvem. Resultados, aplicadores e outros dados não serão alterados.\n\nUse apenas se tiver certeza de que esses cadastros já existem na nuvem.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Dispensar envio',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setDismissing(true);
+              try {
+                const result = await onDismissCadastroUploads();
+                if (result.ok) {
+                  if (result.dismissed > 0) {
+                    Alert.alert(
+                      'Envio dispensado',
+                      `${result.dismissed.toLocaleString('pt-BR')} cadastro(s) removidos da fila de envio.`,
+                    );
+                  }
+                  onClose();
+                } else if (result.error) {
+                  Alert.alert('Não foi possível dispensar', result.error);
+                }
+              } finally {
+                setDismissing(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [dismissing, isSyncing, onClose, onDismissCadastroUploads, pendingCadastros]);
+
+  const showDismissCadastros =
+    !isDownload && pendingCadastros > 0 && Boolean(onDismissCadastroUploads);
+
+  const footer =
+    showDismissCadastros ? (
+      <View style={styles.footerCol}>
+        <PressableScale
+          onPress={confirmDismissCadastros}
+          disabled={isSyncing || dismissing}
+          style={[
+            styles.dismissBtn,
+            {
+              borderColor: theme.loss,
+              backgroundColor: theme.lossMuted,
+              opacity: isSyncing || dismissing ? 0.55 : 1,
+            },
+          ]}
+        >
+          {dismissing ? (
+            <ActivityIndicator size="small" color={theme.loss} />
+          ) : (
+            <Text style={[styles.dismissBtnText, { color: theme.loss }]}>
+              Dispensar envio de cadastros ({pendingCadastros.toLocaleString('pt-BR')})
+            </Text>
+          )}
+        </PressableScale>
+      </View>
+    ) : undefined;
 
   return (
     <ModernModal
       visible={visible}
       onClose={onClose}
       title={title}
+      footer={footer}
+      dismissable={!dismissing}
       icon={
         isDownload ? (
           <CloudDownload size={20} color="#FFFFFF" strokeWidth={2.2} />
@@ -79,6 +156,13 @@ export function SyncQueueDetailModal({
             ))}
           </View>
         )}
+
+        {showDismissCadastros ? (
+          <Text style={[styles.dismissHint, { color: theme.textMuted }]}>
+            Se os cadastros já existem na nuvem (ex.: importação local em massa), você pode dispensar
+            o envio deles. Resultados, aplicadores e demais dados continuarão pendentes normalmente.
+          </Text>
+        ) : null}
       </View>
     </ModernModal>
   );
@@ -141,5 +225,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
+  },
+  dismissHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  footerCol: {
+    flex: 1,
+    width: '100%',
+  },
+  dismissBtn: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+  },
+  dismissBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

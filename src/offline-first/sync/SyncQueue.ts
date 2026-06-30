@@ -126,6 +126,22 @@ export class SyncQueue {
     return withError[0]?.error ?? null;
   }
 
+  /** Remove todas as pendências de uma coleção (ex.: dispensar envio de cadastros). */
+  async clearPendingForCollection(ownerUid: string, collection: CollectionName): Promise<number> {
+    const db = getTafDatabase();
+    if (!db) return 0;
+    const rows = await db.syncQueue.where('ownerUid').equals(ownerUid).toArray();
+    const toDelete = rows.filter(
+      (r) =>
+        r.collection === collection &&
+        (r.status === 'pending' || r.status === 'failed' || r.status === 'processing'),
+    );
+    if (toDelete.length > 0) {
+      await db.syncQueue.bulkDelete(toDelete.map((r) => r.operationId));
+    }
+    return toDelete.length;
+  }
+
   /** Remove pendências de um documento após gravação direta na nuvem. */
   async clearPendingForDocument(
     ownerUid: string,

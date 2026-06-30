@@ -123,6 +123,7 @@ export function preCadastroRecordToTaf(record: PreCadastroRecord): PreCadastroTa
     id: record.id,
     criadoEm: record.criadoEm,
     tipoProva: record.tipoProva,
+    normaTaf: record.normaTaf ?? 'armada',
     participantes: record.participantes,
   };
 }

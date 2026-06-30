@@ -10,7 +10,11 @@ import {
 } from '../offline-first/db/preCadastroLocalDb';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 
+import type { TipoProvaTAF } from '../taf/tafProvaTypes';
+
 export const MAX_PRE_CADASTRO_PARTICIPANTES = 15;
+
+export type NormaTafPreCadastro = 'armada' | 'cfn';
 
 export type PreCadastroParticipante = {
   nip: string;
@@ -22,7 +26,9 @@ export type PreCadastroParticipante = {
 export type PreCadastroTaf = {
   id: string;
   criadoEm: number;
-  tipoProva: 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
+  tipoProva: TipoProvaTAF;
+  /** Padrão armada quando omitido (registros antigos). */
+  normaTaf?: NormaTafPreCadastro;
   participantes: PreCadastroParticipante[];
 };
 

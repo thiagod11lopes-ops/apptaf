@@ -45,6 +45,9 @@ export interface AplicadorRecord extends AplicadorItemPersist, SyncableMeta {
   ownerUid: string;
 }
 
+import type { TipoProvaTAF } from '../../taf/tafProvaTypes';
+import type { NormaTafPreCadastro } from '../../services/preCadastroTafStorage';
+
 export type PreCadastroParticipante = {
   nip: string;
   nomeMilitar: string;
@@ -56,7 +59,8 @@ export interface PreCadastroRecord extends SyncableMeta {
   id: string;
   ownerUid: string;
   criadoEm: number;
-  tipoProva: 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
+  tipoProva: TipoProvaTAF;
+  normaTaf?: NormaTafPreCadastro;
   participantes: PreCadastroParticipante[];
 }
 

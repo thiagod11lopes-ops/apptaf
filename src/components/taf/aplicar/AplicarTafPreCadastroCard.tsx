@@ -118,4 +118,8 @@ export const PRE_CADASTRO_ACCENTS: Record<string, [string, string]> = {
   natacao: ['#0891b2', '#6366f1'],
   permanencia: ['#7c3aed', '#4f46e5'],
   caminhada: ['#059669', '#14b8a6'],
+  flexao_barra: ['#3a4d28', '#5a6b42'],
+  flexao_solo: ['#4a5530', '#7a6344'],
+  abdominal_remador: ['#2a3320', '#556B2F'],
+  abdominal_prancha: ['#3d4a28', '#6b5842'],
 };

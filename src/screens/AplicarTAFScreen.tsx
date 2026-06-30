@@ -183,11 +183,16 @@ type NipFeedbackLinha =
 
 const MAX_VOLTAS_COLUNAS = 99;
 
-function labelTipoProvaPreCadastro(tipo: PreCadastroTaf['tipoProva']): string {
-  if (tipo === 'natacao') return 'Natação';
-  if (tipo === 'permanencia') return 'Permanência';
-  if (tipo === 'caminhada') return 'Caminhada';
-  return 'Corrida';
+function labelTipoProvaPreCadastro(pre: PreCadastroTaf): string {
+  const norma = pre.normaTaf ?? 'armada';
+  const titulo = tituloProvaTaf(pre.tipoProva, norma === 'cfn');
+  return norma === 'cfn' ? `CFN · ${titulo}` : titulo;
+}
+
+function metaPreCadastro(pre: PreCadastroTaf): string {
+  const norma = pre.normaTaf === 'cfn' ? 'CFN' : 'Armada';
+  const qtd = pre.participantes.length;
+  return `${norma} · ${qtd} participante${qtd !== 1 ? 's' : ''} · ${formatarDataPreCadastro(pre.criadoEm)}`;
 }
 
 function formatarDataPreCadastro(ms: number): string {
@@ -1726,9 +1731,37 @@ export default function AplicarTAFScreen() {
     dispatchTrial({ type: 'resetAll' });
   }, [resetCronometroCorrida]);
 
+  const iniciarNovoPreCadastroCfn = useCallback(() => {
+    tipoProvaRef.current = null;
+    resetCronometroCorrida();
+    setModoPreCadastro(true);
+    setModoTafNaval(true);
+    setMostrarListaPreCadastro(false);
+    setMostrarProvas(true);
+    setTipoProva(null);
+    setCorridaEtapa('menu');
+    setNumeroParticipantesCorrida('');
+    setErroParticipantes('');
+    setNParticipantesConfirmado(0);
+    setNipsParticipantes([]);
+    setNipFeedbackLinhas([]);
+    nipsRepeticaoAutorizadaRef.current = new Set();
+    setModalTesteExistente(null);
+    setNumeroVoltas('');
+    setResultadoPermanenciaLinhas([]);
+    setModalPermanenciaFinalizadaVisible(false);
+    setErroPermanencia('');
+    dispatchTrial({ type: 'resetAll' });
+  }, [resetCronometroCorrida]);
+
   const salvarPreCadastro = useCallback(async () => {
     if (!tipoProva) {
-      Alert.alert('Atividade não definida', 'Volte ao menu e escolha Corrida, Natação, Caminhada ou Permanência.');
+      Alert.alert(
+        'Atividade não definida',
+        modoTafNaval
+          ? 'Volte ao menu e escolha a prova CFN desejada.'
+          : 'Volte ao menu e escolha Corrida, Natação, Caminhada ou Permanência.',
+      );
       return;
     }
     for (let i = 0; i < nParticipantesConfirmado; i += 1) {
@@ -1752,7 +1785,8 @@ export default function AplicarTAFScreen() {
     const item: PreCadastroTaf = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       criadoEm: Date.now(),
-      tipoProva: tipoProva as PreCadastroTaf['tipoProva'],
+      tipoProva,
+      normaTaf: modoTafNaval ? 'cfn' : 'armada',
       participantes,
     };
     try {
@@ -1762,6 +1796,7 @@ export default function AplicarTAFScreen() {
       return;
     }
     setModoPreCadastro(false);
+    setModoTafNaval(false);
     setMostrarProvas(false);
     setCorridaEtapa('menu');
     setTipoProva(null);
@@ -1775,6 +1810,7 @@ export default function AplicarTAFScreen() {
     nipFeedbackLinhas,
     nipsParticipantes,
     recarregarListaPreCadastros,
+    modoTafNaval,
   ]);
 
   const iniciarProvaFromPreCadastro = useCallback(
@@ -1782,9 +1818,11 @@ export default function AplicarTAFScreen() {
       const tipo = pre.tipoProva;
       const n = pre.participantes.length;
       if (n < 1) return;
+      const normaCfn = (pre.normaTaf ?? 'armada') === 'cfn';
 
       tipoProvaRef.current = tipo;
       setTipoProva(tipo);
+      setModoTafNaval(normaCfn);
       setModoPreCadastro(false);
       setMostrarListaPreCadastro(false);
       setMostrarProvas(true);
@@ -1805,19 +1843,22 @@ export default function AplicarTAFScreen() {
       setNumeroVoltas('');
       resetCronometroCorrida();
 
-      if (tipo === 'corrida' || tipo === 'natacao' || tipo === 'caminhada') {
+      if (tipo === 'permanencia') {
+        permanenciaLimiteAtingidoRef.current = false;
+        setModalPermanenciaFinalizadaVisible(false);
+        setErroPermanencia('');
+        setResultadoPermanenciaLinhas(Array.from({ length: n }, () => null));
+        setCorridaEtapa('tabela_permanencia');
+      } else if (isProvaComRepeticoes(tipo)) {
+        setRepeticoesParticipantes(Array.from({ length: n }, () => ''));
+        setCorridaEtapa('tabela_repeticoes');
+      } else {
         dispatchTrial({
           type: 'prepararProva',
           nParticipantes: n,
           tipoProva: trialTipoFromProva(tipo),
         });
         setCorridaEtapa('tabela_corrida');
-      } else {
-        permanenciaLimiteAtingidoRef.current = false;
-        setModalPermanenciaFinalizadaVisible(false);
-        setErroPermanencia('');
-        setResultadoPermanenciaLinhas(Array.from({ length: n }, () => null));
-        setCorridaEtapa('tabela_permanencia');
       }
     },
     [resetCronometroCorrida],
@@ -1975,9 +2016,17 @@ export default function AplicarTAFScreen() {
     if (mostrarProvas) {
       if (corridaEtapa === 'menu') {
         return {
-          title: modoPreCadastro ? 'Nova prova' : modoTafNaval ? 'TAF Naval' : 'Modalidades',
+          title: modoPreCadastro
+            ? modoTafNaval
+              ? 'Nova prova CFN'
+              : 'Nova prova Armada'
+            : modoTafNaval
+              ? 'TAF Naval'
+              : 'Modalidades',
           subtitle: modoPreCadastro
-            ? 'Selecione a atividade do pré-cadastro'
+            ? modoTafNaval
+              ? 'Selecione a atividade do pré-cadastro CFN'
+              : 'Selecione a atividade do pré-cadastro Armada'
             : modoTafNaval
               ? 'Provas dos Fuzileiros Navais — CGCFN-108'
               : 'Escolha a prova que será aplicada agora',
@@ -2293,7 +2342,7 @@ export default function AplicarTAFScreen() {
               <AplicarTafSectionHeader
                 kicker="BIBLIOTECA"
                 title="Pré-cadastros salvos"
-                subtitle={`Corrida, natação e permanência: até ${MAX_PRE_CADASTRO_PARTICIPANTES} militares. Caminhada: até ${MAX_PARTICIPANTES}. Use Iniciar Prova para ir direto ao cronômetro.`}
+                subtitle={`Armada: corrida, natação e permanência (até ${MAX_PRE_CADASTRO_PARTICIPANTES}). Caminhada: até ${MAX_PARTICIPANTES}. CFN: provas dos Fuzileiros Navais (até ${MAX_PRE_CADASTRO_PARTICIPANTES}).`}
               />
 
               {listaPreCadastros.length === 0 ? (
@@ -2304,8 +2353,8 @@ export default function AplicarTAFScreen() {
                 listaPreCadastros.map((pre) => (
                   <AplicarTafPreCadastroCard
                     key={pre.id}
-                    titulo={labelTipoProvaPreCadastro(pre.tipoProva)}
-                    meta={`${pre.participantes.length} participante${pre.participantes.length !== 1 ? 's' : ''} · ${formatarDataPreCadastro(pre.criadoEm)}`}
+                    titulo={labelTipoProvaPreCadastro(pre)}
+                    meta={metaPreCadastro(pre)}
                     nomesPreview={pre.participantes.map((p) => p.nomeMilitar).join(', ')}
                     accentColors={PRE_CADASTRO_ACCENTS[pre.tipoProva] ?? PRE_CADASTRO_ACCENTS.corrida}
                     onIniciar={() => iniciarProvaFromPreCadastro(pre)}
@@ -2314,7 +2363,17 @@ export default function AplicarTAFScreen() {
                 ))
               )}
 
-              <AplicarTafPrimaryButton label="+ Novo Pré Cadastro" onPress={iniciarNovoPreCadastro} />
+              <View style={styles.preCadastroActions}>
+                <AplicarTafPrimaryButton
+                  label="+ Novo Pré Cadastro Armada"
+                  onPress={iniciarNovoPreCadastro}
+                />
+                <AplicarTafPrimaryButton
+                  label="+ Novo Pré Cadastro CFN"
+                  onPress={iniciarNovoPreCadastroCfn}
+                  variant="outline"
+                />
+              </View>
             </AplicarTafGlassPanel>
           ) : null}
 
@@ -2326,6 +2385,7 @@ export default function AplicarTAFScreen() {
                   label="Voltar para lista de pré-cadastros"
                   onPress={() => {
                     setModoPreCadastro(false);
+                    setModoTafNaval(false);
                     setMostrarProvas(false);
                     void recarregarListaPreCadastros().then(() => setMostrarListaPreCadastro(true));
                   }}
@@ -2334,11 +2394,21 @@ export default function AplicarTAFScreen() {
                 <AplicarTafBackLink label="Voltar ao início" onPress={voltarInicioAplicarTaf} />
               )}
               <AplicarTafSectionHeader
-                kicker={modoPreCadastro ? 'PRÉ-CADASTRO' : modoTafNaval ? 'TAF NAVAL' : 'PROVA AO VIVO'}
+                kicker={
+                  modoPreCadastro
+                    ? modoTafNaval
+                      ? 'PRÉ-CADASTRO CFN'
+                      : 'PRÉ-CADASTRO ARMADA'
+                    : modoTafNaval
+                      ? 'TAF NAVAL'
+                      : 'PROVA AO VIVO'
+                }
                 title={modoPreCadastro ? 'Selecione a atividade' : modoTafNaval ? 'Provas dos Fuzileiros Navais' : 'Selecione a prova'}
                 subtitle={
                   modoPreCadastro
-                    ? `Corrida, natação e permanência: até ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes. Caminhada: até ${MAX_PARTICIPANTES}.`
+                    ? modoTafNaval
+                      ? `Provas CFN — até ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes por atividade.`
+                      : `Armada: corrida, natação e permanência (até ${MAX_PRE_CADASTRO_PARTICIPANTES}). Caminhada: até ${MAX_PARTICIPANTES}.`
                     : modoTafNaval
                       ? 'Corrida 3200 m, natação 100 m, flexões, abdominais e permanência — CGCFN-108 § 5.5.2'
                       : 'Toque na modalidade para configurar participantes e iniciar'
@@ -2654,6 +2724,10 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   preCadastroVazio: {
     marginBottom: 16,
     textAlign: 'center',
+  },
+  preCadastroActions: {
+    gap: 12,
+    marginTop: 4,
   },
   modalTempoOverlay: {
     flex: 1,

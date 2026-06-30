@@ -47,7 +47,6 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onIniciarTafNaval, onPreC
                 <Text style={[styles.tileTitlePrimary, isNarrowPhone ? styles.tileTitleCompact : null]}>
                   Iniciar TAF Armada
                 </Text>
-                <Text style={styles.tileSubPrimary}>Prova ao vivo com cronômetro</Text>
               </View>
               <Sparkles size={18} color="rgba(255,255,255,0.5)" style={styles.spark} />
             </View>
@@ -76,7 +75,6 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onIniciarTafNaval, onPreC
                 <Text style={[styles.tileTitleNaval, isNarrowPhone ? styles.tileTitleCompact : null]}>
                   Iniciar TAF CFN
                 </Text>
-                <Text style={styles.tileSubNaval}>Provas dos Fuzileiros Navais</Text>
               </View>
             </View>
           </LinearGradient>
@@ -174,12 +172,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.3,
   },
-  tileSubNaval: {
-    color: 'rgba(240,235,224,0.82)',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
   tileSecondary: {
     padding: 18,
     borderRadius: PREMIUM.radiusLg + 6,
@@ -220,12 +212,6 @@ const styles = StyleSheet.create({
   },
   tileTitleCompact: {
     fontSize: 19,
-  },
-  tileSubPrimary: {
-    color: 'rgba(255,255,255,0.82)',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
   },
   tileTitle: {
     fontSize: 20,

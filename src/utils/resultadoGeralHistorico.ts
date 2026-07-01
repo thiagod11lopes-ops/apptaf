@@ -5,7 +5,7 @@ import { formatMsByModality } from '../taf/tafTimeFormat';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { formatNipInput, nipDigitos } from './nipFormat';
-import type { PendenciaParcialItem, ResultadoGeralItem } from './resultadoTafCadastro';
+import type { PendenciaParcialItem, ResultadoGeralItem, ResultadoTafLinha } from './resultadoTafCadastro';
 import {
   postoGradFromLinhaId,
   temAvaliacaoCaminhada,
@@ -381,6 +381,29 @@ export function listarResultadosCompletosFromHistorico(
   return listarResultadosGeralFromHistorico(sessoes, cadastros).filter(
     (l) => l.statusTaf === 'Completo',
   );
+}
+
+/** Enriquece linhas do cadastro com datas/sessões de corrida × caminhada do Histórico. */
+export function enriquecerLinhasDistanciaMetaFromHistorico(
+  linhas: ResultadoTafLinha[],
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[] = [],
+): ResultadoTafLinha[] {
+  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  const aggs = agregarHistoricoPorParticipante(unificadas, cadastros);
+  const byId = new Map(aggs.map((a) => [a.id, a]));
+
+  return linhas.map((linha) => {
+    let agg = byId.get(linha.id);
+    if (!agg) {
+      const nipC = nipDigitos(linha.nip);
+      if (nipC.length >= 8) {
+        agg = aggs.find((a) => nipDigitos(a.nip) === nipC);
+      }
+    }
+    if (!agg) return linha;
+    return { ...linha, ...metaCorridaCaminhadaFromCadastro(agg, cadastros) };
+  });
 }
 
 export type ResumoInicioTafHistorico = {

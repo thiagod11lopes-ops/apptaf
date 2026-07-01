@@ -50,7 +50,8 @@ import {
   exportResultadosTafPdf,
   estimarFolhasA4PdfResultadosTaf,
 } from '../utils/exportResultadosTafPdf';
-import { listarResultadosCompletosFromHistorico } from '../utils/resultadoGeralHistorico';
+import { listarResultadosCompletosFromHistorico, enriquecerLinhasDistanciaMetaFromHistorico } from '../utils/resultadoGeralHistorico';
+import { modalidadeCorridaCaminhadaDispensavel } from '../utils/corridaCaminhadaExcludente';
 import type { ConfirmacaoGerarResultadosPdfInfo } from './sismav/ConfirmacaoGerarResultadosPdfModal';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
@@ -103,8 +104,9 @@ function linhasComRubricasMescladas(
   cadastros: Awaited<ReturnType<typeof getAllCadastros>>,
   rubricasSessoes: Map<string, RubricasPorNip>,
   rubricasCadastros: Map<string, RubricasPorNip>,
+  sessoes: SessaoAplicacaoTaf[] = [],
 ): ResultadoTafLinha[] {
-  return cadastros
+  const linhas = cadastros
     .filter(cadastroComAlgumResultadoTaf)
     .map((c) => {
       const linha = cadastroParaLinhaResultado(c);
@@ -115,6 +117,9 @@ function linhasComRubricasMescladas(
       );
       return mesclarRubricasNaLinha(linha, rub);
     });
+  return sessoes.length > 0
+    ? enriquecerLinhasDistanciaMetaFromHistorico(linhas, sessoes, cadastros)
+    : linhas;
 }
 
 export function ResultadosConsultaPanel() {
@@ -221,14 +226,17 @@ export function ResultadosConsultaPanel() {
     setRubricasSessoes(rubSessoes);
 
     setBuscou(true);
-    setLinhas(linhasComRubricasMescladas(comResultado, rubSessoes, rubCadastros));
+    const sessoes = sessoesHistorico.length
+      ? sessoesHistorico
+      : unificarSessoesComCadastroRegistrador(await getAllSessoesAplicacao(), lista);
+    setLinhas(linhasComRubricasMescladas(comResultado, rubSessoes, rubCadastros, sessoes));
 
     if (cadastrados.length === 0) {
       setMensagemBusca('Dados não Encontrados no Sistema');
     } else if (comResultado.length === 0) {
       setMensagemBusca('Militar Cadastrado não realizou TAF');
     }
-  }, [nip, nome, todosCadastros, carregarBase]);
+  }, [nip, nome, todosCadastros, carregarBase, sessoesHistorico]);
 
   const handleGerarResultados = useCallback(async () => {
     setAviso(null);
@@ -507,6 +515,7 @@ export function ResultadosConsultaPanel() {
             <ProvaComColunaRubrica
               titulo="Corrida"
               rubricaSvg={r.rubricaCorridaSvg}
+              dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'corrida')}
               headerRight={
                 podeExcluirCorrida ? (
                   <PressableScale
@@ -531,6 +540,7 @@ export function ResultadosConsultaPanel() {
             <ProvaComColunaRubrica
               titulo="Caminhada"
               rubricaSvg={r.rubricaCaminhadaSvg}
+              dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'caminhada')}
               headerRight={
                 podeExcluirCaminhada ? (
                   <PressableScale

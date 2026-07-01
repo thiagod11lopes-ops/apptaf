@@ -1,6 +1,7 @@
 import type { SyncQueueBreakdown } from './syncQueueBreakdown';
 import { EMPTY_SYNC_QUEUE_BREAKDOWN } from './syncQueueBreakdown';
-import { createInitialSyncSteps } from './syncSteps';
+import { createInitialSyncSteps, type SyncStepId, type SyncStepState } from './syncSteps';
+import type { SyncErrorDetail } from './syncErrorInfo';
 
 export type SyncUiPhase =
   | 'offline'
@@ -66,6 +67,7 @@ export type SyncUiState = {
   lastSync: SyncResultSummary | null;
   lastSyncAt: number | null;
   syncError: string | null;
+  syncErrorDetail: SyncErrorDetail | null;
   errorStepId: SyncStepId | null;
   syncSteps: SyncStepState[];
   toggleEnabled: boolean;
@@ -112,6 +114,7 @@ export function defaultSyncUiState(pendingUploads = 0): SyncUiState {
     lastSync: null,
     lastSyncAt: null,
     syncError: null,
+    syncErrorDetail: null,
     errorStepId: null,
     syncSteps: createInitialSyncSteps(),
     toggleEnabled: false,

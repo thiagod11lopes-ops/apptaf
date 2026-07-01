@@ -34,16 +34,15 @@ import {
 } from './syncUiState';
 import { estimateSyncQueueCounts } from './lastWriteWinsSync';
 import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
+import { parseSyncError, type SyncErrorDetail } from './syncErrorInfo';
+import { SYNC_AUTH_REQUIRED, SYNC_AUTH_REQUIRED_MESSAGE } from './syncAuthMessages';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
 export type EnsureAuthenticatedFn = () => Promise<{ ok: boolean; error?: string }>;
 
-/** Erro interno quando sync é solicitado sem sessão Google ativa. */
-export const SYNC_AUTH_REQUIRED = 'AUTH_REQUIRED';
-
-export const SYNC_AUTH_REQUIRED_MESSAGE =
-  'Faça login com Google antes de ativar sincronização';
+export { SYNC_AUTH_REQUIRED, SYNC_AUTH_REQUIRED_MESSAGE } from './syncAuthMessages';
+export { formatSyncUploadError } from './syncErrorInfo';
 
 export type SyncManagerState = {
   mode: SyncManagerMode;
@@ -58,43 +57,6 @@ export type SyncManagerState = {
   assistantProgress: null;
   clockDriftWarning: string | null;
 };
-
-export function formatSyncUploadError(raw?: string | null): string {
-  if (!raw?.trim()) {
-    return 'Falha ao sincronizar com a nuvem. Tente novamente.';
-  }
-  const msg = raw.trim();
-  if (msg === 'offline') {
-    return 'Sem conexão com a internet. Verifique a rede e tente novamente.';
-  }
-  if (msg === 'upload_failed' || msg === 'upload_incomplete' || msg === 'pending_remain') {
-    return 'Não foi possível enviar os dados locais. Tente novamente.';
-  }
-  if (/^pending_remain:\d+/.test(msg)) {
-    const count = msg.split(':')[1] ?? '0';
-    return `${count} alteração(ões) local(is) não foram sincronizadas. Verifique o login e tente novamente.`;
-  }
-  if (msg === 'no_owner') {
-    return 'Sessão inválida. Entre novamente com Google.';
-  }
-  if (msg === SYNC_AUTH_REQUIRED || msg === SYNC_AUTH_REQUIRED_MESSAGE) {
-    return SYNC_AUTH_REQUIRED_MESSAGE;
-  }
-  if (msg === 'Faça login com Google para sincronizar.') {
-    return SYNC_AUTH_REQUIRED_MESSAGE;
-  }
-  if (/permission|permiss[aã]o|denied|insufficient/i.test(msg)) {
-    if (
-      /pre_cadastros|Publique as regras|Permissão negada na coleção|Permissão negada ao ler/i.test(
-        msg,
-      )
-    ) {
-      return msg;
-    }
-    return 'Permissão negada na nuvem. Verifique sua conta.';
-  }
-  return msg;
-}
 
 const EMPTY_SUMMARY: PendingSyncSummary = {
   items: [],
@@ -115,6 +77,7 @@ let mode: SyncManagerMode = 'OFFLINE';
 let pendingSummary: PendingSyncSummary = EMPTY_SUMMARY;
 let uploading = false;
 let uploadError: string | null = null;
+let uploadErrorDetail: SyncErrorDetail | null = null;
 let syncInFlight = false;
 let lastAudit: SyncAuditEntry | null = null;
 let clockDriftResult: ClockDriftResult | null = null;
@@ -191,6 +154,7 @@ function buildSyncUi(): SyncUiState {
     lastSync: lastSyncResult,
     lastSyncAt,
     syncError: uiPhase === 'error' ? uploadError : null,
+    syncErrorDetail: uiPhase === 'error' ? uploadErrorDetail : null,
     errorStepId,
     syncSteps,
     toggleEnabled,
@@ -514,6 +478,7 @@ async function returnToOfflineMode(): Promise<void> {
   mode = 'OFFLINE';
   uploading = false;
   uploadError = null;
+  uploadErrorDetail = null;
   backupIdBeforeSync = null;
   clockDriftResult = null;
   syncProgress = { ...EMPTY_SYNC_PROGRESS };
@@ -559,6 +524,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
   syncInFlight = true;
   uploading = true;
   uploadError = null;
+  uploadErrorDetail = null;
   errorStepId = null;
   mode = 'ONLINE_PREPARING';
   uiPhase = 'preparing';
@@ -747,7 +713,9 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     return { ok: true };
   } catch (error) {
     const rawError = error instanceof Error ? error.message : String(error);
-    uploadError = formatSyncUploadError(rawError);
+    const detail = parseSyncError(rawError);
+    uploadError = detail.message;
+    uploadErrorDetail = detail;
     uiPhase = 'error';
     errorStepId = currentStep;
     syncSteps = markStepError(syncSteps, currentStep);
@@ -780,6 +748,7 @@ async function refreshAfterSystemWipe(dataOwnerUid: string): Promise<void> {
     downloadBreakdown: EMPTY_SYNC_QUEUE_BREAKDOWN,
   };
   uploadError = null;
+  uploadErrorDetail = null;
   uiPhase = 'offline';
   notifyListeners();
   if (syncAuthAvailable) {
@@ -884,6 +853,7 @@ export const syncManager = {
 
   async retrySync(ensureAuth?: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
     uploadError = null;
+    uploadErrorDetail = null;
     errorStepId = null;
     uiPhase = 'offline';
     syncSteps = createInitialSyncSteps();
@@ -912,6 +882,7 @@ export const syncManager = {
 
   clearUploadError(): void {
     uploadError = null;
+    uploadErrorDetail = null;
     errorStepId = null;
     if (uiPhase === 'error') uiPhase = 'offline';
     notifyListeners();

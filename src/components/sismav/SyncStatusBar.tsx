@@ -23,7 +23,10 @@ function formatQueueCount(value: number | null | undefined): string {
 
 function cloudConnectionLabel(syncUi: SyncUiState, loggedIn: boolean): string {
   if (!loggedIn) return 'Faça login para sincronizar';
-  if (syncUi.phase === 'error') return 'Erro na sincronização';
+  if (syncUi.phase === 'error') {
+    const typeLabel = syncUi.syncErrorDetail?.typeLabel;
+    return typeLabel ? `Erro: ${typeLabel}` : 'Erro na sincronização';
+  }
   if (syncUi.isSyncing) return 'Sincronizando…';
   if (syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date') return 'Sincronizado';
   return 'Dados locais · pronto para sync';
@@ -252,15 +255,33 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
 
         {showError ? (
           <View style={styles.errorBlock}>
-            <Text style={[styles.errorTitle, { color: theme.loss }]}>⚠ Erro durante sincronização</Text>
+            <Text style={[styles.errorTitle, { color: theme.loss }]}>
+              ⚠{' '}
+              {syncUi.syncErrorDetail?.typeLabel
+                ? `Erro: ${syncUi.syncErrorDetail.typeLabel}`
+                : 'Erro durante sincronização'}
+            </Text>
+            {syncUi.syncErrorDetail ? (
+              <>
+                <Text style={[ts.caption, { color: theme.textSecondary, lineHeight: 18 }]}>
+                  <Text style={{ fontWeight: '700' }}>Detalhe: </Text>
+                  {syncUi.syncErrorDetail.message}
+                </Text>
+                <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 18 }]}>
+                  <Text style={{ fontWeight: '700' }}>Como resolver: </Text>
+                  {syncUi.syncErrorDetail.hint}
+                </Text>
+              </>
+            ) : (
+              <Text style={[ts.caption, { color: theme.textSecondary, lineHeight: 18 }]}>
+                {syncUi.syncError ?? 'Não foi possível sincronizar.'}
+              </Text>
+            )}
             {syncUi.errorStepId ? (
               <Text style={[ts.caption, { color: theme.textSecondary }]}>
                 Etapa: {stepLabel(syncUi.errorStepId)}
               </Text>
             ) : null}
-            <Text style={[ts.caption, { color: theme.textSecondary, lineHeight: 18 }]}>
-              {syncUi.syncError ?? 'Não foi possível sincronizar.'}
-            </Text>
             <PressableScale
               onPress={() => void retrySync()}
               style={[styles.retryBtn, { borderColor: theme.primary }]}

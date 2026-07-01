@@ -3,7 +3,7 @@ import { getFirebaseAuth } from '../../config/firebase';
 import { connectivityMonitor } from './ConnectivityMonitor';
 import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
 import { syncEngine, notifyDataChanged } from './SyncEngine';
-import { ANONYMOUS_OWNER } from '../db/localDb';
+import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip } from '../db/localDb';
 import { systemState } from './SystemState';
 import { syncLogger } from './SyncLogger';
 import { createLocalBackup, restoreLocalBackup } from './localBackup';
@@ -435,9 +435,25 @@ async function refreshCounters(pendingDownloads: number | null = counters.pendin
   notifyListeners();
 }
 
+async function compactCadastrosIfNeeded(uid: string): Promise<void> {
+  try {
+    const removed = await compactDuplicateCadastrosByNip(uid);
+    if (removed > 0) {
+      await refreshPendingSummary();
+      notifyDataChanged();
+    }
+  } catch (error) {
+    await syncLogger.warn(
+      'sync-manager',
+      `Falha ao remover cadastros duplicados: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 async function applyCountersAfterSuccessfulSync(): Promise<void> {
   const uid = ownerUid ?? getCachedDataOwnerUid();
   if (!uid) return;
+  await compactCadastrosIfNeeded(uid);
   invalidateRemoteSnapshotCache();
   await refreshPendingSummary();
   counters = await buildSyncCounters(
@@ -809,6 +825,7 @@ export const syncManager = {
     mode = 'OFFLINE';
     uiPhase = 'offline';
     await syncEngine.preparePendingOwner(dataOwnerUid);
+    await compactCadastrosIfNeeded(dataOwnerUid);
     await loadLastSyncFromAudit();
     await refreshPendingSummary();
     scheduleCloudQueueEstimate();

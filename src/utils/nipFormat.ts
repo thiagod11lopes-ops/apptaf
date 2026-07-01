@@ -17,6 +17,12 @@ export function nipDigitos(value: string): string {
   return value.replace(/\D/g, '');
 }
 
+/** Chave estável para deduplicar cadastros (8 dígitos do NIP). */
+export function nipChaveCadastro(nip: string | null | undefined): string {
+  const digits = nipDigitos(nip ?? '');
+  return digits.length >= 8 ? digits : '';
+}
+
 export type NipAnalise =
   | { valido: true; digitos: 8; formatado: string }
   | { valido: false; digitos: number; mensagem: string };

@@ -12,6 +12,7 @@ import { userCadastrosPath } from './firestorePaths';
 import { sanitizeForFirestore } from './sanitizeFirestoreData';
 import type { TombstonePayload } from '../../offline-first/sync/tombstone';
 import { dedupeCadastrosPorNip } from '../../utils/dedupeCadastrosPorNip';
+import { formatNipInput, nipChaveCadastro } from '../../utils/nipFormat';
 import { stampCadastro } from '../offline/recordTimestamps';
 import {
   extractCadastroRubricas,
@@ -36,11 +37,13 @@ export async function getAllCadastrosFirestoreLight(uid: string): Promise<Cadast
 
   for (const docSnap of snap.docs) {
     const raw = docSnap.data() as CadastroItemPersist & { deleted?: boolean; deletedAt?: number };
+    const nipDigits = nipChaveCadastro(raw.nip);
     items.push(
       toCadastroLight({
         ...raw,
         id: docSnap.id,
         nome: (raw.nome ?? '').trim(),
+        nip: nipDigits ? formatNipInput(nipDigits) : (raw.nip ?? '').trim(),
       }),
     );
   }

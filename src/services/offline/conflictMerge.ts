@@ -1,7 +1,7 @@
 import type { CadastroItemPersist } from '../cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
 import type { ResultadoCorridaItem } from '../../navigation/types';
-import { nipDigitos } from '../../utils/nipFormat';
+import { nipChaveCadastro, nipDigitos } from '../../utils/nipFormat';
 import { getRecordUpdatedAt, getSessaoSortTime } from './recordTimestamps';
 
 function resultadoKey(r: ResultadoCorridaItem): string {
@@ -125,14 +125,14 @@ export function dedupeCadastrosByNipNewest(items: CadastroItemPersist[]): Cadast
   const semNip: CadastroItemPersist[] = [];
 
   for (const item of items) {
-    const nip = item.nip?.trim();
-    if (!nip) {
+    const key = nipChaveCadastro(item.nip);
+    if (!key) {
       semNip.push(item);
       continue;
     }
-    const atual = porNip.get(nip);
+    const atual = porNip.get(key);
     if (!atual || getRecordUpdatedAt(item) >= getRecordUpdatedAt(atual)) {
-      porNip.set(nip, item);
+      porNip.set(key, item);
     }
   }
 

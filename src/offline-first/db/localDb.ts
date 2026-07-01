@@ -12,6 +12,9 @@ import { syncQueue } from '../sync/SyncQueue';
 import { syncLogger } from '../sync/SyncLogger';
 import { syncStatusForOperation } from '../sync/syncStatus';
 import { normalizeSessaoShape } from '../../utils/sessaoLight';
+import { nipChaveCadastro } from '../../utils/nipFormat';
+import { dedupeCadastrosByNipNewest } from '../../services/offline/conflictMerge';
+import { readUpdatedAt } from '../sync/recordMeta';
 
 const ANONYMOUS_OWNER = '__local__';
 
@@ -147,7 +150,8 @@ export async function listCadastrosForDisplay(ownerUid: string | null): Promise<
   const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted);
   const batches = await Promise.all(sources.map((uid) => listCadastros(uid)));
   const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
-  return mergeRecordsById(mergeTarget, batches);
+  const merged = mergeRecordsById(mergeTarget, batches);
+  return dedupeCadastrosByNipNewest(merged) as CadastroRecord[];
 }
 
 /** Lista sessões para exibição — inclui owner persistido e __local__ (modo offline). */
@@ -229,6 +233,64 @@ export async function getCadastroById(ownerUid: string, id: string): Promise<Cad
   return row;
 }
 
+export async function findCadastroByNipDigits(
+  ownerUid: string,
+  nip: string,
+  excludeId?: string,
+): Promise<CadastroRecord | undefined> {
+  const key = nipChaveCadastro(nip);
+  if (!key) return undefined;
+  const loginUid = getCachedLoginUid();
+  const sources = uniqueOwnerSources(ownerUid, ANONYMOUS_OWNER, loginUid);
+  for (const uid of sources) {
+    const rows = await listCadastros(uid);
+    const found = rows.find((r) => r.id !== excludeId && nipChaveCadastro(r.nip) === key);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Remove cadastros duplicados no IndexedDB (mesmo NIP, IDs diferentes). */
+export async function compactDuplicateCadastrosByNip(ownerUid: string): Promise<number> {
+  const db = getTafDatabase();
+  if (!db || !ownerUid.trim()) return 0;
+
+  const loginUid = getCachedLoginUid();
+  const sources = uniqueOwnerSources(ownerUid, ANONYMOUS_OWNER, loginUid);
+  const allRows: CadastroRecord[] = [];
+  for (const uid of sources) {
+    allRows.push(...(await listCadastros(uid, true)));
+  }
+
+  const porNip = new Map<string, CadastroRecord>();
+  for (const row of allRows) {
+    const key = nipChaveCadastro(row.nip);
+    if (!key) continue;
+    const atual = porNip.get(key);
+    if (!atual || readUpdatedAt(row) >= readUpdatedAt(atual)) {
+      porNip.set(key, row);
+    }
+  }
+
+  const keepIds = new Set([...porNip.values()].map((r) => r.id));
+  const toDelete = allRows.filter((r) => {
+    const key = nipChaveCadastro(r.nip);
+    return key && !keepIds.has(r.id);
+  });
+  if (toDelete.length === 0) return 0;
+
+  await db.cadastros.bulkDelete(toDelete.map((r) => r.id));
+  for (const row of toDelete) {
+    await syncQueue.clearPendingForDocument(row.ownerUid, 'cadastros', row.id);
+  }
+  await syncLogger.info(
+    'local-db',
+    `Removidos ${toDelete.length} cadastro(s) duplicado(s) por NIP`,
+    { ownerUid },
+  );
+  return toDelete.length;
+}
+
 export async function getSessaoById(ownerUid: string, id: string): Promise<SessaoRecord | null> {
   const db = getTafDatabase();
   if (!db) return null;
@@ -284,15 +346,24 @@ export async function saveCadastro(
   ownerUid: string,
   userId: string | null,
 ): Promise<CadastroRecord> {
-  const existing = await getCadastroRaw(item.id);
-  const operation = existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
+  let payload = item;
+  let existing = await getCadastroRaw(payload.id);
+  if (existing?.deleted) existing = undefined;
+
+  const byNip = await findCadastroByNipDigits(ownerUid, payload.nip, payload.id);
+  if (byNip && !byNip.deleted && (!existing || byNip.id !== existing.id)) {
+    existing = byNip;
+    payload = { ...payload, id: byNip.id };
+  }
+
+  const operation = existing ? 'UPDATE' : 'CREATE';
   const record = await toCadastroRecord(
-    existing && existing.ownerUid === ownerUid ? { ...existing, ...item } : item,
+    existing ? { ...existing, ...payload } : payload,
     ownerUid,
     userId,
     operation,
   );
-  if (existing && existing.ownerUid === ownerUid) {
+  if (existing) {
     record.createdAt = existing.createdAt;
   }
   await putCadastroRecord(record);
@@ -330,21 +401,47 @@ export async function saveCadastrosBatch(
   }
 
   const records: CadastroRecord[] = [];
+  const loginUid = getCachedLoginUid();
+  const sources = uniqueOwnerSources(ownerUid, ANONYMOUS_OWNER, loginUid);
+  const existingRows: CadastroRecord[] = [];
+  for (const uid of sources) {
+    existingRows.push(...(await listCadastros(uid)));
+  }
+  const porNip = new Map<string, CadastroRecord>();
+  for (const row of existingRows) {
+    const key = nipChaveCadastro(row.nip);
+    if (!key) continue;
+    const atual = porNip.get(key);
+    if (!atual || readUpdatedAt(row) >= readUpdatedAt(atual)) {
+      porNip.set(key, row);
+    }
+  }
 
   for (const item of items) {
-    const existing = await db.cadastros.get(item.id);
-    const operation =
-      existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
+    const nipKey = nipChaveCadastro(item.nip);
+    const existingByNip = nipKey ? porNip.get(nipKey) : undefined;
+    const existingById = await db.cadastros.get(existingByNip?.id ?? item.id);
+    const existing =
+      existingById && existingById.ownerUid === ownerUid && !existingById.deleted
+        ? existingById
+        : existingByNip && existingByNip.ownerUid === ownerUid && !existingByNip.deleted
+          ? existingByNip
+          : undefined;
+    const payload = existing ? { ...item, id: existing.id } : item;
+    const operation = existing ? 'UPDATE' : 'CREATE';
     const record = await toCadastroRecord(
-      existing && existing.ownerUid === ownerUid ? { ...existing, ...item } : item,
+      existing ? { ...existing, ...payload } : payload,
       ownerUid,
       userId,
       operation,
     );
-    if (existing && existing.ownerUid === ownerUid) {
+    if (existing) {
       record.createdAt = existing.createdAt;
     }
     records.push(record);
+    if (nipKey) {
+      porNip.set(nipKey, record);
+    }
   }
 
   await db.cadastros.bulkPut(records);

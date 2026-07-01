@@ -167,3 +167,82 @@ export function filtrarPendencias(
       return lista;
   }
 }
+
+export type ConcluidoTafItem = {
+  id: string;
+  nip: string;
+  nome: string;
+  postoGrad: string;
+  categoria: string;
+  temCorrida: boolean;
+  temNatacao: boolean;
+  temPermanencia: boolean;
+};
+
+function concluidoFromAgg(
+  agg: ReturnType<typeof agregarHistoricoPorParticipante>[number],
+): ConcluidoTafItem | null {
+  if (itemFromAgg(agg)) return null;
+  return {
+    id: agg.id,
+    nip: agg.nip || '—',
+    nome: agg.nome || '—',
+    postoGrad: '—',
+    categoria: '—',
+    temCorrida: true,
+    temNatacao: true,
+    temPermanencia: true,
+  };
+}
+
+function concluidoFromCadastro(
+  c: CadastroItemPersist,
+  agg: ReturnType<typeof agregarHistoricoPorParticipante>[number] | undefined,
+): ConcluidoTafItem | null {
+  if (itemFromCadastro(c, agg)) return null;
+  return {
+    id: c.id,
+    nip: c.nip?.trim() || '—',
+    nome: c.nome?.trim() || '—',
+    postoGrad: c.categoria === 'Oficiais' ? c.oficial || '—' : c.praca || '—',
+    categoria: c.categoria,
+    temCorrida: true,
+    temNatacao: true,
+    temPermanencia: true,
+  };
+}
+
+/** Militares cadastrados (e do histórico sem cadastro) com todas as modalidades do TAF concluídas. */
+export function montarListaConcluidos(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[] = [],
+): ConcluidoTafItem[] {
+  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  const aggs = agregarHistoricoPorParticipante(unificadas, cadastros);
+  const aggMap = aggPorCadastro(cadastros, aggs);
+
+  const lista: ConcluidoTafItem[] = [];
+  const idsIncluidos = new Set<string>();
+
+  for (const c of cadastros) {
+    const item = concluidoFromCadastro(c, aggMap.get(c.id));
+    if (!item) continue;
+    lista.push(item);
+    idsIncluidos.add(c.id);
+    const nipC = nipDigitos(c.nip);
+    if (nipC.length >= 8) idsIncluidos.add(`nip:${nipC}`);
+  }
+
+  for (const agg of aggs) {
+    const nipA = nipDigitos(agg.nip);
+    const chaveNip = nipA.length >= 8 ? `nip:${nipA}` : '';
+    if (idsIncluidos.has(agg.id) || (chaveNip && idsIncluidos.has(chaveNip))) continue;
+    const item = concluidoFromAgg(agg);
+    if (!item) continue;
+    lista.push(item);
+    idsIncluidos.add(agg.id);
+    if (chaveNip) idsIncluidos.add(chaveNip);
+  }
+
+  return lista.sort(compareByNomePtBr);
+}

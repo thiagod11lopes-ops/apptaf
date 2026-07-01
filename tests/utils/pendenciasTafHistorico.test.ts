@@ -7,6 +7,7 @@ import {
 } from '../../src/utils/resultadoTafCadastro';
 import {
   calcularContagemPendencias,
+  montarListaConcluidos,
   montarListaPendencias,
 } from '../../src/utils/pendenciasTafHistorico';
 import { listarResultadosGeralFromHistorico } from '../../src/utils/resultadoGeralHistorico';
@@ -102,5 +103,20 @@ describe('pendência corrida/caminhada substitutivas', () => {
     expect(linhas[0]?.notaCorrida).toBe('—');
     expect(linhas[0]?.situacaoCaminhada).toBe('Aprovado');
     expect(linhas[0]?.situacaoCorrida).toBe('—');
+  });
+
+  it('montarListaConcluidos: militar com três modalidades aparece na lista', () => {
+    const cadastros = [
+      cadastroBase({
+        tempoCorrida: '12:00',
+        notaCorrida: '90',
+        tempoNatacao: '02:00',
+        notaNatacao: '90',
+        resultadoPermanencia: 'aprovado',
+      }),
+    ];
+    const concluidos = montarListaConcluidos([], cadastros);
+    expect(concluidos).toHaveLength(1);
+    expect(concluidos[0]?.nome).toBe('Teste Silva');
   });
 });

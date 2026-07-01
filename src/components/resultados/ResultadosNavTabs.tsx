@@ -6,21 +6,29 @@ import { PREMIUM } from '../../theme/premium';
 import { getAplicarTafGlass } from '../taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from '../mobile/TafTabChrome';
 
-export type AbaResultadosNav = 'historico' | 'consulta' | 'pendencia' | 'geral';
+export type AbaResultadosNav = 'historico' | 'consulta' | 'pendencia' | 'geral' | 'concluido';
 
 type Props = {
   value: AbaResultadosNav;
   onChange: (id: AbaResultadosNav) => void;
 };
 
-const ROWS: { id: AbaResultadosNav; label: string }[][] = [
+type TabDef = { id: AbaResultadosNav; label: string };
+
+const ROWS: (TabDef | { type: 'split'; tabs: TabDef[] })[][] = [
   [
     { id: 'historico', label: 'Histórico' },
     { id: 'consulta', label: 'Gerenciar Resultados' },
   ],
   [
     { id: 'geral', label: 'Resultado Geral' },
-    { id: 'pendencia', label: 'Pendência' },
+    {
+      type: 'split',
+      tabs: [
+        { id: 'pendencia', label: 'Pendência' },
+        { id: 'concluido', label: 'Concluído' },
+      ],
+    },
   ],
 ];
 
@@ -28,15 +36,21 @@ function TabBtn({
   label,
   active,
   onPress,
+  variant = 'primary',
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  variant?: 'primary' | 'success';
 }) {
   const { theme } = useTheme();
   const glass = getAplicarTafGlass(theme);
 
   if (active) {
+    const colors =
+      variant === 'success'
+        ? (['#059669', '#14b8a6'] as const)
+        : ([theme.primary, '#6366f1'] as const);
     return (
       <TouchableOpacity
         accessibilityRole="tab"
@@ -46,12 +60,12 @@ function TabBtn({
         style={styles.btnWrap}
       >
         <LinearGradient
-          colors={[theme.primary, '#6366f1']}
+          colors={[...colors]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.btnActive}
         >
-          <Text style={styles.btnTextActive} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
+          <Text style={styles.btnTextActive} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>
             {label}
           </Text>
         </LinearGradient>
@@ -71,11 +85,40 @@ function TabBtn({
         style={[styles.btnText, { color: theme.textSecondary }]}
         numberOfLines={2}
         adjustsFontSizeToFit
-        minimumFontScale={0.8}
+        minimumFontScale={0.75}
       >
         {label}
       </Text>
     </TouchableOpacity>
+  );
+}
+
+function SplitTabGroup({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: TabDef[];
+  value: AbaResultadosNav;
+  onChange: (id: AbaResultadosNav) => void;
+}) {
+  const { theme } = useTheme();
+  const glass = getAplicarTafGlass(theme);
+
+  return (
+    <View style={[styles.splitWrap, { borderColor: glass.border, backgroundColor: glass.highlight }]}>
+      {tabs.map((tab, index) => (
+        <React.Fragment key={tab.id}>
+          {index > 0 ? <View style={[styles.splitDivider, { backgroundColor: glass.border }]} /> : null}
+          <TabBtn
+            label={tab.label}
+            active={value === tab.id}
+            onPress={() => onChange(tab.id)}
+            variant={tab.id === 'concluido' ? 'success' : 'primary'}
+          />
+        </React.Fragment>
+      ))}
+    </View>
   );
 }
 
@@ -85,17 +128,27 @@ export function ResultadosNavTabs({ value, onChange }: Props) {
   return (
     <TafGlassPanel accent="cyan" style={styles.wrap}>
       {ROWS.map((row, rowIndex) => (
-        <React.Fragment key={row.map((t) => t.id).join('-')}>
+        <React.Fragment key={rowIndex}>
           {rowIndex > 0 ? <View style={[styles.divider, { backgroundColor: glass.border }]} /> : null}
           <View style={[styles.row, { borderColor: glass.border }]}>
-            {row.map((opt) => (
-              <TabBtn
-                key={opt.id}
-                label={opt.label}
-                active={value === opt.id}
-                onPress={() => onChange(opt.id)}
-              />
-            ))}
+            {row.map((opt) => {
+              if ('type' in opt && opt.type === 'split') {
+                return (
+                  <View key="split-pendencia-concluido" style={styles.splitCell}>
+                    <SplitTabGroup tabs={opt.tabs} value={value} onChange={onChange} />
+                  </View>
+                );
+              }
+              const tab = opt as TabDef;
+              return (
+                <TabBtn
+                  key={tab.id}
+                  label={tab.label}
+                  active={value === tab.id}
+                  onPress={() => onChange(tab.id)}
+                />
+              );
+            })}
           </View>
         </React.Fragment>
       ))}
@@ -132,7 +185,7 @@ const styles = StyleSheet.create({
   btnActive: {
     flex: 1,
     paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     borderRadius: PREMIUM.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
@@ -154,5 +207,20 @@ const styles = StyleSheet.create({
     height: 1,
     width: '100%',
     opacity: 0.7,
+  },
+  splitCell: {
+    flex: 1,
+  },
+  splitWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    borderRadius: PREMIUM.radiusMd,
+    overflow: 'hidden',
+    minHeight: 44,
+  },
+  splitDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    opacity: 0.85,
   },
 });

@@ -791,6 +791,16 @@ export default function AplicarTAFScreen() {
     [tipoProva, nipsParticipantes],
   );
 
+  const iniciarFinalizacaoComAssinaturaAplicador = useCallback(
+    async (resultados: ResultadoCorridaItem[]) => {
+      resultadosPosMilitaresRef.current = resultados;
+      const sessionId = await gravarSessaoAplicacao(resultados);
+      lastSessionIdRef.current = sessionId ?? null;
+      setFluxoAplicadorVisible(true);
+    },
+    [gravarSessaoAplicacao],
+  );
+
   const onConcluirAssinaturaAplicador = useCallback(
     async (assinatura: AplicadorAssinaturaResumo) => {
       setFluxoAplicadorVisible(false);
@@ -939,9 +949,7 @@ export default function AplicarTAFScreen() {
             {
               text: 'OK',
               onPress: () => {
-                void gravarSessaoAplicacao(resultados).then(() => {
-                  navigation.navigate('CadastrarResultados', { resultados, returnTo: 'AplicarTAF' });
-                });
+                void iniciarFinalizacaoComAssinaturaAplicador(resultados);
               },
             },
           ],
@@ -957,9 +965,7 @@ export default function AplicarTAFScreen() {
           {
             text: 'OK',
             onPress: () => {
-              void gravarSessaoAplicacao(resultados).then(() => {
-                navigation.navigate('CadastrarResultados', { resultados, returnTo: 'AplicarTAF' });
-              });
+              void iniciarFinalizacaoComAssinaturaAplicador(resultados);
             },
           },
         ],
@@ -976,6 +982,7 @@ export default function AplicarTAFScreen() {
     temposMilitaresMs,
     tipoProva,
     gravarSessaoAplicacao,
+    iniciarFinalizacaoComAssinaturaAplicador,
     modoTafNaval,
   ]);
 
@@ -1068,9 +1075,7 @@ export default function AplicarTAFScreen() {
             {
               text: 'OK',
               onPress: () => {
-                void gravarSessaoAplicacao(resultados).then(() => {
-                  navigation.navigate('CadastrarResultados', { resultados, returnTo: 'AplicarTAF' });
-                });
+                void iniciarFinalizacaoComAssinaturaAplicador(resultados);
               },
             },
           ],
@@ -1092,19 +1097,22 @@ export default function AplicarTAFScreen() {
     salvandoResultadosCorrida,
     tipoProva,
     gravarSessaoAplicacao,
+    iniciarFinalizacaoComAssinaturaAplicador,
   ]);
 
   const fecharModalTempoRegistrado = useCallback(() => {
+    const avisoParcial = modalParcialAviso;
     setModalTempoRegistradoVisible(false);
     setModalParcialAviso(null);
     const res = pendingResultadosNavRef.current;
     pendingResultadosNavRef.current = null;
     if (res) {
-      void gravarSessaoAplicacao(res).then(() => {
-        navigation.navigate('CadastrarResultados', { resultados: res, returnTo: 'AplicarTAF' });
-      });
+      if (avisoParcial) {
+        Alert.alert('Registro parcial', avisoParcial);
+      }
+      void iniciarFinalizacaoComAssinaturaAplicador(res);
     }
-  }, [navigation, gravarSessaoAplicacao]);
+  }, [iniciarFinalizacaoComAssinaturaAplicador, modalParcialAviso]);
 
   const iniciarRubricaStroke = useCallback((event: GestureResponderEvent) => {
     const { locationX, locationY } = event.nativeEvent;
@@ -1184,11 +1192,8 @@ export default function AplicarTAFScreen() {
     if (modalParcialAviso) {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
-    void gravarSessaoAplicacao(atualizados).then(async (sessionId) => {
-      await persistirRubricasNoCadastro(atualizados);
-      resultadosPosMilitaresRef.current = atualizados;
-      lastSessionIdRef.current = sessionId ?? null;
-      setFluxoAplicadorVisible(true);
+    void persistirRubricasNoCadastro(atualizados).then(() => {
+      void iniciarFinalizacaoComAssinaturaAplicador(atualizados);
     });
     pendingResultadosNavRef.current = null;
     setModalParcialAviso(null);
@@ -1196,7 +1201,7 @@ export default function AplicarTAFScreen() {
     indiceRubricaNatacao,
     listaResultadosRubricaNatacao,
     modalParcialAviso,
-    gravarSessaoAplicacao,
+    iniciarFinalizacaoComAssinaturaAplicador,
     rubricaCanvasWidth,
     rubricaStrokeAtual,
     rubricaStrokes,
@@ -2271,7 +2276,7 @@ export default function AplicarTAFScreen() {
               style={styles.modalFuturisticStripe}
             />
             <Text style={styles.modalTempoMensagemCadastro}>
-              Tempo Registrado com Sucesso verifique tabela de Registrador de TAF
+              Resultado registrado. Confirme a assinatura do aplicador para concluir o teste.
             </Text>
             {modalParcialAviso ? (
               <Text style={styles.modalTempoParcialCadastro}>{modalParcialAviso}</Text>
@@ -2411,7 +2416,7 @@ export default function AplicarTAFScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!modalRubricaNatacaoVisible}
+        scrollEnabled={!modalRubricaNatacaoVisible && !fluxoAplicadorVisible}
       >
         <View style={styles.centerWrap}>
           {!mostrarProvas && !mostrarListaPreCadastro ? (
@@ -2742,7 +2747,8 @@ export default function AplicarTAFScreen() {
           mostrarProvas &&
           modalProvaTempoVisible &&
           !modalRubricaNatacaoVisible &&
-          !modalTempoRegistradoVisible
+          !modalTempoRegistradoVisible &&
+          !fluxoAplicadorVisible
         }
         onClose={voltarDeTabelaParaNips}
         prova={provaModalTipo}

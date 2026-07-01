@@ -15,6 +15,7 @@ import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoE
 import { PressableScale } from '../components/premium/PressableScale';
 import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
 import { ResultadosPendenciaParcialPanel } from '../components/ResultadosPendenciaParcialPanel';
+import { ResultadosConcluidoPanel } from '../components/ResultadosConcluidoPanel';
 import { ResultadosGeralPanel } from '../components/ResultadosGeralPanel';
 import type { RootStackParamList } from '../navigation/types';
 import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
@@ -43,7 +44,7 @@ import { TafCenteredTabHeader, TafGlassPanel } from '../components/mobile/TafTab
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Resultados'>;
-type AbaResultados = 'historico' | 'consulta' | 'pendencia' | 'geral';
+type AbaResultados = 'historico' | 'consulta' | 'pendencia' | 'geral' | 'concluido';
 
 export default function ResultadosScreen() {
   const { theme } = useTheme();
@@ -126,7 +127,7 @@ export default function ResultadosScreen() {
     <MobileScreenScaffold contentContainerStyle={styles.scroll}>
         <TafCenteredTabHeader
           title="Resultados"
-          subtitle="Histórico · gerenciar · geral · pendências"
+          subtitle="Histórico · gerenciar · geral · pendências · concluídos"
           footer={<TopActionIcons activeRoute="Resultados" inline centered />}
         />
 
@@ -244,6 +245,8 @@ export default function ResultadosScreen() {
           <ResultadosConsultaPanel />
         ) : aba === 'geral' ? (
           <ResultadosGeralPanel onVerHistoricoMilitar={abrirHistoricoMilitar} />
+        ) : aba === 'concluido' ? (
+          <ResultadosConcluidoPanel />
         ) : (
           <ResultadosPendenciaParcialPanel />
         )}

@@ -22,6 +22,12 @@ import {
   type FiltroPendenciaTaf,
   type PendenciaTafItem,
 } from '../utils/pendenciasTafHistorico';
+import {
+  CFN_CHIP_LABELS,
+  montarListaPendenciasCfn,
+  type PendenciaCfnItem,
+} from '../utils/pendenciasTafCfnHistorico';
+import { prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
 import { exportPendenciasTafPdf } from '../utils/exportPendenciasTafPdf';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
@@ -116,7 +122,7 @@ function FiltroPendenciaBtn({ id, count, active, onPress }: FiltroBtnProps) {
   );
 }
 
-export function ResultadosPendenciaParcialPanel() {
+export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { normaTaf?: NormaTafVista }) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -124,6 +130,7 @@ export function ResultadosPendenciaParcialPanel() {
   const glass = getAplicarTafGlass(theme);
 
   const [lista, setLista] = useState<PendenciaTafItem[]>([]);
+  const [listaCfn, setListaCfn] = useState<PendenciaCfnItem[]>([]);
   const [contagem, setContagem] = useState<Record<FiltroPendenciaTaf, number>>({
     total: 0,
     corrida: 0,
@@ -138,16 +145,29 @@ export function ResultadosPendenciaParcialPanel() {
     setCarregando(true);
     Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
       .then(([cadastros, sessoes]) => {
-        const pendencias = montarListaPendencias(sessoes, cadastros);
+        if (normaTaf === 'cfn') {
+          setListaCfn(montarListaPendenciasCfn(sessoes, cadastros));
+          setLista([]);
+          setContagem({ total: 0, corrida: 0, natacao: 0, permanencia: 0 });
+          return;
+        }
+        const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
+          sessoes,
+          cadastros,
+          'armada',
+        );
+        const pendencias = montarListaPendencias(sessoesNorma, cadastrosNorma);
         setLista(pendencias);
-        setContagem(calcularContagemPendencias(sessoes, cadastros));
+        setListaCfn([]);
+        setContagem(calcularContagemPendencias(sessoesNorma, cadastrosNorma));
       })
       .catch(() => {
         setLista([]);
+        setListaCfn([]);
         setContagem({ total: 0, corrida: 0, natacao: 0, permanencia: 0 });
       })
       .finally(() => setCarregando(false));
-  }, []);
+  }, [normaTaf]);
 
   useFocusEffect(
     useCallback(() => {
@@ -156,8 +176,14 @@ export function ResultadosPendenciaParcialPanel() {
   );
 
   const listaFiltrada = useMemo(() => filtrarPendencias(lista, filtro), [lista, filtro]);
+  const listaCfnVisivel = listaCfn;
+  const totalVisivel = normaTaf === 'cfn' ? listaCfnVisivel.length : listaFiltrada.length;
 
   const gerarPdf = useCallback(async () => {
+    if (normaTaf === 'cfn') {
+      Alert.alert('PDF', 'Exportação PDF de pendências CFN em breve.');
+      return;
+    }
     if (listaFiltrada.length === 0) {
       Alert.alert('Sem dados', 'Não há militares com pendência neste filtro para gerar o PDF.');
       return;
@@ -171,7 +197,7 @@ export function ResultadosPendenciaParcialPanel() {
     } finally {
       setGerandoPdf(false);
     }
-  }, [listaFiltrada, filtro]);
+  }, [listaFiltrada, filtro, normaTaf]);
 
   return (
     <View style={styles.wrap}>
@@ -180,6 +206,22 @@ export function ResultadosPendenciaParcialPanel() {
           <Text style={[ts.caption, { color: theme.textMuted, textAlign: 'center' }]}>
             Carregando…
           </Text>
+        ) : normaTaf === 'cfn' ? (
+          <View style={[styles.filtrosRow, { borderColor: glass.border }]}>
+            <View
+              style={[
+                styles.filtroBtn,
+                styles.filtroBtnInactive,
+                styles.filtroCfnTotal,
+                { borderColor: theme.border, backgroundColor: theme.cardBg },
+              ]}
+            >
+              <Text style={styles.filtroCount}>{listaCfnVisivel.length}</Text>
+              <Text style={[styles.filtroLabel, { color: theme.textSecondary }]}>
+                Pendência Total CFN
+              </Text>
+            </View>
+          </View>
         ) : (
           <View style={[styles.filtrosRow, { borderColor: glass.border }]}>
             {FILTROS.map((id) => (
@@ -195,7 +237,7 @@ export function ResultadosPendenciaParcialPanel() {
         )}
       </TafGlassPanel>
 
-      {!carregando && listaFiltrada.length > 0 ? (
+      {!carregando && totalVisivel > 0 && normaTaf !== 'cfn' ? (
         <TouchableOpacity
           onPress={() => void gerarPdf()}
           disabled={gerandoPdf}
@@ -222,7 +264,7 @@ export function ResultadosPendenciaParcialPanel() {
         </TouchableOpacity>
       ) : null}
 
-      {!carregando && listaFiltrada.length === 0 ? (
+      {!carregando && totalVisivel === 0 ? (
         <TafGlassPanel style={styles.emptyCard}>
           <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
             Nenhuma pendência neste filtro.
@@ -230,7 +272,62 @@ export function ResultadosPendenciaParcialPanel() {
         </TafGlassPanel>
       ) : null}
 
-      {listaFiltrada.map((item) => (
+      {normaTaf === 'cfn'
+        ? listaCfnVisivel.map((item) => (
+            <View key={item.id} style={styles.itemPress}>
+              <TafGlassPanel style={styles.itemCard}>
+                <View style={styles.itemTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
+                    <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{item.nip}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.situacaoBadge,
+                      {
+                        backgroundColor:
+                          item.situacao === 'Sem teste' ? theme.backgroundSecondary : theme.lossMuted,
+                        borderColor: item.situacao === 'Sem teste' ? theme.border : theme.loss,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        ts.caption,
+                        {
+                          color: item.situacao === 'Sem teste' ? theme.textMuted : theme.loss,
+                          fontWeight: '800',
+                          fontSize: 10,
+                        },
+                      ]}
+                    >
+                      {item.situacao}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
+                <Text style={[ts.body, { color: ui.text, fontWeight: '700', marginBottom: 4 }]}>
+                  {item.nome}
+                </Text>
+
+                <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 10 }]}>
+                  {item.postoGrad} · {item.categoria}
+                </Text>
+
+                <View style={styles.chipsRow}>
+                  {CFN_CHIP_LABELS.map(({ key, label }) => (
+                    <ChipModalidade key={key} label={label} ok={item.provas[key]} />
+                  ))}
+                </View>
+
+                <Text style={[ts.caption, styles.faltaLabel, { color: theme.loss }]}>
+                  Falta: {item.faltam.join(', ')}
+                </Text>
+              </TafGlassPanel>
+            </View>
+          ))
+        : listaFiltrada.map((item) => (
         <View key={item.id} style={styles.itemPress}>
           <TafGlassPanel style={styles.itemCard}>
             <View style={styles.itemTop}>
@@ -333,6 +430,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
     lineHeight: 14,
+  },
+  filtroCfnTotal: {
+    flexGrow: 1,
+    minWidth: '100%',
   },
   pdfBtnOuter: {
     marginBottom: 14,

@@ -14,6 +14,7 @@ import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb
 import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
 import type { FiltroHistoricoMilitar } from '../utils/filtrarSessoesHistoricoMilitar';
 import { listarResultadosGeralFromHistorico } from '../utils/resultadoGeralHistorico';
+import { prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
 import { EditarResultadoTafModal } from './sismav/EditarResultadoTafModal';
 import { ConfirmacaoExcluirResultadoGeralModal } from './sismav/ConfirmacaoExcluirResultadoGeralModal';
 import { excluirTodosResultadosTafMilitar } from '../utils/atualizarResultadoTaf';
@@ -50,8 +51,10 @@ function linhaCombinaBusca(item: ResultadoGeralItem, q: string, qDigits: string)
 }
 
 export function ResultadosGeralPanel({
+  normaTaf = 'armada',
   onVerHistoricoMilitar,
 }: {
+  normaTaf?: NormaTafVista;
   onVerHistoricoMilitar?: (filtro: FiltroHistoricoMilitar) => void;
 }) {
   const { theme } = useTheme();
@@ -71,24 +74,34 @@ export function ResultadosGeralPanel({
     setCarregando(true);
     Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
       .then(([cadastrosLista, sessoes]) => {
-        setCadastros(cadastrosLista);
-        setLista(listarResultadosGeralFromHistorico(sessoes, cadastrosLista));
+        const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
+          sessoes,
+          cadastrosLista,
+          normaTaf,
+        );
+        setCadastros(cadastrosNorma);
+        setLista(listarResultadosGeralFromHistorico(sessoesNorma, cadastrosNorma));
       })
       .catch(() => {
         setCadastros([]);
         setLista([]);
       })
       .finally(() => setCarregando(false));
-  }, []);
+  }, [normaTaf]);
 
   const recarregarLista = useCallback(async () => {
     const [cadastrosLista, sessoes] = await Promise.all([
       getAllCadastros(),
       getAllSessoesAplicacao(),
     ]);
-    setCadastros(cadastrosLista);
-    setLista(listarResultadosGeralFromHistorico(sessoes, cadastrosLista));
-  }, []);
+    const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
+      sessoes,
+      cadastrosLista,
+      normaTaf,
+    );
+    setCadastros(cadastrosNorma);
+    setLista(listarResultadosGeralFromHistorico(sessoesNorma, cadastrosNorma));
+  }, [normaTaf]);
 
   const abrirEdicao = useCallback(
     (item: ResultadoGeralItem) => {

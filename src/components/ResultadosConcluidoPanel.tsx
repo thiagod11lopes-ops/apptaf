@@ -15,31 +15,45 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { montarListaConcluidos, type ConcluidoTafItem } from '../utils/pendenciasTafHistorico';
+import {
+  CFN_CHIP_LABELS,
+  montarListaConcluidosCfn,
+  type ConcluidoCfnItem,
+} from '../utils/pendenciasTafCfnHistorico';
+import { prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
 import { exportConcluidosTafPdf } from '../utils/exportConcluidosTafPdf';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { TafGlassPanel } from './mobile/TafTabChrome';
 
-function ChipModalidade({ label }: { label: string }) {
+function ChipModalidade({ label, ok = true }: { label: string; ok?: boolean }) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   return (
-    <View style={[styles.chip, { backgroundColor: theme.gainMuted, borderColor: theme.gain }]}>
-      <Text style={[ts.caption, { color: theme.gain, fontWeight: '700', fontSize: 11 }]}>
-        {label} ✓
+    <View
+      style={[
+        styles.chip,
+        ok
+          ? { backgroundColor: theme.gainMuted, borderColor: theme.gain }
+          : { backgroundColor: theme.lossMuted, borderColor: theme.loss },
+      ]}
+    >
+      <Text style={[ts.caption, { color: ok ? theme.gain : theme.loss, fontWeight: '700', fontSize: 11 }]}>
+        {label} {ok ? '✓' : '—'}
       </Text>
     </View>
   );
 }
 
-export function ResultadosConcluidoPanel() {
+export function ResultadosConcluidoPanel({ normaTaf = 'armada' }: { normaTaf?: NormaTafVista }) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const t = theme.tokens;
 
   const [lista, setLista] = useState<ConcluidoTafItem[]>([]);
+  const [listaCfn, setListaCfn] = useState<ConcluidoCfnItem[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [gerandoPdf, setGerandoPdf] = useState(false);
 
@@ -47,11 +61,25 @@ export function ResultadosConcluidoPanel() {
     setCarregando(true);
     Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
       .then(([cadastros, sessoes]) => {
-        setLista(montarListaConcluidos(sessoes, cadastros));
+        if (normaTaf === 'cfn') {
+          setListaCfn(montarListaConcluidosCfn(sessoes, cadastros));
+          setLista([]);
+          return;
+        }
+        const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
+          sessoes,
+          cadastros,
+          'armada',
+        );
+        setLista(montarListaConcluidos(sessoesNorma, cadastrosNorma));
+        setListaCfn([]);
       })
-      .catch(() => setLista([]))
+      .catch(() => {
+        setLista([]);
+        setListaCfn([]);
+      })
       .finally(() => setCarregando(false));
-  }, []);
+  }, [normaTaf]);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,7 +87,13 @@ export function ResultadosConcluidoPanel() {
     }, [carregar]),
   );
 
+  const listaVisivel = normaTaf === 'cfn' ? listaCfn : lista;
+
   const gerarPdf = useCallback(async () => {
+    if (normaTaf === 'cfn') {
+      Alert.alert('PDF', 'Exportação PDF de concluídos CFN em breve.');
+      return;
+    }
     if (lista.length === 0) {
       Alert.alert('Sem dados', 'Não há militares com TAF concluído para gerar o PDF.');
       return;
@@ -73,7 +107,7 @@ export function ResultadosConcluidoPanel() {
     } finally {
       setGerandoPdf(false);
     }
-  }, [lista]);
+  }, [lista, normaTaf]);
 
   return (
     <View style={styles.wrap}>
@@ -88,17 +122,19 @@ export function ResultadosConcluidoPanel() {
             <View style={styles.resumoTexto}>
               <Text style={[ts.label, { color: theme.gain }]}>TAF concluído</Text>
               <Text style={[ts.h2, { color: ui.text, marginTop: 2 }]}>
-                {lista.length.toLocaleString('pt-BR')} militar{lista.length !== 1 ? 'es' : ''}
+                {listaVisivel.length.toLocaleString('pt-BR')} militar{listaVisivel.length !== 1 ? 'es' : ''}
               </Text>
               <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
-                Corrida ou caminhada, natação e permanência registradas
+                {normaTaf === 'cfn'
+                  ? 'Todas as 7 provas CFN registradas'
+                  : 'Corrida ou caminhada, natação e permanência registradas'}
               </Text>
             </View>
           </View>
         )}
       </TafGlassPanel>
 
-      {!carregando && lista.length > 0 ? (
+      {!carregando && listaVisivel.length > 0 && normaTaf !== 'cfn' ? (
         <TouchableOpacity
           onPress={() => void gerarPdf()}
           disabled={gerandoPdf}
@@ -125,15 +161,55 @@ export function ResultadosConcluidoPanel() {
         </TouchableOpacity>
       ) : null}
 
-      {!carregando && lista.length === 0 ? (
+      {!carregando && listaVisivel.length === 0 ? (
         <TafGlassPanel style={styles.emptyCard}>
           <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
-            Nenhum militar concluiu todas as modalidades do TAF ainda.
+            {normaTaf === 'cfn'
+              ? 'Nenhum militar concluiu todas as provas do TAF CFN ainda.'
+              : 'Nenhum militar concluiu todas as modalidades do TAF ainda.'}
           </Text>
         </TafGlassPanel>
       ) : null}
 
-      {lista.map((item) => (
+      {normaTaf === 'cfn'
+        ? listaCfn.map((item) => (
+            <View key={item.id} style={styles.itemPress}>
+              <TafGlassPanel style={styles.itemCard}>
+                <View style={styles.itemTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
+                    <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{item.nip}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.situacaoBadge,
+                      { backgroundColor: theme.gainMuted, borderColor: theme.gain },
+                    ]}
+                  >
+                    <Text style={[ts.caption, { color: theme.gain, fontWeight: '800', fontSize: 10 }]}>
+                      Concluído
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
+                <Text style={[ts.body, { color: ui.text, fontWeight: '700', marginBottom: 4 }]}>
+                  {item.nome}
+                </Text>
+
+                <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 10 }]}>
+                  {item.postoGrad} · {item.categoria}
+                </Text>
+
+                <View style={styles.chipsRow}>
+                  {CFN_CHIP_LABELS.map(({ key, label }) => (
+                    <ChipModalidade key={key} label={label} ok={item.provas[key]} />
+                  ))}
+                </View>
+              </TafGlassPanel>
+            </View>
+          ))
+        : lista.map((item) => (
         <View key={item.id} style={styles.itemPress}>
           <TafGlassPanel style={styles.itemCard}>
             <View style={styles.itemTop}>

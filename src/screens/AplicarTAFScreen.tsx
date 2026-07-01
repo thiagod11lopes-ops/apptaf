@@ -786,9 +786,10 @@ export default function AplicarTAFScreen() {
         dataAplicacao: dataHojeBr(),
         tipoProva: tipo,
         resultados,
+        normaTaf: modoTafNaval ? 'cfn' : 'armada',
       });
     },
-    [tipoProva, nipsParticipantes],
+    [tipoProva, nipsParticipantes, modoTafNaval],
   );
 
   const iniciarFinalizacaoComAssinaturaAplicador = useCallback(

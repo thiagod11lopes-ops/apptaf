@@ -8,9 +8,10 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ChevronRight, Trash2, X } from 'lucide-react-native';
+import { ChevronRight, Trash2, X, ArrowLeftRight } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { ResultadosNavTabs } from '../components/resultados/ResultadosNavTabs';
+import { ResultadosNormaLauncher } from '../components/resultados/ResultadosNormaLauncher';
 import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoExcluirSessaoModal';
 import { PressableScale } from '../components/premium/PressableScale';
 import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
@@ -27,6 +28,11 @@ import {
 import {
   deleteSessaoFromHistorico,
 } from '../services/deleteSessaoHistorico';
+import {
+  filtrarSessoesPorNorma,
+  NORMA_TAF_LABEL,
+  type NormaTafVista,
+} from '../utils/normaTafResultados';
 import {
   filtrarSessoesHistoricoMilitar,
   type FiltroHistoricoMilitar,
@@ -52,6 +58,7 @@ export default function ResultadosScreen() {
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const navigation = useNavigation<Nav>();
   const [aba, setAba] = useState<AbaResultados>('historico');
+  const [normaVista, setNormaVista] = useState<NormaTafVista | null>(null);
   const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>([]);
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
   const [historicoFiltroMilitar, setHistoricoFiltroMilitar] = useState<FiltroHistoricoMilitar | null>(
@@ -74,10 +81,17 @@ export default function ResultadosScreen() {
 
   useAuthDataReload(carregar);
 
+  const sessoesPorNorma = useMemo(() => {
+    if (!normaVista) return [];
+    return filtrarSessoesPorNorma(sessoes, normaVista);
+  }, [sessoes, normaVista]);
+
   const sessoesHistoricoVisiveis = useMemo(() => {
-    if (!historicoFiltroMilitar) return sessoes;
-    return filtrarSessoesHistoricoMilitar(sessoes, historicoFiltroMilitar, cadastros);
-  }, [sessoes, historicoFiltroMilitar, cadastros]);
+    if (!normaVista) return [];
+    const base = sessoesPorNorma;
+    if (!historicoFiltroMilitar) return base;
+    return filtrarSessoesHistoricoMilitar(base, historicoFiltroMilitar, cadastros);
+  }, [sessoesPorNorma, historicoFiltroMilitar, cadastros, normaVista]);
 
   const abrirHistoricoMilitar = useCallback((filtro: FiltroHistoricoMilitar) => {
     setHistoricoFiltroMilitar(filtro);
@@ -127,11 +141,41 @@ export default function ResultadosScreen() {
     <MobileScreenScaffold contentContainerStyle={styles.scroll}>
         <TafCenteredTabHeader
           title="Resultados"
-          subtitle="Histórico · gerenciar · geral · pendências · concluídos"
+          subtitle={
+            normaVista
+              ? `${NORMA_TAF_LABEL[normaVista]} · histórico · gerenciar · geral · pendências · concluídos`
+              : 'Selecione TAF Armada ou TAF CFN'
+          }
           footer={<TopActionIcons activeRoute="Resultados" inline centered />}
         />
 
-        <ResultadosNavTabs value={aba} onChange={mudarAba} />
+        {normaVista ? (
+          <>
+            <TafGlassPanel accent="cyan" style={styles.normaBanner}>
+              <View style={styles.normaBannerRow}>
+                <View style={styles.normaBannerTexto}>
+                  <Text style={[ts.label, { color: theme.primary }]}>{NORMA_TAF_LABEL[normaVista]}</Text>
+                  <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
+                    {normaVista === 'cfn'
+                      ? 'Corrida 3200 m, natação 100 m, flexões, abdominais e permanência'
+                      : 'Corrida, caminhada, natação e permanência'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setNormaVista(null)}
+                  style={[styles.trocarNormaBtn, { borderColor: theme.border }]}
+                  accessibilityLabel="Trocar norma TAF"
+                  accessibilityRole="button"
+                >
+                  <ArrowLeftRight size={16} color={theme.textSecondary} strokeWidth={2.4} />
+                  <Text style={[ts.caption, { color: theme.textSecondary, fontWeight: '700' }]}>
+                    Trocar
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </TafGlassPanel>
+
+            <ResultadosNavTabs value={aba} onChange={mudarAba} />
 
         {aba === 'historico' ? (
           <>
@@ -242,13 +286,17 @@ export default function ResultadosScreen() {
             })}
           </>
         ) : aba === 'consulta' ? (
-          <ResultadosConsultaPanel />
+          <ResultadosConsultaPanel normaTaf={normaVista} />
         ) : aba === 'geral' ? (
-          <ResultadosGeralPanel onVerHistoricoMilitar={abrirHistoricoMilitar} />
+          <ResultadosGeralPanel normaTaf={normaVista} onVerHistoricoMilitar={abrirHistoricoMilitar} />
         ) : aba === 'concluido' ? (
-          <ResultadosConcluidoPanel />
+          <ResultadosConcluidoPanel normaTaf={normaVista} />
         ) : (
-          <ResultadosPendenciaParcialPanel />
+          <ResultadosPendenciaParcialPanel normaTaf={normaVista} />
+        )}
+          </>
+        ) : (
+          <ResultadosNormaLauncher onArmada={() => setNormaVista('armada')} onCfn={() => setNormaVista('cfn')} />
         )}
     </MobileScreenScaffold>
 
@@ -349,6 +397,26 @@ const styles = StyleSheet.create({
   },
   limparFiltroBtn: {
     padding: 8,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+  },
+  normaBanner: {
+    marginBottom: 14,
+  },
+  normaBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  normaBannerTexto: {
+    flex: 1,
+  },
+  trocarNormaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
   },

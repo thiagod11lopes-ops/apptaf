@@ -1,5 +1,6 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import type { NormaTafPreCadastro } from './preCadastroTafStorage';
 
 export type TipoProvaAplicada =
   | 'corrida'
@@ -18,6 +19,8 @@ export type SessaoAplicacaoTaf = {
   tipoProva: TipoProvaAplicada;
   resultados: ResultadoCorridaItem[];
   aplicadorAssinatura?: AplicadorAssinaturaResumo;
+  /** armada (padrão) ou cfn — distingue histórico quando a prova é compartilhada (corrida, natação…). */
+  normaTaf?: NormaTafPreCadastro;
   /** Unix ms — usado na sincronização offline (mais recente prevalece). */
   updatedAt?: number;
 };
@@ -121,6 +124,7 @@ export async function addSessaoAplicacao(
     tipoProva: input.tipoProva,
     resultados: input.resultados,
     aplicadorAssinatura: input.aplicadorAssinatura,
+    normaTaf: input.normaTaf,
   };
 
   const uid = await resolveStorageOwnerUid();

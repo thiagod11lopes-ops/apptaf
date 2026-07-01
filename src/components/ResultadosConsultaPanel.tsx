@@ -51,6 +51,7 @@ import {
   estimarFolhasA4PdfResultadosTaf,
 } from '../utils/exportResultadosTafPdf';
 import { listarResultadosCompletosFromHistorico, enriquecerLinhasDistanciaMetaFromHistorico } from '../utils/resultadoGeralHistorico';
+import { cadastroComResultadoNorma, prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
 import { modalidadeCorridaCaminhadaDispensavel } from '../utils/corridaCaminhadaExcludente';
 import type { ConfirmacaoGerarResultadosPdfInfo } from './sismav/ConfirmacaoGerarResultadosPdfModal';
 import { PREMIUM } from '../theme/premium';
@@ -122,7 +123,7 @@ function linhasComRubricasMescladas(
     : linhas;
 }
 
-export function ResultadosConsultaPanel() {
+export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: NormaTafVista }) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -154,10 +155,11 @@ export function ResultadosConsultaPanel() {
       getAllCadastros(),
       getAllSessoesAplicacao(),
     ]);
-    setTodosCadastros(lista);
-    setSessoesHistorico(unificarSessoesComCadastroRegistrador(sessoes, lista));
-    return lista;
-  }, []);
+    const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(sessoes, lista, normaTaf);
+    setTodosCadastros(cadastrosNorma);
+    setSessoesHistorico(sessoesNorma);
+    return cadastrosNorma;
+  }, [normaTaf]);
 
   useFocusEffect(
     useCallback(() => {
@@ -217,7 +219,7 @@ export function ResultadosConsultaPanel() {
     const cadastrados = filtrarCadastrosPorNipNome(lista, nipTrim, nomeTrim, {
       somenteComResultadoTaf: false,
     });
-    const comResultado = cadastrados.filter(cadastroComAlgumResultadoTaf);
+    const comResultado = cadastrados.filter((c) => cadastroComResultadoNorma(c, normaTaf));
 
     const [rubSessoes, rubCadastros] = await Promise.all([
       carregarRubricasDasSessoesPorNip(),
@@ -236,7 +238,7 @@ export function ResultadosConsultaPanel() {
     } else if (comResultado.length === 0) {
       setMensagemBusca('Militar Cadastrado não realizou TAF');
     }
-  }, [nip, nome, todosCadastros, carregarBase, sessoesHistorico]);
+  }, [nip, nome, todosCadastros, carregarBase, sessoesHistorico, normaTaf]);
 
   const handleGerarResultados = useCallback(async () => {
     setAviso(null);

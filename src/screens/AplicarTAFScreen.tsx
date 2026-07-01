@@ -90,7 +90,7 @@ import {
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { cadastroPrecisaCompletarDadosTaf, dataNascimentoCadastroValida } from '../utils/cadastroDadosTaf';
 import { dataHojeBr } from '../utils/tafRegistro';
-import { detectarConflitoCorridaCaminhada } from '../utils/corridaCaminhadaExcludente';
+import { detectarConflitoCorridaCaminhada, removerModalidadeOpostaDistanciaDoHistorico } from '../utils/corridaCaminhadaExcludente';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
 import {
   notaCaminhadaParaPersistencia,
@@ -890,6 +890,12 @@ export default function AplicarTAFScreen() {
           tempoMs: r.tempoMs,
           modoTafNaval,
         });
+        if (!modoTafNaval && (prova === 'corrida' || prova === 'caminhada')) {
+          const nip = (r.nip ?? '').trim();
+          if (nip) {
+            await removerModalidadeOpostaDistanciaDoHistorico(nip, prova, atualizado);
+          }
+        }
         await addCadastro(atualizado);
         const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);
         if (idx >= 0) listaAtual[idx] = atualizado;

@@ -28,6 +28,9 @@ export function limparResultadoModalidadeCadastro(
       next.notaCorrida = undefined;
       next.dataTafCorrida = undefined;
       next.rubricaCorridaSvg = undefined;
+      if (next.modalidadeDistanciaAtiva === 'corrida') {
+        next.modalidadeDistanciaAtiva = undefined;
+      }
       break;
     case 'natacao':
       next.tempoNatacao = undefined;
@@ -53,6 +56,9 @@ export function limparResultadoModalidadeCadastro(
       next.notaCaminhada = undefined;
       next.dataTafCaminhada = undefined;
       next.rubricaCaminhadaSvg = undefined;
+      if (next.modalidadeDistanciaAtiva === 'caminhada') {
+        next.modalidadeDistanciaAtiva = undefined;
+      }
       break;
   }
 

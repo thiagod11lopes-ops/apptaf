@@ -81,9 +81,11 @@ export function ModalModalidadeExcludente({ info, onProsseguir, onDesistir }: Pr
             <Text style={styles.strong}>substituirá</Text>
             {` a `}
             <Text style={styles.strong}>{existenteLabel}</Text>
-            {`. O resultado anterior ficará marcado como `}
-            <Text style={[styles.strong, { color: theme.loss }]}>Dispensável</Text>
-            {` nos resultados.`}
+            {`. O registro anterior de `}
+            <Text style={styles.strong}>{existenteLabel}</Text>
+            {` será `}
+            <Text style={[styles.strong, { color: theme.loss }]}>apagado</Text>
+            {` ao concluir esta prova.`}
           </Text>
           <Text style={[styles.hint, { color: theme.textMuted }]}>
             Toque em Desistir para apagar o NIP desta linha e informar outro participante.

@@ -1,7 +1,7 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import type { TipoProvaTAF } from '../taf/tafProvaTypes';
-import { buscarRegistroModalidadeNoHistorico } from './registroModalidadeHistorico';
+import { buscarRegistroModalidadeNoHistorico, removerParticipanteModalidadeDoHistorico } from './registroModalidadeHistorico';
 import type { ResultadoTafLinha } from './resultadoTafCadastro';
 import {
   cadastroParaLinhaResultado,
@@ -132,4 +132,19 @@ export function modalidadeCorridaCaminhadaDispensavel(
   const vigente = modalidadeCorridaCaminhadaVigente(item);
   if (!vigente) return false;
   return vigente !== alvo;
+}
+
+/** Modalidade oposta a corrida/caminhada no TAF Armada. */
+export function modalidadeDistanciaOposta(
+  prova: 'corrida' | 'caminhada',
+): ModalidadeExcludenteSubstituta {
+  return prova === 'corrida' ? 'caminhada' : 'corrida';
+}
+
+export async function removerModalidadeOpostaDistanciaDoHistorico(
+  nip: string,
+  prova: 'corrida' | 'caminhada',
+  cadastro: CadastroItemPersist,
+): Promise<void> {
+  await removerParticipanteModalidadeDoHistorico(nip, modalidadeDistanciaOposta(prova), cadastro);
 }

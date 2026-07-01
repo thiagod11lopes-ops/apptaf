@@ -173,7 +173,7 @@ export async function removerSessoesRegistradorPorCadastro(
 ): Promise<void> {
   const tipos: TipoProvaAplicada[] = tipo
     ? [tipo]
-    : ['corrida', 'natacao', 'permanencia'];
+    : ['corrida', 'caminhada', 'natacao', 'permanencia'];
   const sessoes = await getAllSessoesAplicacao();
   for (const t of tipos) {
     const id = `${SESSAO_REGISTRADOR_ID_PREFIX}${cadastroId}-${t}`;

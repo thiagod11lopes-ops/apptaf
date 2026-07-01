@@ -14,6 +14,7 @@ import { textoNotaCaminhada, notaCaminhadaParaPersistencia } from '../taf/caminh
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import type { TipoProvaTAF } from '../taf/tafProvaTypes';
 import { dataHojeBr } from '../utils/tafRegistro';
+import { limparResultadoModalidadeCadastro } from '../utils/limparResultadoModalidade';
 
 type NipOk = {
   dataNascimento: string;
@@ -82,8 +83,9 @@ export function aplicarResultadoNoCadastro(
     const nota = modoTafNaval
       ? notaCorrida3200ParaPersistencia(textoNotaCorrida3200(tempoMs, idade, sexo))
       : notaCorridaParaPersistencia(textoNotaCorrida(tempoMs, idade, sexo));
+    const base = modoTafNaval ? cadastro : limparResultadoModalidadeCadastro(cadastro, 'caminhada');
     return {
-      ...cadastro,
+      ...base,
       tempoCorrida: tempoStr,
       dataTafCorrida: hoje,
       notaCorrida: nota,
@@ -94,8 +96,9 @@ export function aplicarResultadoNoCadastro(
   if (prova === 'caminhada') {
     const tempoStr = formatMsByModality('corrida', tempoMs);
     const nota = notaCaminhadaParaPersistencia(textoNotaCaminhada(tempoMs, idade, sexo));
+    const base = limparResultadoModalidadeCadastro(cadastro, 'corrida');
     return {
-      ...cadastro,
+      ...base,
       tempoCaminhada: tempoStr,
       dataTafCaminhada: hoje,
       notaCaminhada: nota,

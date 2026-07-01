@@ -762,7 +762,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
 
 async function refreshAfterSystemWipe(dataOwnerUid: string): Promise<void> {
   invalidateRemoteSnapshotCache();
-  ownerUid = dataOwnerUid;
+  ownerUid = dataOwnerUid || null;
   pendingSummary = EMPTY_SUMMARY;
   counters = {
     pendingUploads: 0,
@@ -775,9 +775,6 @@ async function refreshAfterSystemWipe(dataOwnerUid: string): Promise<void> {
   uploadErrorDetail = null;
   uiPhase = 'offline';
   notifyListeners();
-  if (syncAuthAvailable) {
-    await refreshCloudQueueEstimate(true);
-  }
 }
 
 export function isCloudReadActive(): boolean {
@@ -926,6 +923,28 @@ export const syncManager = {
 
   async afterSystemWipe(dataOwnerUid: string): Promise<void> {
     await refreshAfterSystemWipe(dataOwnerUid);
+  },
+
+  async beginSystemWipe(): Promise<void> {
+    stopCloudDiffWatch();
+    if (queueEstimateTimer) {
+      clearTimeout(queueEstimateTimer);
+      queueEstimateTimer = null;
+    }
+    syncEngine.deactivateOnlineMode();
+  },
+
+  async endSystemWipe(dataOwnerUid: string): Promise<void> {
+    await refreshAfterSystemWipe(dataOwnerUid);
+    if (syncAuthAvailable && dataOwnerUid) {
+      startCloudDiffWatch();
+    }
+  },
+
+  resumeAfterInterruptedWipe(): void {
+    if (syncAuthAvailable) {
+      startCloudDiffWatch();
+    }
   },
 
   async shutdown(): Promise<void> {

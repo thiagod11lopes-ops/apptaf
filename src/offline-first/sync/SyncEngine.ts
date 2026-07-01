@@ -16,6 +16,7 @@ import {
   wipeAllCloudDataForOwner,
 } from './firebase/FirebaseGateway';
 import { getCachedLoginUid, getCachedDataOwnerUid, waitForAuthenticatedUid } from '../../services/firebase/authUid';
+import type { WipeCloudProgressCallback } from '../../services/firebase/wipeCloudDataFirestore';
 import { applyTeamWipeIfNeeded } from './syncTeamWipe';
 import type { AplicadorRecord, CadastroRecord, SessaoRecord, SyncQueueEntry } from '../types';
 import {
@@ -634,11 +635,11 @@ export class SyncEngine {
   }
 
   /** Wipe na nuvem — somente via Sync Engine (FirebaseGateway). */
-  async wipeCloudTeam(uid: string) {
+  async wipeCloudTeam(uid: string, onProgress?: WipeCloudProgressCallback) {
     if (!systemState.canUseFirebase()) {
       throw new Error('Ative o modo de sincronização para apagar dados na nuvem.');
     }
-    return wipeAllCloudDataForOwner(uid);
+    return wipeAllCloudDataForOwner(uid, onProgress);
   }
 }
 

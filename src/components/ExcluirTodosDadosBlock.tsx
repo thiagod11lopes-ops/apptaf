@@ -3,14 +3,15 @@ import { View, Text, StyleSheet, Platform, ActivityIndicator, TouchableOpacity }
 import { LinearGradient } from 'expo-linear-gradient';
 import { AlertTriangle, ShieldAlert, Trash2 } from 'lucide-react-native';
 import { ModernModal } from './sismav/ModernModal';
+import { WipeSystemProgressModal } from './WipeSystemProgressModal';
 import { PressableScale } from './premium/PressableScale';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
-import { wipeSystemData } from '../services/wipeSystemData';
+import { wipeSystemData, type WipeProgressUpdate } from '../services/wipeSystemData';
 import { PREMIUM } from '../theme/premium';
 
-type Step = 'idle' | 'warn1' | 'warn2';
+type Step = 'idle' | 'warn1' | 'warn2' | 'wiping';
 
 type Props = {
   onWiped?: () => void;
@@ -24,6 +25,9 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
+  const [wipeProgress, setWipeProgress] = useState<WipeProgressUpdate | null>(null);
+  const [wipeDone, setWipeDone] = useState(false);
+  const [wipeError, setWipeError] = useState<string | null>(null);
 
   const apagaNuvem = isAuthenticated && firebaseEnabled && isBoss;
 
@@ -32,20 +36,32 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
     setStep('idle');
   }, [loading]);
 
+  const fecharProgresso = useCallback(() => {
+    setStep('idle');
+    setWipeProgress(null);
+    setWipeDone(false);
+    setWipeError(null);
+    setLoading(false);
+  }, []);
+
   const executar = useCallback(async () => {
     if (!isBoss) {
       setErro('Somente o e-mail chefe pode excluir todos os dados.');
       return;
     }
-    setStep('idle');
+    setStep('wiping');
     setLoading(true);
     setErro(null);
     setSucesso(null);
+    setWipeProgress(null);
+    setWipeDone(false);
+    setWipeError(null);
     try {
       const uid = getCachedDataOwnerUid();
       const result = await wipeSystemData({
         uid,
         wipeCloud: apagaNuvem,
+        onProgress: setWipeProgress,
       });
 
       const partes = ['Dados locais removidos.'];
@@ -62,10 +78,14 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
         partes.push('Aparelhos autorizados serão esvaziados ao sincronizar.');
       }
 
-      setSucesso(partes.join(' '));
+      const msg = partes.join(' ');
+      setSucesso(msg);
+      setWipeDone(true);
       onWiped?.();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Não foi possível excluir todos os dados.');
+      const msg = e instanceof Error ? e.message : 'Não foi possível excluir todos os dados.';
+      setErro(msg);
+      setWipeError(msg);
     } finally {
       setLoading(false);
     }
@@ -179,8 +199,10 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
         <Text style={[styles.btnTriggerText, { color: theme.loss }]}>Excluir todos os dados</Text>
       </TouchableOpacity>
 
-      {erro ? <Text style={[ts.caption, styles.feedback, { color: theme.error }]}>{erro}</Text> : null}
-      {sucesso ? (
+      {erro && step === 'idle' ? (
+        <Text style={[ts.caption, styles.feedback, { color: theme.error }]}>{erro}</Text>
+      ) : null}
+      {sucesso && step === 'idle' ? (
         <Text style={[ts.caption, styles.feedback, { color: theme.success }]}>{sucesso}</Text>
       ) : null}
 
@@ -235,6 +257,15 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
           </Text>
         </View>
       </ModernModal>
+
+      <WipeSystemProgressModal
+        visible={step === 'wiping'}
+        progress={wipeProgress}
+        done={wipeDone}
+        error={wipeError}
+        successMessage={sucesso}
+        onClose={fecharProgresso}
+      />
     </View>
   );
 }

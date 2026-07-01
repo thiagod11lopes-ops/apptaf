@@ -27,15 +27,33 @@ export type WipeCloudTeamResult = WipeCloudCounts & {
   teamWipeAt: number;
 };
 
-async function deleteAllInCollection(collectionPath: string): Promise<number> {
+export type WipeCloudCollectionProgress = {
+  collection: string;
+  collectionLabel: string;
+  deletedInCollection: number;
+  totalInCollection: number;
+  step: number;
+  totalSteps: number;
+};
+
+export type WipeCloudProgressCallback = (update: WipeCloudCollectionProgress) => void;
+
+async function deleteAllInCollection(
+  collectionPath: string,
+  onBatch?: (deleted: number, total: number) => void,
+): Promise<number> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firestore indisponível.');
 
   const snap = await getDocs(collection(db, collectionPath));
-  if (snap.empty) return 0;
+  if (snap.empty) {
+    onBatch?.(0, 0);
+    return 0;
+  }
 
   let deleted = 0;
   const docs = snap.docs;
+  const total = docs.length;
 
   for (let i = 0; i < docs.length; i += FIRESTORE_BATCH_LIMIT) {
     const batch = writeBatch(db);
@@ -45,32 +63,60 @@ async function deleteAllInCollection(collectionPath: string): Promise<number> {
       deleted += 1;
     }
     await batch.commit();
+    onBatch?.(deleted, total);
   }
 
   return deleted;
 }
 
-/** Remove todos os cadastros, sessões, aplicadores e rubricas do usuário na nuvem. */
-export async function wipeCloudUserDataFirestore(uid: string): Promise<WipeCloudCounts> {
-  const [cadastros, sessoes, aplicadores, cadastroRubricas, sessaoRubricas, preCadastros] =
-    await Promise.all([
-    deleteAllInCollection(userCadastrosPath(uid)),
-    deleteAllInCollection(userSessoesPath(uid)),
-    deleteAllInCollection(userAplicadoresPath(uid)),
-    deleteAllInCollection(userCadastroRubricasPath(uid)),
-    deleteAllInCollection(userSessaoRubricasPath(uid)),
-    deleteAllInCollection(userPreCadastrosPath(uid)),
-  ]);
+const CLOUD_WIPE_COLLECTIONS: Array<{
+  key: keyof WipeCloudCounts;
+  label: string;
+  path: (uid: string) => string;
+}> = [
+  { key: 'cadastros', label: 'Cadastros na nuvem', path: userCadastrosPath },
+  { key: 'sessoes', label: 'Sessões de TAF na nuvem', path: userSessoesPath },
+  { key: 'aplicadores', label: 'Aplicadores na nuvem', path: userAplicadoresPath },
+  { key: 'cadastroRubricas', label: 'Rubricas de cadastros', path: userCadastroRubricasPath },
+  { key: 'sessaoRubricas', label: 'Rubricas de sessões', path: userSessaoRubricasPath },
+  { key: 'preCadastros', label: 'Pré-cadastros na nuvem', path: userPreCadastrosPath },
+];
 
-  return { cadastros, sessoes, aplicadores, cadastroRubricas, sessaoRubricas, preCadastros };
+/** Remove todos os cadastros, sessões, aplicadores e rubricas do usuário na nuvem. */
+export async function wipeCloudUserDataFirestore(
+  uid: string,
+  onProgress?: WipeCloudProgressCallback,
+): Promise<WipeCloudCounts> {
+  const totalSteps = CLOUD_WIPE_COLLECTIONS.length;
+  const counts = {} as WipeCloudCounts;
+
+  for (let i = 0; i < CLOUD_WIPE_COLLECTIONS.length; i += 1) {
+    const col = CLOUD_WIPE_COLLECTIONS[i];
+    const step = i + 1;
+    counts[col.key] = await deleteAllInCollection(col.path(uid), (deletedInCollection, totalInCollection) => {
+      onProgress?.({
+        collection: col.key,
+        collectionLabel: col.label,
+        deletedInCollection,
+        totalInCollection,
+        step,
+        totalSteps,
+      });
+    });
+  }
+
+  return counts;
 }
 
 /**
  * Zera dados do chefe na nuvem e marca a equipe para limpar cache local
  * nos aparelhos autorizados (member_lookup continua para re-login).
  */
-export async function wipeCloudTeamDataFirestore(bossUid: string): Promise<WipeCloudTeamResult> {
-  const totals = await wipeCloudUserDataFirestore(bossUid);
+export async function wipeCloudTeamDataFirestore(
+  bossUid: string,
+  onProgress?: WipeCloudProgressCallback,
+): Promise<WipeCloudTeamResult> {
+  const totals = await wipeCloudUserDataFirestore(bossUid, onProgress);
 
   let memberAccountsWiped = 0;
   try {

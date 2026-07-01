@@ -22,6 +22,13 @@ export function formatDurationSeconds(ms: number): string {
   return `${sec} ${sec === 1 ? 'segundo' : 'segundos'}`;
 }
 
+export function formatElapsedClock(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+
 export function formatRemainingSeconds(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return 'Calculando…';
   const sec = Math.max(1, Math.round(seconds));

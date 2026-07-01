@@ -1,6 +1,6 @@
-import React from 'react';
-import { Platform, StyleSheet, View, Text } from 'react-native';
-import { BookOpen, Check, ClipboardList, Save, Settings, User, UserRoundCheck } from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Platform, StyleSheet, View, Text, ActivityIndicator, Alert } from 'react-native';
+import { BookOpen, Check, ClipboardList, Save, Settings, User, UserRoundCheck, Sparkles } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { navigateTab } from '../../navigation/navigationRef';
@@ -8,6 +8,11 @@ import type { RootStackParamList } from '../../navigation/types';
 import { ActionIconTooltip } from './ActionIconTooltip';
 import { PressableScale } from './PressableScale';
 import { PREMIUM } from '../../theme/premium';
+import {
+  isModoDemonstracaoAtivo,
+  subscribeModoDemonstracao,
+  toggleModoDemonstracaoSistema,
+} from '../../services/modoDemonstracao';
 
 const ICON_SIZE = 22;
 const BTN_SIZE = PREMIUM.minTouch;
@@ -74,6 +79,47 @@ export function TopActionIcons({
 }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss } = useAuth();
+  const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
+  const [demoCarregando, setDemoCarregando] = useState(false);
+
+  useEffect(() => subscribeModoDemonstracao(() => setDemoAtivo(isModoDemonstracaoAtivo())), []);
+
+  const alternarDemonstracao = useCallback(() => {
+    if (demoCarregando) return;
+    const ativar = !demoAtivo;
+    Alert.alert(
+      ativar ? 'Carregar dados de exemplo?' : 'Restaurar dados reais?',
+      ativar
+        ? 'Serão gerados 2.243 militares fictícios para demonstração. Seus dados reais ficam guardados localmente e nada será enviado à nuvem.'
+        : 'Os dados de demonstração serão removidos e seus dados reais serão restaurados.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: ativar ? 'Carregar exemplo' : 'Restaurar',
+          onPress: () => {
+            setDemoCarregando(true);
+            void toggleModoDemonstracaoSistema()
+              .then(({ ativo }) => {
+                setDemoAtivo(ativo);
+                Alert.alert(
+                  ativo ? 'Modo demonstração ativo' : 'Dados reais restaurados',
+                  ativo
+                    ? 'Explore o sistema com dados fictícios. Toque novamente no ícone de exemplo para voltar aos seus dados.'
+                    : 'Seus dados reais foram aplicados novamente.',
+                );
+              })
+              .catch((e) => {
+                Alert.alert(
+                  'Não foi possível concluir',
+                  e instanceof Error ? e.message : 'Tente novamente.',
+                );
+              })
+              .finally(() => setDemoCarregando(false));
+          },
+        },
+      ],
+    );
+  }, [demoAtivo, demoCarregando]);
   const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
   const iconSize = ICON_SIZE;
   const btnSize = BTN_SIZE;
@@ -197,6 +243,38 @@ export function TopActionIcons({
           </React.Fragment>
         );
       })}
+      {activeRoute !== 'Login'
+        ? wrapTooltip(
+            inline,
+            demoAtivo ? 'Sair do modo exemplo' : 'Dados de exemplo',
+            demoAtivo
+              ? 'Restaurar seus dados reais (nada vai para a nuvem no modo exemplo)'
+              : 'Preencher o app com 2.243 militares fictícios para demonstração',
+            <PressableScale
+              onPress={alternarDemonstracao}
+              disabled={demoCarregando}
+              style={[
+                btnStyle,
+                demoAtivo && {
+                  borderColor: theme.gain,
+                  backgroundColor: theme.gainMuted,
+                },
+                demoCarregando ? { opacity: 0.65 } : null,
+              ]}
+              accessibilityLabel={demoAtivo ? 'Restaurar dados reais' : 'Carregar dados de exemplo'}
+            >
+              {demoCarregando ? (
+                <ActivityIndicator size="small" color={theme.primary} />
+              ) : (
+                <Sparkles
+                  size={iconSize}
+                  color={demoAtivo ? theme.gain : tabInk}
+                  strokeWidth={strokeWidth}
+                />
+              )}
+            </PressableScale>,
+          )
+        : null}
       {activeRoute !== 'Login'
         ? wrapTooltip(
             inline,

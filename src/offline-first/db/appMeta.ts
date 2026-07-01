@@ -29,7 +29,16 @@ export const APP_META_KEYS = [
   'sync:pendingResumeAt',
   'sync:resumeMessage',
   THEME_META_KEY,
+  'demo:modoAtivo',
+  'demo:backupId',
 ] as const;
+
+export const DEMO_MODO_ATIVO_KEY = 'demo:modoAtivo';
+export const DEMO_BACKUP_ID_KEY = 'demo:backupId';
+
+export function isModoDemonstracaoAtivo(): boolean {
+  return readAppMetaCache(DEMO_MODO_ATIVO_KEY) === '1';
+}
 
 let appMetaHydrated = false;
 

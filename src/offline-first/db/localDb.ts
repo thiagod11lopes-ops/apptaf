@@ -15,8 +15,14 @@ import { normalizeSessaoShape } from '../../utils/sessaoLight';
 import { nipChaveCadastro } from '../../utils/nipFormat';
 import { dedupeCadastrosByNipNewest } from '../../services/offline/conflictMerge';
 import { readUpdatedAt } from '../sync/recordMeta';
+import { isModoDemonstracaoAtivo } from './appMeta';
 
 const ANONYMOUS_OWNER = '__local__';
+
+async function enqueueIfAllowed(entry: Parameters<typeof syncQueue.enqueue>[0]): Promise<void> {
+  if (isModoDemonstracaoAtivo()) return;
+  await syncQueue.enqueue(entry);
+}
 
 export function resolveOwnerUid(uid: string | null | undefined): string {
   return uid?.trim() || ANONYMOUS_OWNER;
@@ -367,7 +373,7 @@ export async function saveCadastro(
     record.createdAt = existing.createdAt;
   }
   await putCadastroRecord(record);
-  await syncQueue.enqueue({
+  await enqueueIfAllowed({
     operationType: operation,
     collection: 'cadastros',
     documentId: record.id,
@@ -446,7 +452,7 @@ export async function saveCadastrosBatch(
 
   await db.cadastros.bulkPut(records);
 
-  await syncQueue.enqueue({
+  await enqueueIfAllowed({
     operationType: 'UPDATE',
     collection: 'cadastros',
     documentId: `__batch__:${Date.now()}`,
@@ -470,7 +476,7 @@ export async function softDeleteCadastro(
   if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
   const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');
   await putCadastroRecord(record);
-  await syncQueue.enqueue({
+  await enqueueIfAllowed({
     operationType: 'DELETE',
     collection: 'cadastros',
     documentId: id,
@@ -508,7 +514,7 @@ export async function saveAplicador(
     record.createdAt = existing.createdAt;
   }
   await putAplicadorRecord(record);
-  await syncQueue.enqueue({
+  await enqueueIfAllowed({
     operationType: operation,
     collection: 'aplicadores',
     documentId: record.id,
@@ -530,7 +536,7 @@ export async function softDeleteAplicador(
   if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
   const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');
   await putAplicadorRecord(record);
-  await syncQueue.enqueue({
+  await enqueueIfAllowed({
     operationType: 'DELETE',
     collection: 'aplicadores',
     documentId: id,
@@ -566,7 +572,7 @@ export async function saveSessao(
     record.createdAt = existing.createdAt;
   }
   await putSessaoRecord(record);
-  await syncQueue.enqueue({
+  await enqueueIfAllowed({
     operationType: operation,
     collection: 'sessoes',
     documentId: record.id,
@@ -587,7 +593,7 @@ export async function softDeleteSessao(
   if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
   const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');
   await putSessaoRecord(record);
-  await syncQueue.enqueue({
+  await enqueueIfAllowed({
     operationType: 'DELETE',
     collection: 'sessoes',
     documentId: id,
@@ -676,6 +682,76 @@ export async function wipeOwnerData(ownerUid: string): Promise<void> {
   await db.sessoes.where('ownerUid').equals(ownerUid).delete();
   await db.preCadastros.where('ownerUid').equals(ownerUid).delete();
   await db.syncQueue.where('ownerUid').equals(ownerUid).delete();
+}
+
+/** Substitui dados do owner por dataset de demonstração — sem fila de sync. */
+export async function importDemonstracaoDataset(
+  ownerUid: string,
+  cadastros: CadastroItemPersist[],
+  sessoes: SessaoAplicacaoTaf[],
+): Promise<void> {
+  const db = getTafDatabase();
+  if (!db) throw new Error('Armazenamento local indisponível para modo demonstração.');
+
+  const deviceId = await getDeviceId();
+  const userId = getCachedLoginUid();
+  const now = Date.now();
+
+  const cadRecords: CadastroRecord[] = cadastros.map((item) =>
+    markRecordSynced(
+      bumpRecordMeta(
+        {
+          ...item,
+          ownerUid,
+          createdAt: now,
+          updatedAt: item.updatedAt ?? now,
+          version: 1,
+          syncVersion: 1,
+          deviceId,
+          userId,
+          syncStatus: 'synced',
+          deleted: false,
+          lastModifiedBy: deviceId,
+        } as CadastroRecord,
+        deviceId,
+        userId,
+        'CREATE',
+      ),
+      userId,
+    ),
+  );
+
+  const sessRecords: SessaoRecord[] = sessoes.map((item) =>
+    markRecordSynced(
+      bumpRecordMeta(
+        {
+          ...normalizeSessaoShape(item),
+          ownerUid,
+          createdAt: Date.parse(item.criadoEm) || now,
+          updatedAt: item.updatedAt ?? now,
+          version: 1,
+          syncVersion: 1,
+          deviceId,
+          userId,
+          syncStatus: 'synced',
+          deleted: false,
+          lastModifiedBy: deviceId,
+        } as SessaoRecord,
+        deviceId,
+        userId,
+        'CREATE',
+      ),
+      userId,
+    ),
+  );
+
+  const CHUNK = 400;
+  for (let i = 0; i < cadRecords.length; i += CHUNK) {
+    await db.cadastros.bulkPut(cadRecords.slice(i, i + CHUNK));
+  }
+  for (let i = 0; i < sessRecords.length; i += CHUNK) {
+    await db.sessoes.bulkPut(sessRecords.slice(i, i + CHUNK));
+  }
 }
 
 export { ANONYMOUS_OWNER };

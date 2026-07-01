@@ -35,10 +35,12 @@ import {
 import { estimateSyncQueueCounts } from './lastWriteWinsSync';
 import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
 import { parseSyncError, shouldTreatAsUpdateBlocked, type SyncErrorDetail } from './syncErrorInfo';
+import { isModoDemonstracaoAtivo } from '../db/appMeta';
 import {
   SYNC_AUTH_REQUIRED,
   SYNC_AUTH_REQUIRED_MESSAGE,
   SYNC_UPDATE_BLOCKED,
+  DEMO_SYNC_BLOCKED_MESSAGE,
 } from './syncAuthMessages';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
@@ -532,6 +534,9 @@ function scheduleReturnToOffline(delayMs: number): void {
 }
 
 async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
+  if (isModoDemonstracaoAtivo()) {
+    return { ok: false, error: DEMO_SYNC_BLOCKED_MESSAGE };
+  }
   if (syncInFlight) return { ok: false, error: 'sync_in_progress' };
 
   let queueEstimateWaitMs = 0;

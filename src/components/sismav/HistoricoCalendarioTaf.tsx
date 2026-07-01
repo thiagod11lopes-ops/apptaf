@@ -334,6 +334,35 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
             </Text>
           </View>
 
+          <PressableScale
+            onPress={() => void gerarPdfDoDia()}
+            disabled={gerandoPdf}
+            style={[styles.btnPdfOuter, gerandoPdf ? { opacity: 0.7 } : null]}
+          >
+            <LinearGradient
+              colors={[...theme.tokens.gradientPrimaryBtn]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[
+                styles.btnPdf,
+                Platform.OS === 'web'
+                  ? ({ boxShadow: '0 6px 16px rgba(37, 99, 235, 0.32)' } as object)
+                  : null,
+              ]}
+            >
+              {gerandoPdf ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Download size={18} color="#FFFFFF" strokeWidth={2.4} />
+                  <Text style={styles.btnPdfText}>
+                    Gerar Resultados do dia ({dataBrSelecionada})
+                  </Text>
+                </>
+              )}
+            </LinearGradient>
+          </PressableScale>
+
           {sessoesDoDia.map((sessao) => (
             <View
               key={sessao.id}
@@ -395,34 +424,6 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
             </View>
           ))}
 
-          <PressableScale
-            onPress={() => void gerarPdfDoDia()}
-            disabled={gerandoPdf}
-            style={[styles.btnPdfOuter, gerandoPdf ? { opacity: 0.7 } : null]}
-          >
-            <LinearGradient
-              colors={[...theme.tokens.gradientPrimaryBtn]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[
-                styles.btnPdf,
-                Platform.OS === 'web'
-                  ? ({ boxShadow: '0 6px 16px rgba(37, 99, 235, 0.32)' } as object)
-                  : null,
-              ]}
-            >
-              {gerandoPdf ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <>
-                  <Download size={18} color="#FFFFFF" strokeWidth={2.4} />
-                  <Text style={styles.btnPdfText}>
-                    Gerar Resultados do dia ({dataBrSelecionada})
-                  </Text>
-                </>
-              )}
-            </LinearGradient>
-          </PressableScale>
         </View>
       ) : null}
     </SectionCard>
@@ -524,7 +525,7 @@ const styles = StyleSheet.create({
     minWidth: 120,
     maxWidth: 130,
   },
-  btnPdfOuter: { borderRadius: 12, overflow: 'hidden', marginTop: 4 },
+  btnPdfOuter: { borderRadius: 12, overflow: 'hidden', marginBottom: 14 },
   btnPdf: {
     flexDirection: 'row',
     alignItems: 'center',

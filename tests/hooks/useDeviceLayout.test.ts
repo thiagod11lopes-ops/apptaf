@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   isMobileOrTabletUserAgent,
   resolveUsePhoneFrame,
+  resolveUseTabletFrame,
+  computeTabletFrameSize,
 } from '../../src/hooks/useDeviceLayout';
 
 const DESKTOP_UA =
@@ -80,6 +82,65 @@ describe('resolveUsePhoneFrame', () => {
         userAgent: DESKTOP_UA,
       }),
     ).toBe(false);
+  });
+});
+
+describe('resolveUseTabletFrame', () => {
+  it('ativa moldura em navegador desktop com mouse', () => {
+    expect(
+      resolveUseTabletFrame({
+        isWeb: true,
+        width: 1440,
+        userAgent: DESKTOP_UA,
+        pointerCoarse: false,
+        hoverNone: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('desativa em apps nativos (isWeb false)', () => {
+    expect(
+      resolveUseTabletFrame({
+        isWeb: false,
+        width: 1440,
+        userAgent: DESKTOP_UA,
+      }),
+    ).toBe(false);
+  });
+
+  it('desativa em mobile web e tablets touch', () => {
+    expect(
+      resolveUseTabletFrame({
+        isWeb: true,
+        width: 390,
+        userAgent: IPHONE_UA,
+      }),
+    ).toBe(false);
+    expect(
+      resolveUseTabletFrame({
+        isWeb: true,
+        width: 1024,
+        userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)',
+      }),
+    ).toBe(false);
+    expect(
+      resolveUseTabletFrame({
+        isWeb: true,
+        width: 1366,
+        userAgent: DESKTOP_UA,
+        pointerCoarse: true,
+        hoverNone: true,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('computeTabletFrameSize', () => {
+  it('mantém proporção de tablet dentro do viewport', () => {
+    const size = computeTabletFrameSize(1920, 1080);
+    expect(size.width).toBeLessThanOrEqual(834);
+    expect(size.height).toBeLessThanOrEqual(1080 * 0.94);
+    expect(size.width / size.height).toBeCloseTo(834 / 1112, 2);
   });
 });
 

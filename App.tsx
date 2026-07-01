@@ -15,7 +15,7 @@ import { OfflineSyncProvider } from './src/contexts/OfflineSyncContext';
 import { DataStoreProvider } from './src/offline-first/store/DataStoreContext';
 import { hydrateAppStorageFromIndexedDb } from './src/offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './src/services/firebase/authUid';
-import { PhoneFrameShell } from './src/components/premium/PhoneFrameShell';
+import { TabletFrameShell } from './src/components/premium/TabletFrameShell';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AdminHistoricoApp } from './src/admin/AdminHistoricoApp';
@@ -68,9 +68,9 @@ function AppRoot() {
   return (
     <View style={[styles.appRoot, { backgroundColor: 'transparent' }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <PhoneFrameShell>
+      <TabletFrameShell>
         <AppNavigator />
-      </PhoneFrameShell>
+      </TabletFrameShell>
     </View>
   );
 }

@@ -89,7 +89,7 @@ describe('fluxo offline — dados locais', () => {
 
 describe('login — migração anônimo → chefe', () => {
   beforeEach(() => {
-    setAuthUidState('login-uid', BOSS_UID, true);
+    setAuthUidState(BOSS_UID, BOSS_UID, true);
   });
 
   afterEach(async () => {

@@ -26,6 +26,13 @@ const GRADIENT = (colors: string[]) => ({
   ],
 });
 
+function heatmapReprovacaoPalette(c: ChartThemeColors): string[] {
+  if (c.isDark) {
+    return ['#134e4a', '#0e7490', c.primary, '#d97706', '#ea580c', c.loss];
+  }
+  return ['#ecfdf5', '#cffafe', '#bfdbfe', '#fde68a', '#fb923c', '#dc2626'];
+}
+
 function baseGrid(isDark: boolean) {
   return {
     backgroundColor: 'transparent',
@@ -340,14 +347,20 @@ export function buildEstatisticasChartOptions(
           orient: 'horizontal',
           left: 'center',
           bottom: 0,
-          inRange: { color: ['#ecfdf5', '#fde68a', '#fca5a5', '#dc2626'] },
+          inRange: { color: heatmapReprovacaoPalette(c) },
           textStyle: { color: c.textMuted },
         },
         series: [
           {
             type: 'heatmap',
             data: heatData,
-            label: { show: true, formatter: '{c}%', color: c.text, fontSize: 10 },
+            label: {
+              show: true,
+              formatter: '{c}%',
+              color: c.isDark ? '#f8fafc' : '#0f172a',
+              fontSize: 10,
+              fontWeight: 700,
+            },
             emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.25)' } },
           },
         ],

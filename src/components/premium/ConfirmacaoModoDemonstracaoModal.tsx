@@ -5,6 +5,11 @@ import { AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react-native';
 import { ModernModal } from '../sismav/ModernModal';
 import { PressableScale } from './PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
+import {
+  DEMO_TOTAL_CFN,
+  DEMO_TOTAL_FEMININO,
+  DEMO_TOTAL_MILITARES,
+} from '../../utils/gerarDadosDemonstracaoTaf';
 
 export type ModoDemonstracaoModalPhase = 'confirm' | 'loading' | 'success' | 'error';
 
@@ -123,7 +128,7 @@ export function ConfirmacaoModoDemonstracaoModal({
           <>
             <Text style={[styles.message, { color: theme.text }]}>
               {ativar
-                ? 'Serão gerados 2.243 militares fictícios para demonstração. Seus dados reais ficam guardados localmente e nada será enviado à nuvem.'
+                ? `Serão gerados ${DEMO_TOTAL_MILITARES} militares fictícios (${DEMO_TOTAL_CFN} fuzileiros navais e ${DEMO_TOTAL_FEMININO} mulheres) para demonstração. Seus dados reais ficam guardados localmente e nada será enviado à nuvem.`
                 : 'Os dados de demonstração serão removidos e seus dados reais serão restaurados.'}
             </Text>
             <Text style={[styles.hint, { color: theme.textMuted }]}>

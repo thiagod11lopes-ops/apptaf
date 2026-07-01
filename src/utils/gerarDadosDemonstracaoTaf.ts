@@ -4,10 +4,24 @@ import type { NormaTafPreCadastro } from '../services/preCadastroTafStorage';
 import type { ResultadoCorridaItem } from '../navigation/types';
 import { formatNipInput } from './nipFormat';
 
-export const DEMO_TOTAL_MILITARES = 2243;
+export const DEMO_TOTAL_MILITARES = 50;
+export const DEMO_TOTAL_CFN = 10;
+export const DEMO_TOTAL_FEMININO = 20;
 export const DEMO_PCT_COMPLETO = 0.75;
-export const DEMO_PCT_FEMININO = 0.6;
-export const DEMO_PCT_CFN = 0.3;
+
+function escalaDemo(total: number, referencia: number): number {
+  if (total <= 0) return 0;
+  return Math.min(total, Math.max(0, Math.round((referencia / DEMO_TOTAL_MILITARES) * total)));
+}
+
+function indicesFemininos(total: number): Set<number> {
+  const alvo = escalaDemo(total, DEMO_TOTAL_FEMININO);
+  const indices = new Set<number>();
+  for (let k = 0; k < alvo; k += 1) {
+    indices.add(Math.floor((k * total) / alvo));
+  }
+  return indices;
+}
 
 const PRACAS = ['MN', 'CB', 'CA', 'SG', 'SO', '1T', '2T', '3T'] as const;
 const NOMES_M = ['Silva', 'Santos', 'Oliveira', 'Souza', 'Lima', 'Costa', 'Almeida', 'Pereira', 'Rodrigues'];
@@ -260,13 +274,15 @@ export type DadosDemonstracaoTaf = {
 export function gerarDadosDemonstracaoTaf(total = DEMO_TOTAL_MILITARES): DadosDemonstracaoTaf {
   const cadastros: CadastroItemPersist[] = [];
   const buckets = new Map<string, SessaoBucket>();
+  const femininos = indicesFemininos(total);
+  const totalCfn = escalaDemo(total, DEMO_TOTAL_CFN);
   let feminino = 0;
   let cfn = 0;
   let completos = 0;
 
   for (let i = 0; i < total; i += 1) {
-    const isFemale = seeded(i, 11) < DEMO_PCT_FEMININO;
-    const isCfn = seeded(i, 7) < DEMO_PCT_CFN;
+    const isFemale = femininos.has(i);
+    const isCfn = i < totalCfn;
     const completo = seeded(i, 3) < DEMO_PCT_COMPLETO;
     if (isFemale) feminino += 1;
     if (isCfn) cfn += 1;

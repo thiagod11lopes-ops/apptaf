@@ -14,6 +14,11 @@ import {
   toggleModoDemonstracaoSistema,
 } from '../../services/modoDemonstracao';
 import {
+  DEMO_TOTAL_CFN,
+  DEMO_TOTAL_FEMININO,
+  DEMO_TOTAL_MILITARES,
+} from '../../utils/gerarDadosDemonstracaoTaf';
+import {
   ConfirmacaoModoDemonstracaoModal,
   type ModoDemonstracaoModalPhase,
 } from './ConfirmacaoModoDemonstracaoModal';
@@ -252,7 +257,7 @@ export function TopActionIcons({
             demoAtivo ? 'Sair do modo exemplo' : 'Dados de exemplo',
             demoAtivo
               ? 'Restaurar seus dados reais (nada vai para a nuvem no modo exemplo)'
-              : 'Preencher o app com 2.243 militares fictícios para demonstração',
+              : `Preencher o app com ${DEMO_TOTAL_MILITARES} militares fictícios (${DEMO_TOTAL_CFN} FN, ${DEMO_TOTAL_FEMININO} mulheres) para demonstração`,
             <PressableScale
               onPress={alternarDemonstracao}
               disabled={demoCarregando}

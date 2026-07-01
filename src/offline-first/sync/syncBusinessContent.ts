@@ -24,6 +24,7 @@ export function cadastroBusinessSnapshot(item: CadastroItemPersist): Record<stri
     tempoCaminhada: normalizeOptional(item.tempoCaminhada),
     notaCaminhada: normalizeOptional(item.notaCaminhada),
     dataTafCaminhada: normalizeOptional(item.dataTafCaminhada),
+    modalidadeDistanciaAtiva: item.modalidadeDistanciaAtiva,
     tempoNatacao: normalizeOptional(item.tempoNatacao),
     notaNatacao: normalizeOptional(item.notaNatacao),
     resultadoNatacao: item.resultadoNatacao,

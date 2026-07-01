@@ -82,7 +82,13 @@ export function aplicarResultadoNoCadastro(
     const nota = modoTafNaval
       ? notaCorrida3200ParaPersistencia(textoNotaCorrida3200(tempoMs, idade, sexo))
       : notaCorridaParaPersistencia(textoNotaCorrida(tempoMs, idade, sexo));
-    return { ...cadastro, tempoCorrida: tempoStr, dataTafCorrida: hoje, notaCorrida: nota };
+    return {
+      ...cadastro,
+      tempoCorrida: tempoStr,
+      dataTafCorrida: hoje,
+      notaCorrida: nota,
+      ...(modoTafNaval ? {} : { modalidadeDistanciaAtiva: 'corrida' as const }),
+    };
   }
 
   if (prova === 'caminhada') {
@@ -93,6 +99,7 @@ export function aplicarResultadoNoCadastro(
       tempoCaminhada: tempoStr,
       dataTafCaminhada: hoje,
       notaCaminhada: nota,
+      modalidadeDistanciaAtiva: 'caminhada',
     };
   }
 

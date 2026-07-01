@@ -29,6 +29,8 @@ export type CadastroItemPersist = {
   dataTafNatacao?: string;
   dataTafCaminhada?: string;
   dataTafPermanencia?: string;
+  /** TAF Armada: corrida 2.400 m ou caminhada 4.800 m — indica qual prevalece quando ambas existem. */
+  modalidadeDistanciaAtiva?: 'corrida' | 'caminhada';
   /** Rúbrica do candidato (SVG data URL) por modalidade */
   rubricaCorridaSvg?: string;
   rubricaNatacaoSvg?: string;

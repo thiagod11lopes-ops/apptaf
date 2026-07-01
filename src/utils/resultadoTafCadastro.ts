@@ -25,6 +25,11 @@ export type ResultadoTafLinha = {
   /** Datas de aplicação (DD/MM/AAAA) para definir corrida × caminhada excludentes. */
   dataTafCorrida?: string;
   dataTafCaminhada?: string;
+  /** TAF Armada: modalidade de distância que prevalece quando corrida e caminhada coexistem. */
+  modalidadeDistanciaAtiva?: 'corrida' | 'caminhada';
+  /** ISO da sessão do Histórico (desempate quando as datas coincidem). */
+  corridaRegistradaEm?: string;
+  caminhadaRegistradaEm?: string;
 };
 
 function tempos(c: CadastroItemPersist) {
@@ -219,6 +224,7 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
     rubricaPermanenciaSvg: temPerm ? c.rubricaPermanenciaSvg : undefined,
     dataTafCorrida: temCorrida ? (c.dataTafCorrida || '').trim() || undefined : undefined,
     dataTafCaminhada: temCaminhada ? (c.dataTafCaminhada || '').trim() || undefined : undefined,
+    modalidadeDistanciaAtiva: c.modalidadeDistanciaAtiva,
   };
 }
 

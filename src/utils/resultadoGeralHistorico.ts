@@ -30,6 +30,8 @@ type AggRow = {
   caminhada?: ModalidadeHistorico;
   natacao?: ModalidadeHistorico;
   permanencia?: ModalidadeHistorico;
+  corridaSessaoEm?: string;
+  caminhadaSessaoEm?: string;
 };
 
 function temRequisitoCorridaOuCaminhada(agg: AggRow): boolean {
@@ -113,18 +115,26 @@ function atualizarIdentidade(agg: AggRow, r: ResultadoCorridaItem, cadastros: Ca
   if (nome) agg.nome = nome;
 }
 
-function datasCorridaCaminhadaFromCadastro(
+function metaCorridaCaminhadaFromCadastro(
   agg: AggRow,
   cadastros: CadastroItemPersist[],
-): Pick<ResultadoGeralItem, 'dataTafCorrida' | 'dataTafCaminhada'> {
+): Pick<
+  ResultadoGeralItem,
+  | 'dataTafCorrida'
+  | 'dataTafCaminhada'
+  | 'modalidadeDistanciaAtiva'
+  | 'corridaRegistradaEm'
+  | 'caminhadaRegistradaEm'
+> {
   const busca = buscarCadastroPorNomeOuNip(cadastros, (agg.nip ?? '').trim() || agg.nome);
-  if (busca.kind !== 'found') return {};
-  const c = busca.cadastro;
+  const c = busca.kind === 'found' ? busca.cadastro : undefined;
   return {
-    dataTafCorrida: temAvaliacaoCorrida(c) ? (c.dataTafCorrida || '').trim() || undefined : undefined,
-    dataTafCaminhada: temAvaliacaoCaminhada(c)
-      ? (c.dataTafCaminhada || '').trim() || undefined
-      : undefined,
+    dataTafCorrida: c && temAvaliacaoCorrida(c) ? (c.dataTafCorrida || '').trim() || undefined : undefined,
+    dataTafCaminhada:
+      c && temAvaliacaoCaminhada(c) ? (c.dataTafCaminhada || '').trim() || undefined : undefined,
+    modalidadeDistanciaAtiva: c?.modalidadeDistanciaAtiva,
+    corridaRegistradaEm: agg.corridaSessaoEm,
+    caminhadaRegistradaEm: agg.caminhadaSessaoEm,
   };
 }
 
@@ -194,9 +204,13 @@ export function agregarHistoricoPorParticipante(
       atualizarIdentidade(agg, r, cadastros);
       const slice = sliceFromResultado(tipo, r);
 
-      if (tipo === 'corrida') agg.corrida = slice;
-      else if (tipo === 'caminhada') agg.caminhada = slice;
-      else if (tipo === 'natacao') agg.natacao = slice;
+      if (tipo === 'corrida') {
+        agg.corrida = slice;
+        agg.corridaSessaoEm = sessao.criadoEm;
+      } else if (tipo === 'caminhada') {
+        agg.caminhada = slice;
+        agg.caminhadaSessaoEm = sessao.criadoEm;
+      } else if (tipo === 'natacao') agg.natacao = slice;
       else if (tipo === 'permanencia') agg.permanencia = slice;
     }
   }
@@ -339,7 +353,7 @@ export function listarResultadosGeralFromHistorico(
   return agregarHistoricoPorParticipante(unificadas, cadastros)
     .map((agg) => ({
       ...aggParaLinha(agg),
-      ...datasCorridaCaminhadaFromCadastro(agg, cadastros),
+      ...metaCorridaCaminhadaFromCadastro(agg, cadastros),
       postoGrad: postoGradFromLinhaId(agg.id, agg.nip, cadastros),
     }))
     .sort(compareByNomePtBr);

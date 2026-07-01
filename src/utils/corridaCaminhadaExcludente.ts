@@ -41,6 +41,9 @@ type LinhaCorridaCaminhada = Pick<
   | 'situacaoCaminhada'
   | 'dataTafCorrida'
   | 'dataTafCaminhada'
+  | 'modalidadeDistanciaAtiva'
+  | 'corridaRegistradaEm'
+  | 'caminhadaRegistradaEm'
 >;
 
 /** Qual modalidade corrida/caminhada prevalece na linha de resultados. */
@@ -52,10 +55,24 @@ export function modalidadeCorridaCaminhadaVigente(
   if (temCorrida && !temCaminhada) return 'corrida';
   if (temCaminhada && !temCorrida) return 'caminhada';
   if (temCorrida && temCaminhada) {
+    if (item.modalidadeDistanciaAtiva === 'corrida' || item.modalidadeDistanciaAtiva === 'caminhada') {
+      return item.modalidadeDistanciaAtiva;
+    }
+
+    const ic = (item.corridaRegistradaEm || '').trim();
+    const im = (item.caminhadaRegistradaEm || '').trim();
+    if (ic && im && ic !== im) {
+      return ic.localeCompare(im) > 0 ? 'corrida' : 'caminhada';
+    }
+
     const dc = (item.dataTafCorrida || '').trim();
     const dm = (item.dataTafCaminhada || '').trim();
-    if (dc && dm) return compareDataBr(dc, dm) >= 0 ? 'corrida' : 'caminhada';
-    return 'corrida';
+    if (dc && dm) {
+      const cmp = compareDataBr(dc, dm);
+      if (cmp !== 0) return cmp > 0 ? 'corrida' : 'caminhada';
+    }
+
+    if (ic && im) return ic.localeCompare(im) >= 0 ? 'corrida' : 'caminhada';
   }
   return null;
 }

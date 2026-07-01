@@ -9,7 +9,7 @@ import {
   type GestureResponderEvent,
 } from 'react-native';
 import Svg, { Path as SvgPath } from 'react-native-svg';
-import { Modal } from 'react-native';
+import { AppModal } from '../premium/AppModal';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getAllAplicadores, type AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import { verificarSenhaAplicador, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../../utils/aplicadorSenha';
@@ -203,7 +203,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
   );
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => {}} accessibilityViewIsModal>
+    <AppModal visible={visible} transparent animationType="fade" onRequestClose={() => {}} accessibilityViewIsModal>
       <AssinaturaFuturistaOverlay>
         <AssinaturaFuturistaScroll>
           <AssinaturaFuturistaCard accent="violet">
@@ -378,6 +378,6 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
           </AssinaturaFuturistaCard>
         </AssinaturaFuturistaScroll>
       </AssinaturaFuturistaOverlay>
-    </Modal>
+    </AppModal>
   );
 }

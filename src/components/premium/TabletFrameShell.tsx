@@ -152,6 +152,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     zIndex: 1,
+    position: 'relative',
   },
   cameraRow: {
     position: 'absolute',

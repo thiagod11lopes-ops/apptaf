@@ -17,10 +17,10 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Modal,
   GestureResponderEvent,
   KeyboardAvoidingView,
 } from 'react-native';
+import { AppModal } from '../components/premium/AppModal';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { SafeAreaView as SafeAreaViewInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -2127,7 +2127,7 @@ export default function AplicarTAFScreen() {
         onConfirm={() => void executarExclusaoPreCadastro()}
       />
 
-      <Modal
+      <AppModal
         visible={modalPermanenciaFinalizadaVisible}
         transparent
         animationType="fade"
@@ -2153,9 +2153,9 @@ export default function AplicarTAFScreen() {
             />
           </View>
         </View>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         visible={modalTempoRegistradoVisible}
         transparent
         animationType="fade"
@@ -2179,8 +2179,8 @@ export default function AplicarTAFScreen() {
             <AplicarTafPrimaryButton label="OK" onPress={fecharModalTempoRegistrado} />
           </View>
         </View>
-      </Modal>
-      <Modal
+      </AppModal>
+      <AppModal
         visible={modalRubricaNatacaoVisible}
         transparent
         animationType="fade"
@@ -2297,7 +2297,7 @@ export default function AplicarTAFScreen() {
             })()}
           </AssinaturaFuturistaScroll>
         </AssinaturaFuturistaOverlay>
-      </Modal>
+      </AppModal>
 
       <FluxoAssinaturaAplicadorModal
         visible={fluxoAplicadorVisible}

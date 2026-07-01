@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import {
-  Modal,
   View,
   Text,
   StyleSheet,
@@ -13,6 +12,7 @@ import { BlurView } from 'expo-blur';
 import { X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { PressableScale } from '../premium/PressableScale';
+import { AppModal } from '../premium/AppModal';
 
 type Props = {
   visible: boolean;
@@ -45,7 +45,7 @@ export function ModernModal({
   }, [visible]);
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       transparent
       animationType="fade"
@@ -99,7 +99,7 @@ export function ModernModal({
         </View>
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

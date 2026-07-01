@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   ScrollView,
   TouchableOpacity,
   Platform,
   ActivityIndicator,
   type LayoutChangeEvent,
 } from 'react-native';
+import { AppModal } from '../premium/AppModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check, X } from 'lucide-react-native';
@@ -546,7 +546,7 @@ export function TafProvaTempoModal({
   );
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       transparent={false}
       animationType="slide"
@@ -669,7 +669,7 @@ export function TafProvaTempoModal({
       </SafeAreaView>
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

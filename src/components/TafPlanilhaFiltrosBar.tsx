@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform } from 'react-native';
+import { AppModal } from '../premium/AppModal';
 import { Search, Calendar, X } from 'lucide-react-native';
 import { LabelSvgText } from './LabelSvgText';
 import type { FiltroModalidadeTaf } from '../utils/tafRegistro';
@@ -167,7 +168,7 @@ export function TafPlanilhaFiltrosBar({
       </View>
 
       {Platform.OS !== 'web' ? (
-        <Modal visible={calendarioAberto} transparent animationType="fade" onRequestClose={() => setCalendarioAberto(false)}>
+        <AppModal visible={calendarioAberto} transparent animationType="fade" onRequestClose={() => setCalendarioAberto(false)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalCard, { backgroundColor: ui.modalBg, borderColor: theme.border }]}>
               <Text style={[styles.modalTitle, { color: ui.text }]}>Data do registro</Text>
@@ -196,7 +197,7 @@ export function TafPlanilhaFiltrosBar({
               </View>
             </View>
           </View>
-        </Modal>
+        </AppModal>
       ) : null}
     </View>
   );

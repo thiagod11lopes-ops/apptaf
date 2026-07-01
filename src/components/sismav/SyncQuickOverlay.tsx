@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Modal, StyleSheet, View, Platform, Image } from 'react-native';
+import { StyleSheet, View, Platform, Image } from 'react-native';
+import { AppModal } from '../premium/AppModal';
 import Svg, { Circle } from 'react-native-svg';
 import Animated, {
   Easing,
@@ -63,7 +64,7 @@ export function SyncQuickOverlay({ visible }: Props) {
   const trackColor = theme.isDark ? 'rgba(148,163,184,0.22)' : 'rgba(148,163,184,0.26)';
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+    <AppModal visible={visible} transparent animationType="fade" statusBarTranslucent>
       <View style={styles.backdrop} pointerEvents="none">
         <Animated.View
           style={[
@@ -112,7 +113,7 @@ export function SyncQuickOverlay({ visible }: Props) {
           />
         </Animated.View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Modal, ScrollView, TouchableOpacity, Text, View, Platform } from 'react-native';
+import { ScrollView, TouchableOpacity, Text, View, Platform } from 'react-native';
+import { AppModal } from '../premium/AppModal';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ResultadoCorridaItem } from '../navigation/types';
@@ -99,7 +100,7 @@ export function RubricaCaptureModal({
   const tempoStr = formatMsByModality(mod === 'natacao' ? 'natacao' : 'corrida', participante.tempoMs);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <AppModal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <AssinaturaFuturistaOverlay>
         <AssinaturaFuturistaScroll>
           <AssinaturaFuturistaCard accent="cyan">
@@ -186,6 +187,6 @@ export function RubricaCaptureModal({
           </AssinaturaFuturistaCard>
         </AssinaturaFuturistaScroll>
       </AssinaturaFuturistaOverlay>
-    </Modal>
+    </AppModal>
   );
 }

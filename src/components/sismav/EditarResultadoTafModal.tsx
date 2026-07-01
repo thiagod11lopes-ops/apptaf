@@ -3,12 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   TextInput,
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { AppModal } from '../premium/AppModal';
 import { Check, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
@@ -82,7 +82,7 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
   if (!cadastro) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={fechar}>
+    <AppModal visible={visible} transparent animationType="fade" onRequestClose={fechar}>
       <View style={styles.overlay}>
         <View style={[styles.card, { backgroundColor: ui.modalBg, borderColor: theme.border }]}>
           <View style={styles.header}>
@@ -190,7 +190,7 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
           </View>
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

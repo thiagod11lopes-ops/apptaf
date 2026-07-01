@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   ScrollView,
   TouchableOpacity,
   TextInput,
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { AppModal } from '../premium/AppModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
@@ -63,7 +63,7 @@ export function TafProvaRepeticoesModal({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <AppModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <LinearGradient colors={[...backdropColors]} style={styles.backdrop}>
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
           <View style={[styles.sheet, { backgroundColor: glass.bg, borderColor: glass.border }]}>
@@ -158,7 +158,7 @@ export function TafProvaRepeticoesModal({
           </View>
         </SafeAreaView>
       </LinearGradient>
-    </Modal>
+    </AppModal>
   );
 }
 

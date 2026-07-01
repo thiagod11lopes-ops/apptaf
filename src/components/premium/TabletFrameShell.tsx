@@ -5,6 +5,7 @@ import { useDeviceLayout, computeTabletFrameSize } from '../../hooks/useDeviceLa
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppBackdrop } from '../mobile/AppBackdrop';
 import { DesktopTabletBackdrop } from './DesktopTabletBackdrop';
+import { APP_MODAL_HOST_ID } from './AppModal';
 
 type Props = {
   children: React.ReactNode;
@@ -62,7 +63,12 @@ export function TabletFrameShell({ children }: Props) {
             <View style={[styles.screenClip, { backgroundColor: 'transparent' }]}>
               <AppBackdrop />
               <TabletCamera />
-              <View style={styles.screenContent}>{children}</View>
+              <View
+                style={styles.screenContent}
+                {...(Platform.OS === 'web' ? { nativeID: APP_MODAL_HOST_ID, id: APP_MODAL_HOST_ID } : {})}
+              >
+                {children}
+              </View>
             </View>
           </View>
         </LinearGradient>
@@ -153,6 +159,10 @@ const styles = StyleSheet.create({
     minHeight: 0,
     zIndex: 1,
     position: 'relative',
+    ...Platform.select({
+      web: { overflow: 'visible' } as object,
+      default: {},
+    }),
   },
   cameraRow: {
     position: 'absolute',

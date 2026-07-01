@@ -52,6 +52,10 @@ import {
   ModalTesteJaAplicado,
   type ModalTesteJaAplicadoInfo,
 } from '../components/sismav/ModalTesteJaAplicado';
+import {
+  ModalModalidadeExcludente,
+  type ModalModalidadeExcludenteInfo,
+} from '../components/sismav/ModalModalidadeExcludente';
 import { ConfirmacaoExcluirPreCadastroModal } from '../components/sismav/ConfirmacaoExcluirPreCadastroModal';
 import { FluxoAssinaturaAplicadorModal } from '../components/sismav/FluxoAssinaturaAplicadorModal';
 import {
@@ -86,6 +90,7 @@ import {
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { cadastroPrecisaCompletarDadosTaf, dataNascimentoCadastroValida } from '../utils/cadastroDadosTaf';
 import { dataHojeBr } from '../utils/tafRegistro';
+import { avisoModalidadeExcludente } from '../utils/corridaCaminhadaExcludente';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
 import {
   notaCaminhadaParaPersistencia,
@@ -294,6 +299,9 @@ export default function AplicarTAFScreen() {
   const [nipFeedbackLinhas, setNipFeedbackLinhas] = useState<NipFeedbackLinha[]>([]);
   const [modalTesteExistente, setModalTesteExistente] = useState<
     (ModalTesteJaAplicadoInfo & { dataNascimento: string; sexo?: 'M' | 'F' }) | null
+  >(null);
+  const [modalModalidadeExcludente, setModalModalidadeExcludente] = useState<
+    (ModalModalidadeExcludenteInfo & { cadastro: CadastroItemPersist }) | null
   >(null);
   const nipsRepeticaoAutorizadaRef = useRef<Set<number>>(new Set());
   const [numeroVoltas, setNumeroVoltas] = useState('');
@@ -1315,6 +1323,59 @@ export default function AplicarTAFScreen() {
     });
   }, []);
 
+  const finalizarConfirmacaoNip = useCallback(
+    (index: number, c: CadastroItemPersist) => {
+      const modalidade = tipoProvaRef.current ?? tipoProva;
+      const substituta = avisoModalidadeExcludente(modalidade, c, modoTafNaval);
+      if (substituta && (modalidade === 'corrida' || modalidade === 'caminhada')) {
+        const nome = (c.nome || '').trim() || 'Sem nome';
+        const nipLinha = nipsParticipantes[index] || c.nip;
+        setModalModalidadeExcludente({
+          index,
+          nome,
+          nip: nipLinha,
+          modalidadeExistente: substituta,
+          modalidadeNova: modalidade,
+          cadastro: c,
+        });
+        return;
+      }
+      definirNipOk(index, c);
+    },
+    [tipoProva, modoTafNaval, nipsParticipantes, definirNipOk],
+  );
+
+  const limparNipLinha = useCallback((index: number) => {
+    setNipsParticipantes((prev) => {
+      const next = [...prev];
+      next[index] = '';
+      return next;
+    });
+    setNipFeedbackLinhas((prev) => {
+      const next = [...prev];
+      next[index] = null;
+      return next;
+    });
+    if (nipsRepeticaoAutorizadaRef.current.has(index)) {
+      const rep = new Set(nipsRepeticaoAutorizadaRef.current);
+      rep.delete(index);
+      nipsRepeticaoAutorizadaRef.current = rep;
+    }
+  }, []);
+
+  const prosseguirModalidadeExcludente = useCallback(() => {
+    if (!modalModalidadeExcludente) return;
+    const { index, cadastro } = modalModalidadeExcludente;
+    definirNipOk(index, cadastro);
+    setModalModalidadeExcludente(null);
+  }, [modalModalidadeExcludente, definirNipOk]);
+
+  const desistirModalidadeExcludente = useCallback(() => {
+    if (!modalModalidadeExcludente) return;
+    limparNipLinha(modalModalidadeExcludente.index);
+    setModalModalidadeExcludente(null);
+  }, [modalModalidadeExcludente, limparNipLinha]);
+
   const continuarAposCadastroEncontrado = useCallback(
     async (index: number, c: CadastroItemPersist) => {
       if (cadastroPrecisaCompletarDadosTaf(c)) {
@@ -1362,9 +1423,9 @@ export default function AplicarTAFScreen() {
         }
       }
 
-      definirNipOk(index, c);
+      finalizarConfirmacaoNip(index, c);
     },
-    [nipsParticipantes, tipoProva, definirNipOk],
+    [nipsParticipantes, tipoProva, finalizarConfirmacaoNip],
   );
 
   const atualizarDadosNipLinha = useCallback(
@@ -1498,10 +1559,10 @@ export default function AplicarTAFScreen() {
     const cadastros = await getAllCadastros();
     const busca = buscarCadastroPorNomeOuNip(cadastros, nip);
     if (busca.kind === 'found') {
-      definirNipOk(index, busca.cadastro);
+      finalizarConfirmacaoNip(index, busca.cadastro);
     }
     setModalTesteExistente(null);
-  }, [modalTesteExistente, definirNipOk]);
+  }, [modalTesteExistente, finalizarConfirmacaoNip]);
 
   const prepararProva = useCallback(() => {
     if (
@@ -2116,6 +2177,12 @@ export default function AplicarTAFScreen() {
         info={modalTesteExistente}
         onClose={fecharModalTesteExistente}
         onConfirmarRepeticao={confirmarRepeticaoTeste}
+      />
+
+      <ModalModalidadeExcludente
+        info={modalModalidadeExcludente}
+        onProsseguir={prosseguirModalidadeExcludente}
+        onDesistir={desistirModalidadeExcludente}
       />
 
       <ConfirmacaoExcluirPreCadastroModal

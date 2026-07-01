@@ -113,6 +113,21 @@ function atualizarIdentidade(agg: AggRow, r: ResultadoCorridaItem, cadastros: Ca
   if (nome) agg.nome = nome;
 }
 
+function datasCorridaCaminhadaFromCadastro(
+  agg: AggRow,
+  cadastros: CadastroItemPersist[],
+): Pick<ResultadoGeralItem, 'dataTafCorrida' | 'dataTafCaminhada'> {
+  const busca = buscarCadastroPorNomeOuNip(cadastros, (agg.nip ?? '').trim() || agg.nome);
+  if (busca.kind !== 'found') return {};
+  const c = busca.cadastro;
+  return {
+    dataTafCorrida: temAvaliacaoCorrida(c) ? (c.dataTafCorrida || '').trim() || undefined : undefined,
+    dataTafCaminhada: temAvaliacaoCaminhada(c)
+      ? (c.dataTafCaminhada || '').trim() || undefined
+      : undefined,
+  };
+}
+
 function aggParaLinha(agg: AggRow): ResultadoGeralItem {
   const temCorrida = !!agg.corrida;
   const temCaminhada = !!agg.caminhada;
@@ -324,6 +339,7 @@ export function listarResultadosGeralFromHistorico(
   return agregarHistoricoPorParticipante(unificadas, cadastros)
     .map((agg) => ({
       ...aggParaLinha(agg),
+      ...datasCorridaCaminhadaFromCadastro(agg, cadastros),
       postoGrad: postoGradFromLinhaId(agg.id, agg.nip, cadastros),
     }))
     .sort(compareByNomePtBr);

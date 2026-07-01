@@ -5,6 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SearchHighlightText } from './SearchHighlightText';
 import { LabelNip } from './LabelNip';
 import type { ResultadoGeralItem } from '../utils/resultadoTafCadastro';
+import { modalidadeCorridaCaminhadaDispensavel } from '../utils/corridaCaminhadaExcludente';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
@@ -37,11 +38,6 @@ function StatusChip({ status }: { status: 'Completo' | 'Parcial' }) {
   );
 }
 
-function temCorridaConcluida(item: ResultadoGeralItem): boolean {
-  const nota = (item.notaCorrida || '').trim();
-  if (nota && nota !== '—') return true;
-  return item.situacaoCorrida === 'Aprovado' || item.situacaoCorrida === 'Reprovado';
-}
 
 function ModalityBlock({
   label,
@@ -212,13 +208,14 @@ export function ResultadosGeralTable({
               nota={item.notaCorrida}
               situacao={item.situacaoCorrida}
               buscaLower={buscaLower}
+              dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'corrida')}
             />
             <ModalityBlock
               label="CAMINHADA"
               nota={item.notaCaminhada}
               situacao={item.situacaoCaminhada}
               buscaLower={buscaLower}
-              dispensavel={temCorridaConcluida(item)}
+              dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'caminhada')}
             />
             <ModalityBlock
               label="NATAÇÃO"

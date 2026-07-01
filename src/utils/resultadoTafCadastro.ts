@@ -22,6 +22,9 @@ export type ResultadoTafLinha = {
   rubricaCaminhadaSvg?: string;
   rubricaNatacaoSvg?: string;
   rubricaPermanenciaSvg?: string;
+  /** Datas de aplicação (DD/MM/AAAA) para definir corrida × caminhada excludentes. */
+  dataTafCorrida?: string;
+  dataTafCaminhada?: string;
 };
 
 function tempos(c: CadastroItemPersist) {
@@ -214,6 +217,8 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
     rubricaCaminhadaSvg: temCaminhada ? c.rubricaCaminhadaSvg : undefined,
     rubricaNatacaoSvg: temNatacao ? c.rubricaNatacaoSvg : undefined,
     rubricaPermanenciaSvg: temPerm ? c.rubricaPermanenciaSvg : undefined,
+    dataTafCorrida: temCorrida ? (c.dataTafCorrida || '').trim() || undefined : undefined,
+    dataTafCaminhada: temCaminhada ? (c.dataTafCaminhada || '').trim() || undefined : undefined,
   };
 }
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, TouchableOpacity, Text, View, Platform } from 'react-native';
-import { AppModal } from '../premium/AppModal';
+import { AppModal } from './premium/AppModal';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ResultadoCorridaItem } from '../navigation/types';

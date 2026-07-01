@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform } from 'react-native';
-import { AppModal } from '../premium/AppModal';
+import { AppModal } from './premium/AppModal';
 import { Search, Calendar, X } from 'lucide-react-native';
 import { LabelSvgText } from './LabelSvgText';
 import type { FiltroModalidadeTaf } from '../utils/tafRegistro';

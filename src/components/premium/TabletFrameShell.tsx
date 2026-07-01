@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useDeviceLayout, computeTabletFrameSize } from '../../hooks/useDeviceLayout';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppBackdrop } from '../mobile/AppBackdrop';
+import { DesktopTabletBackdrop } from './DesktopTabletBackdrop';
 
 type Props = {
   children: React.ReactNode;
@@ -45,14 +46,7 @@ export function TabletFrameShell({ children }: Props) {
 
   return (
     <View style={styles.desktopOuter}>
-      <LinearGradient
-        colors={['#0c0c14', '#12121c', '#07070d', '#0a0a12']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.ambientGlow} />
-      <View style={styles.ambientGlowSecondary} />
+      <DesktopTabletBackdrop />
 
       <View style={[styles.tabletAssembly, frameSize]}>
         <View style={styles.tabletShadowLayer} />
@@ -97,41 +91,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingVertical: 24,
     paddingHorizontal: 28,
-  },
-  ambientGlow: {
-    position: 'absolute',
-    width: 640,
-    height: 640,
-    borderRadius: 320,
-    backgroundColor: 'rgba(99, 102, 241, 0.1)',
-    top: '50%',
-    left: '50%',
-    marginTop: -320,
-    marginLeft: -320,
-    ...Platform.select({
-      web: { filter: 'blur(90px)' } as object,
-      default: {},
-    }),
-  },
-  ambientGlowSecondary: {
-    position: 'absolute',
-    width: 420,
-    height: 420,
-    borderRadius: 210,
-    backgroundColor: 'rgba(56, 189, 248, 0.07)',
-    top: '44%',
-    left: '52%',
-    marginTop: -210,
-    marginLeft: -210,
-    ...Platform.select({
-      web: { filter: 'blur(70px)' } as object,
-      default: {},
-    }),
+    position: 'relative',
   },
   tabletAssembly: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
   },
   tabletShadowLayer: {
     ...StyleSheet.absoluteFillObject,

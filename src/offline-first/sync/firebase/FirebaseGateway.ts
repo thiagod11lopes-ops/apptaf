@@ -4,6 +4,7 @@
  */
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { getFirestoreDb, getFirebaseAuth } from '../../../config/firebase';
+import { SYNC_UPDATE_BLOCKED } from '../syncAuthMessages';
 
 export {
   getAllCadastrosFirestoreLight,
@@ -130,8 +131,8 @@ export async function probeFirestoreConnectivityDetailed(
             }
           }
         }
-      } else if (/offline|unavailable|network|failed/i.test(msg)) {
-        lastReason = 'Sem conexão com o Firebase. Verifique a internet e tente novamente.';
+      } else if (/offline|unavailable|network|failed|fetch|cors|blocked|googleapis/i.test(msg)) {
+        lastReason = SYNC_UPDATE_BLOCKED;
       } else if (msg.trim()) {
         lastReason = msg;
       }

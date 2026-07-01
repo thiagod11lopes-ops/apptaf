@@ -34,8 +34,12 @@ import {
 } from './syncUiState';
 import { estimateSyncQueueCounts } from './lastWriteWinsSync';
 import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
-import { parseSyncError, type SyncErrorDetail } from './syncErrorInfo';
-import { SYNC_AUTH_REQUIRED, SYNC_AUTH_REQUIRED_MESSAGE } from './syncAuthMessages';
+import { parseSyncError, shouldTreatAsUpdateBlocked, type SyncErrorDetail } from './syncErrorInfo';
+import {
+  SYNC_AUTH_REQUIRED,
+  SYNC_AUTH_REQUIRED_MESSAGE,
+  SYNC_UPDATE_BLOCKED,
+} from './syncAuthMessages';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
@@ -585,7 +589,11 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
 
     const firestoreProbe = await probeFirestoreConnectivityDetailed(ownerUid);
     if (!firestoreProbe.ok) {
-      throw new Error(firestoreProbe.reason ?? 'Não foi possível conectar ao Firebase. Tente novamente.');
+      const reason = firestoreProbe.reason ?? 'Não foi possível conectar ao Firebase.';
+      if (shouldTreatAsUpdateBlocked(reason)) {
+        throw new Error(SYNC_UPDATE_BLOCKED);
+      }
+      throw new Error(reason);
     }
     completeStep('validate_permissions');
 

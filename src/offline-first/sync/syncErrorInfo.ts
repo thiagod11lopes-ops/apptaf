@@ -1,4 +1,9 @@
-import { SYNC_AUTH_REQUIRED, SYNC_AUTH_REQUIRED_MESSAGE } from './syncAuthMessages';
+import {
+  SYNC_AUTH_REQUIRED,
+  SYNC_AUTH_REQUIRED_MESSAGE,
+  SYNC_UPDATE_BLOCKED,
+  SYNC_UPDATE_BLOCKED_MESSAGE,
+} from './syncAuthMessages';
 
 export type SyncErrorDetail = {
   /** Identificador curto (ex.: network_offline, auth_required). */
@@ -27,6 +32,32 @@ function detail(
   return { code, typeLabel, message, hint };
 }
 
+const UPDATE_BLOCKED_HINT =
+  'Tente outra rede (ex.: dados móveis), VPN autorizada ou peça liberação do Firebase/Google ao administrador da rede.';
+
+/** Indica bloqueio de acesso à nuvem (rede/proxy/firewall), não falta de internet local. */
+export function shouldTreatAsUpdateBlocked(raw?: string | null): boolean {
+  if (!raw?.trim()) return false;
+  const msg = raw.trim();
+  if (msg === SYNC_UPDATE_BLOCKED || msg === SYNC_UPDATE_BLOCKED_MESSAGE) return true;
+  if (
+    /permission|permiss[aã]o|denied|insufficient|negada|token.*expirad|sess[aã]o google|AUTH_REQUIRED/i.test(
+      msg,
+    )
+  ) {
+    return false;
+  }
+  return (
+    /failed to fetch|network request failed|load failed|err_blocked|blocked by|cors|firestore\.googleapis|googleapis\.com|sem conex[aã]o com o firebase|n[aã]o foi poss[ií]vel conectar ao firebase|could not reach|net::err|access control|proxy|firewall/i.test(
+      msg,
+    )
+  );
+}
+
+function updateBlockedDetail(message = SYNC_UPDATE_BLOCKED_MESSAGE): SyncErrorDetail {
+  return detail('update_blocked', 'Atualização bloqueada', message, UPDATE_BLOCKED_HINT);
+}
+
 /** Classifica erro bruto da sincronização para exibição na UI. */
 export function parseSyncError(raw?: string | null): SyncErrorDetail {
   if (!raw?.trim()) return { ...GENERIC };
@@ -40,6 +71,10 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
       'Sem conexão com a internet.',
       'Verifique Wi‑Fi ou dados móveis e tente novamente.',
     );
+  }
+
+  if (msg === SYNC_UPDATE_BLOCKED || shouldTreatAsUpdateBlocked(msg)) {
+    return updateBlockedDetail(SYNC_UPDATE_BLOCKED_MESSAGE);
   }
 
   if (msg === 'sync_in_progress') {

@@ -34,10 +34,8 @@ const BOTTOM_BAR_PADDING = 96;
 export default function AppNavigator() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { useSidebarShell, isLandscape, hideSidebarForLandscape } = useDeviceLayout();
+  const { useSidebarShell } = useDeviceLayout();
   const [activeRoute, setActiveRoute] = useState<keyof RootStackParamList>('Home');
-  const tafImersivo =
-    activeRoute === 'AplicarTAF' && (hideSidebarForLandscape || isLandscape);
   const topChromeExtra =
     activeRoute === 'Home' ||
     activeRoute === 'Cadastro' ||
@@ -48,14 +46,11 @@ export default function AppNavigator() {
     activeRoute === 'AplicacaoTAF' ||
     activeRoute === 'CadastroAplicador'
       ? 8
-      : tafImersivo
-        ? 4
-        : 52;
-  const topChromePad =
-    useSidebarShell && !tafImersivo
-      ? Math.max(insets.top, 8) + 8
-      : Math.max(insets.top, 8) + topChromeExtra;
-  const bottomPad = useSidebarShell && !tafImersivo ? 24 : tafImersivo ? 12 : BOTTOM_BAR_PADDING;
+      : 52;
+  const topChromePad = useSidebarShell
+    ? Math.max(insets.top, 8) + 8
+    : Math.max(insets.top, 8) + topChromeExtra;
+  const bottomPad = useSidebarShell ? 24 : BOTTOM_BAR_PADDING;
 
   const syncRoute = useCallback(() => {
     setActiveRoute(getCurrentRouteName());

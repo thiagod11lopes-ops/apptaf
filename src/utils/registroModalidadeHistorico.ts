@@ -118,19 +118,17 @@ function resultadoDeveSerRemovido(
 }
 
 /**
- * Busca registro da modalidade no Histórico somente se o cadastro ainda tiver resultado.
- * Sessões órfãs (após exclusão do cadastro) não bloqueiam novo teste.
+ * Busca registro da modalidade no Histórico (independente do cadastro).
  */
-export function buscarRegistroModalidadeExistente(
+export function buscarRegistroModalidadeNoHistorico(
   nip: string,
   tipo: TipoProvaAplicada,
-  sessoes: SessaoAplicacaoTaf[],
   cadastro: CadastroItemPersist,
   cadastros: CadastroItemPersist[] = [],
+  sessoes: SessaoAplicacaoTaf[],
 ): RegistroModalidadeExistente | null {
   const alvoNip = nipDigitos(nip);
   if (!alvoNip && !cadastro.id) return null;
-  if (!cadastroTemResultadoNaModalidade(cadastro, tipo)) return null;
 
   const listaCadastros = cadastros.length > 0 ? cadastros : [cadastro];
 
@@ -151,6 +149,21 @@ export function buscarRegistroModalidadeExistente(
   }
 
   return melhor ? registroFromHistorico(melhor.sessao, melhor.resultado) : null;
+}
+
+/**
+ * Busca registro da modalidade no Histórico somente se o cadastro ainda tiver resultado.
+ * Sessões órfãs (após exclusão do cadastro) não bloqueiam novo teste.
+ */
+export function buscarRegistroModalidadeExistente(
+  nip: string,
+  tipo: TipoProvaAplicada,
+  sessoes: SessaoAplicacaoTaf[],
+  cadastro: CadastroItemPersist,
+  cadastros: CadastroItemPersist[] = [],
+): RegistroModalidadeExistente | null {
+  if (!cadastroTemResultadoNaModalidade(cadastro, tipo)) return null;
+  return buscarRegistroModalidadeNoHistorico(nip, tipo, cadastro, cadastros, sessoes);
 }
 
 /** Remove sessões do Registrador vinculadas ao cadastro (id determinístico). */

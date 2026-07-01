@@ -90,7 +90,7 @@ import {
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { cadastroPrecisaCompletarDadosTaf, dataNascimentoCadastroValida } from '../utils/cadastroDadosTaf';
 import { dataHojeBr } from '../utils/tafRegistro';
-import { avisoModalidadeExcludente } from '../utils/corridaCaminhadaExcludente';
+import { detectarConflitoCorridaCaminhada } from '../utils/corridaCaminhadaExcludente';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
 import {
   notaCaminhadaParaPersistencia,
@@ -1323,26 +1323,41 @@ export default function AplicarTAFScreen() {
     });
   }, []);
 
-  const finalizarConfirmacaoNip = useCallback(
-    (index: number, c: CadastroItemPersist) => {
+  const finalizarConfirmacaoNip = useCallback((index: number, c: CadastroItemPersist) => {
+    definirNipOk(index, c);
+  }, [definirNipOk]);
+
+  const abrirModalExcludenteSeConflito = useCallback(
+    (
+      index: number,
+      c: CadastroItemPersist,
+      nipLinha: string,
+      sessoes: Awaited<ReturnType<typeof getAllSessoesAplicacao>>,
+      cadastros: CadastroItemPersist[],
+    ): boolean => {
       const modalidade = tipoProvaRef.current ?? tipoProva;
-      const substituta = avisoModalidadeExcludente(modalidade, c, modoTafNaval);
-      if (substituta && (modalidade === 'corrida' || modalidade === 'caminhada')) {
-        const nome = (c.nome || '').trim() || 'Sem nome';
-        const nipLinha = nipsParticipantes[index] || c.nip;
-        setModalModalidadeExcludente({
-          index,
-          nome,
-          nip: nipLinha,
-          modalidadeExistente: substituta,
-          modalidadeNova: modalidade,
-          cadastro: c,
-        });
-        return;
-      }
-      definirNipOk(index, c);
+      const oposta = detectarConflitoCorridaCaminhada(
+        modalidade,
+        c,
+        nipLinha,
+        sessoes,
+        cadastros,
+        modoTafNaval,
+      );
+      if (!oposta || (modalidade !== 'corrida' && modalidade !== 'caminhada')) return false;
+
+      const nome = (c.nome || '').trim() || 'Sem nome';
+      setModalModalidadeExcludente({
+        index,
+        nome,
+        nip: nipLinha,
+        modalidadeExistente: oposta,
+        modalidadeNova: modalidade,
+        cadastro: c,
+      });
+      return true;
     },
-    [tipoProva, modoTafNaval, nipsParticipantes, definirNipOk],
+    [tipoProva, modoTafNaval],
   );
 
   const limparNipLinha = useCallback((index: number) => {
@@ -1397,12 +1412,20 @@ export default function AplicarTAFScreen() {
       const nome = (c.nome || '').trim() || 'Sem nome';
       const nipLinha = nipsParticipantes[index] || c.nip;
       const modalidade = tipoProvaRef.current ?? tipoProva;
+      const precisaHistorico =
+        (modalidade === 'corrida' || modalidade === 'caminhada') && !modoTafNaval;
 
-      if (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index)) {
-        const [sessoes, cadastros] = await Promise.all([
+      let sessoes: Awaited<ReturnType<typeof getAllSessoesAplicacao>> = [];
+      let cadastros: CadastroItemPersist[] = [];
+
+      if (precisaHistorico || (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index))) {
+        [sessoes, cadastros] = await Promise.all([
           getAllSessoesAplicacao(),
           getAllCadastros(),
         ]);
+      }
+
+      if (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index)) {
         const existente = buscarRegistroModalidadeExistente(
           nipLinha,
           modalidade,
@@ -1423,9 +1446,13 @@ export default function AplicarTAFScreen() {
         }
       }
 
+      if (precisaHistorico && abrirModalExcludenteSeConflito(index, c, nipLinha, sessoes, cadastros)) {
+        return;
+      }
+
       finalizarConfirmacaoNip(index, c);
     },
-    [nipsParticipantes, tipoProva, finalizarConfirmacaoNip],
+    [nipsParticipantes, tipoProva, modoTafNaval, finalizarConfirmacaoNip, abrirModalExcludenteSeConflito],
   );
 
   const atualizarDadosNipLinha = useCallback(
@@ -1559,10 +1586,10 @@ export default function AplicarTAFScreen() {
     const cadastros = await getAllCadastros();
     const busca = buscarCadastroPorNomeOuNip(cadastros, nip);
     if (busca.kind === 'found') {
-      finalizarConfirmacaoNip(index, busca.cadastro);
+      definirNipOk(index, busca.cadastro);
     }
     setModalTesteExistente(null);
-  }, [modalTesteExistente, finalizarConfirmacaoNip]);
+  }, [modalTesteExistente, definirNipOk]);
 
   const prepararProva = useCallback(() => {
     if (

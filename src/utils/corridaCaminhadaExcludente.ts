@@ -1,7 +1,13 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import type { TipoProvaTAF } from '../taf/tafProvaTypes';
+import { buscarRegistroModalidadeNoHistorico } from './registroModalidadeHistorico';
 import type { ResultadoTafLinha } from './resultadoTafCadastro';
-import { temAvaliacaoCorrida, temAvaliacaoCaminhada } from './resultadoTafCadastro';
+import {
+  cadastroParaLinhaResultado,
+  temAvaliacaoCorrida,
+  temAvaliacaoCaminhada,
+} from './resultadoTafCadastro';
 
 export type ModalidadeExcludenteSubstituta = 'corrida' | 'caminhada';
 
@@ -17,7 +23,49 @@ function compareDataBr(a: string, b: string): number {
   return pa.localeCompare(pb);
 }
 
-/** Modalidade oposta que ficará dispensável ao aplicar corrida ou caminhada (TAF Armada). */
+function temRegistroModalidade(
+  modalidade: ModalidadeExcludenteSubstituta,
+  cadastro: CadastroItemPersist,
+  nip: string,
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[],
+): boolean {
+  const noCadastro =
+    modalidade === 'corrida' ? temAvaliacaoCorrida(cadastro) : temAvaliacaoCaminhada(cadastro);
+  if (noCadastro) return true;
+  return !!buscarRegistroModalidadeNoHistorico(nip, modalidade, cadastro, cadastros, sessoes);
+}
+
+/**
+ * Detecta conflito corrida × caminhada ao confirmar NIP no TAF Armada.
+ * Considera cadastro e Histórico; não avisa ao repetir a modalidade já vigente.
+ */
+export function detectarConflitoCorridaCaminhada(
+  prova: TipoProvaTAF | null,
+  cadastro: CadastroItemPersist,
+  nip: string,
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[],
+  modoTafNaval: boolean,
+): ModalidadeExcludenteSubstituta | null {
+  if (modoTafNaval || (prova !== 'corrida' && prova !== 'caminhada')) return null;
+
+  const oposta: ModalidadeExcludenteSubstituta = prova === 'corrida' ? 'caminhada' : 'corrida';
+  const temOposta = temRegistroModalidade(oposta, cadastro, nip, sessoes, cadastros);
+  if (!temOposta) return null;
+
+  const temAtual = temRegistroModalidade(prova, cadastro, nip, sessoes, cadastros);
+  if (temAtual) {
+    const linha = cadastroParaLinhaResultado(cadastro);
+    const vigente = modalidadeCorridaCaminhadaVigente(linha);
+    if (vigente === prova) return null;
+    if (vigente === oposta) return oposta;
+  }
+
+  return oposta;
+}
+
+/** @deprecated Use {@link detectarConflitoCorridaCaminhada} com sessões do Histórico. */
 export function avisoModalidadeExcludente(
   prova: TipoProvaTAF | null,
   cadastro: CadastroItemPersist,

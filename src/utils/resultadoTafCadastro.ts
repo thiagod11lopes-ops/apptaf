@@ -1,6 +1,7 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { nipDigitos } from './nipFormat';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
+import { compareByNomePtBr } from './compareNomePtBr';
 import { mesclarRubricas, rubricasDoCadastro, type RubricasPorNip } from './rubricasDasSessoes';
 import { temRegistroModalidade } from './tafRegistro';
 
@@ -148,7 +149,7 @@ export function listarPendenciasParciais(cadastros: CadastroItemPersist[]): Pend
   return cadastros
     .filter(cadastroComPendenciaParcialTaf)
     .map(pendenciaParcialFromCadastro)
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    .sort(compareByNomePtBr);
 }
 
 export type ResultadoGeralItem = ResultadoTafLinha & {
@@ -166,7 +167,7 @@ export function listarResultadosGeral(cadastros: CadastroItemPersist[]): Resulta
       ...cadastroParaLinhaResultado(c),
       statusTaf: cadastroComTafCompleto(c) ? ('Completo' as const) : ('Parcial' as const),
     }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    .sort(compareByNomePtBr);
 }
 
 export function postoGradFromCadastro(
@@ -304,7 +305,7 @@ function filtrarCadastrosPorNipNomeBase(
     });
   }
 
-  return lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+  return lista.sort(compareByNomePtBr);
 }
 
 /** Busca por NIP e/ou nome; retorna vazio se ambos estiverem em branco. */

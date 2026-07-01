@@ -36,7 +36,13 @@ export async function getAllCadastrosFirestoreLight(uid: string): Promise<Cadast
 
   for (const docSnap of snap.docs) {
     const raw = docSnap.data() as CadastroItemPersist & { deleted?: boolean; deletedAt?: number };
-    items.push(toCadastroLight({ ...raw, id: docSnap.id }));
+    items.push(
+      toCadastroLight({
+        ...raw,
+        id: docSnap.id,
+        nome: (raw.nome ?? '').trim(),
+      }),
+    );
   }
 
   return dedupeCadastrosPorNip(items);

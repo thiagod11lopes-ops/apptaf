@@ -13,6 +13,7 @@ import {
   temAvaliacaoCorridaOuCaminhada,
 } from './resultadoTafCadastro';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
+import { compareByNomePtBr } from './compareNomePtBr';
 
 type ModalidadeHistorico = {
   nota: string;
@@ -325,7 +326,7 @@ export function listarResultadosGeralFromHistorico(
       ...aggParaLinha(agg),
       postoGrad: postoGradFromLinhaId(agg.id, agg.nip, cadastros),
     }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    .sort(compareByNomePtBr);
 }
 
 /**
@@ -339,7 +340,7 @@ export function listarPendenciasParciaisFromHistorico(
   return agregarHistoricoPorParticipante(unificadas, cadastros)
     .map(aggParaPendenciaParcial)
     .filter((item): item is PendenciaParcialItem => item != null)
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    .sort(compareByNomePtBr);
 }
 
 /** Militares com as três modalidades registradas no Histórico. */

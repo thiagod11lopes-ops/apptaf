@@ -5,6 +5,7 @@ import type { PendenciaParcialItem } from './resultadoTafCadastro';
 import { temAvaliacaoCorridaOuCaminhada } from './resultadoTafCadastro';
 import { agregarHistoricoPorParticipante } from './resultadoGeralHistorico';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
+import { compareByNomePtBr } from './compareNomePtBr';
 
 export type FiltroPendenciaTaf = 'total' | 'corrida' | 'natacao' | 'permanencia';
 
@@ -133,7 +134,7 @@ export function montarListaPendencias(
     if (chaveNip) idsIncluidos.add(chaveNip);
   }
 
-  return lista.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return lista.sort(compareByNomePtBr);
 }
 
 export function calcularContagemPendencias(

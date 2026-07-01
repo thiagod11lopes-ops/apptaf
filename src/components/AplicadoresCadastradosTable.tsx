@@ -9,6 +9,7 @@ import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from './mobile/TafTabChrome';
+import { compareByNomePtBr } from '../utils/compareNomePtBr';
 
 function postoGradLabel(item: AplicadorItemPersist): string {
   if (item.categoria === 'Oficiais') return (item.oficial || '').trim() || '—';
@@ -59,7 +60,7 @@ export function AplicadoresCadastradosTable({
   const glass = getAplicarTafGlass(theme);
 
   const sorted = useMemo(
-    () => [...data].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    () => [...data].sort(compareByNomePtBr),
     [data],
   );
 

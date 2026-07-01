@@ -23,6 +23,7 @@ import {
   type RubricaStroke,
 } from '../../utils/rubricaSvgBuilder';
 import { RUBRICA_COR_TRACO } from '../../utils/rubricaSvgNormalize';
+import { compareByNomePtBr } from '../../utils/compareNomePtBr';
 import { RUBRICA_NATIVA_ALTURA } from '../../utils/rubricaConstants';
 import {
   AssinaturaFuturistaOverlay,
@@ -87,7 +88,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
     setCarregandoAplicadores(true);
     void getAllAplicadores()
       .then((lista) => {
-        const ordenados = [...lista].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        const ordenados = [...lista].sort(compareByNomePtBr);
         setAplicadores(ordenados);
       })
       .catch(() => setAplicadores([]))

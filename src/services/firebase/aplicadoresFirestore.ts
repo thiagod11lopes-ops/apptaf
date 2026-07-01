@@ -11,6 +11,7 @@ function aplicadoresCollection(uid: string) {
   return collection(db, userAplicadoresPath(uid));
 }
 
+import { compareByNomePtBr } from '../../utils/compareNomePtBr';
 import { stripSenhaFromAplicador, toAplicadorFirestorePayload } from '../../utils/aplicadorSyncPolicy';
 
 /** Aplicadores do chefe — senhaHash para assinatura offline; senha em texto nunca na nuvem. */
@@ -19,9 +20,13 @@ export async function getAllAplicadoresFirestore(uid: string): Promise<Aplicador
   return snap.docs
     .map((docSnap) => {
       const raw = docSnap.data() as AplicadorItemPersist & { deleted?: boolean; deletedAt?: number };
-      return stripSenhaFromAplicador({ ...raw, id: docSnap.id });
+      return stripSenhaFromAplicador({
+        ...raw,
+        id: docSnap.id,
+        nome: (raw.nome ?? '').trim() || '—',
+      });
     })
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    .sort(compareByNomePtBr);
 }
 
 export async function addAplicadorFirestore(uid: string, item: AplicadorItemPersist): Promise<void> {

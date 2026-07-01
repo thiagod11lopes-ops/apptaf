@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Platform, StyleSheet, View, Text, ActivityIndicator, Alert } from 'react-native';
+import { Platform, StyleSheet, View, Text, ActivityIndicator } from 'react-native';
 import { BookOpen, Check, ClipboardList, Save, Settings, User, UserRoundCheck, Sparkles } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -13,6 +13,10 @@ import {
   subscribeModoDemonstracao,
   toggleModoDemonstracaoSistema,
 } from '../../services/modoDemonstracao';
+import {
+  ConfirmacaoModoDemonstracaoModal,
+  type ModoDemonstracaoModalPhase,
+} from './ConfirmacaoModoDemonstracaoModal';
 
 const ICON_SIZE = 22;
 const BTN_SIZE = PREMIUM.minTouch;
@@ -81,45 +85,43 @@ export function TopActionIcons({
   const { isAuthenticated, isBoss } = useAuth();
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [demoCarregando, setDemoCarregando] = useState(false);
+  const [demoModal, setDemoModal] = useState<{
+    phase: ModoDemonstracaoModalPhase;
+    ativar: boolean;
+    errorMessage?: string;
+  } | null>(null);
 
   useEffect(() => subscribeModoDemonstracao(() => setDemoAtivo(isModoDemonstracaoAtivo())), []);
 
+  const fecharModalDemonstracao = useCallback(() => {
+    if (demoCarregando) return;
+    setDemoModal(null);
+  }, [demoCarregando]);
+
   const alternarDemonstracao = useCallback(() => {
     if (demoCarregando) return;
-    const ativar = !demoAtivo;
-    Alert.alert(
-      ativar ? 'Carregar dados de exemplo?' : 'Restaurar dados reais?',
-      ativar
-        ? 'Serão gerados 2.243 militares fictícios para demonstração. Seus dados reais ficam guardados localmente e nada será enviado à nuvem.'
-        : 'Os dados de demonstração serão removidos e seus dados reais serão restaurados.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: ativar ? 'Carregar exemplo' : 'Restaurar',
-          onPress: () => {
-            setDemoCarregando(true);
-            void toggleModoDemonstracaoSistema()
-              .then(({ ativo }) => {
-                setDemoAtivo(ativo);
-                Alert.alert(
-                  ativo ? 'Modo demonstração ativo' : 'Dados reais restaurados',
-                  ativo
-                    ? 'Explore o sistema com dados fictícios. Toque novamente no ícone de exemplo para voltar aos seus dados.'
-                    : 'Seus dados reais foram aplicados novamente.',
-                );
-              })
-              .catch((e) => {
-                Alert.alert(
-                  'Não foi possível concluir',
-                  e instanceof Error ? e.message : 'Tente novamente.',
-                );
-              })
-              .finally(() => setDemoCarregando(false));
-          },
-        },
-      ],
-    );
+    setDemoModal({ phase: 'confirm', ativar: !demoAtivo });
   }, [demoAtivo, demoCarregando]);
+
+  const confirmarDemonstracao = useCallback(() => {
+    if (!demoModal || demoCarregando) return;
+    const { ativar } = demoModal;
+    setDemoModal({ phase: 'loading', ativar });
+    setDemoCarregando(true);
+    void toggleModoDemonstracaoSistema()
+      .then(({ ativo }) => {
+        setDemoAtivo(ativo);
+        setDemoModal({ phase: 'success', ativar: ativo });
+      })
+      .catch((e) => {
+        setDemoModal({
+          phase: 'error',
+          ativar,
+          errorMessage: e instanceof Error ? e.message : 'Tente novamente.',
+        });
+      })
+      .finally(() => setDemoCarregando(false));
+  }, [demoModal, demoCarregando]);
   const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
   const iconSize = ICON_SIZE;
   const btnSize = BTN_SIZE;
@@ -165,6 +167,7 @@ export function TopActionIcons({
         : 'Enviar e receber dados com a nuvem';
 
   return (
+    <>
     <View style={[styles.row, inline && styles.rowInline, centered && styles.rowCentered]}>
       {onSyncPress
         ? wrapTooltip(
@@ -314,6 +317,15 @@ export function TopActionIcons({
         </PressableScale>,
       )}
     </View>
+    <ConfirmacaoModoDemonstracaoModal
+      visible={demoModal != null}
+      phase={demoModal?.phase ?? 'confirm'}
+      ativar={demoModal?.ativar ?? false}
+      errorMessage={demoModal?.errorMessage}
+      onClose={fecharModalDemonstracao}
+      onConfirm={confirmarDemonstracao}
+    />
+    </>
   );
 }
 

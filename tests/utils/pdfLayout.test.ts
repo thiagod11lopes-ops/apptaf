@@ -19,6 +19,7 @@ describe('pdfLayout', () => {
     expect(html).toContain('size: A4 landscape');
     expect(html).toContain('pdf-print-header');
     expect(html).toContain('pdf-print-footer');
+    expect(html).toContain('pdf-print-top-gap');
     expect(html).toContain('table-header-group');
     expect(html).toContain('Resumo da aplicação — TAF');
     expect(html).toContain('aplicador-assinatura');

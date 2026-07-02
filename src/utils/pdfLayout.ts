@@ -2,11 +2,14 @@
 export const PDF_A4_LANDSCAPE_WIDTH = 842;
 export const PDF_A4_LANDSCAPE_HEIGHT = 595;
 
-/** Margens @page (mm) — reservam área para cabeçalho/rodapé fixos sem sobrepor a tabela. */
-export const PDF_PAGE_MARGIN_TOP_MM = 14;
+/** Margens @page (mm) — laterais e rodapé; o topo usa espaçador por bloco de folha. */
+export const PDF_PAGE_MARGIN_TOP_MM = 8;
 export const PDF_PAGE_MARGIN_BOTTOM_MM = 22;
 export const PDF_PAGE_MARGIN_BOTTOM_SEM_ASSINATURA_MM = 10;
 export const PDF_PAGE_MARGIN_SIDE_MM = 10;
+
+/** Espaço acima da tabela em cada folha — evita sobreposição com o título fixo. */
+export const PDF_PRINT_TOP_GAP_MM = 26;
 
 /** Máximo de linhas de dados por folha — visual limpo e previsível. */
 export const PDF_MAX_ROWS_PER_PAGE = 12;
@@ -67,6 +70,14 @@ export const PDF_PRINT_TABLE_STYLES = `
     break-before: page;
     margin-top: 0;
   }
+  .pdf-print-top-gap {
+    display: block;
+    width: 100%;
+    height: ${PDF_PRINT_TOP_GAP_MM}mm;
+    min-height: ${PDF_PRINT_TOP_GAP_MM}mm;
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
   @media print {
     .pdf-print-body table thead {
       display: table-header-group;
@@ -112,6 +123,10 @@ function renderPdfTableChunk(
   </table>`;
 }
 
+function pdfPageBlockOpen(): string {
+  return `<section class="pdf-print-page-block"><div class="pdf-print-top-gap" aria-hidden="true"></div>`;
+}
+
 /** Tabela paginada — até 12 linhas por folha, com cabeçalho de colunas repetido. */
 export function buildPaginatedPdfTableHtml(options: BuildPdfTableOptions): string {
   const {
@@ -126,7 +141,7 @@ export function buildPaginatedPdfTableHtml(options: BuildPdfTableOptions): strin
 
   if (rowHtml.length === 0) {
     const leading = leadingHtml ? `<div class="pdf-print-leading">${leadingHtml}</div>` : '';
-    return `<section class="pdf-print-page-block">${leading}${renderPdfTableChunk(
+    return `${pdfPageBlockOpen()}${leading}${renderPdfTableChunk(
       tableClass,
       theadHtml,
       [],
@@ -140,7 +155,7 @@ export function buildPaginatedPdfTableHtml(options: BuildPdfTableOptions): strin
     .map((chunk, pageIndex) => {
       const leading =
         pageIndex === 0 && leadingHtml ? `<div class="pdf-print-leading">${leadingHtml}</div>` : '';
-      return `<section class="pdf-print-page-block">${leading}${renderPdfTableChunk(
+      return `${pdfPageBlockOpen()}${leading}${renderPdfTableChunk(
         tableClass,
         theadHtml,
         chunk,
@@ -159,7 +174,7 @@ export function buildPdfTableHtml(options: BuildPdfTableOptions): string {
 /** Altura útil da área de conteúdo (pt) para estimativa de folhas. */
 export function pdfLandscapeContentHeightPt(hasAplicadorFooter: boolean): number {
   const mmToPt = 72 / 25.4;
-  const top = PDF_PAGE_MARGIN_TOP_MM * mmToPt;
+  const top = (PDF_PAGE_MARGIN_TOP_MM + PDF_PRINT_TOP_GAP_MM) * mmToPt;
   const bottom =
     (hasAplicadorFooter ? PDF_PAGE_MARGIN_BOTTOM_MM : PDF_PAGE_MARGIN_BOTTOM_SEM_ASSINATURA_MM) *
     mmToPt;
@@ -204,7 +219,7 @@ function pdfPageStyles(hasAplicador: boolean): string {
     right: 0;
     z-index: 1000;
     box-sizing: border-box;
-    padding: 2mm ${PDF_PAGE_MARGIN_SIDE_MM}mm 2mm;
+    padding: 2mm ${PDF_PAGE_MARGIN_SIDE_MM}mm 3mm;
     background: #fff;
     border-bottom: 1px solid #d1d5db;
   }

@@ -103,6 +103,7 @@ describe('assinatura aplicador no PDF do histórico', () => {
     }));
     const html = buildResumoAplicacaoHtml(resultados, 'Corrida');
     expect((html.match(/<section class="pdf-print-page-block">/g) ?? []).length).toBe(3);
+    expect((html.match(/pdf-print-top-gap/g) ?? []).length).toBeGreaterThanOrEqual(3);
     expect((html.match(/<thead>/g) ?? []).length).toBe(3);
     expect((html.match(/<th>Corredor<\/th>/g) ?? []).length).toBe(3);
     expect((html.match(/<th>NIP<\/th>/g) ?? []).length).toBe(3);

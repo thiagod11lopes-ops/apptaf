@@ -17,6 +17,9 @@ export const PDF_PRINT_BOTTOM_GAP_MM = 30;
 /** Máximo de linhas de dados por folha — visual limpo e previsível. */
 export const PDF_MAX_ROWS_PER_PAGE = 12;
 
+/** Com assinatura do aplicador, menos linhas cabem sem folha vazia (título + tabela + rodapé). */
+export const PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA = 8;
+
 export function escapeHtmlPdf(s: string): string {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -36,6 +39,10 @@ export const PDF_PRINT_TABLE_STYLES = `
     break-inside: avoid-page;
     width: 100%;
     border-collapse: collapse;
+    margin-top: ${PDF_PRINT_TOP_GAP_MM}mm;
+  }
+  .pdf-print-page-block--com-assinatura table {
+    margin-bottom: ${PDF_PRINT_BOTTOM_GAP_MM}mm;
   }
   .pdf-print-body table thead,
   .pdf-print-page-block table thead {
@@ -65,29 +72,13 @@ export const PDF_PRINT_TABLE_STYLES = `
     margin-bottom: 8px;
   }
   .pdf-print-page-block {
-    page-break-inside: avoid;
-    break-inside: avoid-page;
+    page-break-inside: auto;
+    break-inside: auto;
   }
   .pdf-print-page-block + .pdf-print-page-block {
     page-break-before: always;
     break-before: page;
     margin-top: 0;
-  }
-  .pdf-print-top-gap {
-    display: block;
-    width: 100%;
-    height: ${PDF_PRINT_TOP_GAP_MM}mm;
-    min-height: ${PDF_PRINT_TOP_GAP_MM}mm;
-    page-break-inside: avoid;
-    break-inside: avoid-page;
-  }
-  .pdf-print-bottom-gap {
-    display: block;
-    width: 100%;
-    height: ${PDF_PRINT_BOTTOM_GAP_MM}mm;
-    min-height: ${PDF_PRINT_BOTTOM_GAP_MM}mm;
-    page-break-inside: avoid;
-    break-inside: avoid-page;
   }
   @media print {
     .pdf-print-body table thead {
@@ -135,7 +126,7 @@ function renderPdfTableChunk(
 }
 
 function pdfPageBlockOpen(): string {
-  return `<section class="pdf-print-page-block"><div class="pdf-print-top-gap" aria-hidden="true"></div>`;
+  return '<section class="pdf-print-page-block">';
 }
 
 /** Tabela paginada — até 12 linhas por folha, com cabeçalho de colunas repetido. */
@@ -161,7 +152,11 @@ export function buildPaginatedPdfTableHtml(options: BuildPdfTableOptions): strin
     )}</section>`;
   }
 
-  const chunks = paginatePdfTableRows(rowHtml, rowsPerPage);
+  const chunks = paginatePdfTableRows(rowHtml, rowsPerPage).filter((chunk) => chunk.length > 0);
+  if (chunks.length === 0) {
+    return '';
+  }
+
   return chunks
     .map((chunk, pageIndex) => {
       const leading =
@@ -300,11 +295,11 @@ export type PdfLandscapeDocumentOptions = {
   extraStyles?: string;
 };
 
-function injectAplicadorFooterGap(conteudoHtml: string): string {
+function prepareConteudoComAssinatura(conteudoHtml: string): string {
   if (!conteudoHtml.includes('pdf-print-page-block')) return conteudoHtml;
   return conteudoHtml.replace(
-    /<\/section>/g,
-    '<div class="pdf-print-bottom-gap" aria-hidden="true"></div></section>',
+    /<section class="pdf-print-page-block">/g,
+    '<section class="pdf-print-page-block pdf-print-page-block--com-assinatura">',
   );
 }
 
@@ -313,7 +308,7 @@ export function buildPdfLandscapeDocument(options: PdfLandscapeDocumentOptions):
   const hasAplicador = Boolean(options.aplicadorHtml?.trim());
   const footer = hasAplicador ? `<div class="pdf-print-footer">${options.aplicadorHtml}</div>` : '';
   const conteudoHtml = hasAplicador
-    ? injectAplicadorFooterGap(options.conteudoHtml)
+    ? prepareConteudoComAssinatura(options.conteudoHtml)
     : options.conteudoHtml;
 
   return `<!DOCTYPE html>

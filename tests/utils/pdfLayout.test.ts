@@ -4,23 +4,30 @@ import {
   buildPdfTableHtml,
   estimarFolhasPdfPorLinhas,
   PDF_MAX_ROWS_PER_PAGE,
+  PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
   paginatePdfTableRows,
 } from '../../src/utils/pdfLayout';
 
 describe('pdfLayout', () => {
   it('gera documento A4 paisagem com cabeçalho fixo e tabela contínua', () => {
+    const tabela = buildPdfTableHtml({
+      tableClass: 'resultados-taf',
+      theadHtml: '<tr><th>NIP</th></tr>',
+      rowHtml: ['<tr><td>1</td></tr>'],
+      emptyColspan: 1,
+      rowsPerPage: PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
+    });
     const html = buildPdfLandscapeDocument({
       documentTitle: 'Teste',
       titulo: 'Resumo da aplicação — TAF',
       metaHtml: 'Gerado em 28/06/2026 · <strong>Corrida</strong>',
-      conteudoHtml: '<table><tr><td>Linha</td></tr></table>',
+      conteudoHtml: tabela,
       aplicadorHtml: '<div class="aplicador-assinatura">Assinatura</div>',
     });
     expect(html).toContain('size: A4 landscape');
     expect(html).toContain('pdf-print-header');
     expect(html).toContain('pdf-print-footer');
-    expect(html).toContain('pdf-print-top-gap');
-    expect(html).toContain('pdf-print-bottom-gap');
+    expect(html).toContain('pdf-print-page-block--com-assinatura');
     expect(html).toContain('table-header-group');
     expect(html).toContain('Resumo da aplicação — TAF');
     expect(html).toContain('aplicador-assinatura');
@@ -49,5 +56,18 @@ describe('pdfLayout', () => {
     expect(estimarFolhasPdfPorLinhas(50)).toBe(5);
     expect(estimarFolhasPdfPorLinhas(12)).toBe(1);
     expect(estimarFolhasPdfPorLinhas(13)).toBe(2);
+  });
+
+  it('com assinatura limita a 8 linhas por folha para evitar páginas sem tabela', () => {
+    expect(estimarFolhasPdfPorLinhas(25, PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA)).toBe(4);
+    const html = buildPdfTableHtml({
+      tableClass: 'resultados-taf',
+      theadHtml: '<tr><th>NIP</th><th>Nome</th></tr>',
+      rowHtml: Array.from({ length: 25 }, (_, i) => `<tr><td>${i}</td><td>Mil ${i}</td></tr>`),
+      emptyColspan: 2,
+      rowsPerPage: PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
+    });
+    expect((html.match(/<tbody>/g) ?? []).length).toBe(4);
+    expect(html).not.toMatch(/<tbody>\s*<\/tbody>/);
   });
 });

@@ -17,11 +17,18 @@ import {
   estimarFolhasPdfPorLinhas,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
+  PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
 
 /** Estima quantas folhas A4 paisagem serão necessárias para o resumo da aplicação. */
-export function estimarFolhasA4PdfResumoAplicacao(quantidadeLinhas: number): number {
-  return estimarFolhasPdfPorLinhas(quantidadeLinhas);
+export function estimarFolhasA4PdfResumoAplicacao(
+  quantidadeLinhas: number,
+  comAssinaturaAplicador = true,
+): number {
+  return estimarFolhasPdfPorLinhas(
+    quantidadeLinhas,
+    comAssinaturaAplicador ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
+  );
 }
 
 /** Inferência do rótulo da prova (Corrida, Natação, etc.) a partir dos resultados da sessão. */
@@ -74,6 +81,7 @@ export function buildResumoAplicacaoHtml(
     });
 
   const metaHtml = `Gerado em ${escapeHtmlPdf(dataStr)} · <strong>${tituloProva}</strong>`;
+  const comAssinatura = Boolean(aplicadorAssinatura?.nome?.trim());
 
   const conteudoHtml =
     resultados.length === 0
@@ -83,6 +91,7 @@ export function buildResumoAplicacaoHtml(
           theadHtml: theadPdf,
           rowHtml: rows,
           emptyColspan: 7,
+          rowsPerPage: comAssinatura ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
         });
 
   return buildPdfLandscapeDocument({

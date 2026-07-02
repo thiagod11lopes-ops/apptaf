@@ -102,13 +102,11 @@ describe('assinatura aplicador no PDF do histórico', () => {
       prova: 'corrida' as const,
     }));
     const html = buildResumoAplicacaoHtml(resultados, 'Corrida', undefined, assinatura);
-    expect((html.match(/<section class="pdf-print-page-block">/g) ?? []).length).toBe(3);
-    expect((html.match(/pdf-print-top-gap/g) ?? []).length).toBeGreaterThanOrEqual(3);
-    expect((html.match(/pdf-print-bottom-gap/g) ?? []).length).toBeGreaterThanOrEqual(3);
-    expect((html.match(/<thead>/g) ?? []).length).toBe(3);
-    expect((html.match(/<th>Corredor<\/th>/g) ?? []).length).toBe(3);
-    expect((html.match(/<th>NIP<\/th>/g) ?? []).length).toBe(3);
-    expect((html.match(/<th>Tempo<\/th>/g) ?? []).length).toBe(3);
-    expect((html.match(/<th class="col-rubrica">Rúbrica<\/th>/g) ?? []).length).toBe(3);
+    expect((html.match(/<section class="pdf-print-page-block pdf-print-page-block--com-assinatura">/g) ?? []).length).toBe(4);
+    expect((html.match(/<thead>/g) ?? []).length).toBe(4);
+    expect((html.match(/<th>Corredor<\/th>/g) ?? []).length).toBe(4);
+    expect((html.match(/<th>NIP<\/th>/g) ?? []).length).toBe(4);
+    expect((html.match(/<th>Tempo<\/th>/g) ?? []).length).toBe(4);
+    expect((html.match(/<th class="col-rubrica">Rúbrica<\/th>/g) ?? []).length).toBe(4);
   });
 });

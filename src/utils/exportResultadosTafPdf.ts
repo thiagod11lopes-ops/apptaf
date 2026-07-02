@@ -15,11 +15,18 @@ import {
   estimarFolhasPdfPorLinhas,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
+  PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
 
 /** Estima quantas folhas A4 paisagem serão necessárias para imprimir a tabela de resultados. */
-export function estimarFolhasA4PdfResultadosTaf(quantidadeLinhas: number): number {
-  return estimarFolhasPdfPorLinhas(quantidadeLinhas);
+export function estimarFolhasA4PdfResultadosTaf(
+  quantidadeLinhas: number,
+  comAssinaturaAplicador = false,
+): number {
+  return estimarFolhasPdfPorLinhas(
+    quantidadeLinhas,
+    comAssinaturaAplicador ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
+  );
 }
 
 /** Tempo padrão da prova de permanência em relatórios PDF. */
@@ -70,12 +77,14 @@ export function buildResultadosTafHtml(
     );
 
   const metaHtml = `${escapeHtmlPdf(subtitulo)} · Gerado em ${escapeHtmlPdf(dataStr)} · ${linhas.length} registro(s)`;
+  const comAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));
 
   const conteudoHtml = buildPdfTableHtml({
     tableClass: 'resultados-taf',
     theadHtml: RESULTADOS_TAF_THEAD,
     rowHtml: rows,
     emptyColspan: 14,
+    rowsPerPage: comAssinatura ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
   });
 
   return buildPdfLandscapeDocument({

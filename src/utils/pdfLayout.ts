@@ -8,6 +8,9 @@ export const PDF_PAGE_MARGIN_BOTTOM_MM = 22;
 export const PDF_PAGE_MARGIN_BOTTOM_SEM_ASSINATURA_MM = 10;
 export const PDF_PAGE_MARGIN_SIDE_MM = 10;
 
+/** Máximo de linhas de dados por folha — visual limpo e previsível. */
+export const PDF_MAX_ROWS_PER_PAGE = 12;
+
 export function escapeHtmlPdf(s: string): string {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -43,6 +46,15 @@ export const PDF_PRINT_TABLE_STYLES = `
     break-inside: avoid-page;
     margin-bottom: 8px;
   }
+  .pdf-print-page-block {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+  .pdf-print-page-block + .pdf-print-page-block {
+    page-break-before: always;
+    break-before: page;
+    margin-top: 0;
+  }
   @media print {
     .pdf-print-body table thead {
       display: table-header-group;
@@ -57,10 +69,39 @@ export type BuildPdfTableOptions = {
   emptyColspan: number;
   emptyMessage?: string;
   leadingHtml?: string;
+  rowsPerPage?: number;
 };
 
-/** Tabela única — o navegador preenche cada folha e quebra linhas quando necessário. */
-export function buildPdfTableHtml(options: BuildPdfTableOptions): string {
+/** Divide linhas `<tr>…</tr>` em blocos de até N linhas por folha. */
+export function paginatePdfTableRows(rows: string[], rowsPerPage: number): string[][] {
+  if (rows.length === 0) return [];
+  const limit = Math.max(1, rowsPerPage);
+  const chunks: string[][] = [];
+  for (let index = 0; index < rows.length; index += limit) {
+    chunks.push(rows.slice(index, index + limit));
+  }
+  return chunks;
+}
+
+function renderPdfTableChunk(
+  tableClass: string,
+  theadHtml: string,
+  rows: string[],
+  emptyColspan: number,
+  emptyMessage: string,
+): string {
+  const tbody =
+    rows.length > 0
+      ? rows.join('')
+      : `<tr><td colspan="${emptyColspan}">${emptyMessage}</td></tr>`;
+  return `<table class="${tableClass}">
+    <thead>${theadHtml}</thead>
+    <tbody>${tbody}</tbody>
+  </table>`;
+}
+
+/** Tabela paginada — até 12 linhas por folha, com cabeçalho de colunas repetido. */
+export function buildPaginatedPdfTableHtml(options: BuildPdfTableOptions): string {
   const {
     tableClass,
     theadHtml,
@@ -68,19 +109,39 @@ export function buildPdfTableHtml(options: BuildPdfTableOptions): string {
     emptyColspan,
     emptyMessage = 'Nenhum registro',
     leadingHtml = '',
+    rowsPerPage = PDF_MAX_ROWS_PER_PAGE,
   } = options;
 
-  const tbody =
-    rowHtml.length > 0
-      ? rowHtml.join('')
-      : `<tr><td colspan="${emptyColspan}">${emptyMessage}</td></tr>`;
+  if (rowHtml.length === 0) {
+    const leading = leadingHtml ? `<div class="pdf-print-leading">${leadingHtml}</div>` : '';
+    return `<section class="pdf-print-page-block">${leading}${renderPdfTableChunk(
+      tableClass,
+      theadHtml,
+      [],
+      emptyColspan,
+      emptyMessage,
+    )}</section>`;
+  }
 
-  const leading = leadingHtml ? `<div class="pdf-print-leading">${leadingHtml}</div>` : '';
+  const chunks = paginatePdfTableRows(rowHtml, rowsPerPage);
+  return chunks
+    .map((chunk, pageIndex) => {
+      const leading =
+        pageIndex === 0 && leadingHtml ? `<div class="pdf-print-leading">${leadingHtml}</div>` : '';
+      return `<section class="pdf-print-page-block">${leading}${renderPdfTableChunk(
+        tableClass,
+        theadHtml,
+        chunk,
+        emptyColspan,
+        emptyMessage,
+      )}</section>`;
+    })
+    .join('\n');
+}
 
-  return `${leading}<table class="${tableClass}">
-    <thead>${theadHtml}</thead>
-    <tbody>${tbody}</tbody>
-  </table>`;
+/** Atalho — aplica paginação padrão de 12 linhas por folha. */
+export function buildPdfTableHtml(options: BuildPdfTableOptions): string {
+  return buildPaginatedPdfTableHtml(options);
 }
 
 /** Altura útil da área de conteúdo (pt) para estimativa de folhas. */
@@ -95,20 +156,10 @@ export function pdfLandscapeContentHeightPt(hasAplicadorFooter: boolean): number
 
 export function estimarFolhasPdfPorLinhas(
   quantidadeLinhas: number,
-  alturaLinhaPt: number,
-  overheadPrimeiraPaginaPt = 0,
-  hasAplicadorFooter = false,
+  rowsPerPage = PDF_MAX_ROWS_PER_PAGE,
 ): number {
   if (quantidadeLinhas <= 0) return 0;
-  const util = pdfLandscapeContentHeightPt(hasAplicadorFooter);
-  const theadPt = 22;
-  const primeira = Math.max(
-    1,
-    Math.floor((util - overheadPrimeiraPaginaPt - theadPt) / alturaLinhaPt),
-  );
-  const demais = Math.max(1, Math.floor((util - theadPt) / alturaLinhaPt));
-  if (quantidadeLinhas <= primeira) return 1;
-  return 1 + Math.ceil((quantidadeLinhas - primeira) / demais);
+  return Math.ceil(quantidadeLinhas / Math.max(1, rowsPerPage));
 }
 
 function pdfPageStyles(hasAplicador: boolean): string {
@@ -238,28 +289,6 @@ export function buildPdfLandscapeDocument(options: PdfLandscapeDocumentOptions):
   </div>
 </body>
 </html>`;
-}
-
-/** @deprecated Use buildPdfTableHtml — paginação manual removida em favor de quebra automática. */
-export function buildPaginatedPdfTableHtml(options: BuildPdfTableOptions): string {
-  return buildPdfTableHtml(options);
-}
-
-/** @deprecated Mantido para testes legados. */
-export function paginatePdfTableRows(
-  rows: string[],
-  rowsFirstPage: number,
-  rowsOtherPage: number,
-): string[][] {
-  if (rows.length === 0) return [];
-  if (rows.length <= rowsFirstPage) return [rows];
-  const chunks: string[][] = [rows.slice(0, rowsFirstPage)];
-  let index = rowsFirstPage;
-  while (index < rows.length) {
-    chunks.push(rows.slice(index, index + rowsOtherPage));
-    index += rowsOtherPage;
-  }
-  return chunks;
 }
 
 export const PDF_LANDSCAPE_PAGE_STYLES = pdfPageStyles(true);

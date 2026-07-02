@@ -17,17 +17,9 @@ import {
   PDF_A4_LANDSCAPE_WIDTH,
 } from './pdfLayout';
 
-const PDF_RESULTADOS_ROW_HEIGHT_PT = 44;
-const PDF_RESULTADOS_KPI_OVERHEAD_PT = 0;
-
 /** Estima quantas folhas A4 paisagem serão necessárias para imprimir a tabela de resultados. */
 export function estimarFolhasA4PdfResultadosTaf(quantidadeLinhas: number): number {
-  return estimarFolhasPdfPorLinhas(
-    quantidadeLinhas,
-    PDF_RESULTADOS_ROW_HEIGHT_PT,
-    PDF_RESULTADOS_KPI_OVERHEAD_PT,
-    true,
-  );
+  return estimarFolhasPdfPorLinhas(quantidadeLinhas);
 }
 
 /** Tempo padrão da prova de permanência em relatórios PDF. */

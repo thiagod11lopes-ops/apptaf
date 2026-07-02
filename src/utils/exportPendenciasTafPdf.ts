@@ -127,7 +127,7 @@ export function buildPendenciasTafHtml(
   const theadHtml = `<tr>
           <th>NIP</th>
           <th>Nome</th>
-          <th>Posto / Grad.</th>
+          <th>P/G</th>
           <th>Categoria</th>
           <th>Situação</th>
           <th>Modalidades</th>

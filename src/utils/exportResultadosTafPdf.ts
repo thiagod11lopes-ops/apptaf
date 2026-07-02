@@ -28,19 +28,19 @@ export const PERMANENCIA_TEMPO_PDF_PADRAO = '10 minutos';
 const TITULO_RESULTADOS_TAF = 'Resultados TAF — Corrida, Caminhada, Natação e Permanência';
 
 const RESULTADOS_TAF_THEAD = `<tr>
-        <th>Posto/Grad.</th>
+        <th>P/G</th>
         <th>NIP</th>
         <th>Nome</th>
         <th>Nota corrida</th>
-        <th>Situação corrida</th>
+        <th>Situação</th>
         <th class="col-rubrica">Rúbrica</th>
         <th>Nota caminhada</th>
-        <th>Situação caminhada</th>
+        <th>Situação</th>
         <th class="col-rubrica">Rúbrica</th>
         <th>Nota natação</th>
-        <th>Situação natação</th>
+        <th>Situação</th>
         <th class="col-rubrica">Rúbrica</th>
-        <th>Situação permanência</th>
+        <th>Situação</th>
         <th class="col-rubrica">Rúbrica</th>
       </tr>`;
 

@@ -11,15 +11,47 @@ export function escapeHtmlPdf(s: string): string {
 }
 
 /** Cabeçalho/rodapé fixos repetidos em cada página na impressão/PDF. */
+export const PDF_PRINT_TABLE_STYLES = `
+  .pdf-print-body table {
+    width: 100%;
+    border-collapse: collapse;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+  .pdf-print-body table thead {
+    display: table-header-group;
+  }
+  .pdf-print-body table tbody {
+    display: table-row-group;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+  .pdf-print-body table tfoot {
+    display: table-footer-group;
+  }
+  .pdf-print-body table tr {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+  .pdf-print-body table th,
+  .pdf-print-body table td {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+`;
+
 export const PDF_LANDSCAPE_PAGE_STYLES = `
   @page {
     size: A4 landscape;
-    margin: 10mm;
+    margin: 22mm 10mm 30mm 10mm;
   }
   html, body {
     margin: 0;
     padding: 0;
     width: 100%;
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
   }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -35,8 +67,9 @@ export const PDF_LANDSCAPE_PAGE_STYLES = `
     right: 0;
     z-index: 1000;
     background: #fff;
-    padding: 8px 14px 10px;
+    padding: 6px 14px 8px;
     border-bottom: 1px solid #d1d5db;
+    box-sizing: border-box;
   }
   .pdf-print-header h1 {
     font-size: 22px;
@@ -64,23 +97,33 @@ export const PDF_LANDSCAPE_PAGE_STYLES = `
     justify-content: center;
     align-items: flex-end;
     gap: 12px 24px;
+    box-sizing: border-box;
   }
   .pdf-print-footer .aplicador-assinatura {
     margin-top: 0;
     page-break-inside: avoid;
+    break-inside: avoid-page;
   }
   .pdf-print-body {
-    padding: 76px 14px 118px;
-  }
-  .pdf-print-body--sem-aplicador {
-    padding-bottom: 18px;
+    padding: 0 14px;
+    overflow: visible;
+    height: auto;
   }
   @media print {
+    html, body {
+      overflow: visible !important;
+      height: auto !important;
+    }
+    .pdf-print-body {
+      overflow: visible !important;
+      height: auto !important;
+    }
     .pdf-print-header,
     .pdf-print-footer {
       position: fixed;
     }
   }
+  ${PDF_PRINT_TABLE_STYLES}
 `;
 
 export type PdfLandscapeDocumentOptions = {
@@ -96,7 +139,6 @@ export type PdfLandscapeDocumentOptions = {
 /** Documento HTML em A4 paisagem com título/meta e assinatura do aplicador em todas as páginas. */
 export function buildPdfLandscapeDocument(options: PdfLandscapeDocumentOptions): string {
   const hasAplicador = Boolean(options.aplicadorHtml?.trim());
-  const bodyClass = hasAplicador ? 'pdf-print-body' : 'pdf-print-body pdf-print-body--sem-aplicador';
   const footer = hasAplicador ? `<div class="pdf-print-footer">${options.aplicadorHtml}</div>` : '';
 
   return `<!DOCTYPE html>
@@ -116,7 +158,7 @@ export function buildPdfLandscapeDocument(options: PdfLandscapeDocumentOptions):
     <p class="meta">${options.metaHtml}</p>
   </div>
   ${footer}
-  <div class="${bodyClass}">
+  <div class="pdf-print-body">
     ${options.conteudoHtml}
   </div>
 </body>

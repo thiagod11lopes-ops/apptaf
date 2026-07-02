@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPdfLandscapeDocument } from '../../src/utils/pdfLayout';
+import { buildPdfLandscapeDocument, buildPaginatedPdfTableHtml } from '../../src/utils/pdfLayout';
 
 describe('pdfLayout', () => {
   it('gera documento A4 paisagem com cabeçalho e rodapé fixos', () => {
@@ -17,5 +17,20 @@ describe('pdfLayout', () => {
     expect(html).toContain('page-break-inside: avoid');
     expect(html).toContain('Resumo da aplicação — TAF');
     expect(html).toContain('aplicador-assinatura');
+  });
+
+  it('repete cabeçalho de colunas em cada bloco paginado', () => {
+    const html = buildPaginatedPdfTableHtml({
+      tableClass: 'resultados-taf',
+      theadHtml: '<tr><th>NIP</th><th>Nome</th></tr>',
+      rowHtml: Array.from({ length: 25 }, (_, i) => `<tr><td>${i}</td><td>Mil ${i}</td></tr>`),
+      rowsFirstPage: 9,
+      rowsOtherPage: 10,
+      emptyColspan: 2,
+    });
+
+    expect((html.match(/<thead>/g) ?? []).length).toBe(3);
+    expect(html).toContain('pdf-table-continuacao');
+    expect(html.match(/<th>NIP<\/th>/g)?.length).toBe(3);
   });
 });

@@ -18,6 +18,11 @@ export const PDF_PRINT_TABLE_STYLES = `
     page-break-inside: auto;
     break-inside: auto;
   }
+  .pdf-print-body table.pdf-table-continuacao {
+    page-break-before: always;
+    break-before: page;
+    margin-top: 0;
+  }
   .pdf-print-body table thead {
     display: table-header-group;
   }
@@ -29,16 +34,82 @@ export const PDF_PRINT_TABLE_STYLES = `
   .pdf-print-body table tfoot {
     display: table-footer-group;
   }
-  .pdf-print-body table tr {
+  .pdf-print-body table thead tr {
     page-break-inside: avoid;
     break-inside: avoid-page;
   }
-  .pdf-print-body table th,
-  .pdf-print-body table td {
+  .pdf-print-body table tbody tr {
     page-break-inside: avoid;
     break-inside: avoid-page;
+  }
+  @media print {
+    .pdf-print-body table thead {
+      display: table-header-group;
+    }
+    .pdf-print-body table thead tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
   }
 `;
+
+export type BuildPaginatedPdfTableOptions = {
+  tableClass: string;
+  theadHtml: string;
+  rowHtml: string[];
+  rowsFirstPage: number;
+  rowsOtherPage: number;
+  emptyColspan: number;
+  emptyMessage?: string;
+  leadingHtml?: string;
+};
+
+/** Divide linhas `<tr>…</tr>` em blocos que cabem em cada folha A4 paisagem. */
+export function paginatePdfTableRows(
+  rows: string[],
+  rowsFirstPage: number,
+  rowsOtherPage: number,
+): string[][] {
+  if (rows.length === 0) return [];
+  if (rows.length <= rowsFirstPage) return [rows];
+  const chunks: string[][] = [rows.slice(0, rowsFirstPage)];
+  let index = rowsFirstPage;
+  while (index < rows.length) {
+    chunks.push(rows.slice(index, index + rowsOtherPage));
+    index += rowsOtherPage;
+  }
+  return chunks;
+}
+
+/** Monta uma ou mais tabelas, repetindo o cabeçalho de colunas em cada folha. */
+export function buildPaginatedPdfTableHtml(options: BuildPaginatedPdfTableOptions): string {
+  const {
+    tableClass,
+    theadHtml,
+    rowHtml,
+    rowsFirstPage,
+    rowsOtherPage,
+    emptyColspan,
+    emptyMessage = 'Nenhum registro',
+    leadingHtml = '',
+  } = options;
+
+  if (rowHtml.length === 0) {
+    return `${leadingHtml}<table class="${tableClass}"><thead>${theadHtml}</thead><tbody><tr><td colspan="${emptyColspan}">${emptyMessage}</td></tr></tbody></table>`;
+  }
+
+  const chunks = paginatePdfTableRows(rowHtml, rowsFirstPage, rowsOtherPage);
+  return chunks
+    .map((chunk, pageIndex) => {
+      const continuation = pageIndex > 0 ? ' pdf-table-continuacao' : '';
+      const prefix = pageIndex === 0 ? leadingHtml : '';
+      return `${prefix}<table class="${tableClass}${continuation}">
+    <thead>${theadHtml}</thead>
+    <tbody>${chunk.join('')}</tbody>
+  </table>`;
+    })
+    .join('\n');
+}
 
 export const PDF_LANDSCAPE_PAGE_STYLES = `
   @page {

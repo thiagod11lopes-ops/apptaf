@@ -4,10 +4,14 @@ import * as Sharing from 'expo-sharing';
 import type { ConcluidoTafItem } from './pendenciasTafHistorico';
 import {
   buildPdfLandscapeDocument,
+  buildPaginatedPdfTableHtml,
   escapeHtmlPdf,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
 } from './pdfLayout';
+
+const PDF_COMPACT_ROWS_FIRST_PAGE = 10;
+const PDF_COMPACT_ROWS_OTHER_PAGE = 14;
 
 function chipHtml(label: string): string {
   return `<span class="chip chip-ok">${escapeHtmlPdf(label)} ✓</span>`;
@@ -94,8 +98,7 @@ const CONCLUIDOS_EXTRA_STYLES = `
 export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
   const dataStr = new Date().toLocaleString('pt-BR');
 
-  const rows = itens
-    .map(
+  const rows = itens.map(
       (r) => `<tr>
         <td class="mono">${escapeHtmlPdf(r.nip)}</td>
         <td><strong>${escapeHtmlPdf(r.nome)}</strong></td>
@@ -104,26 +107,32 @@ export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
         <td><span class="badge-ok">Concluído</span></td>
         <td class="chips">${chipHtml('Corrida')} ${chipHtml('Natação')} ${chipHtml('Perm.')}</td>
       </tr>`,
-    )
-    .join('');
+    );
 
-  const conteudoHtml = `
+  const kpiHtml = `
     <div class="kpi-row">
       <div class="kpi"><div class="n">${itens.length}</div><div class="l">Militares concluídos</div></div>
-    </div>
-    <table class="concluidos-taf">
-      <thead>
-        <tr>
+    </div>`;
+
+  const theadHtml = `<tr>
           <th>NIP</th>
           <th>Nome</th>
           <th>Posto / Grad.</th>
           <th>Categoria</th>
           <th>Situação</th>
           <th>Modalidades</th>
-        </tr>
-      </thead>
-      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b">Nenhum registro</td></tr>'}</tbody>
-    </table>`;
+        </tr>`;
+
+  const conteudoHtml = buildPaginatedPdfTableHtml({
+    tableClass: 'concluidos-taf',
+    theadHtml,
+    rowHtml: rows,
+    rowsFirstPage: PDF_COMPACT_ROWS_FIRST_PAGE,
+    rowsOtherPage: PDF_COMPACT_ROWS_OTHER_PAGE,
+    emptyColspan: 6,
+    emptyMessage: 'Nenhum registro',
+    leadingHtml: kpiHtml,
+  });
 
   return buildPdfLandscapeDocument({
     documentTitle: 'TAF Concluído — Relatório',

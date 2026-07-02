@@ -12,10 +12,14 @@ import {
 } from './pdfAplicadorAssinaturaHtml';
 import {
   buildPdfLandscapeDocument,
+  buildPaginatedPdfTableHtml,
   escapeHtmlPdf,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
 } from './pdfLayout';
+
+const PDF_RESUMO_ROWS_FIRST_PAGE = 9;
+const PDF_RESUMO_ROWS_OTHER_PAGE = 10;
 
 /** Inferência do rótulo da prova (Corrida, Natação, etc.) a partir dos resultados da sessão. */
 export function tituloProvaResumoPdf(resultados: ResultadoCorridaItem[]): string {
@@ -45,10 +49,9 @@ export function buildResumoAplicacaoHtml(
   const colProva = escapeHtmlPdf(cabecalhoColunaProvaResultados(resultados));
   const tituloProva = escapeHtmlPdf(tituloProvaResumoPdf(resultados));
 
-  const theadPdf = `<th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th>`;
+  const theadPdf = `<tr><th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th></tr>`;
 
-  const rows = resultados
-    .map((r) => {
+  const rows = resultados.map((r) => {
       const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
       const nip = r.nip ? escapeHtmlPdf(r.nip) : '—';
       const nota = escapeHtmlPdf(r.notaTexto ?? '—');
@@ -65,16 +68,19 @@ export function buildResumoAplicacaoHtml(
         <td class="repro">${situacao}</td>
         <td class="col-rubrica">${rubrica}</td>
       </tr>`;
-    })
-    .join('');
+    });
 
   const conteudoHtml =
     resultados.length === 0
       ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessão.</p>'
-      : `<table class="resultados-taf">
-    <thead><tr>${theadPdf}</tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+      : buildPaginatedPdfTableHtml({
+          tableClass: 'resultados-taf',
+          theadHtml: theadPdf,
+          rowHtml: rows,
+          rowsFirstPage: PDF_RESUMO_ROWS_FIRST_PAGE,
+          rowsOtherPage: PDF_RESUMO_ROWS_OTHER_PAGE,
+          emptyColspan: 7,
+        });
 
   return buildPdfLandscapeDocument({
     documentTitle: titulo,

@@ -8,10 +8,15 @@ import {
 } from './pendenciasTafHistorico';
 import {
   buildPdfLandscapeDocument,
+  buildPaginatedPdfTableHtml,
   escapeHtmlPdf,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
 } from './pdfLayout';
+
+/** Linhas compactas (pendências/concluídos) por folha A4 paisagem. */
+const PDF_COMPACT_ROWS_FIRST_PAGE = 10;
+const PDF_COMPACT_ROWS_OTHER_PAGE = 14;
 
 function chipHtml(label: string, ok: boolean): string {
   const bg = ok ? '#dcfce7' : '#fee2e2';
@@ -104,8 +109,7 @@ export function buildPendenciasTafHtml(
   const dataStr = new Date().toLocaleString('pt-BR');
   const tituloFiltro = FILTRO_PENDENCIA_LABEL[filtro];
 
-  const rows = itens
-    .map(
+  const rows = itens.map(
       (r) => `<tr>
         <td class="mono">${escapeHtmlPdf(r.nip)}</td>
         <td><strong>${escapeHtmlPdf(r.nome)}</strong></td>
@@ -115,18 +119,16 @@ export function buildPendenciasTafHtml(
         <td class="chips">${chipHtml('Corrida', r.temCorrida)} ${chipHtml('Natação', r.temNatacao)} ${chipHtml('Perm.', r.temPermanencia)}</td>
         <td class="falta">${escapeHtmlPdf(r.faltam.join(', ') || '—')}</td>
       </tr>`,
-    )
-    .join('');
+    );
 
-  const conteudoHtml = `
+  const kpiHtml = `
     <div class="kpi-row">
       <div class="kpi"><div class="n">${itens.length}</div><div class="l">Militares listados</div></div>
       <div class="kpi"><div class="n">${itens.filter((i) => i.situacao === 'Sem teste').length}</div><div class="l">Sem teste</div></div>
       <div class="kpi"><div class="n">${itens.filter((i) => i.situacao === 'Parcial').length}</div><div class="l">Parcial</div></div>
-    </div>
-    <table class="pendencias-taf">
-      <thead>
-        <tr>
+    </div>`;
+
+  const theadHtml = `<tr>
           <th>NIP</th>
           <th>Nome</th>
           <th>Posto / Grad.</th>
@@ -134,10 +136,18 @@ export function buildPendenciasTafHtml(
           <th>Situação</th>
           <th>Modalidades</th>
           <th>Pendências</th>
-        </tr>
-      </thead>
-      <tbody>${rows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:#64748b">Nenhum registro</td></tr>'}</tbody>
-    </table>`;
+        </tr>`;
+
+  const conteudoHtml = buildPaginatedPdfTableHtml({
+    tableClass: 'pendencias-taf',
+    theadHtml,
+    rowHtml: rows,
+    rowsFirstPage: PDF_COMPACT_ROWS_FIRST_PAGE,
+    rowsOtherPage: PDF_COMPACT_ROWS_OTHER_PAGE,
+    emptyColspan: 7,
+    emptyMessage: 'Nenhum registro',
+    leadingHtml: kpiHtml,
+  });
 
   return buildPdfLandscapeDocument({
     documentTitle: `${tituloFiltro} — TAF`,

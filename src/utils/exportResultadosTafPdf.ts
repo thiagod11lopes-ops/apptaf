@@ -10,6 +10,7 @@ import {
 } from './pdfAplicadorAssinaturaHtml';
 import {
   buildPdfLandscapeDocument,
+  buildPaginatedPdfTableHtml,
   escapeHtmlPdf,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
@@ -39,14 +40,30 @@ export const PERMANENCIA_TEMPO_PDF_PADRAO = '10 minutos';
 
 const TITULO_RESULTADOS_TAF = 'Resultados TAF — Corrida, Caminhada, Natação e Permanência';
 
+const RESULTADOS_TAF_THEAD = `<tr>
+        <th>Posto/Grad.</th>
+        <th>NIP</th>
+        <th>Nome</th>
+        <th>Nota corrida</th>
+        <th>Situação corrida</th>
+        <th class="col-rubrica">Rúbrica</th>
+        <th>Nota caminhada</th>
+        <th>Situação caminhada</th>
+        <th class="col-rubrica">Rúbrica</th>
+        <th>Nota natação</th>
+        <th>Situação natação</th>
+        <th class="col-rubrica">Rúbrica</th>
+        <th>Situação permanência</th>
+        <th class="col-rubrica">Rúbrica</th>
+      </tr>`;
+
 export function buildResultadosTafHtml(
   linhas: ResultadoTafLinha[],
   subtitulo: string,
   aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
-  const rows = linhas
-    .map(
+  const rows = linhas.map(
       (r) => `<tr>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td>${escapeHtmlPdf(r.nip)}</td>
@@ -63,30 +80,16 @@ export function buildResultadosTafHtml(
         <td>${escapeHtmlPdf(r.situacaoPermanencia)}</td>
         <td class="col-rubrica">${celulaRubricaHtml(r.rubricaPermanenciaSvg)}</td>
       </tr>`,
-    )
-    .join('');
+    );
 
-  const conteudoHtml = `<table class="resultados-taf">
-    <thead>
-      <tr>
-        <th>Posto/Grad.</th>
-        <th>NIP</th>
-        <th>Nome</th>
-        <th>Nota corrida</th>
-        <th>Situação corrida</th>
-        <th class="col-rubrica">Rúbrica</th>
-        <th>Nota caminhada</th>
-        <th>Situação caminhada</th>
-        <th class="col-rubrica">Rúbrica</th>
-        <th>Nota natação</th>
-        <th>Situação natação</th>
-        <th class="col-rubrica">Rúbrica</th>
-        <th>Situação permanência</th>
-        <th class="col-rubrica">Rúbrica</th>
-      </tr>
-    </thead>
-    <tbody>${rows || '<tr><td colspan="14">Nenhum registro</td></tr>'}</tbody>
-  </table>`;
+  const conteudoHtml = buildPaginatedPdfTableHtml({
+    tableClass: 'resultados-taf',
+    theadHtml: RESULTADOS_TAF_THEAD,
+    rowHtml: rows,
+    rowsFirstPage: PDF_RESULTADOS_ROWS_FIRST_PAGE,
+    rowsOtherPage: PDF_RESULTADOS_ROWS_OTHER_PAGE,
+    emptyColspan: 14,
+  });
 
   return buildPdfLandscapeDocument({
     documentTitle: 'Resultados TAF',

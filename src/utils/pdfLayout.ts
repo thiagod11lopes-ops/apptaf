@@ -2,14 +2,17 @@
 export const PDF_A4_LANDSCAPE_WIDTH = 842;
 export const PDF_A4_LANDSCAPE_HEIGHT = 595;
 
-/** Margens @page (mm) — laterais e rodapé; o topo usa espaçador por bloco de folha. */
+/** Margens @page (mm) — zona segura da impressora; folgas de cabeçalho/rodapé vêm dos espaçadores. */
 export const PDF_PAGE_MARGIN_TOP_MM = 8;
-export const PDF_PAGE_MARGIN_BOTTOM_MM = 22;
+export const PDF_PAGE_MARGIN_BOTTOM_MM = 6;
 export const PDF_PAGE_MARGIN_BOTTOM_SEM_ASSINATURA_MM = 10;
 export const PDF_PAGE_MARGIN_SIDE_MM = 10;
 
-/** Espaço acima da tabela em cada folha — evita sobreposição com o título fixo. */
-export const PDF_PRINT_TOP_GAP_MM = 26;
+/** Espaço acima da tabela em cada folha — abaixo do título fixo, sem folga excessiva. */
+export const PDF_PRINT_TOP_GAP_MM = 20;
+
+/** Espaço abaixo da tabela em cada folha — evita sobreposição com a assinatura do aplicador. */
+export const PDF_PRINT_BOTTOM_GAP_MM = 30;
 
 /** Máximo de linhas de dados por folha — visual limpo e previsível. */
 export const PDF_MAX_ROWS_PER_PAGE = 12;
@@ -75,6 +78,14 @@ export const PDF_PRINT_TABLE_STYLES = `
     width: 100%;
     height: ${PDF_PRINT_TOP_GAP_MM}mm;
     min-height: ${PDF_PRINT_TOP_GAP_MM}mm;
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+  .pdf-print-bottom-gap {
+    display: block;
+    width: 100%;
+    height: ${PDF_PRINT_BOTTOM_GAP_MM}mm;
+    min-height: ${PDF_PRINT_BOTTOM_GAP_MM}mm;
     page-break-inside: avoid;
     break-inside: avoid-page;
   }
@@ -175,9 +186,9 @@ export function buildPdfTableHtml(options: BuildPdfTableOptions): string {
 export function pdfLandscapeContentHeightPt(hasAplicadorFooter: boolean): number {
   const mmToPt = 72 / 25.4;
   const top = (PDF_PAGE_MARGIN_TOP_MM + PDF_PRINT_TOP_GAP_MM) * mmToPt;
-  const bottom =
-    (hasAplicadorFooter ? PDF_PAGE_MARGIN_BOTTOM_MM : PDF_PAGE_MARGIN_BOTTOM_SEM_ASSINATURA_MM) *
-    mmToPt;
+  const bottom = hasAplicadorFooter
+    ? (PDF_PAGE_MARGIN_BOTTOM_MM + PDF_PRINT_BOTTOM_GAP_MM) * mmToPt
+    : PDF_PAGE_MARGIN_BOTTOM_SEM_ASSINATURA_MM * mmToPt;
   return PDF_A4_LANDSCAPE_HEIGHT - top - bottom;
 }
 
@@ -219,7 +230,7 @@ function pdfPageStyles(hasAplicador: boolean): string {
     right: 0;
     z-index: 1000;
     box-sizing: border-box;
-    padding: 2mm ${PDF_PAGE_MARGIN_SIDE_MM}mm 3mm;
+    padding: 1.5mm ${PDF_PAGE_MARGIN_SIDE_MM}mm 2mm;
     background: #fff;
     border-bottom: 1px solid #d1d5db;
   }
@@ -242,14 +253,14 @@ function pdfPageStyles(hasAplicador: boolean): string {
     right: 0;
     z-index: 1000;
     box-sizing: border-box;
-    padding: 2mm ${PDF_PAGE_MARGIN_SIDE_MM}mm 2mm;
+    padding: 0 ${PDF_PAGE_MARGIN_SIDE_MM}mm 0.5mm;
     background: #fff;
     border-top: 1px solid #d1d5db;
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     align-items: flex-end;
-    gap: 8px 20px;
+    gap: 2px 16px;
   }
   .pdf-print-footer .aplicador-assinatura {
     margin-top: 0;
@@ -289,10 +300,21 @@ export type PdfLandscapeDocumentOptions = {
   extraStyles?: string;
 };
 
+function injectAplicadorFooterGap(conteudoHtml: string): string {
+  if (!conteudoHtml.includes('pdf-print-page-block')) return conteudoHtml;
+  return conteudoHtml.replace(
+    /<\/section>/g,
+    '<div class="pdf-print-bottom-gap" aria-hidden="true"></div></section>',
+  );
+}
+
 /** Documento A4 paisagem: título e assinatura fixos por folha; tabela preenche o espaço restante. */
 export function buildPdfLandscapeDocument(options: PdfLandscapeDocumentOptions): string {
   const hasAplicador = Boolean(options.aplicadorHtml?.trim());
   const footer = hasAplicador ? `<div class="pdf-print-footer">${options.aplicadorHtml}</div>` : '';
+  const conteudoHtml = hasAplicador
+    ? injectAplicadorFooterGap(options.conteudoHtml)
+    : options.conteudoHtml;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -312,7 +334,7 @@ export function buildPdfLandscapeDocument(options: PdfLandscapeDocumentOptions):
   </div>
   ${footer}
   <div class="pdf-print-body">
-    ${options.conteudoHtml}
+    ${conteudoHtml}
   </div>
 </body>
 </html>`;

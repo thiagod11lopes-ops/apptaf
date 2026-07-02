@@ -20,6 +20,7 @@ describe('pdfLayout', () => {
     expect(html).toContain('pdf-print-header');
     expect(html).toContain('pdf-print-footer');
     expect(html).toContain('pdf-print-top-gap');
+    expect(html).toContain('pdf-print-bottom-gap');
     expect(html).toContain('table-header-group');
     expect(html).toContain('Resumo da aplicação — TAF');
     expect(html).toContain('aplicador-assinatura');

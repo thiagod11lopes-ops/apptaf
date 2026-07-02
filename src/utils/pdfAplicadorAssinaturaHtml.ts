@@ -33,7 +33,8 @@ export function blocosAplicadorAssinaturaHtml(assinaturas?: AplicadorAssinaturaR
 
 export const PDF_APLICADOR_ASSINATURA_STYLES = `
   .aplicador-assinatura {
-    margin-top: 0;
+    margin: 0;
+    padding: 0;
     text-align: center;
     page-break-inside: avoid;
     break-inside: avoid-page;
@@ -41,12 +42,12 @@ export const PDF_APLICADOR_ASSINATURA_STYLES = `
   .aplicador-rubrica {
     display: flex;
     justify-content: center;
-    margin-bottom: 8px;
+    margin-bottom: 2px;
   }
   .aplicador-linha {
     width: 72%;
     max-width: 420px;
-    margin: 0 auto 12px;
+    margin: 0 auto 4px;
     border: none;
     border-top: 1px solid #374151;
   }
@@ -55,23 +56,24 @@ export const PDF_APLICADOR_ASSINATURA_STYLES = `
     flex-wrap: wrap;
     align-items: baseline;
     justify-content: center;
-    gap: 8px;
-    margin: 0 0 4px;
+    gap: 6px;
+    margin: 0 0 2px;
   }
   .aplicador-posto-grad {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
     color: #6B7280;
   }
   .aplicador-nome {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 800;
     color: #111827;
   }
   .aplicador-nip {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: #6B7280;
     margin: 0;
+    line-height: 1.1;
   }
 `;

@@ -47,7 +47,7 @@ const RESULTADOS_TAF_THEAD = `<tr>
         <th>Nota natação</th>
         <th>Situação</th>
         <th class="col-rubrica">Rúbrica</th>
-        <th>Situação</th>
+        <th>Situação Permanência</th>
         <th class="col-rubrica">Rúbrica</th>
       </tr>`;
 

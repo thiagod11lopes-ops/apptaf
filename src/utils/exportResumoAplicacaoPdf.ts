@@ -14,9 +14,15 @@ import {
   buildPdfLandscapeDocument,
   buildPdfTableHtml,
   escapeHtmlPdf,
+  estimarFolhasPdfPorLinhas,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
 } from './pdfLayout';
+
+/** Estima quantas folhas A4 paisagem serão necessárias para o resumo da aplicação. */
+export function estimarFolhasA4PdfResumoAplicacao(quantidadeLinhas: number): number {
+  return estimarFolhasPdfPorLinhas(quantidadeLinhas);
+}
 
 /** Inferência do rótulo da prova (Corrida, Natação, etc.) a partir dos resultados da sessão. */
 export function tituloProvaResumoPdf(resultados: ResultadoCorridaItem[]): string {

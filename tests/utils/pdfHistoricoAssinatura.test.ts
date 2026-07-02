@@ -87,5 +87,26 @@ describe('assinatura aplicador no PDF do histórico', () => {
     expect(html).toContain('aplicador-assinatura');
     expect(html).toContain('João Aplicador');
     expect(html).toContain('aplicador-rubrica');
+    expect(html).toContain('<th>Corredor</th>');
+    expect(html).toContain('<th>Nome</th>');
+    expect(html).toContain('table-header-group');
+  });
+
+  it('buildResumoAplicacaoHtml pagina com 12 linhas por folha e repete titulos das colunas', () => {
+    const resultados = Array.from({ length: 25 }, (_, index) => ({
+      corredor: index + 1,
+      nome: `Militar ${index + 1}`,
+      nip: '12.3456.78',
+      tempoMs: 720000,
+      notaTexto: '90',
+      prova: 'corrida' as const,
+    }));
+    const html = buildResumoAplicacaoHtml(resultados, 'Corrida');
+    expect((html.match(/<section class="pdf-print-page-block">/g) ?? []).length).toBe(3);
+    expect((html.match(/<thead>/g) ?? []).length).toBe(3);
+    expect((html.match(/<th>Corredor<\/th>/g) ?? []).length).toBe(3);
+    expect((html.match(/<th>NIP<\/th>/g) ?? []).length).toBe(3);
+    expect((html.match(/<th>Tempo<\/th>/g) ?? []).length).toBe(3);
+    expect((html.match(/<th class="col-rubrica">Rúbrica<\/th>/g) ?? []).length).toBe(3);
   });
 });

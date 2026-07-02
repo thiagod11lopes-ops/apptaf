@@ -19,27 +19,39 @@ export function escapeHtmlPdf(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-/** Estilos de tabela — quebra de linha automática pelo navegador; thead repete em cada folha. */
+/** Estilos de tabela — blocos paginados mantêm thead junto às linhas da folha. */
 export const PDF_PRINT_TABLE_STYLES = `
   .pdf-print-body table {
     width: 100%;
     border-collapse: collapse;
-    page-break-inside: auto;
-    break-inside: auto;
   }
-  .pdf-print-body table thead {
+  .pdf-print-page-block table {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .pdf-print-body table thead,
+  .pdf-print-page-block table thead {
     display: table-header-group;
   }
-  .pdf-print-body table tbody {
+  .pdf-print-body table tbody,
+  .pdf-print-page-block table tbody {
     display: table-row-group;
   }
-  .pdf-print-body table thead tr {
+  .pdf-print-body table thead tr,
+  .pdf-print-page-block table thead tr {
     page-break-inside: avoid;
     break-inside: avoid-page;
   }
-  .pdf-print-body table tbody tr {
+  .pdf-print-body table tbody tr,
+  .pdf-print-page-block table tbody tr {
     page-break-inside: avoid;
     break-inside: avoid-page;
+  }
+  .pdf-print-page-block table thead th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .pdf-print-leading {
     page-break-inside: avoid;

@@ -10,18 +10,13 @@ export function escapeHtmlPdf(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-/** Cabeçalho/rodapé fixos repetidos em cada página na impressão/PDF. */
+/** Estilos de tabela e seções de página (sem cabeçalho/rodapé fixos). */
 export const PDF_PRINT_TABLE_STYLES = `
   .pdf-print-body table {
     width: 100%;
     border-collapse: collapse;
     page-break-inside: auto;
     break-inside: auto;
-  }
-  .pdf-print-body table.pdf-table-continuacao {
-    page-break-before: always;
-    break-before: page;
-    margin-top: 0;
   }
   .pdf-print-body table thead {
     display: table-header-group;
@@ -42,13 +37,60 @@ export const PDF_PRINT_TABLE_STYLES = `
     page-break-inside: avoid;
     break-inside: avoid-page;
   }
+  .pdf-print-page {
+    box-sizing: border-box;
+    page-break-after: always;
+    break-after: page;
+    padding: 0 2px 4px;
+  }
+  .pdf-print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  .pdf-print-page-doc-header {
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #d1d5db;
+  }
+  .pdf-print-page-doc-header h1 {
+    font-size: 17px;
+    margin: 0 0 3px;
+    line-height: 1.2;
+    font-weight: 800;
+  }
+  .pdf-print-page-doc-header .meta {
+    font-size: 11px;
+    color: #6b7280;
+    margin: 0;
+    line-height: 1.25;
+  }
+  .pdf-print-page-content {
+    margin: 0;
+  }
+  .pdf-print-page-doc-footer {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #d1d5db;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 8px 20px;
+  }
+  .pdf-print-page-doc-footer .aplicador-assinatura {
+    margin-top: 0;
+  }
   @media print {
     .pdf-print-body table thead {
       display: table-header-group;
     }
-    .pdf-print-body table thead tr {
-      break-inside: avoid;
-      page-break-inside: avoid;
+    .pdf-print-page {
+      page-break-after: always;
+      break-after: page;
+    }
+    .pdf-print-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
     }
   }
 `;
@@ -62,6 +104,10 @@ export type BuildPaginatedPdfTableOptions = {
   emptyColspan: number;
   emptyMessage?: string;
   leadingHtml?: string;
+  /** Título e meta repetidos no topo de cada folha (fluxo normal, sem sobreposição). */
+  pageDocHeaderHtml?: string;
+  /** Assinatura(s) do aplicador no rodapé de cada folha. */
+  pageDocFooterHtml?: string;
 };
 
 /** Divide linhas `<tr>…</tr>` em blocos que cabem em cada folha A4 paisagem. */
@@ -81,7 +127,28 @@ export function paginatePdfTableRows(
   return chunks;
 }
 
-/** Monta uma ou mais tabelas, repetindo o cabeçalho de colunas em cada folha. */
+function wrapPdfPageSection(
+  innerHtml: string,
+  pageDocHeaderHtml?: string,
+  pageDocFooterHtml?: string,
+): string {
+  const header = pageDocHeaderHtml
+    ? `<div class="pdf-print-page-doc-header">${pageDocHeaderHtml}</div>`
+    : '';
+  const footer = pageDocFooterHtml?.trim()
+    ? `<div class="pdf-print-page-doc-footer">${pageDocFooterHtml}</div>`
+    : '';
+
+  if (!header && !footer) return innerHtml;
+
+  return `<section class="pdf-print-page">
+    ${header}
+    <div class="pdf-print-page-content">${innerHtml}</div>
+    ${footer}
+  </section>`;
+}
+
+/** Monta uma ou mais tabelas em seções de página, repetindo cabeçalho de colunas e doc. */
 export function buildPaginatedPdfTableHtml(options: BuildPaginatedPdfTableOptions): string {
   const {
     tableClass,
@@ -92,21 +159,33 @@ export function buildPaginatedPdfTableHtml(options: BuildPaginatedPdfTableOption
     emptyColspan,
     emptyMessage = 'Nenhum registro',
     leadingHtml = '',
+    pageDocHeaderHtml,
+    pageDocFooterHtml,
   } = options;
 
+  const tableHtml = (rows: string[]) =>
+    `<table class="${tableClass}">
+    <thead>${theadHtml}</thead>
+    <tbody>${rows.length ? rows.join('') : `<tr><td colspan="${emptyColspan}">${emptyMessage}</td></tr>`}</tbody>
+  </table>`;
+
   if (rowHtml.length === 0) {
-    return `${leadingHtml}<table class="${tableClass}"><thead>${theadHtml}</thead><tbody><tr><td colspan="${emptyColspan}">${emptyMessage}</td></tr></tbody></table>`;
+    return wrapPdfPageSection(
+      `${leadingHtml}${tableHtml([])}`,
+      pageDocHeaderHtml,
+      pageDocFooterHtml,
+    );
   }
 
   const chunks = paginatePdfTableRows(rowHtml, rowsFirstPage, rowsOtherPage);
   return chunks
     .map((chunk, pageIndex) => {
-      const continuation = pageIndex > 0 ? ' pdf-table-continuacao' : '';
       const prefix = pageIndex === 0 ? leadingHtml : '';
-      return `${prefix}<table class="${tableClass}${continuation}">
-    <thead>${theadHtml}</thead>
-    <tbody>${chunk.join('')}</tbody>
-  </table>`;
+      return wrapPdfPageSection(
+        `${prefix}${tableHtml(chunk)}`,
+        pageDocHeaderHtml,
+        pageDocFooterHtml,
+      );
     })
     .join('\n');
 }
@@ -114,7 +193,7 @@ export function buildPaginatedPdfTableHtml(options: BuildPaginatedPdfTableOption
 export const PDF_LANDSCAPE_PAGE_STYLES = `
   @page {
     size: A4 landscape;
-    margin: 22mm 10mm 30mm 10mm;
+    margin: 10mm;
   }
   html, body {
     margin: 0;
@@ -131,52 +210,8 @@ export const PDF_LANDSCAPE_PAGE_STYLES = `
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .pdf-print-header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    background: #fff;
-    padding: 6px 14px 8px;
-    border-bottom: 1px solid #d1d5db;
-    box-sizing: border-box;
-  }
-  .pdf-print-header h1 {
-    font-size: 22px;
-    margin: 0 0 4px;
-    line-height: 1.15;
-    font-weight: 800;
-  }
-  .pdf-print-header .meta {
-    font-size: 15px;
-    color: #6b7280;
-    margin: 0;
-    line-height: 1.15;
-  }
-  .pdf-print-footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    background: #fff;
-    padding: 4px 14px 6px;
-    border-top: 1px solid #d1d5db;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: flex-end;
-    gap: 12px 24px;
-    box-sizing: border-box;
-  }
-  .pdf-print-footer .aplicador-assinatura {
-    margin-top: 0;
-    page-break-inside: avoid;
-    break-inside: avoid-page;
-  }
   .pdf-print-body {
-    padding: 0 14px;
+    padding: 0 8px 8px;
     overflow: visible;
     height: auto;
   }
@@ -188,10 +223,6 @@ export const PDF_LANDSCAPE_PAGE_STYLES = `
     .pdf-print-body {
       overflow: visible !important;
       height: auto !important;
-    }
-    .pdf-print-header,
-    .pdf-print-footer {
-      position: fixed;
     }
   }
   ${PDF_PRINT_TABLE_STYLES}
@@ -207,10 +238,13 @@ export type PdfLandscapeDocumentOptions = {
   extraStyles?: string;
 };
 
-/** Documento HTML em A4 paisagem com título/meta e assinatura do aplicador em todas as páginas. */
+/** Documento HTML em A4 paisagem; título e assinatura ficam dentro de cada seção de página. */
 export function buildPdfLandscapeDocument(options: PdfLandscapeDocumentOptions): string {
-  const hasAplicador = Boolean(options.aplicadorHtml?.trim());
-  const footer = hasAplicador ? `<div class="pdf-print-footer">${options.aplicadorHtml}</div>` : '';
+  let conteudoHtml = options.conteudoHtml;
+  if (!conteudoHtml.includes('pdf-print-page')) {
+    const pageHeaderHtml = `<h1>${escapeHtmlPdf(options.titulo)}</h1><p class="meta">${options.metaHtml}</p>`;
+    conteudoHtml = wrapPdfPageSection(conteudoHtml, pageHeaderHtml, options.aplicadorHtml);
+  }
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -224,13 +258,8 @@ export function buildPdfLandscapeDocument(options: PdfLandscapeDocumentOptions):
   </style>
 </head>
 <body>
-  <div class="pdf-print-header">
-    <h1>${escapeHtmlPdf(options.titulo)}</h1>
-    <p class="meta">${options.metaHtml}</p>
-  </div>
-  ${footer}
   <div class="pdf-print-body">
-    ${options.conteudoHtml}
+    ${conteudoHtml}
   </div>
 </body>
 </html>`;

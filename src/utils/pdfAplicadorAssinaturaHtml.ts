@@ -33,9 +33,10 @@ export function blocosAplicadorAssinaturaHtml(assinaturas?: AplicadorAssinaturaR
 
 export const PDF_APLICADOR_ASSINATURA_STYLES = `
   .aplicador-assinatura {
-    margin-top: 28px;
+    margin-top: 0;
     text-align: center;
     page-break-inside: avoid;
+    break-inside: avoid-page;
   }
   .aplicador-rubrica {
     display: flex;

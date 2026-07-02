@@ -14,9 +14,9 @@ import {
   PDF_A4_LANDSCAPE_WIDTH,
 } from './pdfLayout';
 
-/** Linhas compactas (pendências/concluídos) por folha A4 paisagem. */
-const PDF_COMPACT_ROWS_FIRST_PAGE = 10;
-const PDF_COMPACT_ROWS_OTHER_PAGE = 14;
+/** Linhas compactas (pendências/concluídos) por folha — com título e KPI no fluxo. */
+const PDF_COMPACT_ROWS_FIRST_PAGE = 7;
+const PDF_COMPACT_ROWS_OTHER_PAGE = 8;
 
 function chipHtml(label: string, ok: boolean): string {
   const bg = ok ? '#dcfce7' : '#fee2e2';
@@ -138,6 +138,8 @@ export function buildPendenciasTafHtml(
           <th>Pendências</th>
         </tr>`;
 
+  const metaHtml = `Relatório de pendências do Teste de Aptidão Física · Gerado em ${escapeHtmlPdf(dataStr)}`;
+
   const conteudoHtml = buildPaginatedPdfTableHtml({
     tableClass: 'pendencias-taf',
     theadHtml,
@@ -147,6 +149,7 @@ export function buildPendenciasTafHtml(
     emptyColspan: 7,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
+    pageDocHeaderHtml: `<h1>${escapeHtmlPdf(tituloFiltro)}</h1><p class="meta">${metaHtml}</p>`,
   });
 
   return buildPdfLandscapeDocument({

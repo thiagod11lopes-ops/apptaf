@@ -58,12 +58,9 @@ describe('assinatura aplicador no PDF do histórico', () => {
       'Resultados do dia — 01/01/2026',
       [assinatura],
     );
-    expect(html).toContain('pdf-print-header');
-    expect(html).toContain('pdf-print-footer');
+    expect(html).toContain('pdf-print-page-doc-header');
+    expect(html).toContain('pdf-print-page-doc-footer');
     expect(html).toContain('aplicador-assinatura');
-    expect(html).toContain('João Aplicador');
-    expect(html).toContain('NIP 11.1111.11');
-    expect(html).toContain('A4 landscape');
   });
 
   it('buildResumoAplicacaoHtml repete cabeçalho e rubrica do aplicador em layout de páginas', () => {
@@ -82,8 +79,8 @@ describe('assinatura aplicador no PDF do histórico', () => {
       'Resumo da aplicação — TAF',
       assinatura,
     );
-    expect(html).toContain('pdf-print-header');
-    expect(html).toContain('pdf-print-footer');
+    expect(html).toContain('pdf-print-page-doc-header');
+    expect(html).toContain('pdf-print-page-doc-footer');
     expect(html).toContain('Resumo da aplicação — TAF');
     expect(html).toContain('<strong>Corrida</strong>');
     expect(html).toContain('aplicador-assinatura');

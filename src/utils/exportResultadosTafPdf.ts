@@ -17,15 +17,16 @@ import {
 } from './pdfLayout';
 
 /** Altura útil estimada por linha (rúbricas) em pontos — A4 paisagem. */
-const PDF_RESULTADOS_ROW_HEIGHT_PT = 50;
-const PDF_RESULTADOS_FIRST_PAGE_OVERHEAD_PT = 130;
-const PDF_RESULTADOS_PAGE_USABLE_PT = 514;
-const PDF_RESULTADOS_ROWS_FIRST_PAGE = Math.floor(
-  (PDF_A4_LANDSCAPE_HEIGHT - PDF_RESULTADOS_FIRST_PAGE_OVERHEAD_PT) / PDF_RESULTADOS_ROW_HEIGHT_PT,
+const PDF_RESULTADOS_ROW_HEIGHT_PT = 48;
+/** Cada folha inclui título, meta, thead e assinatura do aplicador no fluxo. */
+const PDF_RESULTADOS_PAGE_OVERHEAD_PT = 175;
+const PDF_RESULTADOS_PAGE_USABLE_PT = PDF_A4_LANDSCAPE_HEIGHT - PDF_RESULTADOS_PAGE_OVERHEAD_PT;
+const PDF_RESULTADOS_ROWS_PER_PAGE = Math.max(
+  1,
+  Math.floor(PDF_RESULTADOS_PAGE_USABLE_PT / PDF_RESULTADOS_ROW_HEIGHT_PT),
 );
-const PDF_RESULTADOS_ROWS_OTHER_PAGE = Math.floor(
-  PDF_RESULTADOS_PAGE_USABLE_PT / PDF_RESULTADOS_ROW_HEIGHT_PT,
-);
+const PDF_RESULTADOS_ROWS_FIRST_PAGE = PDF_RESULTADOS_ROWS_PER_PAGE;
+const PDF_RESULTADOS_ROWS_OTHER_PAGE = PDF_RESULTADOS_ROWS_PER_PAGE;
 
 /** Estima quantas folhas A4 paisagem serão necessárias para imprimir a tabela de resultados. */
 export function estimarFolhasA4PdfResultadosTaf(quantidadeLinhas: number): number {
@@ -82,6 +83,8 @@ export function buildResultadosTafHtml(
       </tr>`,
     );
 
+  const metaHtml = `${escapeHtmlPdf(subtitulo)} · Gerado em ${escapeHtmlPdf(dataStr)} · ${linhas.length} registro(s)`;
+
   const conteudoHtml = buildPaginatedPdfTableHtml({
     tableClass: 'resultados-taf',
     theadHtml: RESULTADOS_TAF_THEAD,
@@ -89,6 +92,8 @@ export function buildResultadosTafHtml(
     rowsFirstPage: PDF_RESULTADOS_ROWS_FIRST_PAGE,
     rowsOtherPage: PDF_RESULTADOS_ROWS_OTHER_PAGE,
     emptyColspan: 14,
+    pageDocHeaderHtml: `<h1>${escapeHtmlPdf(TITULO_RESULTADOS_TAF)}</h1><p class="meta">${metaHtml}</p>`,
+    pageDocFooterHtml: blocosAplicadorAssinaturaHtml(aplicadorAssinaturas),
   });
 
   return buildPdfLandscapeDocument({

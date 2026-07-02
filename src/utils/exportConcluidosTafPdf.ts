@@ -10,8 +10,8 @@ import {
   PDF_A4_LANDSCAPE_WIDTH,
 } from './pdfLayout';
 
-const PDF_COMPACT_ROWS_FIRST_PAGE = 10;
-const PDF_COMPACT_ROWS_OTHER_PAGE = 14;
+const PDF_COMPACT_ROWS_FIRST_PAGE = 7;
+const PDF_COMPACT_ROWS_OTHER_PAGE = 8;
 
 function chipHtml(label: string): string {
   return `<span class="chip chip-ok">${escapeHtmlPdf(label)} ✓</span>`;
@@ -123,6 +123,8 @@ export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
           <th>Modalidades</th>
         </tr>`;
 
+  const metaHtml = `Relatório de militares que concluíram todas as modalidades do TAF · Gerado em ${escapeHtmlPdf(dataStr)}`;
+
   const conteudoHtml = buildPaginatedPdfTableHtml({
     tableClass: 'concluidos-taf',
     theadHtml,
@@ -132,6 +134,7 @@ export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
     emptyColspan: 6,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
+    pageDocHeaderHtml: `<h1>Militares com TAF concluído</h1><p class="meta">${metaHtml}</p>`,
   });
 
   return buildPdfLandscapeDocument({

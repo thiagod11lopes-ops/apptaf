@@ -239,6 +239,8 @@ export async function hydrateAppStorageFromIndexedDb(): Promise<void> {
   const { hydrateAuthUidFromIndexedDb } = await import('../../services/firebase/authUid');
   await hydrateAuthProfileFromIndexedDb();
   await hydrateAuthUidFromIndexedDb();
+  const { garantirModoNormalNaAbertura } = await import('../../services/modoDemonstracao');
+  await garantirModoNormalNaAbertura();
 }
 
 /** Reseta cache em memória — apenas testes. */

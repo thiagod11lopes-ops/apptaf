@@ -88,3 +88,30 @@ export async function toggleModoDemonstracaoSistema(): Promise<{ ativo: boolean 
   notifyListeners();
   return { ativo: !estavaAtivo };
 }
+
+let garantiaModoNormalPromise: Promise<void> | null = null;
+
+/** Restaura dados reais na abertura/atualização do app (modo demo não persiste entre sessões). */
+export async function garantirModoNormalNaAbertura(): Promise<void> {
+  if (!garantiaModoNormalPromise) {
+    garantiaModoNormalPromise = (async () => {
+      const backupRaw = await readAppMeta(DEMO_BACKUP_ID_KEY);
+      const demoAtivo = isModoDemonstracaoAtivo();
+      if (!demoAtivo && !backupRaw?.trim()) return;
+
+      const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
+      await desativarModoDemonstracao(ownerUid);
+      notifyDataChanged();
+      notifyListeners();
+    })().catch((error) => {
+      garantiaModoNormalPromise = null;
+      throw error;
+    });
+  }
+  await garantiaModoNormalPromise;
+}
+
+/** Apenas testes — permite simular nova abertura do app. */
+export function resetGarantiaModoNormalForTests(): void {
+  garantiaModoNormalPromise = null;
+}

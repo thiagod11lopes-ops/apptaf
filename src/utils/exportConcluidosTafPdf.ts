@@ -40,6 +40,10 @@ const CONCLUIDOS_EXTRA_STYLES = `
     border: 1px solid #e2e8f0;
     vertical-align: middle;
   }
+  table.concluidos-taf th.col-nome,
+  table.concluidos-taf td.col-nome {
+    white-space: nowrap;
+  }
   table.concluidos-taf tbody tr:nth-child(even) td {
     background: #f0fdf4;
   }
@@ -98,7 +102,7 @@ export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
   const rows = itens.map(
       (r) => `<tr>
         <td class="mono">${escapeHtmlPdf(r.nip)}</td>
-        <td><strong>${escapeHtmlPdf(r.nome)}</strong></td>
+        <td class="col-nome"><strong>${escapeHtmlPdf(r.nome)}</strong></td>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td>${escapeHtmlPdf(r.categoria)}</td>
         <td><span class="badge-ok">Concluído</span></td>
@@ -113,7 +117,7 @@ export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
 
   const theadHtml = `<tr>
           <th>NIP</th>
-          <th>Nome</th>
+          <th class="col-nome">Nome</th>
           <th>P/G</th>
           <th>Categoria</th>
           <th>Situação</th>

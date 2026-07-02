@@ -37,7 +37,7 @@ const TITULO_RESULTADOS_TAF = 'Resultados TAF — Corrida, Caminhada, Natação 
 const RESULTADOS_TAF_THEAD = `<tr>
         <th>P/G</th>
         <th>NIP</th>
-        <th>Nome</th>
+        <th class="col-nome">Nome</th>
         <th>Nota corrida</th>
         <th>Situação</th>
         <th class="col-rubrica">Rúbrica</th>
@@ -61,7 +61,7 @@ export function buildResultadosTafHtml(
       (r) => `<tr>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td>${escapeHtmlPdf(r.nip)}</td>
-        <td>${escapeHtmlPdf(r.nome)}</td>
+        <td class="col-nome">${escapeHtmlPdf(r.nome)}</td>
         <td class="nota">${escapeHtmlPdf(r.notaCorrida)}</td>
         <td>${escapeHtmlPdf(r.situacaoCorrida)}</td>
         <td class="col-rubrica">${celulaRubricaHtml(r.rubricaCorridaSvg)}</td>

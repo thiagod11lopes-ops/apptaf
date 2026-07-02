@@ -33,11 +33,11 @@ describe('pdfLayout', () => {
     expect(html).toContain('aplicador-assinatura');
   });
 
-  it('pagina tabelas com no máximo 12 linhas por folha', () => {
+  it('pagina tabelas com no máximo 10 linhas por folha', () => {
     const html = buildPdfTableHtml({
       tableClass: 'resultados-taf',
-      theadHtml: '<tr><th>NIP</th><th>Nome</th></tr>',
-      rowHtml: Array.from({ length: 25 }, (_, i) => `<tr><td>${i}</td><td>Mil ${i}</td></tr>`),
+      theadHtml: '<tr><th>NIP</th><th class="col-nome">Nome</th></tr>',
+      rowHtml: Array.from({ length: 25 }, (_, i) => `<tr><td>${i}</td><td class="col-nome">Mil ${i}</td></tr>`),
       emptyColspan: 2,
     });
 
@@ -48,26 +48,27 @@ describe('pdfLayout', () => {
       expect.arrayContaining([]),
       expect.arrayContaining([]),
     ]);
-    expect(paginatePdfTableRows(Array.from({ length: 25 }, () => 'x'), PDF_MAX_ROWS_PER_PAGE)[0]).toHaveLength(12);
-    expect(paginatePdfTableRows(Array.from({ length: 25 }, () => 'x'), PDF_MAX_ROWS_PER_PAGE)[2]).toHaveLength(1);
+    expect(paginatePdfTableRows(Array.from({ length: 25 }, () => 'x'), PDF_MAX_ROWS_PER_PAGE)[0]).toHaveLength(10);
+    expect(paginatePdfTableRows(Array.from({ length: 25 }, () => 'x'), PDF_MAX_ROWS_PER_PAGE)[2]).toHaveLength(5);
   });
 
-  it('estima folhas com base em 12 linhas por página', () => {
+  it('estima folhas com base em 10 linhas por página', () => {
     expect(estimarFolhasPdfPorLinhas(50)).toBe(5);
-    expect(estimarFolhasPdfPorLinhas(12)).toBe(1);
-    expect(estimarFolhasPdfPorLinhas(13)).toBe(2);
+    expect(estimarFolhasPdfPorLinhas(10)).toBe(1);
+    expect(estimarFolhasPdfPorLinhas(11)).toBe(2);
   });
 
-  it('com assinatura limita a 8 linhas por folha para evitar páginas sem tabela', () => {
-    expect(estimarFolhasPdfPorLinhas(25, PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA)).toBe(4);
+  it('com assinatura usa 10 linhas por folha', () => {
+    expect(estimarFolhasPdfPorLinhas(25, PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA)).toBe(3);
     const html = buildPdfTableHtml({
       tableClass: 'resultados-taf',
-      theadHtml: '<tr><th>NIP</th><th>Nome</th></tr>',
-      rowHtml: Array.from({ length: 25 }, (_, i) => `<tr><td>${i}</td><td>Mil ${i}</td></tr>`),
+      theadHtml: '<tr><th>NIP</th><th class="col-nome">Nome</th></tr>',
+      rowHtml: Array.from({ length: 25 }, (_, i) => `<tr><td>${i}</td><td class="col-nome">Mil ${i}</td></tr>`),
       emptyColspan: 2,
       rowsPerPage: PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
     });
-    expect((html.match(/<tbody>/g) ?? []).length).toBe(4);
+    expect((html.match(/<tbody>/g) ?? []).length).toBe(3);
+    expect(html).toContain('col-nome');
     expect(html).not.toMatch(/<tbody>\s*<\/tbody>/);
   });
 });

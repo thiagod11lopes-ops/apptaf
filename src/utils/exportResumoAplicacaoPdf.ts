@@ -59,7 +59,7 @@ export function buildResumoAplicacaoHtml(
   const colProva = escapeHtmlPdf(cabecalhoColunaProvaResultados(resultados));
   const tituloProva = escapeHtmlPdf(tituloProvaResumoPdf(resultados));
 
-  const theadPdf = `<tr><th>${colProva}</th><th>Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th></tr>`;
+  const theadPdf = `<tr><th>${colProva}</th><th class="col-nome">Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th></tr>`;
 
   const rows = resultados.map((r) => {
       const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
@@ -71,7 +71,7 @@ export function buildResumoAplicacaoHtml(
       const rubrica = celulaRubricaHtml(r.rubricaCandidatoSvg);
       return `<tr>
         <td>${papel} ${r.corredor}</td>
-        <td>${escapeHtmlPdf(r.nome)}</td>
+        <td class="col-nome">${escapeHtmlPdf(r.nome)}</td>
         <td>${nip}</td>
         <td class="tempo">${escapeHtmlPdf(formatMsByModality(r.prova ?? 'corrida', r.tempoMs))}</td>
         <td class="nota">${nota}</td>

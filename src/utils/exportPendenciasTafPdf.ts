@@ -47,6 +47,10 @@ const PENDENCIAS_EXTRA_STYLES = `
     border: 1px solid #e2e8f0;
     vertical-align: middle;
   }
+  table.pendencias-taf th.col-nome,
+  table.pendencias-taf td.col-nome {
+    white-space: nowrap;
+  }
   table.pendencias-taf tbody tr:nth-child(even) td {
     background: #fafbfc;
   }
@@ -108,7 +112,7 @@ export function buildPendenciasTafHtml(
   const rows = itens.map(
       (r) => `<tr>
         <td class="mono">${escapeHtmlPdf(r.nip)}</td>
-        <td><strong>${escapeHtmlPdf(r.nome)}</strong></td>
+        <td class="col-nome"><strong>${escapeHtmlPdf(r.nome)}</strong></td>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td>${escapeHtmlPdf(r.categoria)}</td>
         <td><span class="badge badge-${r.situacao === 'Sem teste' ? 'muted' : 'warn'}">${escapeHtmlPdf(r.situacao)}</span></td>
@@ -126,7 +130,7 @@ export function buildPendenciasTafHtml(
 
   const theadHtml = `<tr>
           <th>NIP</th>
-          <th>Nome</th>
+          <th class="col-nome">Nome</th>
           <th>P/G</th>
           <th>Categoria</th>
           <th>Situação</th>

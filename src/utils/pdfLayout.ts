@@ -15,10 +15,10 @@ export const PDF_PRINT_TOP_GAP_MM = 20;
 export const PDF_PRINT_BOTTOM_GAP_MM = 30;
 
 /** Máximo de linhas de dados por folha — visual limpo e previsível. */
-export const PDF_MAX_ROWS_PER_PAGE = 12;
+export const PDF_MAX_ROWS_PER_PAGE = 10;
 
-/** Com assinatura do aplicador, menos linhas cabem sem folha vazia (título + tabela + rodapé). */
-export const PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA = 8;
+/** Com assinatura do aplicador — mesma regra de 10 linhas por folha. */
+export const PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA = 10;
 
 export function escapeHtmlPdf(s: string): string {
   return String(s)
@@ -65,6 +65,10 @@ export const PDF_PRINT_TABLE_STYLES = `
   .pdf-print-page-block table thead th {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+  .pdf-print-page-block th.col-nome,
+  .pdf-print-page-block td.col-nome {
+    white-space: nowrap;
   }
   .pdf-print-leading {
     page-break-inside: avoid;

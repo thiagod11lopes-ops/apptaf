@@ -12,14 +12,11 @@ import {
 } from './pdfAplicadorAssinaturaHtml';
 import {
   buildPdfLandscapeDocument,
-  buildPaginatedPdfTableHtml,
+  buildPdfTableHtml,
   escapeHtmlPdf,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
 } from './pdfLayout';
-
-const PDF_RESUMO_ROWS_FIRST_PAGE = 5;
-const PDF_RESUMO_ROWS_OTHER_PAGE = 5;
 
 /** Inferência do rótulo da prova (Corrida, Natação, etc.) a partir dos resultados da sessão. */
 export function tituloProvaResumoPdf(resultados: ResultadoCorridaItem[]): string {
@@ -75,21 +72,17 @@ export function buildResumoAplicacaoHtml(
   const conteudoHtml =
     resultados.length === 0
       ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessão.</p>'
-      : buildPaginatedPdfTableHtml({
+      : buildPdfTableHtml({
           tableClass: 'resultados-taf',
           theadHtml: theadPdf,
           rowHtml: rows,
-          rowsFirstPage: PDF_RESUMO_ROWS_FIRST_PAGE,
-          rowsOtherPage: PDF_RESUMO_ROWS_OTHER_PAGE,
           emptyColspan: 7,
-          pageDocHeaderHtml: `<h1>${escapeHtmlPdf(titulo)}</h1><p class="meta">${metaHtml}</p>`,
-          pageDocFooterHtml: blocoAplicadorAssinaturaHtml(aplicadorAssinatura),
         });
 
   return buildPdfLandscapeDocument({
     documentTitle: titulo,
     titulo,
-    metaHtml: `Gerado em ${escapeHtmlPdf(dataStr)} · <strong>${tituloProva}</strong>`,
+    metaHtml,
     conteudoHtml,
     aplicadorHtml: blocoAplicadorAssinaturaHtml(aplicadorAssinatura),
     extraStyles: `

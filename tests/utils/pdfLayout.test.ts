@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildPdfLandscapeDocument, buildPaginatedPdfTableHtml } from '../../src/utils/pdfLayout';
+import {
+  buildPdfLandscapeDocument,
+  buildPdfTableHtml,
+  estimarFolhasPdfPorLinhas,
+} from '../../src/utils/pdfLayout';
 
 describe('pdfLayout', () => {
-  it('gera documento A4 paisagem com seções de página no fluxo normal', () => {
+  it('gera documento A4 paisagem com cabeçalho fixo e tabela contínua', () => {
     const html = buildPdfLandscapeDocument({
       documentTitle: 'Teste',
       titulo: 'Resumo da aplicação — TAF',
@@ -11,29 +15,29 @@ describe('pdfLayout', () => {
       aplicadorHtml: '<div class="aplicador-assinatura">Assinatura</div>',
     });
     expect(html).toContain('size: A4 landscape');
-    expect(html).toContain('pdf-print-page');
-    expect(html).toContain('pdf-print-page-doc-header');
-    expect(html).toContain('pdf-print-page-doc-footer');
-    expect(html).not.toContain('position: fixed');
+    expect(html).toContain('pdf-print-header');
+    expect(html).toContain('pdf-print-footer');
+    expect(html).toContain('table-header-group');
+    expect(html).not.toContain('pdf-print-page');
     expect(html).toContain('Resumo da aplicação — TAF');
     expect(html).toContain('aplicador-assinatura');
   });
 
-  it('repete cabeçalho de colunas e doc em cada bloco paginado', () => {
-    const html = buildPaginatedPdfTableHtml({
+  it('usa tabela única com thead para quebra automática de linhas', () => {
+    const html = buildPdfTableHtml({
       tableClass: 'resultados-taf',
       theadHtml: '<tr><th>NIP</th><th>Nome</th></tr>',
       rowHtml: Array.from({ length: 25 }, (_, i) => `<tr><td>${i}</td><td>Mil ${i}</td></tr>`),
-      rowsFirstPage: 5,
-      rowsOtherPage: 5,
       emptyColspan: 2,
-      pageDocHeaderHtml: '<h1>Título</h1><p class="meta">Meta</p>',
-      pageDocFooterHtml: '<div class="aplicador-assinatura">Assinatura</div>',
     });
 
-    expect((html.match(/<thead>/g) ?? []).length).toBe(5);
-    expect((html.match(/<section class="pdf-print-page">/g) ?? []).length).toBe(5);
-    expect(html.match(/<th>NIP<\/th>/g)?.length).toBe(5);
-    expect(html.match(/Título/g)?.length).toBe(5);
+    expect((html.match(/<table/g) ?? []).length).toBe(1);
+    expect((html.match(/<thead>/g) ?? []).length).toBe(1);
+    expect(html.match(/<tr>/g)?.length).toBe(26);
+  });
+
+  it('estima folhas com base na área útil da página', () => {
+    expect(estimarFolhasPdfPorLinhas(50, 44, 0, true)).toBeGreaterThan(1);
+    expect(estimarFolhasPdfPorLinhas(3, 44, 0, true)).toBe(1);
   });
 });

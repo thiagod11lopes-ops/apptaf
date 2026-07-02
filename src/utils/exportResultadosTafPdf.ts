@@ -10,30 +10,24 @@ import {
 } from './pdfAplicadorAssinaturaHtml';
 import {
   buildPdfLandscapeDocument,
-  buildPaginatedPdfTableHtml,
+  buildPdfTableHtml,
   escapeHtmlPdf,
+  estimarFolhasPdfPorLinhas,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
 } from './pdfLayout';
 
-/** Altura útil estimada por linha (rúbricas) em pontos — A4 paisagem. */
-const PDF_RESULTADOS_ROW_HEIGHT_PT = 48;
-/** Cada folha inclui título, meta, thead e assinatura do aplicador no fluxo. */
-const PDF_RESULTADOS_PAGE_OVERHEAD_PT = 175;
-const PDF_RESULTADOS_PAGE_USABLE_PT = PDF_A4_LANDSCAPE_HEIGHT - PDF_RESULTADOS_PAGE_OVERHEAD_PT;
-const PDF_RESULTADOS_ROWS_PER_PAGE = Math.max(
-  1,
-  Math.floor(PDF_RESULTADOS_PAGE_USABLE_PT / PDF_RESULTADOS_ROW_HEIGHT_PT),
-);
-const PDF_RESULTADOS_ROWS_FIRST_PAGE = PDF_RESULTADOS_ROWS_PER_PAGE;
-const PDF_RESULTADOS_ROWS_OTHER_PAGE = PDF_RESULTADOS_ROWS_PER_PAGE;
+const PDF_RESULTADOS_ROW_HEIGHT_PT = 44;
+const PDF_RESULTADOS_KPI_OVERHEAD_PT = 0;
 
 /** Estima quantas folhas A4 paisagem serão necessárias para imprimir a tabela de resultados. */
 export function estimarFolhasA4PdfResultadosTaf(quantidadeLinhas: number): number {
-  if (quantidadeLinhas <= 0) return 0;
-  if (quantidadeLinhas <= PDF_RESULTADOS_ROWS_FIRST_PAGE) return 1;
-  const restantes = quantidadeLinhas - PDF_RESULTADOS_ROWS_FIRST_PAGE;
-  return 1 + Math.ceil(restantes / PDF_RESULTADOS_ROWS_OTHER_PAGE);
+  return estimarFolhasPdfPorLinhas(
+    quantidadeLinhas,
+    PDF_RESULTADOS_ROW_HEIGHT_PT,
+    PDF_RESULTADOS_KPI_OVERHEAD_PT,
+    true,
+  );
 }
 
 /** Tempo padrão da prova de permanência em relatórios PDF. */
@@ -85,21 +79,17 @@ export function buildResultadosTafHtml(
 
   const metaHtml = `${escapeHtmlPdf(subtitulo)} · Gerado em ${escapeHtmlPdf(dataStr)} · ${linhas.length} registro(s)`;
 
-  const conteudoHtml = buildPaginatedPdfTableHtml({
+  const conteudoHtml = buildPdfTableHtml({
     tableClass: 'resultados-taf',
     theadHtml: RESULTADOS_TAF_THEAD,
     rowHtml: rows,
-    rowsFirstPage: PDF_RESULTADOS_ROWS_FIRST_PAGE,
-    rowsOtherPage: PDF_RESULTADOS_ROWS_OTHER_PAGE,
     emptyColspan: 14,
-    pageDocHeaderHtml: `<h1>${escapeHtmlPdf(TITULO_RESULTADOS_TAF)}</h1><p class="meta">${metaHtml}</p>`,
-    pageDocFooterHtml: blocosAplicadorAssinaturaHtml(aplicadorAssinaturas),
   });
 
   return buildPdfLandscapeDocument({
     documentTitle: 'Resultados TAF',
     titulo: TITULO_RESULTADOS_TAF,
-    metaHtml: `${escapeHtmlPdf(subtitulo)} · Gerado em ${escapeHtmlPdf(dataStr)} · ${linhas.length} registro(s)`,
+    metaHtml,
     conteudoHtml,
     aplicadorHtml: blocosAplicadorAssinaturaHtml(aplicadorAssinaturas),
     extraStyles: `

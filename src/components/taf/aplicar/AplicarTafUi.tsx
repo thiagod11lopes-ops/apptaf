@@ -128,12 +128,14 @@ export function AplicarTafFlowHeader({
   title,
   subtitle,
   onBack,
+  right,
 }: {
   title: string;
   subtitle?: string;
   onBack: () => void;
+  right?: React.ReactNode;
 }) {
-  return <AplicarTafTabHeader title={title} subtitle={subtitle} onBack={onBack} />;
+  return <AplicarTafTabHeader title={title} subtitle={subtitle} onBack={onBack} right={right} />;
 }
 
 export function AplicarTafCenteredTabHeader({

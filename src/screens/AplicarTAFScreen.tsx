@@ -47,6 +47,7 @@ import {
 } from '../components/taf/aplicar/AplicarTafPreCadastroCard';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
+import { AplicarTafDemoNipsIconButton } from '../components/taf/aplicar/AplicarTafDemoNipsIconButton';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -88,6 +89,14 @@ import {
   removerParticipanteModalidadeDoHistorico,
 } from '../utils/registroModalidadeHistorico';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
+import {
+  filtrarCadastrosDemonstracao,
+  nipFeedbackOkFromCadastro,
+} from '../utils/aplicarTafDemonstracao';
+import {
+  isModoDemonstracaoAtivo,
+  subscribeModoDemonstracao,
+} from '../services/modoDemonstracao';
 import { cadastroPrecisaCompletarDadosTaf, dataNascimentoCadastroValida } from '../utils/cadastroDadosTaf';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { detectarConflitoCorridaCaminhada, removerModalidadeOpostaDistanciaDoHistorico } from '../utils/corridaCaminhadaExcludente';
@@ -297,6 +306,8 @@ export default function AplicarTAFScreen() {
   const [nParticipantesConfirmado, setNParticipantesConfirmado] = useState(0);
   const [nipsParticipantes, setNipsParticipantes] = useState<string[]>([]);
   const [nipFeedbackLinhas, setNipFeedbackLinhas] = useState<NipFeedbackLinha[]>([]);
+  const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
+  const [preenchendoNipsDemo, setPreenchendoNipsDemo] = useState(false);
   const [modalTesteExistente, setModalTesteExistente] = useState<
     (ModalTesteJaAplicadoInfo & { dataNascimento: string; sexo?: 'M' | 'F' }) | null
   >(null);
@@ -516,6 +527,8 @@ export default function AplicarTAFScreen() {
       }
     };
   }, []);
+
+  useEffect(() => subscribeModoDemonstracao(() => setDemoAtivo(isModoDemonstracaoAtivo())), []);
 
   const onChangeNumeroVoltas = useCallback((text: string) => {
     setNumeroVoltas(text.replace(/\D/g, '').slice(0, 4));
@@ -1424,20 +1437,26 @@ export default function AplicarTAFScreen() {
       const nome = (c.nome || '').trim() || 'Sem nome';
       const nipLinha = nipsParticipantes[index] || c.nip;
       const modalidade = tipoProvaRef.current ?? tipoProva;
+      const emDemonstracao = isModoDemonstracaoAtivo();
       const precisaHistorico =
-        (modalidade === 'corrida' || modalidade === 'caminhada') && !modoTafNaval;
+        !emDemonstracao &&
+        (modalidade === 'corrida' || modalidade === 'caminhada') &&
+        !modoTafNaval;
 
       let sessoes: Awaited<ReturnType<typeof getAllSessoesAplicacao>> = [];
       let cadastros: CadastroItemPersist[] = [];
 
-      if (precisaHistorico || (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index))) {
+      if (
+        precisaHistorico ||
+        (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index) && !emDemonstracao)
+      ) {
         [sessoes, cadastros] = await Promise.all([
           getAllSessoesAplicacao(),
           getAllCadastros(),
         ]);
       }
 
-      if (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index)) {
+      if (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index) && !emDemonstracao) {
         const existente = buscarRegistroModalidadeExistente(
           nipLinha,
           modalidade,
@@ -1458,7 +1477,11 @@ export default function AplicarTAFScreen() {
         }
       }
 
-      if (precisaHistorico && abrirModalExcludenteSeConflito(index, c, nipLinha, sessoes, cadastros)) {
+      if (
+        precisaHistorico &&
+        !emDemonstracao &&
+        abrirModalExcludenteSeConflito(index, c, nipLinha, sessoes, cadastros)
+      ) {
         return;
       }
 
@@ -1586,6 +1609,31 @@ export default function AplicarTAFScreen() {
     const c = resultado.cadastro;
     await continuarAposCadastroEncontrado(index, c);
   }, [nipsParticipantes, continuarAposCadastroEncontrado]);
+
+  const preencherNipsDemonstracao = useCallback(async () => {
+    if (preenchendoNipsDemo || nParticipantesConfirmado < 1) return;
+    setPreenchendoNipsDemo(true);
+    try {
+      const cadastros = await getAllCadastros();
+      const pool = filtrarCadastrosDemonstracao(cadastros, modoTafNaval);
+      const n = nParticipantesConfirmado;
+      if (pool.length < n) {
+        Alert.alert(
+          'Cadastros insuficientes',
+          `Há ${pool.length} militar(es) de exemplo disponível(is) para esta prova. Reduza o número de participantes.`,
+        );
+        return;
+      }
+      const selecionados = pool.slice(0, n);
+      setNipsParticipantes(selecionados.map((c) => c.nip));
+      setNipFeedbackLinhas(selecionados.map((c) => nipFeedbackOkFromCadastro(c)));
+      nipsRepeticaoAutorizadaRef.current = new Set(Array.from({ length: n }, (_, i) => i));
+      setModalTesteExistente(null);
+      setModalModalidadeExcludente(null);
+    } finally {
+      setPreenchendoNipsDemo(false);
+    }
+  }, [modoTafNaval, nParticipantesConfirmado, preenchendoNipsDemo]);
 
   const fecharModalTesteExistente = useCallback(() => {
     setModalTesteExistente(null);
@@ -2431,6 +2479,14 @@ export default function AplicarTAFScreen() {
               title={flowHeader.title}
               subtitle={flowHeader.subtitle}
               onBack={() => navigation.goBack()}
+              right={
+                mostrarProvas && corridaEtapa === 'nips' && demoAtivo ? (
+                  <AplicarTafDemoNipsIconButton
+                    onPress={() => void preencherNipsDemonstracao()}
+                    loading={preenchendoNipsDemo}
+                  />
+                ) : undefined
+              }
             />
           )}
 
@@ -2566,7 +2622,11 @@ export default function AplicarTAFScreen() {
               <AplicarTafSectionHeader
                 kicker="IDENTIFICAÇÃO"
                 title={`${tituloProvaCurta} — NIPs`}
-                subtitle={`Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes.`}
+                subtitle={
+                  demoAtivo
+                    ? `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes ou toque no ícone ✨ acima para preencher automaticamente.`
+                    : `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes.`
+                }
               />
 
             {nipsParticipantes.map((nip, index) => {

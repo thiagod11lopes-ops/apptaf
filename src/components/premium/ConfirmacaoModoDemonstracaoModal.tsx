@@ -128,7 +128,7 @@ export function ConfirmacaoModoDemonstracaoModal({
           <>
             <Text style={[styles.message, { color: theme.text }]}>
               {ativar
-                ? `Serão gerados ${DEMO_TOTAL_MILITARES} militares fictícios (${DEMO_TOTAL_CFN} fuzileiros navais e ${DEMO_TOTAL_FEMININO} mulheres) para demonstração. Seus dados reais ficam guardados localmente e nada será enviado à nuvem.`
+                ? `Serão gerados ${DEMO_TOTAL_MILITARES} militares fictícios (${DEMO_TOTAL_CFN} fuzileiros navais e ${DEMO_TOTAL_FEMININO} mulheres) e 1 aplicador de teste (senha 0000) para demonstração. Seus dados reais ficam guardados localmente e nada será enviado à nuvem.`
                 : 'Os dados de demonstração serão removidos e seus dados reais serão restaurados.'}
             </Text>
             <Text style={[styles.hint, { color: theme.textMuted }]}>
@@ -153,7 +153,7 @@ export function ConfirmacaoModoDemonstracaoModal({
         {phase === 'success' ? (
           <Text style={[styles.message, { color: theme.text }]}>
             {ativar
-              ? 'Explore o sistema com dados fictícios. Toque novamente no ícone de exemplo para voltar aos seus dados.'
+              ? 'Explore o sistema com dados fictícios. Use o aplicador "Aplicador Demonstração" (senha 0000) para assinar provas. Toque novamente no ícone de exemplo para voltar aos seus dados.'
               : 'Seus dados reais foram aplicados novamente.'}
           </Text>
         ) : null}

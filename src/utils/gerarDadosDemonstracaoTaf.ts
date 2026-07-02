@@ -1,4 +1,5 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import type { AplicadorItemPersist } from '../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import type { NormaTafPreCadastro } from '../services/preCadastroTafStorage';
 import type { ResultadoCorridaItem } from '../navigation/types';
@@ -10,6 +11,11 @@ export const DEMO_TOTAL_FEMININO = 20;
 export const DEMO_PCT_COMPLETO = 0.75;
 export const DEMO_IDADE_MIN = 18;
 export const DEMO_IDADE_MAX = 50;
+export const DEMO_APLICADOR_ID = 'demo-aplicador-1';
+export const DEMO_APLICADOR_SENHA = '0000';
+/** SHA-256 de "0000" — mesmo algoritmo de hashAplicadorSenha. */
+export const DEMO_APLICADOR_SENHA_HASH =
+  '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0';
 
 /** Referência para idade dos cadastros fictícios (início do período demo do TAF). */
 const DEMO_REFERENCIA_ANO = 2026;
@@ -348,5 +354,19 @@ export function gerarDadosDemonstracaoTaf(total = DEMO_TOTAL_MILITARES): DadosDe
     cadastros,
     sessoes,
     stats: { total, feminino, cfn, completos },
+  };
+}
+
+/** Aplicador fictício para assinatura de provas no modo demonstração. */
+export function gerarAplicadorDemonstracaoTaf(): AplicadorItemPersist {
+  return {
+    id: DEMO_APLICADOR_ID,
+    nip: '99.9999.99',
+    nome: 'Aplicador Demonstração',
+    categoria: 'Praças',
+    praca: 'SG',
+    senha: DEMO_APLICADOR_SENHA,
+    senhaHash: DEMO_APLICADOR_SENHA_HASH,
+    updatedAt: Date.now(),
   };
 }

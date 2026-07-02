@@ -689,6 +689,7 @@ export async function importDemonstracaoDataset(
   ownerUid: string,
   cadastros: CadastroItemPersist[],
   sessoes: SessaoAplicacaoTaf[],
+  aplicadores: AplicadorItemPersist[] = [],
 ): Promise<void> {
   const db = getTafDatabase();
   if (!db) throw new Error('Armazenamento local indisponível para modo demonstração.');
@@ -751,6 +752,35 @@ export async function importDemonstracaoDataset(
   }
   for (let i = 0; i < sessRecords.length; i += CHUNK) {
     await db.sessoes.bulkPut(sessRecords.slice(i, i + CHUNK));
+  }
+
+  if (aplicadores.length > 0) {
+    const appRecords: AplicadorRecord[] = await Promise.all(
+      aplicadores.map(async (item) =>
+        markRecordSynced(
+          bumpRecordMeta(
+            {
+              ...item,
+              ownerUid,
+              createdAt: now,
+              updatedAt: item.updatedAt ?? now,
+              version: 1,
+              syncVersion: 1,
+              deviceId,
+              userId,
+              syncStatus: 'synced',
+              deleted: false,
+              lastModifiedBy: deviceId,
+            } as AplicadorRecord,
+            deviceId,
+            userId,
+            'CREATE',
+          ),
+          userId,
+        ),
+      ),
+    );
+    await db.aplicadores.bulkPut(appRecords);
   }
 }
 

@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { calcularIdadeAnos } from '../../src/utils/calcularIdade';
 import {
+  DEMO_APLICADOR_SENHA,
+  DEMO_APLICADOR_SENHA_HASH,
   DEMO_IDADE_MAX,
   DEMO_IDADE_MIN,
   DEMO_PCT_COMPLETO,
   DEMO_TOTAL_CFN,
   DEMO_TOTAL_FEMININO,
   DEMO_TOTAL_MILITARES,
+  gerarAplicadorDemonstracaoTaf,
   gerarDadosDemonstracaoTaf,
 } from '../../src/utils/gerarDadosDemonstracaoTaf';
 
@@ -60,5 +63,12 @@ describe('gerarDadosDemonstracaoTaf', () => {
       expect(ano).toBe('2026');
       expect(['07', '08', '09']).toContain(mes);
     }
+  });
+
+  it('gera aplicador demo com senha 0000', () => {
+    const aplicador = gerarAplicadorDemonstracaoTaf();
+    expect(aplicador.nome).toBe('Aplicador Demonstração');
+    expect(aplicador.senha).toBe(DEMO_APLICADOR_SENHA);
+    expect(aplicador.senhaHash).toBe(DEMO_APLICADOR_SENHA_HASH);
   });
 });

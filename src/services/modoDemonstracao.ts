@@ -11,7 +11,7 @@ import { importDemonstracaoDataset, resolveOwnerUid, wipeOwnerData } from '../of
 import { createLocalBackup, restoreLocalBackup } from '../offline-first/sync/localBackup';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { resolveStorageOwnerUid } from './firebase/authUid';
-import { gerarDadosDemonstracaoTaf } from '../utils/gerarDadosDemonstracaoTaf';
+import { gerarAplicadorDemonstracaoTaf, gerarDadosDemonstracaoTaf } from '../utils/gerarDadosDemonstracaoTaf';
 
 export { DEMO_SYNC_BLOCKED_MESSAGE } from '../offline-first/sync/syncAuthMessages';
 
@@ -50,7 +50,8 @@ async function ativarModoDemonstracao(ownerUid: string): Promise<void> {
 
   await wipeOwnerData(ownerUid);
   const { cadastros, sessoes } = gerarDadosDemonstracaoTaf();
-  await importDemonstracaoDataset(ownerUid, cadastros, sessoes);
+  const aplicador = gerarAplicadorDemonstracaoTaf();
+  await importDemonstracaoDataset(ownerUid, cadastros, sessoes, [aplicador]);
 
   await writeAppMeta(DEMO_BACKUP_ID_KEY, String(backupId));
   await writeAppMeta(DEMO_MODO_ATIVO_KEY, '1');

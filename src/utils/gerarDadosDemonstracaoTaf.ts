@@ -8,6 +8,13 @@ export const DEMO_TOTAL_MILITARES = 50;
 export const DEMO_TOTAL_CFN = 10;
 export const DEMO_TOTAL_FEMININO = 20;
 export const DEMO_PCT_COMPLETO = 0.75;
+export const DEMO_IDADE_MIN = 18;
+export const DEMO_IDADE_MAX = 50;
+
+/** Referência para idade dos cadastros fictícios (início do período demo do TAF). */
+const DEMO_REFERENCIA_ANO = 2026;
+const DEMO_REFERENCIA_MES = 7;
+const DEMO_REFERENCIA_DIA = 1;
 
 function escalaDemo(total: number, referencia: number): number {
   if (total <= 0) return 0;
@@ -40,6 +47,17 @@ function dataDemonstracao(i: number, salt: number): string {
   const month = dayOffset < 31 ? 7 : dayOffset < 62 ? 8 : 9;
   const day = dayOffset < 31 ? dayOffset + 1 : dayOffset < 62 ? dayOffset - 30 : dayOffset - 61;
   return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/2026`;
+}
+
+function dataNascimentoDemonstracao(i: number, salt: number): string {
+  const idade = pickInt(i, salt, DEMO_IDADE_MIN, DEMO_IDADE_MAX);
+  const mes = pickInt(i, salt + 1, 1, 12);
+  const dia = pickInt(i, salt + 2, 1, 28);
+  let ano = DEMO_REFERENCIA_ANO - idade;
+  if (mes > DEMO_REFERENCIA_MES || (mes === DEMO_REFERENCIA_MES && dia > DEMO_REFERENCIA_DIA)) {
+    ano -= 1;
+  }
+  return `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`;
 }
 
 function brToIso(dataBr: string, hour: number): string {
@@ -293,7 +311,7 @@ export function gerarDadosDemonstracaoTaf(total = DEMO_TOTAL_MILITARES): DadosDe
       id: `demo-cad-${i}`,
       nip: formatNipInput(String(10_000_000 + i)),
       nome: `${nomeBase} Demo ${i + 1}`,
-      dataNascimento: dataDemonstracao(i, 99),
+      dataNascimento: dataNascimentoDemonstracao(i, 99),
       categoria: 'Praças',
       sexo: isFemale ? 'F' : 'M',
       praca: PRACAS[i % PRACAS.length],

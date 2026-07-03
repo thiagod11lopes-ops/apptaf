@@ -36,7 +36,7 @@ export function BackupTafCsvBlock() {
     try {
       const result = await exportarBackupTafCsv();
       setExportMsg(
-        `Backup salvo (${result.filename}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões de TAF.`,
+        `Backup salvo (${result.filename}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões de TAF (backup completo v2).`,
       );
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao gerar backup CSV.');
@@ -159,7 +159,8 @@ export function BackupTafCsvBlock() {
       </TouchableOpacity>
 
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
-        Exporta e restaura cadastros e histórico de TAF em um único arquivo CSV.
+        Exporta e restaura cadastros, resultados, aplicadores, pré-cadastros, e-mails autorizados, fila de
+        sync e metadados em um único arquivo CSV.
         {isAuthenticated ? ' Com login ativo, os dados são gravados na nuvem.' : ''}
       </Text>
 
@@ -175,9 +176,20 @@ export function BackupTafCsvBlock() {
           ]}
         >
           <Text style={[ts.caption, { color: theme.text }]}>
-            Restauração concluída: {importResult.cadastrosImportados.toLocaleString('pt-BR')} cadastros
-            e {importResult.sessoesImportadas.toLocaleString('pt-BR')} sessões importadas.
+            Restauração concluída: {importResult.cadastrosImportados.toLocaleString('pt-BR')} cadastros,{' '}
+            {importResult.sessoesImportadas.toLocaleString('pt-BR')} sessões,{' '}
+            {importResult.aplicadoresImportados.toLocaleString('pt-BR')} aplicadores,{' '}
+            {importResult.preCadastrosImportados.toLocaleString('pt-BR')} pré-cadastros.
           </Text>
+          {(importResult.emailsAutorizadosImportados > 0 ||
+            importResult.syncQueueImportados > 0 ||
+            importResult.appMetaImportados > 0) && (
+            <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
+              Também: {importResult.emailsAutorizadosImportados} e-mail(s) autorizado(s),{' '}
+              {importResult.syncQueueImportados} item(ns) na fila de sync, {importResult.appMetaImportados}{' '}
+              metadado(s).
+            </Text>
+          )}
           {importResult.erros.slice(0, 5).map((msg) => (
             <Text key={msg} style={[ts.caption, { color: theme.loss, marginTop: 4 }]}>
               {msg}

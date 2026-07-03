@@ -261,19 +261,36 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
                 </View>
 
                 {prepared && phase !== 'done' ? (
-                  <View style={[styles.statsRow, { borderColor: theme.border }]}>
-                    <View style={styles.stat}>
-                      <Text style={[styles.statN, { color: theme.text }]}>
-                        {prepared.cadastros.toLocaleString('pt-BR')}
-                      </Text>
-                      <Text style={[ts.caption, { color: theme.textMuted }]}>Cadastros</Text>
+                  <View style={styles.statsWrap}>
+                    <View style={[styles.statsRow, { borderColor: theme.border }]}>
+                      <View style={styles.stat}>
+                        <Text style={[styles.statN, { color: theme.text }]}>
+                          {prepared.cadastros.toLocaleString('pt-BR')}
+                        </Text>
+                        <Text style={[ts.caption, { color: theme.textMuted }]}>Cadastros</Text>
+                      </View>
+                      <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+                      <View style={styles.stat}>
+                        <Text style={[styles.statN, { color: theme.text }]}>
+                          {prepared.sessoes.toLocaleString('pt-BR')}
+                        </Text>
+                        <Text style={[ts.caption, { color: theme.textMuted }]}>Sessões TAF</Text>
+                      </View>
                     </View>
-                    <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-                    <View style={styles.stat}>
-                      <Text style={[styles.statN, { color: theme.text }]}>
-                        {prepared.sessoes.toLocaleString('pt-BR')}
-                      </Text>
-                      <Text style={[ts.caption, { color: theme.textMuted }]}>Sessões TAF</Text>
+                    <View style={[styles.statsRow, { borderColor: theme.border }]}>
+                      <View style={styles.stat}>
+                        <Text style={[styles.statN, { color: theme.text }]}>
+                          {prepared.aplicadores.toLocaleString('pt-BR')}
+                        </Text>
+                        <Text style={[ts.caption, { color: theme.textMuted }]}>Aplicadores</Text>
+                      </View>
+                      <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+                      <View style={styles.stat}>
+                        <Text style={[styles.statN, { color: theme.text }]}>
+                          {prepared.preCadastros.toLocaleString('pt-BR')}
+                        </Text>
+                        <Text style={[ts.caption, { color: theme.textMuted }]}>Pré-cadastros</Text>
+                      </View>
                     </View>
                   </View>
                 ) : null}
@@ -414,6 +431,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   filename: { lineHeight: 18 },
+  statsWrap: { gap: 8 },
   statsRow: {
     flexDirection: 'row',
     borderWidth: 1,

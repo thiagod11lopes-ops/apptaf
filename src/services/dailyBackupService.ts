@@ -1,6 +1,5 @@
-import { getAllCadastros } from './cadastrosIndexedDb';
-import { getAllSessoesAplicacao } from './resultadosAplicadosIndexedDb';
 import { buildBackupCsvContent, downloadBackupCsvFile } from '../utils/backupTafCsv';
+import { gatherSystemBackupData } from '../utils/gatherSystemBackupData';
 import { buildBackupApptafFilename, formatBrDateKey } from '../utils/backupNaming';
 import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
@@ -18,6 +17,8 @@ export type DailyBackupPrepared = {
   filename: string;
   cadastros: number;
   sessoes: number;
+  aplicadores: number;
+  preCadastros: number;
 };
 
 function yieldToUi(): Promise<void> {
@@ -43,16 +44,12 @@ export async function prepareDailySystemBackup(
   report(8, 'Preparando backup diário…');
   await yieldToUi();
 
-  report(22, 'Coletando cadastros…');
-  const cadastros = await getAllCadastros();
-  await yieldToUi();
-
-  report(48, 'Coletando sessões e resultados…');
-  const sessoes = await getAllSessoesAplicacao();
+  report(22, 'Coletando todos os dados do sistema…');
+  const payload = await gatherSystemBackupData();
   await yieldToUi();
 
   report(68, 'Gerando arquivo de backup…');
-  const content = buildBackupCsvContent(cadastros, sessoes);
+  const content = buildBackupCsvContent(payload);
   const filename = buildBackupApptafFilename();
   await yieldToUi();
 
@@ -70,8 +67,10 @@ export async function prepareDailySystemBackup(
   return {
     content,
     filename,
-    cadastros: cadastros.length,
-    sessoes: sessoes.length,
+    cadastros: payload.cadastros.length,
+    sessoes: payload.sessoes.length,
+    aplicadores: payload.aplicadores.length,
+    preCadastros: payload.preCadastros.length,
   };
 }
 

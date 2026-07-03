@@ -9,6 +9,7 @@ import {
 } from '../services/resultadosAplicadosIndexedDb';
 import type { ResultadoCorridaItem } from '../navigation/types';
 import { csvRow, parseCsvRecords, recordsToObjects } from './csvText';
+import { buildBackupApptafFilename } from './backupNaming';
 
 const BACKUP_VERSION = '1';
 
@@ -257,8 +258,11 @@ export function buildBackupCsvContent(
 }
 
 function backupFilename(): string {
-  const date = new Date().toISOString().slice(0, 10);
-  return `taf-backup-${date}.csv`;
+  return buildBackupApptafFilename();
+}
+
+export async function downloadBackupCsvFile(content: string, filename: string): Promise<void> {
+  await shareOrDownloadCsv(content, filename);
 }
 
 async function shareOrDownloadCsv(content: string, filename: string): Promise<void> {

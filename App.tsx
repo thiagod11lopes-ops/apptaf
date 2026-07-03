@@ -16,6 +16,7 @@ import { DataStoreProvider } from './src/offline-first/store/DataStoreContext';
 import { hydrateAppStorageFromIndexedDb } from './src/offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './src/services/firebase/authUid';
 import { TabletFrameShell } from './src/components/premium/TabletFrameShell';
+import { DailyBackupGate } from './src/components/DailyBackupGate';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AdminHistoricoApp } from './src/admin/AdminHistoricoApp';
@@ -68,9 +69,11 @@ function AppRoot() {
   return (
     <View style={[styles.appRoot, { backgroundColor: 'transparent' }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <TabletFrameShell>
-        <AppNavigator />
-      </TabletFrameShell>
+      <DailyBackupGate>
+        <TabletFrameShell>
+          <AppNavigator />
+        </TabletFrameShell>
+      </DailyBackupGate>
     </View>
   );
 }

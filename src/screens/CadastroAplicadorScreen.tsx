@@ -236,7 +236,7 @@ export default function CadastroAplicadorScreen() {
         }
         try {
           const [
-            { getAplicadorSenhasMapFirestore },
+            { getAplicadorSenhasMapFirestore, setAplicadorSenhaFirestore },
             { resolveStorageOwnerUid },
             { verificarSenhaAplicador },
           ] = await Promise.all([
@@ -249,13 +249,21 @@ export default function CadastroAplicadorScreen() {
           const resolvido = await Promise.all(
             lista.map(async (a) => {
               const cloud = cloudMap[a.id];
+              // 1) Senha da nuvem que corresponde ao hash atual (mais confiável).
               if (cloud && a.senhaHash && cloud.senhaHash === a.senhaHash) {
                 return { ...a, senha: cloud.senha };
               }
+              // 2) Senha local válida do chefe — mantém e envia p/ nuvem (backfill).
               if (a.senha && a.senhaHash && (await verificarSenhaAplicador(a.senha, a.senhaHash))) {
+                void setAplicadorSenhaFirestore(ownerUid, a.id, a.senha, a.senhaHash).catch(() => {});
                 return a;
               }
-              return { ...a, senha: undefined };
+              // 3) Qualquer senha da nuvem disponível.
+              if (cloud && cloud.senha) {
+                return { ...a, senha: cloud.senha };
+              }
+              // 4) Mantém o que houver localmente (a senha fica sempre visível).
+              return a;
             }),
           );
           setAplicadores(resolvido);

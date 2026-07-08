@@ -253,9 +253,12 @@ export default function CadastroAplicadorScreen() {
               if (cloud && a.senhaHash && cloud.senhaHash === a.senhaHash) {
                 return { ...a, senha: cloud.senha };
               }
-              // 2) Senha local válida do chefe — mantém e envia p/ nuvem (backfill).
+              // 2) Senha local válida do chefe — mantém. Só faz backfill quando NÃO há
+              // senha na nuvem, para nunca sobrescrever uma troca mais recente de um membro.
               if (a.senha && a.senhaHash && (await verificarSenhaAplicador(a.senha, a.senhaHash))) {
-                void setAplicadorSenhaFirestore(ownerUid, a.id, a.senha, a.senhaHash).catch(() => {});
+                if (!cloud) {
+                  void setAplicadorSenhaFirestore(ownerUid, a.id, a.senha, a.senhaHash).catch(() => {});
+                }
                 return a;
               }
               // 3) Qualquer senha da nuvem disponível.

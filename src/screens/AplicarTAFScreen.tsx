@@ -80,8 +80,8 @@ import {
 } from '../components/taf/TafProvaTempoModal';
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
-import { addSessaoAplicacao, getAllSessoesAplicacao, getSessaoAplicacaoById, updateSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
-import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
+import { addSessaoAplicacao, getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import { aplicarRubricasEmCadastros } from '../utils/persistirRubricaCadastro';
 import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
@@ -326,7 +326,12 @@ export default function AplicarTAFScreen() {
   const [modalParcialAviso, setModalParcialAviso] = useState<string | null>(null);
   const pendingResultadosNavRef = useRef<ResultadoCorridaItem[] | null>(null);
   const resultadosPosMilitaresRef = useRef<ResultadoCorridaItem[] | null>(null);
-  const lastSessionIdRef = useRef<string | null>(null);
+  /**
+   * Gravação adiada: nada é lançado no sistema (nem notas no cadastro, nem a sessão)
+   * até o aplicador confirmar senha + rúbrica. Estes buffers guardam o que será gravado.
+   */
+  const pendingCadastrosRef = useRef<CadastroItemPersist[]>([]);
+  const pendingCleanupsRef = useRef<Array<() => Promise<void>>>([]);
   /** Lista espelhada em estado para o modal de rúbrica re-renderizar ao mudar o participante. */
   const [listaResultadosRubricaNatacao, setListaResultadosRubricaNatacao] = useState<
     ResultadoCorridaItem[] | null
@@ -779,8 +784,17 @@ export default function AplicarTAFScreen() {
     [getElapsedRaceMs],
   );
 
+  const limparBufferAplicacao = useCallback(() => {
+    pendingCadastrosRef.current = [];
+    pendingCleanupsRef.current = [];
+    resultadosPosMilitaresRef.current = null;
+  }, []);
+
   const gravarSessaoAplicacao = useCallback(
-    async (resultados: ResultadoCorridaItem[]): Promise<string | undefined> => {
+    async (
+      resultados: ResultadoCorridaItem[],
+      assinatura?: AplicadorAssinaturaResumo,
+    ): Promise<string | undefined> => {
       const tipo = tipoProvaRef.current ?? tipoProva;
       if (!tipo || resultados.length === 0) return undefined;
 
@@ -800,32 +814,64 @@ export default function AplicarTAFScreen() {
         tipoProva: tipo,
         resultados,
         normaTaf: modoTafNaval ? 'cfn' : 'armada',
+        aplicadorAssinatura: assinatura,
       });
     },
     [tipoProva, nipsParticipantes, modoTafNaval],
   );
 
-  const iniciarFinalizacaoComAssinaturaAplicador = useCallback(
-    async (resultados: ResultadoCorridaItem[]) => {
-      resultadosPosMilitaresRef.current = resultados;
-      const sessionId = await gravarSessaoAplicacao(resultados);
-      lastSessionIdRef.current = sessionId ?? null;
-      setFluxoAplicadorVisible(true);
+  /**
+   * Grava DE FATO no sistema tudo que estava pendente (notas no cadastro, limpezas de
+   * histórico e a sessão) — somente após o aplicador confirmar senha + rúbrica.
+   */
+  const commitAplicacao = useCallback(
+    async (
+      resultados: ResultadoCorridaItem[],
+      assinatura: AplicadorAssinaturaResumo,
+    ): Promise<void> => {
+      for (const cleanup of pendingCleanupsRef.current) {
+        try {
+          await cleanup();
+        } catch {
+          // Limpeza de histórico é complementar; não deve impedir o lançamento.
+        }
+      }
+      pendingCleanupsRef.current = [];
+
+      for (const cadastro of pendingCadastrosRef.current) {
+        await addCadastro(cadastro);
+      }
+      pendingCadastrosRef.current = [];
+
+      await gravarSessaoAplicacao(resultados, assinatura);
     },
     [gravarSessaoAplicacao],
   );
 
+  const iniciarFinalizacaoComAssinaturaAplicador = useCallback(
+    (resultados: ResultadoCorridaItem[]) => {
+      resultadosPosMilitaresRef.current = resultados;
+      setFluxoAplicadorVisible(true);
+    },
+    [],
+  );
+
   const onConcluirAssinaturaAplicador = useCallback(
     async (assinatura: AplicadorAssinaturaResumo) => {
-      setFluxoAplicadorVisible(false);
       const res = resultadosPosMilitaresRef.current;
-      resultadosPosMilitaresRef.current = null;
-      if (lastSessionIdRef.current) {
-        const sessao = await getSessaoAplicacaoById(lastSessionIdRef.current);
-        if (sessao) {
-          await updateSessaoAplicacao({ ...sessao, aplicadorAssinatura: assinatura });
+      try {
+        if (res) {
+          await commitAplicacao(res, assinatura);
         }
+      } catch {
+        Alert.alert(
+          'Erro ao lançar',
+          'Não foi possível lançar os resultados no sistema. Tente novamente.',
+        );
+        return;
       }
+      limparBufferAplicacao();
+      setFluxoAplicadorVisible(false);
       if (res) {
         navigation.navigate('CadastrarResultados', {
           resultados: res,
@@ -834,8 +880,26 @@ export default function AplicarTAFScreen() {
         });
       }
     },
-    [navigation],
+    [navigation, commitAplicacao, limparBufferAplicacao],
   );
+
+  const onCancelarAssinaturaAplicador = useCallback(() => {
+    Alert.alert(
+      'Descartar aplicação?',
+      'Enquanto o aplicador não confirmar a senha e a rúbrica, nada é lançado no sistema. Deseja descartar esta aplicação?',
+      [
+        { text: 'Voltar', style: 'cancel' },
+        {
+          text: 'Descartar',
+          style: 'destructive',
+          onPress: () => {
+            limparBufferAplicacao();
+            setFluxoAplicadorVisible(false);
+          },
+        },
+      ],
+    );
+  }, [limparBufferAplicacao]);
 
   const onCadastrarResultados = useCallback(async () => {
     if (salvandoResultadosCorrida) return;
@@ -897,6 +961,9 @@ export default function AplicarTAFScreen() {
 
     setSalvandoResultadosCorrida(true);
     try {
+      // Gravação adiada: monta o que será lançado, mas só grava após o aplicador confirmar.
+      const bufferCadastros: CadastroItemPersist[] = [];
+      const bufferCleanups: Array<() => Promise<void>> = [];
       const listaAtual: CadastroItemPersist[] = [...cadastrosInicial];
       let ok = 0;
       const naoEncontrados: string[] = [];
@@ -917,15 +984,19 @@ export default function AplicarTAFScreen() {
         if (!modoTafNaval && (prova === 'corrida' || prova === 'caminhada')) {
           const nip = (r.nip ?? '').trim();
           if (nip) {
-            await removerModalidadeOpostaDistanciaDoHistorico(nip, prova, atualizado);
+            bufferCleanups.push(() =>
+              removerModalidadeOpostaDistanciaDoHistorico(nip, prova, atualizado),
+            );
           }
         }
-        await addCadastro(atualizado);
+        bufferCadastros.push(atualizado);
         const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);
         if (idx >= 0) listaAtual[idx] = atualizado;
         ok += 1;
       }
 
+      pendingCadastrosRef.current = bufferCadastros;
+      pendingCleanupsRef.current = bufferCleanups;
       pendingResultadosNavRef.current = resultados;
 
       if (ok > 0) {
@@ -1047,6 +1118,8 @@ export default function AplicarTAFScreen() {
 
     setSalvandoResultadosCorrida(true);
     try {
+      // Gravação adiada: monta o que será lançado, mas só grava após o aplicador confirmar.
+      const bufferCadastros: CadastroItemPersist[] = [];
       const listaAtual = [...cadastrosInicial];
       let ok = 0;
       const naoEncontrados: string[] = [];
@@ -1065,12 +1138,14 @@ export default function AplicarTAFScreen() {
           repeticoes: reps,
           modoTafNaval: true,
         });
-        await addCadastro(atualizado);
+        bufferCadastros.push(atualizado);
         const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);
         if (idx >= 0) listaAtual[idx] = atualizado;
         ok += 1;
       }
 
+      pendingCadastrosRef.current = bufferCadastros;
+      pendingCleanupsRef.current = [];
       pendingResultadosNavRef.current = resultados;
 
       if (ok > 0) {
@@ -1206,9 +1281,13 @@ export default function AplicarTAFScreen() {
     if (modalParcialAviso) {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
-    void persistirRubricasNoCadastro(atualizados).then(() => {
-      void iniciarFinalizacaoComAssinaturaAplicador(atualizados);
-    });
+    // Mescla a rúbrica do candidato no buffer (ainda sem gravar);
+    // a gravação real ocorre só após o aplicador confirmar senha + rúbrica.
+    pendingCadastrosRef.current = aplicarRubricasEmCadastros(
+      pendingCadastrosRef.current,
+      atualizados,
+    );
+    iniciarFinalizacaoComAssinaturaAplicador(atualizados);
     pendingResultadosNavRef.current = null;
     setModalParcialAviso(null);
   }, [
@@ -1747,6 +1826,8 @@ export default function AplicarTAFScreen() {
 
     try {
       let cadastrosInicial = await getAllCadastros();
+      // Gravação adiada: monta o que será lançado, mas só grava após o aplicador confirmar.
+      const bufferCadastros: CadastroItemPersist[] = [];
       const listaAtual = [...cadastrosInicial];
       let ok = 0;
       const naoEncontrados: string[] = [];
@@ -1769,11 +1850,14 @@ export default function AplicarTAFScreen() {
           tempoPermanencia: tempoStr,
           dataTafPermanencia: dataHojeBr(),
         };
-        await addCadastro(atualizado);
+        bufferCadastros.push(atualizado);
         const idx = listaAtual.findIndex((c) => c.id === busca.cadastro.id);
         if (idx >= 0) listaAtual[idx] = atualizado;
         ok += 1;
       }
+
+      pendingCadastrosRef.current = bufferCadastros;
+      pendingCleanupsRef.current = [];
 
       if (ok > 0) {
         const resultadosPerm: ResultadoCorridaItem[] = [];
@@ -2456,6 +2540,7 @@ export default function AplicarTAFScreen() {
       <FluxoAssinaturaAplicadorModal
         visible={fluxoAplicadorVisible}
         onConcluir={(assinatura) => void onConcluirAssinaturaAplicador(assinatura)}
+        onCancelar={onCancelarAssinaturaAplicador}
       />
 
       <ScrollView

@@ -53,9 +53,10 @@ type Etapa = 'senha' | 'rubrica';
 type Props = {
   visible: boolean;
   onConcluir: (assinatura: AplicadorAssinaturaResumo) => void;
+  onCancelar?: () => void;
 };
 
-export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
+export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar }: Props) {
   const { theme } = useTheme();
   const [etapa, setEtapa] = useState<Etapa>('senha');
   const [senha, setSenha] = useState('');
@@ -204,7 +205,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
   );
 
   return (
-    <AppModal visible={visible} transparent animationType="fade" onRequestClose={() => {}} accessibilityViewIsModal>
+    <AppModal visible={visible} transparent animationType="fade" onRequestClose={onCancelar ?? (() => {})} accessibilityViewIsModal>
       <AssinaturaFuturistaOverlay>
         <AssinaturaFuturistaScroll>
           <AssinaturaFuturistaCard accent="violet">
@@ -289,13 +290,27 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir }: Props) {
                 />
                 {erroSenha ? <AssinaturaFuturistaError message={erroSenha} /> : null}
 
-                <AssinaturaFuturistaBtnPrimary
-                  label={verificando ? 'Verificando…' : 'Confirmar senha'}
-                  onPress={() => void confirmarSenha()}
-                  disabled={verificando || aplicadores.length === 0}
-                  loading={verificando}
-                  accent="violet"
-                />
+                {onCancelar ? (
+                  <AssinaturaFuturistaBtnRow>
+                    <AssinaturaFuturistaBtnGhost label="Cancelar" onPress={onCancelar} flex />
+                    <AssinaturaFuturistaBtnPrimary
+                      label={verificando ? 'Verificando…' : 'Confirmar senha'}
+                      onPress={() => void confirmarSenha()}
+                      disabled={verificando || aplicadores.length === 0}
+                      loading={verificando}
+                      accent="violet"
+                      flex
+                    />
+                  </AssinaturaFuturistaBtnRow>
+                ) : (
+                  <AssinaturaFuturistaBtnPrimary
+                    label={verificando ? 'Verificando…' : 'Confirmar senha'}
+                    onPress={() => void confirmarSenha()}
+                    disabled={verificando || aplicadores.length === 0}
+                    loading={verificando}
+                    accent="violet"
+                  />
+                )}
               </>
             ) : (
               <>

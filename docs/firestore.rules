@@ -112,6 +112,13 @@ service cloud.firestore {
       );
     }
 
+    // Senhas em texto dos aplicadores: apenas o chefe pode LER.
+    // Membros ativos podem escrever (ao trocar a senha), mas nunca ler.
+    match /users/{userId}/aplicador_senhas/{docId} {
+      allow read: if isBoss(userId);
+      allow write: if isBoss(userId) || isActiveMemberOf(userId);
+    }
+
     match /users/{userId}/pre_cadastros/{docId} {
       allow read, write: if canAccessUserData(userId);
     }

@@ -143,6 +143,18 @@ export default function CadastroAplicadorScreen() {
     setErroNuvem(null);
     try {
       await aplicadorRepository.save(novo);
+      if (senha.trim() && senhaHash && senhaPlano) {
+        try {
+          const [{ setAplicadorSenhaFirestore }, { resolveStorageOwnerUid }] = await Promise.all([
+            import('../services/firebase/aplicadorSenhasFirestore'),
+            import('../services/firebase/authUid'),
+          ]);
+          const ownerUid = await resolveStorageOwnerUid();
+          await setAplicadorSenhaFirestore(ownerUid, id, senhaPlano, senhaHash);
+        } catch {
+          // Senha em texto é complementar; a senhaHash já sincroniza normalmente.
+        }
+      }
       setAplicadores((prev) => {
         if (editandoId) return prev.map((a) => (a.id === id ? novo : a));
         return [...prev, novo];
@@ -195,6 +207,16 @@ export default function CadastroAplicadorScreen() {
     setErroNuvem(null);
     try {
       await aplicadorRepository.remove(id);
+      try {
+        const [{ deleteAplicadorSenhaFirestore }, { resolveStorageOwnerUid }] = await Promise.all([
+          import('../services/firebase/aplicadorSenhasFirestore'),
+          import('../services/firebase/authUid'),
+        ]);
+        const ownerUid = await resolveStorageOwnerUid();
+        await deleteAplicadorSenhaFirestore(ownerUid, id);
+      } catch {
+        // Limpeza da senha em texto é complementar.
+      }
       setAplicadores((prev) => prev.filter((a) => a.id !== id));
       if (editandoId === id) setEditandoId(null);
     } catch (err) {
@@ -207,9 +229,42 @@ export default function CadastroAplicadorScreen() {
 
   const recarregarAplicadores = useCallback(() => {
     getAllAplicadores()
-      .then(setAplicadores)
+      .then(async (lista) => {
+        if (!isBoss) {
+          setAplicadores(lista);
+          return;
+        }
+        try {
+          const [
+            { getAplicadorSenhasMapFirestore },
+            { resolveStorageOwnerUid },
+            { verificarSenhaAplicador },
+          ] = await Promise.all([
+            import('../services/firebase/aplicadorSenhasFirestore'),
+            import('../services/firebase/authUid'),
+            import('../utils/aplicadorSenha'),
+          ]);
+          const ownerUid = await resolveStorageOwnerUid();
+          const cloudMap = await getAplicadorSenhasMapFirestore(ownerUid);
+          const resolvido = await Promise.all(
+            lista.map(async (a) => {
+              const cloud = cloudMap[a.id];
+              if (cloud && a.senhaHash && cloud.senhaHash === a.senhaHash) {
+                return { ...a, senha: cloud.senha };
+              }
+              if (a.senha && a.senhaHash && (await verificarSenhaAplicador(a.senha, a.senhaHash))) {
+                return a;
+              }
+              return { ...a, senha: undefined };
+            }),
+          );
+          setAplicadores(resolvido);
+        } catch {
+          setAplicadores(lista);
+        }
+      })
       .catch(() => undefined);
-  }, []);
+  }, [isBoss]);
 
   useAuthDataReload(recarregarAplicadores);
 

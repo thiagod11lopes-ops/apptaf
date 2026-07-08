@@ -120,23 +120,44 @@ export async function addAplicador(item: AplicadorItemPersist): Promise<void> {
   }
 }
 
+/** Envia a senha em texto para a nuvem (coleção só-leitura do chefe). Best-effort. */
+async function pushAplicadorSenhaCloud(
+  ownerUid: string | null,
+  id: string,
+  senha: string,
+  senhaHash: string,
+): Promise<void> {
+  if (!ownerUid) return;
+  try {
+    const { setAplicadorSenhaFirestore } = await import('./firebase/aplicadorSenhasFirestore');
+    await setAplicadorSenhaFirestore(ownerUid, id, senha, senhaHash);
+  } catch {
+    // A senha funcional (hash) já sincroniza pela fila; o texto é complementar.
+  }
+}
+
 /**
  * Altera apenas a senha de um aplicador já cadastrado.
  * Disponível para o chefe e para e-mails autorizados (membros).
- * Para o chefe, também atualiza a senha em texto (visível na planilha).
+ * A senha em texto é enviada à nuvem em coleção que apenas o chefe pode ler.
  */
 export async function alterarSenhaAplicador(id: string, novaSenha: string): Promise<boolean> {
   const { hashAplicadorSenha, formatSenhaAplicadorInput } = await import('../utils/aplicadorSenha');
-  const senhaHash = await hashAplicadorSenha(novaSenha);
-  const senhaPlano = isBossDataSession() ? formatSenhaAplicadorInput(novaSenha) : undefined;
+  const senhaFmt = formatSenhaAplicadorInput(novaSenha);
+  const senhaHash = await hashAplicadorSenha(senhaFmt);
+  const senhaPlano = isBossDataSession() ? senhaFmt : undefined;
 
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
-    return dataStore.updateAplicadorSenha(id, senhaHash, uid, senhaPlano);
+    const ok = await dataStore.updateAplicadorSenha(id, senhaHash, uid, senhaPlano);
+    if (ok) await pushAplicadorSenhaCloud(uid, id, senhaFmt, senhaHash);
+    return ok;
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
-    return dataStore.updateAplicadorSenha(id, senhaHash, uid, senhaPlano);
+    const ok = await dataStore.updateAplicadorSenha(id, senhaHash, uid, senhaPlano);
+    if (ok) await pushAplicadorSenhaCloud(uid, id, senhaFmt, senhaHash);
+    return ok;
   }
 
   try {

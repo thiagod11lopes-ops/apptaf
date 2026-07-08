@@ -16,6 +16,7 @@ export type AplicadorItemPersist = {
 import { waitForAuthenticatedUid, resolveStorageOwnerUid } from './firebase/authUid';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { dataStore } from '../offline-first/store/DataStore';
+import { isBossDataSession } from '../utils/aplicadorSyncPolicy';
 
 function useOfflineFirstDb(): boolean {
   return getTafDatabase() != null;
@@ -116,6 +117,54 @@ export async function addAplicador(item: AplicadorItemPersist): Promise<void> {
     });
   } catch {
     // Sem impedir a funcionalidade da UI.
+  }
+}
+
+/**
+ * Altera apenas a senha de um aplicador já cadastrado.
+ * Disponível para o chefe e para e-mails autorizados (membros).
+ * Para o chefe, também atualiza a senha em texto (visível na planilha).
+ */
+export async function alterarSenhaAplicador(id: string, novaSenha: string): Promise<boolean> {
+  const { hashAplicadorSenha, formatSenhaAplicadorInput } = await import('../utils/aplicadorSenha');
+  const senhaHash = await hashAplicadorSenha(novaSenha);
+  const senhaPlano = isBossDataSession() ? formatSenhaAplicadorInput(novaSenha) : undefined;
+
+  if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
+    return dataStore.updateAplicadorSenha(id, senhaHash, uid, senhaPlano);
+  }
+  const uid = await waitForAuthenticatedUid();
+  if (uid) {
+    return dataStore.updateAplicadorSenha(id, senhaHash, uid, senhaPlano);
+  }
+
+  try {
+    const db = await openDb();
+    return await new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const existing = getReq.result as AplicadorItemPersist | undefined;
+        if (!existing) {
+          resolve(false);
+          return;
+        }
+        const merged: AplicadorItemPersist = {
+          ...existing,
+          senhaHash,
+          ...(senhaPlano !== undefined ? { senha: senhaPlano } : {}),
+          updatedAt: Date.now(),
+        };
+        const putReq = store.put(merged);
+        putReq.onsuccess = () => resolve(true);
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  } catch {
+    return false;
   }
 }
 

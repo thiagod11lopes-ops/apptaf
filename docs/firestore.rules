@@ -101,7 +101,15 @@ service cloud.firestore {
 
     match /users/{userId}/aplicadores/{docId} {
       allow read: if canAccessUserData(userId);
-      allow write: if isBoss(userId);
+      allow create, delete: if isBoss(userId);
+      // Membros autorizados podem alterar apenas a senha (senhaHash);
+      // identidade (nip/nome/categoria) permanece inalterada.
+      allow update: if isBoss(userId) || (
+        isActiveMemberOf(userId)
+        && request.resource.data.nip == resource.data.nip
+        && request.resource.data.nome == resource.data.nome
+        && request.resource.data.categoria == resource.data.categoria
+      );
     }
 
     match /users/{userId}/pre_cadastros/{docId} {

@@ -81,6 +81,25 @@ export function mergeAplicadorAfterRemoteDownload(
   };
 }
 
+/**
+ * Verdadeiro quando a diferença entre o registro local e o remoto é apenas de
+ * senha (senhaHash) — identidade (nip/nome/categoria) inalterada e nenhum dos
+ * dois marcado como excluído. Usado para liberar o upload de troca de senha por
+ * membros autorizados, mantendo o bloqueio das demais escritas em aplicadores.
+ */
+export function isMemberAplicadorSenhaChange(
+  local: Partial<AplicadorItemPersist> & { deleted?: boolean } | null | undefined,
+  remote: Partial<AplicadorItemPersist> & { deleted?: boolean } | null | undefined,
+): boolean {
+  if (!local || !remote) return false;
+  if (local.deleted || remote.deleted) return false;
+  return (
+    (local.nip ?? '') === (remote.nip ?? '') &&
+    (local.nome ?? '') === (remote.nome ?? '') &&
+    (local.categoria ?? '') === (remote.categoria ?? '')
+  );
+}
+
 export function sanitizeAplicadorForDisplay(
   item: AplicadorItemPersist,
   isMember = isAuthorizedMemberSession(),

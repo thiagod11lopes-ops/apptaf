@@ -524,6 +524,47 @@ export async function saveAplicador(
   return record;
 }
 
+/**
+ * Atualiza somente a senha (senhaHash) de um aplicador existente.
+ * Permitido também para membros autorizados — identidade (nip/nome/categoria)
+ * permanece inalterada, o que é garantido pelas regras do Firestore no upload.
+ */
+export async function updateAplicadorSenhaHash(
+  id: string,
+  senhaHash: string,
+  ownerUid: string,
+  userId: string | null,
+  senhaPlano?: string,
+): Promise<AplicadorRecord | null> {
+  const existing = await getAplicadorRaw(id);
+  if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return null;
+
+  const base: AplicadorRecord = {
+    ...existing,
+    senhaHash,
+    ...(senhaPlano !== undefined ? { senha: senhaPlano } : {}),
+  };
+  const record = bumpRecordMeta(base, await getDeviceId(), userId, 'UPDATE');
+  await putAplicadorRecord(record);
+  await enqueueIfAllowed({
+    operationType: 'UPDATE',
+    collection: 'aplicadores',
+    documentId: id,
+    payload: record,
+    ownerUid,
+  });
+  await syncLogger.appendChangeLog({
+    documentId: id,
+    collection: 'aplicadores',
+    action: 'UPDATE',
+    deviceId: record.deviceId,
+    userId,
+    previousVersion: existing.version,
+    newVersion: record.version,
+  });
+  return record;
+}
+
 export async function softDeleteAplicador(
   id: string,
   ownerUid: string,

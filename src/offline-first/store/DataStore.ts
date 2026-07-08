@@ -13,6 +13,7 @@ import {
   resolveOwnerUid,
   saveCadastro,
   saveAplicador,
+  updateAplicadorSenhaHash,
   saveCadastrosBatch,
   saveSessao,
   softDeleteCadastro,
@@ -75,6 +76,23 @@ export class DataStore {
   async deleteAplicador(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteAplicador(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
     notifyDataChanged();
+  }
+
+  async updateAplicadorSenha(
+    id: string,
+    senhaHash: string,
+    ownerUid: string | null,
+    senhaPlano?: string,
+  ): Promise<boolean> {
+    const record = await updateAplicadorSenhaHash(
+      id,
+      senhaHash,
+      resolveOwnerUid(ownerUid),
+      getCachedLoginUid(),
+      senhaPlano,
+    );
+    notifyDataChanged();
+    return record != null;
   }
 
   async upsertSessao(sessao: SessaoAplicacaoTaf, ownerUid: string | null): Promise<void> {

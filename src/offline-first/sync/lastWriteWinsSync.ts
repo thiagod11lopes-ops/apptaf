@@ -25,6 +25,7 @@ import { normalizeSessaoShape, type SessaoResultadoRubrica } from '../../utils/s
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import {
   isAuthorizedMemberSession,
+  isMemberAplicadorSenhaChange,
   mergeAplicadorAfterRemoteDownload,
   toAplicadorFirestorePayload,
 } from '../../utils/aplicadorSyncPolicy';
@@ -321,8 +322,28 @@ async function flushRemainingPendingRecords(
 
     if (isAuthorizedMemberSession() && item.collection === 'aplicadores') {
       const remote = remoteMaps.aplicadores.get(item.id);
+      const decision = remote ? decideLastWriteWins(local, remote) : null;
+      const membroTrocaSenha =
+        !!remote &&
+        decision?.action === 'upload' &&
+        isMemberAplicadorSenhaChange(local as AplicadorRecord, remote as AplicadorRecord);
       try {
-        if (remote) {
+        if (remote && membroTrocaSenha) {
+          await executePlanItem(
+            ownerUid,
+            {
+              collection: 'aplicadores',
+              id: item.id,
+              action: 'upload',
+              local,
+              remote,
+              hasRemote: true,
+            },
+            uploadFns,
+            stats,
+            deletionAudits,
+          );
+        } else if (remote) {
           await executePlanItem(
             ownerUid,
             {
@@ -546,7 +567,14 @@ async function executePlanItem(
   const upload = uploadFns[item.collection];
 
   if (item.action === 'upload' && item.local) {
-    if (isAuthorizedMemberSession() && item.collection === 'aplicadores') {
+    if (
+      isAuthorizedMemberSession() &&
+      item.collection === 'aplicadores' &&
+      !isMemberAplicadorSenhaChange(
+        item.local as AplicadorRecord,
+        item.remote as AplicadorRecord | undefined,
+      )
+    ) {
       stats.ignored += 1;
       return;
     }
@@ -619,7 +647,17 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
   const downloadItems = fullPlan.filter((p) => p.action === 'download');
   const uploadItems = fullPlan
     .filter((p) => p.action === 'upload')
-    .filter((p) => !(isAuthorizedMemberSession() && p.collection === 'aplicadores'));
+    .filter(
+      (p) =>
+        !(
+          isAuthorizedMemberSession() &&
+          p.collection === 'aplicadores' &&
+          !isMemberAplicadorSenhaChange(
+            p.local as AplicadorRecord | undefined,
+            p.remote as AplicadorRecord | undefined,
+          )
+        ),
+    );
 
   const localPre = await listPreCadastros(ownerUid);
 

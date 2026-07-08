@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { User } from 'lucide-react-native';
+import { User, KeyRound } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
@@ -19,6 +19,7 @@ import { AppHeader } from '../components/sismav/AppHeader';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
+import { AlterarSenhaAplicadorModal } from '../components/aplicador/AlterarSenhaAplicadorModal';
 import { consumeLastRedirectAuthError } from '../services/firebase/googleAuth';
 import { navigateTab } from '../navigation/navigationRef';
 import { PREMIUM } from '../theme/premium';
@@ -33,7 +34,8 @@ export default function LoginScreen() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const navigation = useNavigation();
-  const { user, isAuthenticated, isSessionLoading, firebaseEnabled, logout } = useAuth();
+  const { user, isAuthenticated, isAuthorizedMember, isSessionLoading, firebaseEnabled, logout } =
+    useAuth();
   const { appMode, pendingCount } = useOfflineSyncState();
   const { statusHint } = useCloudSyncHeaderStatus();
 
@@ -64,6 +66,7 @@ export default function LoginScreen() {
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [senhaModalVisible, setSenhaModalVisible] = useState(false);
 
   useEffect(() => {
     const redirectError = consumeLastRedirectAuthError();
@@ -148,12 +151,40 @@ export default function LoginScreen() {
           )}
         </Card>
 
+        {isAuthenticated && isAuthorizedMember ? (
+          <Card elevated style={styles.senhaCard}>
+            <View style={styles.senhaHeader}>
+              <View
+                style={[styles.senhaIcon, { backgroundColor: theme.accentMuted, borderColor: theme.border }]}
+              >
+                <KeyRound size={20} color={theme.primary} strokeWidth={2.2} />
+              </View>
+              <View style={styles.senhaHeaderText}>
+                <Text style={ts.h2}>Senha de aplicador</Text>
+                <Text style={[ts.caption, { color: theme.textMuted, marginTop: 2 }]}>
+                  Escolha um aplicador e altere a senha informando a senha atual.
+                </Text>
+              </View>
+            </View>
+            <Button
+              title="Alterar senha de aplicador"
+              variant="secondary"
+              onPress={() => setSenhaModalVisible(true)}
+            />
+          </Card>
+        ) : null}
+
         <Text style={[ts.caption, styles.footer]}>
           {firebaseEnabled
             ? 'Após entrar com Google, sua sessão permanece ativa. A sincronização é feita manualmente na tela inicial.'
             : 'Adicione as chaves do Firebase em .env para habilitar login Google e banco na nuvem.'}
         </Text>
       </ScrollView>
+
+      <AlterarSenhaAplicadorModal
+        visible={senhaModalVisible}
+        onClose={() => setSenhaModalVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -190,4 +221,20 @@ const styles = StyleSheet.create({
   },
   erro: { marginTop: 10, textAlign: 'center' },
   footer: { textAlign: 'center', marginTop: 16, lineHeight: 20, paddingHorizontal: 8 },
+  senhaCard: { marginTop: 16 },
+  senhaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  senhaIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  senhaHeaderText: { flex: 1 },
 });

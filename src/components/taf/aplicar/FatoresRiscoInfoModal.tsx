@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { AlertTriangle, X } from 'lucide-react-native';
-import { AppModal } from '../premium/AppModal';
-import { useTheme } from '../../contexts/ThemeContext';
-import { getUiColors } from '../../theme/uiColors';
-import { formatNipInput } from '../../utils/nipFormat';
+import { AppModal } from '../../premium/AppModal';
+import { useTheme } from '../../../contexts/ThemeContext';
+import { getUiColors } from '../../../theme/uiColors';
+import { formatNipInput } from '../../../utils/nipFormat';
 
 export const FATORES_RISCO_LARANJA = '#ea580c';
 

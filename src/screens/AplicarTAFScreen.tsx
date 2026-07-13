@@ -41,6 +41,10 @@ import {
 } from '../components/taf/aplicar/AplicarTafUi';
 import { AplicarTafHomeLauncher } from '../components/taf/aplicar/AplicarTafHomeLauncher';
 import { AplicarTafFatoresRiscoPanel } from '../components/taf/aplicar/AplicarTafFatoresRiscoPanel';
+import {
+  FatoresRiscoInfoModal,
+  FATORES_RISCO_LARANJA,
+} from '../components/taf/aplicar/FatoresRiscoInfoModal';
 import { AplicarTafProvaSelector } from '../components/taf/aplicar/AplicarTafProvaSelector';
 import {
   AplicarTafPreCadastroCard,
@@ -133,6 +137,13 @@ import {
   removePreCadastroTaf,
   type PreCadastroTaf,
 } from '../services/preCadastroTafStorage';
+import {
+  getAllFatoresRisco,
+  listarFatoresRiscoSim,
+  temFatorRiscoSim,
+  type FatoresRiscoRegistro,
+} from '../services/fatoresRiscoStorage';
+import { nipDigitos } from '../utils/nipFormat';
 
 /** Máscara NIP: 00.0000.00 (igual ao cadastro) */
 function formatNipInput(value: string) {
@@ -283,6 +294,14 @@ export default function AplicarTAFScreen() {
   const inputTextColor = ui.text;
   const [mostrarListaPreCadastro, setMostrarListaPreCadastro] = useState(false);
   const [mostrarFatoresRisco, setMostrarFatoresRisco] = useState(false);
+  const [fatoresRiscoPorNip, setFatoresRiscoPorNip] = useState<Record<string, FatoresRiscoRegistro>>(
+    {},
+  );
+  const [modalFatoresRiscoInfo, setModalFatoresRiscoInfo] = useState<{
+    nome: string;
+    nip: string;
+    fatores: string[];
+  } | null>(null);
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
   const [modoTafNaval, setModoTafNaval] = useState(false);
   const [repeticoesParticipantes, setRepeticoesParticipantes] = useState<string[]>([]);
@@ -1943,6 +1962,45 @@ export default function AplicarTAFScreen() {
     setMostrarProvas(false);
   }, []);
 
+  const recarregarFatoresRisco = useCallback(() => {
+    void getAllFatoresRisco()
+      .then(setFatoresRiscoPorNip)
+      .catch(() => setFatoresRiscoPorNip({}));
+  }, []);
+
+  useEffect(() => {
+    recarregarFatoresRisco();
+  }, [recarregarFatoresRisco, mostrarFatoresRisco, corridaEtapa]);
+
+  const abrirModalFatoresRiscoParticipante = useCallback(
+    (index: number) => {
+      const nip = nipsParticipantes[index] ?? '';
+      const key = nipDigitos(nip);
+      const reg = key ? fatoresRiscoPorNip[key] : undefined;
+      if (!reg || !temFatorRiscoSim(reg.respostas)) return;
+      const fb = nipFeedbackLinhas[index];
+      const nome =
+        fb?.tipo === 'ok' || fb?.tipo === 'completar_dados'
+          ? fb.nomeMilitar
+          : reg.nome || `Participante ${index + 1}`;
+      setModalFatoresRiscoInfo({
+        nome,
+        nip: key,
+        fatores: listarFatoresRiscoSim(reg.respostas),
+      });
+    },
+    [nipsParticipantes, fatoresRiscoPorNip, nipFeedbackLinhas],
+  );
+
+  const participanteTemFatorRisco = useCallback(
+    (index: number): boolean => {
+      const key = nipDigitos(nipsParticipantes[index] ?? '');
+      if (!key) return false;
+      return temFatorRiscoSim(fatoresRiscoPorNip[key]?.respostas);
+    },
+    [nipsParticipantes, fatoresRiscoPorNip],
+  );
+
   const voltarInicioAplicarTaf = useCallback(() => {
     setMostrarListaPreCadastro(false);
     setMostrarFatoresRisco(false);
@@ -2209,6 +2267,15 @@ export default function AplicarTAFScreen() {
         return fb?.tipo === 'ok' ? fb.nomeMilitar : '—';
       }),
     [nParticipantesConfirmado, nipFeedbackLinhas],
+  );
+
+  const participantesComFatorRiscoModal = useMemo(
+    () =>
+      Array.from({ length: nParticipantesConfirmado }, (_, index) => {
+        const key = nipDigitos(nipsParticipantes[index] ?? '');
+        return key ? temFatorRiscoSim(fatoresRiscoPorNip[key]?.respostas) : false;
+      }),
+    [nParticipantesConfirmado, nipsParticipantes, fatoresRiscoPorNip],
   );
 
   const todosMarcadosPermanencia = useMemo(
@@ -2609,7 +2676,10 @@ export default function AplicarTAFScreen() {
           ) : null}
 
           {mostrarFatoresRisco ? (
-            <AplicarTafFatoresRiscoPanel onVoltar={voltarInicioAplicarTaf} />
+            <AplicarTafFatoresRiscoPanel
+              onVoltar={voltarInicioAplicarTaf}
+              onSalvo={recarregarFatoresRisco}
+            />
           ) : null}
 
           {mostrarListaPreCadastro ? (
@@ -2788,17 +2858,35 @@ export default function AplicarTAFScreen() {
                   <View
                     style={[
                       styles.militarIdentityCard,
-                      {
-                        borderColor: theme.isDark ? 'rgba(34,197,94,0.35)' : 'rgba(22,163,74,0.22)',
-                        backgroundColor: theme.isDark ? 'rgba(34,197,94,0.08)' : 'rgba(220,252,231,0.45)',
-                      },
+                      participanteTemFatorRisco(index)
+                        ? {
+                            borderColor: theme.isDark
+                              ? 'rgba(234,88,12,0.55)'
+                              : 'rgba(234,88,12,0.45)',
+                            borderWidth: 2,
+                            backgroundColor: theme.isDark
+                              ? 'rgba(234,88,12,0.1)'
+                              : 'rgba(255,247,237,0.85)',
+                          }
+                        : {
+                            borderColor: theme.isDark
+                              ? 'rgba(34,197,94,0.35)'
+                              : 'rgba(22,163,74,0.22)',
+                            backgroundColor: theme.isDark
+                              ? 'rgba(34,197,94,0.08)'
+                              : 'rgba(220,252,231,0.45)',
+                          },
                     ]}
                   >
                     <LinearGradient
                       colors={
-                        theme.isDark
-                          ? ['rgba(34,197,94,0.35)', 'rgba(56,189,248,0.2)']
-                          : ['rgba(34,197,94,0.55)', 'rgba(37,99,235,0.35)']
+                        participanteTemFatorRisco(index)
+                          ? theme.isDark
+                            ? ['rgba(234,88,12,0.55)', 'rgba(251,146,60,0.25)']
+                            : ['rgba(234,88,12,0.7)', 'rgba(251,146,60,0.4)']
+                          : theme.isDark
+                            ? ['rgba(34,197,94,0.35)', 'rgba(56,189,248,0.2)']
+                            : ['rgba(34,197,94,0.55)', 'rgba(37,99,235,0.35)']
                       }
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
@@ -2808,26 +2896,90 @@ export default function AplicarTAFScreen() {
                       <View
                         style={[
                           styles.militarNumOrb,
-                          { backgroundColor: theme.isDark ? 'rgba(34,197,94,0.22)' : PREMIUM.accentMuted },
+                          {
+                            backgroundColor: participanteTemFatorRisco(index)
+                              ? theme.isDark
+                                ? 'rgba(234,88,12,0.22)'
+                                : 'rgba(254,215,170,0.7)'
+                              : theme.isDark
+                                ? 'rgba(34,197,94,0.22)'
+                                : PREMIUM.accentMuted,
+                          },
                         ]}
                       >
-                        <Text style={[styles.militarNumOrbText, { color: theme.success }]}>{index + 1}</Text>
+                        <Text
+                          style={[
+                            styles.militarNumOrbText,
+                            {
+                              color: participanteTemFatorRisco(index)
+                                ? FATORES_RISCO_LARANJA
+                                : theme.success,
+                            },
+                          ]}
+                        >
+                          {index + 1}
+                        </Text>
                       </View>
                       <View style={styles.militarNomeCol}>
                         <Text style={[styles.militarRoleLabel, { color: theme.textSecondary }]}>
                           {labelAtleta}
                         </Text>
-                        <Text style={[styles.militarNomeText, { color: ui.text }]} numberOfLines={2}>
+                        <Text
+                          accessibilityRole={
+                            participanteTemFatorRisco(index) ? 'button' : undefined
+                          }
+                          accessibilityHint={
+                            participanteTemFatorRisco(index)
+                              ? 'Abre os fatores de risco deste militar'
+                              : undefined
+                          }
+                          onPress={
+                            participanteTemFatorRisco(index)
+                              ? () => abrirModalFatoresRiscoParticipante(index)
+                              : undefined
+                          }
+                          style={[
+                            styles.militarNomeText,
+                            {
+                              color: participanteTemFatorRisco(index)
+                                ? FATORES_RISCO_LARANJA
+                                : ui.text,
+                              textDecorationLine: participanteTemFatorRisco(index)
+                                ? 'underline'
+                                : 'none',
+                            },
+                          ]}
+                          numberOfLines={2}
+                        >
                           {fb.nomeMilitar}
                         </Text>
                       </View>
                       <View
                         style={[
                           styles.militarHashBadge,
-                          { backgroundColor: theme.isDark ? 'rgba(56,189,248,0.15)' : 'rgba(37,99,235,0.1)' },
+                          {
+                            backgroundColor: participanteTemFatorRisco(index)
+                              ? theme.isDark
+                                ? 'rgba(234,88,12,0.18)'
+                                : 'rgba(254,215,170,0.55)'
+                              : theme.isDark
+                                ? 'rgba(56,189,248,0.15)'
+                                : 'rgba(37,99,235,0.1)',
+                          },
                         ]}
                       >
-                        <Text style={[styles.militarHashText, { color: theme.primary }]}>#{index + 1}</Text>
+                        <Text
+                          style={[
+                            styles.militarHashText,
+                            {
+                              color: participanteTemFatorRisco(index)
+                                ? FATORES_RISCO_LARANJA
+                                : theme.primary,
+                            },
+                          ]}
+                        >
+                          #{index + 1}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -2917,6 +3069,14 @@ export default function AplicarTAFScreen() {
         </View>
       </ScrollView>
 
+      <FatoresRiscoInfoModal
+        visible={modalFatoresRiscoInfo != null}
+        nome={modalFatoresRiscoInfo?.nome ?? ''}
+        nip={modalFatoresRiscoInfo?.nip ?? ''}
+        fatores={modalFatoresRiscoInfo?.fatores ?? []}
+        onClose={() => setModalFatoresRiscoInfo(null)}
+      />
+
       <TafProvaTempoModal
         visible={
           mostrarProvas &&
@@ -2946,6 +3106,8 @@ export default function AplicarTAFScreen() {
         nColunasVoltas={nColunasVoltas}
         nParticipantes={nParticipantesConfirmado}
         nomesParticipantes={nomesParticipantesModal}
+        participantesComFatorRisco={participantesComFatorRiscoModal}
+        onPressNomeParticipante={abrirModalFatoresRiscoParticipante}
         checksVoltas={checksVoltas}
         chegadaNatacao={chegadaNatacao}
         onToggleVolta={toggleCheckVolta}
@@ -2976,6 +3138,8 @@ export default function AplicarTAFScreen() {
         tituloProva={tituloProvaCurta}
         nParticipantes={nParticipantesConfirmado}
         nomesParticipantes={nomesParticipantesModal}
+        participantesComFatorRisco={participantesComFatorRiscoModal}
+        onPressNomeParticipante={abrirModalFatoresRiscoParticipante}
         valores={repeticoesParticipantes}
         onChangeValor={atualizarRepeticaoParticipante}
         getNota={(index) => notaRepeticoesPorLinha[index] ?? '—'}

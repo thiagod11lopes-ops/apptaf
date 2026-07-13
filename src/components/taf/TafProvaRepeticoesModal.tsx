@@ -26,6 +26,8 @@ export type TafProvaRepeticoesModalProps = {
   tituloProva: string;
   nParticipantes: number;
   nomesParticipantes: string[];
+  participantesComFatorRisco?: boolean[];
+  onPressNomeParticipante?: (index: number) => void;
   valores: string[];
   onChangeValor: (index: number, text: string) => void;
   getNota: (index: number) => string;
@@ -42,6 +44,8 @@ export function TafProvaRepeticoesModal({
   tituloProva,
   nParticipantes,
   nomesParticipantes,
+  participantesComFatorRisco = [],
+  onPressNomeParticipante,
   valores,
   onChangeValor,
   getNota,
@@ -83,6 +87,7 @@ export function TafProvaRepeticoesModal({
             <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
               {rows.map((index) => {
                 const nome = nomesParticipantes[index] ?? `Militar ${index + 1}`;
+                const temFatorRisco = participantesComFatorRisco[index] === true;
                 const nota = getNota(index);
                 const reprov = isNotaReprovado(index);
                 return (
@@ -92,7 +97,22 @@ export function TafProvaRepeticoesModal({
                   >
                     <View style={styles.rowHead}>
                       <Text style={[styles.rowNum, { color: theme.primary }]}>#{index + 1}</Text>
-                      <Text style={[styles.rowNome, { color: ui.text }]} numberOfLines={2}>
+                      <Text
+                        accessibilityRole={temFatorRisco ? 'button' : undefined}
+                        onPress={
+                          temFatorRisco && onPressNomeParticipante
+                            ? () => onPressNomeParticipante(index)
+                            : undefined
+                        }
+                        style={[
+                          styles.rowNome,
+                          {
+                            color: temFatorRisco ? '#ea580c' : ui.text,
+                            textDecorationLine: temFatorRisco ? 'underline' : 'none',
+                          },
+                        ]}
+                        numberOfLines={2}
+                      >
                         {nome}
                       </Text>
                     </View>

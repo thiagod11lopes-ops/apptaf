@@ -92,6 +92,9 @@ export type TafProvaTempoModalProps = {
   nColunasVoltas?: number;
   nParticipantes: number;
   nomesParticipantes: string[];
+  /** Índices (ou flags por participante) com fator de risco marcado. */
+  participantesComFatorRisco?: boolean[];
+  onPressNomeParticipante?: (index: number) => void;
   checksVoltas?: boolean[][];
   chegadaNatacao?: boolean[];
   onToggleVolta?: (participante: number, volta: number) => void;
@@ -295,6 +298,8 @@ export function TafProvaTempoModal({
   nColunasVoltas = 0,
   nParticipantes,
   nomesParticipantes,
+  participantesComFatorRisco = [],
+  onPressNomeParticipante,
   checksVoltas = [],
   chegadaNatacao = [],
   onToggleVolta,
@@ -359,6 +364,7 @@ export function TafProvaTempoModal({
     <>
       {Array.from({ length: nParticipantes }, (_, index) => {
         const nome = nomesParticipantes[index] ?? '—';
+        const temFatorRisco = participantesComFatorRisco[index] === true;
         const tempoMs = temposMilitaresMs[index];
         const tempoStr = tempoMs != null ? formatMs(tempoMs) : '—';
         const nota = getNota?.(index) ?? '—';
@@ -438,13 +444,22 @@ export function TafProvaTempoModal({
                   </Text>
                 </View>
                 <Text
+                  accessibilityRole={temFatorRisco ? 'button' : undefined}
+                  onPress={
+                    temFatorRisco && onPressNomeParticipante
+                      ? () => onPressNomeParticipante(index)
+                      : undefined
+                  }
                   style={[
                     styles.participantNome,
                     isNativeMobile && !isProvaLayoutPreparado && !isPermanencia
                       ? styles.participantNomeCompact
                       : null,
                     isProvaLayoutPreparado || isPermanencia ? styles.participantNomeAdaptive : null,
-                    { color: ui.text },
+                    {
+                      color: temFatorRisco ? '#ea580c' : ui.text,
+                      textDecorationLine: temFatorRisco ? 'underline' : 'none',
+                    },
                   ]}
                 >
                   {nome}

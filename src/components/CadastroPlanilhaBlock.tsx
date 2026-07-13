@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform } from 'react-native';
-import { Pencil, Trash2, Search, ListFilter } from 'lucide-react-native';
+import { Pencil, Trash2, Search, ListFilter, ShieldAlert } from 'lucide-react-native';
 import { CorrigirNipCadastroModal } from './CorrigirNipCadastroModal';
-import { contarCadastrosComErroNip } from '../utils/nipFormat';
+import { FatoresRiscoCadastroModal } from './FatoresRiscoCadastroModal';
+import { contarCadastrosComErroNip, nipDigitos } from '../utils/nipFormat';
 import { Card } from './Card';
 import { LabelNip } from './LabelNip';
 import { LabelSO } from './LabelSO';
@@ -11,6 +12,10 @@ import { TafGlassPanel, TafSectionHeader } from './mobile/TafTabChrome';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { PREMIUM } from '../theme/premium';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import {
+  getAllFatoresRisco,
+  type FatoresRiscoRegistro,
+} from '../services/fatoresRiscoStorage';
 import { idadeDisplayFromDataNascimento } from '../utils/idadeFromDataNascimento';
 import { textoNotaCorridaFromCadastro } from '../taf/corrida2400Nota';
 import { textoNotaNatacaoFromCadastro } from '../taf/natacaoNota';
@@ -97,8 +102,33 @@ export function CadastroPlanilhaBlock({
   const [filtroModalidade, setFiltroModalidade] = useState<FiltroModalidadeTaf>('Todos');
   const [filtroData, setFiltroData] = useState<string>('');
   const [modalErrosNipAberto, setModalErrosNipAberto] = useState(false);
+  const [fatoresPorNip, setFatoresPorNip] = useState<Record<string, FatoresRiscoRegistro>>({});
+  const [modalFatores, setModalFatores] = useState<{
+    nome: string;
+    nip: string;
+    registro: FatoresRiscoRegistro | null;
+  } | null>(null);
 
   const errosNipCount = useMemo(() => contarCadastrosComErroNip(cadastros), [cadastros]);
+
+  useEffect(() => {
+    if (isAplicacaoTaf) return;
+    void getAllFatoresRisco()
+      .then(setFatoresPorNip)
+      .catch(() => setFatoresPorNip({}));
+  }, [isAplicacaoTaf, cadastros]);
+
+  const abrirFatoresRiscoCadastro = useCallback(
+    (c: CadastroItemPersist) => {
+      const key = nipDigitos(c.nip ?? '');
+      setModalFatores({
+        nome: (c.nome || '').trim() || 'Militar',
+        nip: key || c.nip || '',
+        registro: key ? fatoresPorNip[key] ?? null : null,
+      });
+    },
+    [fatoresPorNip],
+  );
 
   const postoGradOptions = useMemo(() => {
     const oficiais = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG'];
@@ -570,6 +600,52 @@ export function CadastroPlanilhaBlock({
                       {highlightText(generoPlanilhaLabel(c), buscaLower, styles.modernMetaValue, 1)}
                     </View>
                   </View>
+                  <TouchableOpacity
+                    accessibilityLabel="Fatores de Risco"
+                    accessibilityRole="button"
+                    activeOpacity={0.88}
+                    onPress={() => abrirFatoresRiscoCadastro(c)}
+                    style={[
+                      styles.fatoresBtn,
+                      {
+                        borderColor: nipDigitos(c.nip) && fatoresPorNip[nipDigitos(c.nip)]
+                          ? theme.isDark
+                            ? 'rgba(234,88,12,0.45)'
+                            : 'rgba(234,88,12,0.35)'
+                          : glass.border,
+                        backgroundColor: nipDigitos(c.nip) && fatoresPorNip[nipDigitos(c.nip)]
+                          ? theme.isDark
+                            ? 'rgba(234,88,12,0.14)'
+                            : 'rgba(255,247,237,0.95)'
+                          : theme.isDark
+                            ? 'rgba(139,92,246,0.12)'
+                            : 'rgba(237,233,254,0.85)',
+                      },
+                    ]}
+                  >
+                    <ShieldAlert
+                      size={16}
+                      color={
+                        nipDigitos(c.nip) && fatoresPorNip[nipDigitos(c.nip)]
+                          ? '#ea580c'
+                          : '#8b5cf6'
+                      }
+                      strokeWidth={2.4}
+                    />
+                    <Text
+                      style={[
+                        styles.fatoresBtnText,
+                        {
+                          color:
+                            nipDigitos(c.nip) && fatoresPorNip[nipDigitos(c.nip)]
+                              ? '#ea580c'
+                              : '#8b5cf6',
+                        },
+                      ]}
+                    >
+                      Fatores de Risco
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               ))}
             </View>
@@ -757,6 +833,16 @@ export function CadastroPlanilhaBlock({
           onCorrigido={(atualizado) => onCadastroCorrigido?.(atualizado)}
         />
       ) : null}
+
+      {!isAplicacaoTaf ? (
+        <FatoresRiscoCadastroModal
+          visible={modalFatores != null}
+          nome={modalFatores?.nome ?? ''}
+          nip={modalFatores?.nip ?? ''}
+          registro={modalFatores?.registro ?? null}
+          onClose={() => setModalFatores(null)}
+        />
+      ) : null}
     </>
   );
 
@@ -872,6 +958,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.1,
+  },
+  fatoresBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+  },
+  fatoresBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   tableHeaderRow: {
     flexDirection: 'row',

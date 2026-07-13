@@ -23,6 +23,7 @@ import {
   AplicarTafPrimaryButton,
   AplicarTafSectionHeader,
 } from './AplicarTafUi';
+import { FatoresRiscoSalvoToast } from './FatoresRiscoSalvoToast';
 
 type Props = {
   onVoltar: () => void;
@@ -92,6 +93,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
   const [altura, setAltura] = useState('');
   const [peso, setPeso] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [toastSalvoVisible, setToastSalvoVisible] = useState(false);
 
   const imcResultado = useMemo(() => calcularImc(altura, peso), [altura, peso]);
 
@@ -236,17 +238,21 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         imc: imcResultado?.imc,
       });
       onSalvo?.();
-      Alert.alert('Salvo', 'Fatores de risco registrados para este militar.', [
-        { text: 'OK', onPress: onVoltar },
-      ]);
+      setToastSalvoVisible(true);
     } catch {
       Alert.alert('Erro', 'Não foi possível salvar os fatores de risco. Tente novamente.');
     } finally {
       setSalvando(false);
     }
-  }, [nip, nome, respostas, altura, peso, imcResultado, onSalvo, onVoltar]);
+  }, [nip, nome, respostas, altura, peso, imcResultado, onSalvo]);
+
+  const fecharToastEVoltar = useCallback(() => {
+    setToastSalvoVisible(false);
+    onVoltar();
+  }, [onVoltar]);
 
   return (
+    <>
     <AplicarTafGlassPanel accent="violet">
       <AplicarTafBackLink label="Voltar ao início" onPress={onVoltar} />
       <AplicarTafSectionHeader
@@ -403,10 +409,16 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
           label={salvando ? 'Salvando…' : 'OK — Confirmar fatores'}
           onPress={() => void salvar()}
           loading={salvando}
-          disabled={salvando}
+          disabled={salvando || toastSalvoVisible}
         />
       </View>
     </AplicarTafGlassPanel>
+    <FatoresRiscoSalvoToast
+      visible={toastSalvoVisible}
+      durationMs={3000}
+      onDone={fecharToastEVoltar}
+    />
+    </>
   );
 }
 

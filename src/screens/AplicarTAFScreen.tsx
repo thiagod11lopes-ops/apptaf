@@ -40,6 +40,7 @@ import {
   AplicarTafInput,
 } from '../components/taf/aplicar/AplicarTafUi';
 import { AplicarTafHomeLauncher } from '../components/taf/aplicar/AplicarTafHomeLauncher';
+import { AplicarTafFatoresRiscoPanel } from '../components/taf/aplicar/AplicarTafFatoresRiscoPanel';
 import { AplicarTafProvaSelector } from '../components/taf/aplicar/AplicarTafProvaSelector';
 import {
   AplicarTafPreCadastroCard,
@@ -281,6 +282,7 @@ export default function AplicarTAFScreen() {
   const inputBorder = ui.inputBorder;
   const inputTextColor = ui.text;
   const [mostrarListaPreCadastro, setMostrarListaPreCadastro] = useState(false);
+  const [mostrarFatoresRisco, setMostrarFatoresRisco] = useState(false);
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
   const [modoTafNaval, setModoTafNaval] = useState(false);
   const [repeticoesParticipantes, setRepeticoesParticipantes] = useState<string[]>([]);
@@ -1926,6 +1928,7 @@ export default function AplicarTAFScreen() {
   const abrirListaPreCadastro = useCallback(() => {
     void recarregarListaPreCadastros().then(() => {
       setMostrarListaPreCadastro(true);
+      setMostrarFatoresRisco(false);
       setModoPreCadastro(false);
       setModoTafNaval(false);
       setMostrarProvas(false);
@@ -1933,14 +1936,16 @@ export default function AplicarTAFScreen() {
   }, [recarregarListaPreCadastros]);
 
   const abrirFatoresRisco = useCallback(() => {
-    Alert.alert(
-      'Fatores de Risco',
-      'Esta seção será usada para avaliar condições de saúde antes da prova.',
-    );
+    setMostrarFatoresRisco(true);
+    setMostrarListaPreCadastro(false);
+    setModoPreCadastro(false);
+    setModoTafNaval(false);
+    setMostrarProvas(false);
   }, []);
 
   const voltarInicioAplicarTaf = useCallback(() => {
     setMostrarListaPreCadastro(false);
+    setMostrarFatoresRisco(false);
     setModoPreCadastro(false);
     setModoTafNaval(false);
     setMostrarProvas(false);
@@ -1953,6 +1958,7 @@ export default function AplicarTAFScreen() {
     setModoPreCadastro(true);
     setModoTafNaval(false);
     setMostrarListaPreCadastro(false);
+    setMostrarFatoresRisco(false);
     setMostrarProvas(true);
     setTipoProva(null);
     setCorridaEtapa('menu');
@@ -1976,6 +1982,7 @@ export default function AplicarTAFScreen() {
     setModoPreCadastro(true);
     setModoTafNaval(true);
     setMostrarListaPreCadastro(false);
+    setMostrarFatoresRisco(false);
     setMostrarProvas(true);
     setTipoProva(null);
     setCorridaEtapa('menu');
@@ -2064,6 +2071,7 @@ export default function AplicarTAFScreen() {
       setModoTafNaval(normaCfn);
       setModoPreCadastro(false);
       setMostrarListaPreCadastro(false);
+      setMostrarFatoresRisco(false);
       setMostrarProvas(true);
       setNumeroParticipantesCorrida(String(n));
       setNParticipantesConfirmado(n);
@@ -2129,6 +2137,7 @@ export default function AplicarTAFScreen() {
     setModoPreCadastro(false);
     setModoTafNaval(false);
     setMostrarListaPreCadastro(false);
+    setMostrarFatoresRisco(false);
     tipoProvaRef.current = null;
     resetCronometroCorrida();
     setMostrarProvas(true);
@@ -2153,6 +2162,7 @@ export default function AplicarTAFScreen() {
     setModoPreCadastro(false);
     setModoTafNaval(true);
     setMostrarListaPreCadastro(false);
+    setMostrarFatoresRisco(false);
     tipoProvaRef.current = null;
     resetCronometroCorrida();
     setMostrarProvas(true);
@@ -2252,6 +2262,12 @@ export default function AplicarTAFScreen() {
         subtitle: 'Gerencie provas preparadas para iniciar com um toque',
       };
     }
+    if (mostrarFatoresRisco) {
+      return {
+        title: 'Fatores de Risco',
+        subtitle: 'Identifique o militar pelo NIP ou pelo nome',
+      };
+    }
     if (mostrarProvas) {
       if (corridaEtapa === 'menu') {
         return {
@@ -2290,6 +2306,7 @@ export default function AplicarTAFScreen() {
     };
   }, [
     mostrarListaPreCadastro,
+    mostrarFatoresRisco,
     mostrarProvas,
     corridaEtapa,
     modoPreCadastro,
@@ -2560,7 +2577,7 @@ export default function AplicarTAFScreen() {
         scrollEnabled={!modalRubricaNatacaoVisible && !fluxoAplicadorVisible}
       >
         <View style={styles.centerWrap}>
-          {!mostrarProvas && !mostrarListaPreCadastro ? (
+          {!mostrarProvas && !mostrarListaPreCadastro && !mostrarFatoresRisco ? (
             <AplicarTafCenteredTabHeader
               title={flowHeader.title}
               subtitle={flowHeader.subtitle}
@@ -2582,13 +2599,17 @@ export default function AplicarTAFScreen() {
             />
           )}
 
-          {!mostrarProvas && !mostrarListaPreCadastro ? (
+          {!mostrarProvas && !mostrarListaPreCadastro && !mostrarFatoresRisco ? (
             <AplicarTafHomeLauncher
               onIniciarTaf={iniciarTaf}
               onIniciarTafNaval={iniciarTafNaval}
               onPreCadastro={abrirListaPreCadastro}
               onFatoresRisco={abrirFatoresRisco}
             />
+          ) : null}
+
+          {mostrarFatoresRisco ? (
+            <AplicarTafFatoresRiscoPanel onVoltar={voltarInicioAplicarTaf} />
           ) : null}
 
           {mostrarListaPreCadastro ? (

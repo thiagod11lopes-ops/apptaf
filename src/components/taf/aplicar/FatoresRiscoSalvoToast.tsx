@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Modal } from 'react-native';
 import { ShieldCheck } from 'lucide-react-native';
-import { AppModal } from '../../premium/AppModal';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 
@@ -9,12 +8,11 @@ const ACCENT = '#8b5cf6';
 
 type Props = {
   visible: boolean;
-  /** Duração em ms antes de chamar onDone (padrão 3000). */
   durationMs?: number;
   onDone: () => void;
 };
 
-/** Toast/modal curto após cadastrar fatores de risco. */
+/** Toast/modal curto após cadastrar fatores de risco (Modal nativo = confiável no web). */
 export function FatoresRiscoSalvoToast({ visible, durationMs = 3000, onDone }: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
@@ -26,13 +24,13 @@ export function FatoresRiscoSalvoToast({ visible, durationMs = 3000, onDone }: P
   }, [visible, durationMs, onDone]);
 
   return (
-    <AppModal visible={visible} transparent animationType="fade" onRequestClose={onDone}>
-      <View style={styles.overlay} pointerEvents="box-none">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDone}>
+      <View style={styles.overlay}>
         <View
           style={[
             styles.card,
             {
-              backgroundColor: theme.isDark ? 'rgba(15,23,42,0.96)' : 'rgba(255,255,255,0.97)',
+              backgroundColor: theme.isDark ? 'rgba(15,23,42,0.98)' : 'rgba(255,255,255,0.98)',
               borderColor: theme.isDark ? 'rgba(139,92,246,0.45)' : 'rgba(139,92,246,0.3)',
             },
           ]}
@@ -45,23 +43,28 @@ export function FatoresRiscoSalvoToast({ visible, durationMs = 3000, onDone }: P
               },
             ]}
           />
-          <View style={[styles.iconRing, { backgroundColor: theme.isDark ? 'rgba(139,92,246,0.22)' : 'rgba(237,233,254,0.95)' }]}>
+          <View
+            style={[
+              styles.iconRing,
+              {
+                backgroundColor: theme.isDark ? 'rgba(139,92,246,0.22)' : 'rgba(237,233,254,0.95)',
+              },
+            ]}
+          >
             <ShieldCheck size={28} color={ACCENT} strokeWidth={2.4} />
           </View>
           <Text style={[styles.title, { color: ui.text }]}>Fatores de risco Cadastrados</Text>
-          <Text style={[styles.sub, { color: theme.textSecondary }]}>
-            Dados salvos com sucesso
-          </Text>
+          <Text style={[styles.sub, { color: theme.textSecondary }]}>Dados salvos com sucesso</Text>
         </View>
       </View>
-    </AppModal>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(2,6,23,0.45)',
+    backgroundColor: 'rgba(2,6,23,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 28,

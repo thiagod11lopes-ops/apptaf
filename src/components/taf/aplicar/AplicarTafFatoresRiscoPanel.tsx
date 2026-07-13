@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { getAllCadastros, type CadastroItemPersist } from '../../../services/cadastrosIndexedDb';
@@ -94,6 +94,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
   const [peso, setPeso] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [toastSalvoVisible, setToastSalvoVisible] = useState(false);
+  const [erroSalvar, setErroSalvar] = useState<string | null>(null);
 
   const imcResultado = useMemo(() => calcularImc(altura, peso), [altura, peso]);
 
@@ -202,6 +203,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
   );
 
   const setResposta = useCallback((id: FatorRiscoId, valor: 'sim' | 'nao') => {
+    setErroSalvar(null);
     setRespostas((prev) => ({
       ...prev,
       [id]: prev[id] === valor ? null : valor,
@@ -209,21 +211,19 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
   }, []);
 
   const salvar = useCallback(async () => {
+    setErroSalvar(null);
     const digitos = nipDigitos(nip);
     if (digitos.length !== 8) {
-      Alert.alert('NIP obrigatório', 'Informe um NIP válido (8 dígitos) antes de salvar.');
+      setErroSalvar('Informe um NIP válido (8 dígitos) antes de salvar.');
       return;
     }
     if (!nome.trim()) {
-      Alert.alert('Nome obrigatório', 'Informe o nome do militar antes de salvar.');
+      setErroSalvar('Informe o nome do militar antes de salvar.');
       return;
     }
     const pendente = FATORES_RISCO_ITENS.some((item) => respostas[item.id] == null);
     if (pendente) {
-      Alert.alert(
-        'Checklist incompleto',
-        'Marque Sim ou Não para todos os fatores de risco antes de confirmar.',
-      );
+      setErroSalvar('Marque Sim ou Não para todos os fatores de risco antes de confirmar.');
       return;
     }
 
@@ -239,8 +239,10 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
       });
       onSalvo?.();
       setToastSalvoVisible(true);
-    } catch {
-      Alert.alert('Erro', 'Não foi possível salvar os fatores de risco. Tente novamente.');
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : 'Não foi possível salvar os fatores de risco. Tente novamente.';
+      setErroSalvar(msg);
     } finally {
       setSalvando(false);
     }
@@ -405,6 +407,9 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
       </View>
 
       <View style={styles.saveWrap}>
+        {erroSalvar ? (
+          <Text style={[ts.caption, styles.erroSalvar, { color: theme.loss }]}>{erroSalvar}</Text>
+        ) : null}
         <AplicarTafPrimaryButton
           label={salvando ? 'Salvando…' : 'OK — Confirmar fatores'}
           onPress={() => void salvar()}
@@ -516,5 +521,10 @@ const styles = StyleSheet.create({
   },
   saveWrap: {
     marginTop: 18,
+    gap: 10,
+  },
+  erroSalvar: {
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });

@@ -14,6 +14,7 @@ import { PREMIUM } from '../theme/premium';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import {
   getAllFatoresRisco,
+  getFatoresRiscoByNip,
   type FatoresRiscoRegistro,
 } from '../services/fatoresRiscoStorage';
 import { idadeDisplayFromDataNascimento } from '../utils/idadeFromDataNascimento';
@@ -118,17 +119,26 @@ export function CadastroPlanilhaBlock({
       .catch(() => setFatoresPorNip({}));
   }, [isAplicacaoTaf, cadastros]);
 
-  const abrirFatoresRiscoCadastro = useCallback(
-    (c: CadastroItemPersist) => {
-      const key = nipDigitos(c.nip ?? '');
-      setModalFatores({
-        nome: (c.nome || '').trim() || 'Militar',
-        nip: key || c.nip || '',
-        registro: key ? fatoresPorNip[key] ?? null : null,
-      });
-    },
-    [fatoresPorNip],
-  );
+  const abrirFatoresRiscoCadastro = useCallback(async (c: CadastroItemPersist) => {
+    const key = nipDigitos(c.nip ?? '');
+    const nome = (c.nome || '').trim() || 'Militar';
+    let registro: FatoresRiscoRegistro | null = key ? fatoresPorNip[key] ?? null : null;
+    try {
+      if (key) {
+        registro = (await getFatoresRiscoByNip(key)) ?? registro;
+        if (registro) {
+          setFatoresPorNip((prev) => ({ ...prev, [key]: registro! }));
+        }
+      }
+    } catch {
+      // mantém o que já estava em memória
+    }
+    setModalFatores({
+      nome,
+      nip: key || c.nip || '',
+      registro,
+    });
+  }, [fatoresPorNip]);
 
   const postoGradOptions = useMemo(() => {
     const oficiais = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG'];
@@ -604,7 +614,7 @@ export function CadastroPlanilhaBlock({
                     accessibilityLabel="Fatores de Risco"
                     accessibilityRole="button"
                     activeOpacity={0.88}
-                    onPress={() => abrirFatoresRiscoCadastro(c)}
+                    onPress={() => void abrirFatoresRiscoCadastro(c)}
                     style={[
                       styles.fatoresBtn,
                       {

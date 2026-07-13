@@ -1,4 +1,4 @@
-import { getCachedDataOwnerUid, waitForAuthenticatedUid } from './firebase/authUid';
+import { Platform } from 'react-native';
 import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { nipDigitos } from '../utils/nipFormat';
 
@@ -38,6 +38,11 @@ export const FATORES_RISCO_ITENS: ReadonlyArray<{ id: FatorRiscoId; label: strin
   { id: 'morteSubitaFamilia', label: 'Casos de morte súbita na família' },
 ];
 
+/** Chave única (não depende de ownerUid) — evita gravar/ler em buckets diferentes. */
+const STORAGE_KEY = 'fatoresRisco:registros';
+const LEGACY_LS_PREFIX = 'fatoresRisco:';
+const WEB_LS_KEY = '@taf-fatores-risco-v1';
+
 export function respostasFatoresVazias(): RespostasFatoresRisco {
   return {
     hipertensao: null,
@@ -62,35 +67,83 @@ export function listarFatoresRiscoSim(
   return FATORES_RISCO_ITENS.filter((item) => respostas[item.id] === 'sim').map((item) => item.label);
 }
 
-function metaKey(ownerUid: string): string {
-  return `fatoresRisco:${ownerUid}`;
-}
-
-async function resolveOwnerUid(): Promise<string> {
-  const uid = getCachedDataOwnerUid() ?? (await waitForAuthenticatedUid());
-  return uid ?? '__local__';
-}
-
-async function readMap(ownerUid: string): Promise<Record<string, FatoresRiscoRegistro>> {
-  const raw = await readAppMeta(metaKey(ownerUid));
-  if (!raw) return {};
+function parseMap(raw: string | null | undefined): Record<string, FatoresRiscoRegistro> {
+  if (!raw?.trim()) return {};
   try {
     const parsed = JSON.parse(raw) as Record<string, FatoresRiscoRegistro>;
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
 }
 
+function mergeMaps(
+  ...maps: Array<Record<string, FatoresRiscoRegistro>>
+): Record<string, FatoresRiscoRegistro> {
+  const out: Record<string, FatoresRiscoRegistro> = {};
+  for (const map of maps) {
+    for (const [nip, reg] of Object.entries(map)) {
+      const prev = out[nip];
+      if (!prev || (reg.updatedAt ?? 0) >= (prev.updatedAt ?? 0)) {
+        out[nip] = reg;
+      }
+    }
+  }
+  return out;
+}
+
+function readWebLocalBackup(): Record<string, FatoresRiscoRegistro> {
+  if (Platform.OS !== 'web') return {};
+  try {
+    if (typeof localStorage === 'undefined') return {};
+    return parseMap(localStorage.getItem(WEB_LS_KEY));
+  } catch {
+    return {};
+  }
+}
+
+function writeWebLocalBackup(map: Record<string, FatoresRiscoRegistro>): void {
+  if (Platform.OS !== 'web') return;
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(WEB_LS_KEY, JSON.stringify(map));
+  } catch {
+    // silencioso
+  }
+}
+
+async function readMap(): Promise<Record<string, FatoresRiscoRegistro>> {
+  const primary = parseMap(await readAppMeta(STORAGE_KEY));
+  const webBackup = readWebLocalBackup();
+
+  // Migra chaves antigas por owner (fatoresRisco:<uid>) se ainda existirem no cache/meta.
+  let legacy: Record<string, FatoresRiscoRegistro> = {};
+  try {
+    const { getCachedDataOwnerUid } = await import('./firebase/authUid');
+    const owner = getCachedDataOwnerUid() ?? '__local__';
+    const legacyRaw = await readAppMeta(`${LEGACY_LS_PREFIX}${owner}`);
+    legacy = parseMap(legacyRaw);
+  } catch {
+    legacy = {};
+  }
+
+  return mergeMaps(legacy, webBackup, primary);
+}
+
+async function writeMap(map: Record<string, FatoresRiscoRegistro>): Promise<void> {
+  const payload = JSON.stringify(map);
+  writeWebLocalBackup(map);
+  await writeAppMeta(STORAGE_KEY, payload);
+}
+
 export async function getAllFatoresRisco(): Promise<Record<string, FatoresRiscoRegistro>> {
-  const ownerUid = await resolveOwnerUid();
-  return readMap(ownerUid);
+  return readMap();
 }
 
 export async function getFatoresRiscoByNip(nip: string): Promise<FatoresRiscoRegistro | null> {
   const key = nipDigitos(nip);
   if (key.length !== 8) return null;
-  const map = await getAllFatoresRisco();
+  const map = await readMap();
   return map[key] ?? null;
 }
 
@@ -107,8 +160,7 @@ export async function saveFatoresRisco(input: {
     throw new Error('NIP inválido');
   }
 
-  const ownerUid = await resolveOwnerUid();
-  const map = await readMap(ownerUid);
+  const map = await readMap();
   const registro: FatoresRiscoRegistro = {
     nip: key,
     nome: input.nome.trim(),
@@ -120,6 +172,12 @@ export async function saveFatoresRisco(input: {
   };
 
   map[key] = registro;
-  await writeAppMeta(metaKey(ownerUid), JSON.stringify(map));
-  return registro;
+  await writeMap(map);
+
+  // Confirma leitura imediata (falha cedo se a persistência não refletiu).
+  const confirmado = (await readMap())[key];
+  if (!confirmado) {
+    throw new Error('Falha ao confirmar gravação dos fatores de risco.');
+  }
+  return confirmado;
 }

@@ -185,3 +185,22 @@ export async function saveFatoresRisco(input: {
   }
   return confirmado;
 }
+
+export async function deleteFatoresRiscoByNip(nip: string): Promise<boolean> {
+  const key = nipDigitos(nip);
+  if (key.length !== 8) {
+    throw new Error('NIP inválido');
+  }
+
+  const map = await readMap();
+  if (!map[key]) return false;
+
+  delete map[key];
+  await writeMap(map);
+
+  const aindaExiste = (await readMap())[key];
+  if (aindaExiste) {
+    throw new Error('Falha ao confirmar exclusão dos fatores de risco.');
+  }
+  return true;
+}

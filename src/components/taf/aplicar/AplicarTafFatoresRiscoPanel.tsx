@@ -5,6 +5,7 @@ import { getUiColors } from '../../../theme/uiColors';
 import { getAllCadastros, type CadastroItemPersist } from '../../../services/cadastrosIndexedDb';
 import {
   FATORES_RISCO_ITENS,
+  deleteFatoresRiscoByNip,
   getFatoresRiscoByNip,
   listarFatoresRiscoSim,
   respostasFatoresVazias,
@@ -25,6 +26,7 @@ import {
   AplicarTafPrimaryButton,
   AplicarTafSectionHeader,
 } from './AplicarTafUi';
+import { ConfirmacaoExcluirFatoresRiscoModal } from './ConfirmacaoExcluirFatoresRiscoModal';
 import { FatoresRiscoSalvoToast } from './FatoresRiscoSalvoToast';
 
 type Props = {
@@ -99,6 +101,8 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
   const [toastSalvoVisible, setToastSalvoVisible] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [editandoExistente, setEditandoExistente] = useState(false);
+  const [confirmExcluirVisible, setConfirmExcluirVisible] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
 
   const imcResultado = useMemo(() => calcularImc(altura, peso), [altura, peso]);
 
@@ -280,6 +284,48 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
     setToastSalvoVisible(false);
     onVoltar();
   }, [onVoltar]);
+
+  const limparFormularioAposExclusao = useCallback(() => {
+    setNip('');
+    setNome('');
+    setRespostas(respostasFatoresVazias());
+    setUsoRemedios('');
+    limparAntropometria();
+    setEditandoExistente(false);
+    setErroSalvar(null);
+    setFeedback('Fatores de risco excluídos.');
+  }, [limparAntropometria]);
+
+  const confirmarExclusao = useCallback(async () => {
+    const digitos = nipDigitos(nip);
+    if (digitos.length !== 8) {
+      setErroSalvar('Informe um NIP válido (8 dígitos) para excluir.');
+      setConfirmExcluirVisible(false);
+      return;
+    }
+
+    setExcluindo(true);
+    setErroSalvar(null);
+    try {
+      const removido = await deleteFatoresRiscoByNip(digitos);
+      if (!removido) {
+        setErroSalvar('Não há fatores de risco cadastrados para este NIP.');
+        setConfirmExcluirVisible(false);
+        setEditandoExistente(false);
+        return;
+      }
+      setConfirmExcluirVisible(false);
+      limparFormularioAposExclusao();
+      onSalvo?.();
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : 'Não foi possível excluir os fatores de risco. Tente novamente.';
+      setErroSalvar(msg);
+      setConfirmExcluirVisible(false);
+    } finally {
+      setExcluindo(false);
+    }
+  }, [nip, limparFormularioAposExclusao, onSalvo]);
 
   return (
     <>
@@ -465,10 +511,41 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
           }
           onPress={() => void salvar()}
           loading={salvando}
-          disabled={salvando || toastSalvoVisible}
+          disabled={salvando || excluindo || toastSalvoVisible}
         />
+        {editandoExistente ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Excluir Fatores de Risco"
+            onPress={() => setConfirmExcluirVisible(true)}
+            disabled={salvando || excluindo || toastSalvoVisible}
+            activeOpacity={0.85}
+            style={[
+              styles.btnExcluir,
+              {
+                borderColor: theme.loss,
+                backgroundColor: theme.isDark ? 'rgba(220,38,38,0.16)' : 'rgba(220,38,38,0.08)',
+                opacity: salvando || excluindo || toastSalvoVisible ? 0.5 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.btnExcluirText, { color: theme.loss }]}>
+              Excluir Fatores de Risco
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </AplicarTafGlassPanel>
+    <ConfirmacaoExcluirFatoresRiscoModal
+      visible={confirmExcluirVisible}
+      nip={nip}
+      nome={nome}
+      loading={excluindo}
+      onClose={() => {
+        if (!excluindo) setConfirmExcluirVisible(false);
+      }}
+      onConfirm={() => void confirmarExclusao()}
+    />
     <FatoresRiscoSalvoToast
       visible={toastSalvoVisible}
       durationMs={3000}
@@ -578,6 +655,18 @@ const styles = StyleSheet.create({
   saveWrap: {
     marginTop: 18,
     gap: 10,
+  },
+  btnExcluir: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  btnExcluirText: {
+    fontSize: 15,
+    fontWeight: '800',
   },
   erroSalvar: {
     fontWeight: '700',

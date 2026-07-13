@@ -5,10 +5,14 @@ import { getUiColors } from '../../../theme/uiColors';
 import { getAllCadastros, type CadastroItemPersist } from '../../../services/cadastrosIndexedDb';
 import {
   FATORES_RISCO_ITENS,
+  getAllFatoresRisco,
   getFatoresRiscoByNip,
+  listarFatoresRiscoSim,
   respostasFatoresVazias,
   saveFatoresRisco,
+  temFatorRiscoSim,
   type FatorRiscoId,
+  type FatoresRiscoRegistro,
   type RespostaFatorRisco,
   type RespostasFatoresRisco,
 } from '../../../services/fatoresRiscoStorage';
@@ -24,6 +28,8 @@ import {
   AplicarTafSectionHeader,
 } from './AplicarTafUi';
 import { FatoresRiscoSalvoToast } from './FatoresRiscoSalvoToast';
+import { Pencil } from 'lucide-react-native';
+import { compareByNomePtBr } from '../../../utils/compareNomePtBr';
 
 type Props = {
   onVoltar: () => void;
@@ -86,6 +92,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
   const glass = getAplicarTafGlass(theme);
 
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
+  const [registrosSalvos, setRegistrosSalvos] = useState<FatoresRiscoRegistro[]>([]);
   const [nip, setNip] = useState('');
   const [nome, setNome] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -95,18 +102,46 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
   const [salvando, setSalvando] = useState(false);
   const [toastSalvoVisible, setToastSalvoVisible] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
+  const [editandoExistente, setEditandoExistente] = useState(false);
 
   const imcResultado = useMemo(() => calcularImc(altura, peso), [altura, peso]);
+
+  const recarregarRegistrosSalvos = useCallback(async () => {
+    try {
+      const map = await getAllFatoresRisco();
+      const lista = Object.values(map).sort((a, b) => compareByNomePtBr(a, b));
+      setRegistrosSalvos(lista);
+    } catch {
+      setRegistrosSalvos([]);
+    }
+  }, []);
 
   useEffect(() => {
     void getAllCadastros()
       .then(setCadastros)
       .catch(() => setCadastros([]));
-  }, []);
+    void recarregarRegistrosSalvos();
+  }, [recarregarRegistrosSalvos]);
 
   const limparAntropometria = useCallback(() => {
     setAltura('');
     setPeso('');
+  }, []);
+
+  const aplicarRegistroNoFormulario = useCallback((reg: FatoresRiscoRegistro) => {
+    setNip(formatNipInput(reg.nip));
+    setNome(reg.nome?.trim() || '');
+    setRespostas({ ...respostasFatoresVazias(), ...reg.respostas });
+    setAltura(reg.altura ?? '');
+    setPeso(reg.peso ?? '');
+    setErroSalvar(null);
+    setEditandoExistente(true);
+    const sims = listarFatoresRiscoSim(reg.respostas);
+    setFeedback(
+      sims.length > 0
+        ? `Editando cadastro existente (${sims.length} fator(es) com Sim). Altere e confirme para atualizar.`
+        : 'Editando cadastro existente. Altere e confirme para atualizar.',
+    );
   }, []);
 
   const carregarRespostasSalvas = useCallback(async (nipValor: string) => {
@@ -115,18 +150,17 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
     try {
       const reg = await getFatoresRiscoByNip(key);
       if (reg) {
-        setRespostas({ ...respostasFatoresVazias(), ...reg.respostas });
-        setAltura(reg.altura ?? '');
-        setPeso(reg.peso ?? '');
+        aplicarRegistroNoFormulario(reg);
       } else {
         setRespostas(respostasFatoresVazias());
         setAltura('');
         setPeso('');
+        setEditandoExistente(false);
       }
     } catch {
       // silencioso
     }
-  }, []);
+  }, [aplicarRegistroNoFormulario]);
 
   const sincronizarCampoPar = useCallback(
     (origem: 'nip' | 'nome', valor: string) => {
@@ -137,6 +171,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         setFeedback(null);
         setRespostas(respostasFatoresVazias());
         limparAntropometria();
+        setEditandoExistente(false);
         return;
       }
 
@@ -169,6 +204,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
           setNome('');
           setRespostas(respostasFatoresVazias());
           limparAntropometria();
+          setEditandoExistente(false);
         } else {
           setNome('');
           setFeedback(null);
@@ -178,6 +214,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         setNip('');
         setRespostas(respostasFatoresVazias());
         limparAntropometria();
+        setEditandoExistente(false);
       } else {
         setFeedback(null);
       }
@@ -237,6 +274,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         peso: peso.trim() || undefined,
         imc: imcResultado?.imc,
       });
+      await recarregarRegistrosSalvos();
       onSalvo?.();
       setToastSalvoVisible(true);
     } catch (e) {
@@ -246,7 +284,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
     } finally {
       setSalvando(false);
     }
-  }, [nip, nome, respostas, altura, peso, imcResultado, onSalvo]);
+  }, [nip, nome, respostas, altura, peso, imcResultado, onSalvo, recarregarRegistrosSalvos]);
 
   const fecharToastEVoltar = useCallback(() => {
     setToastSalvoVisible(false);
@@ -260,8 +298,72 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
       <AplicarTafSectionHeader
         kicker="SAÚDE"
         title="Fatores de Risco"
-        subtitle="Informe o NIP ou o nome do militar. O outro campo será preenchido automaticamente."
+        subtitle="Informe o NIP ou o nome, ou selecione um cadastro existente abaixo para reeditar."
       />
+
+      {registrosSalvos.length > 0 ? (
+        <View style={styles.existentesBlock}>
+          <Text style={[ts.caption, styles.checklistTitle, { color: theme.textMuted }]}>
+            Cadastros existentes
+          </Text>
+          <Text style={[ts.caption, styles.checklistHint, { color: theme.textSecondary }]}>
+            Toque em um militar para carregar e reeditar os fatores de risco.
+          </Text>
+          <View style={styles.existentesList}>
+            {registrosSalvos.map((reg) => {
+              const ativo = nipDigitos(nip) === reg.nip;
+              const sims = listarFatoresRiscoSim(reg.respostas);
+              const temRisco = temFatorRiscoSim(reg.respostas);
+              return (
+                <TouchableOpacity
+                  key={reg.nip}
+                  accessibilityLabel={`Editar fatores de risco de ${reg.nome}`}
+                  accessibilityRole="button"
+                  activeOpacity={0.88}
+                  onPress={() => aplicarRegistroNoFormulario(reg)}
+                  style={[
+                    styles.existenteCard,
+                    {
+                      borderColor: ativo
+                        ? theme.primary
+                        : temRisco
+                          ? theme.isDark
+                            ? 'rgba(234,88,12,0.45)'
+                            : 'rgba(234,88,12,0.35)'
+                          : glass.border,
+                      backgroundColor: ativo
+                        ? theme.isDark
+                          ? 'rgba(37,99,235,0.18)'
+                          : 'rgba(37,99,235,0.08)'
+                        : theme.isDark
+                          ? 'rgba(2,6,23,0.35)'
+                          : 'rgba(255,255,255,0.55)',
+                    },
+                  ]}
+                >
+                  <View style={styles.existenteTextCol}>
+                    <Text style={[styles.existenteNome, { color: ui.text }]} numberOfLines={1}>
+                      {reg.nome || 'Sem nome'}
+                    </Text>
+                    <Text style={[ts.caption, { color: theme.textSecondary }]}>
+                      NIP {formatNipInput(reg.nip)}
+                      {sims.length > 0 ? ` · ${sims.length} fator(es) Sim` : ' · sem fatores Sim'}
+                      {reg.imc != null && Number.isFinite(reg.imc)
+                        ? ` · IMC ${reg.imc.toFixed(1).replace('.', ',')}`
+                        : ''}
+                    </Text>
+                  </View>
+                  <Pencil
+                    size={16}
+                    color={temRisco ? '#ea580c' : theme.primary}
+                    strokeWidth={2.4}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.fields}>
         <View style={styles.field}>
@@ -411,7 +513,13 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
           <Text style={[ts.caption, styles.erroSalvar, { color: theme.loss }]}>{erroSalvar}</Text>
         ) : null}
         <AplicarTafPrimaryButton
-          label={salvando ? 'Salvando…' : 'OK — Confirmar fatores'}
+          label={
+            salvando
+              ? 'Salvando…'
+              : editandoExistente
+                ? 'OK — Atualizar fatores'
+                : 'OK — Confirmar fatores'
+          }
           onPress={() => void salvar()}
           loading={salvando}
           disabled={salvando || toastSalvoVisible}
@@ -430,10 +538,35 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
 const styles = StyleSheet.create({
   fields: {
     gap: 14,
-    marginTop: 4,
+    marginTop: 16,
   },
   field: {
     gap: 6,
+  },
+  existentesBlock: {
+    marginTop: 12,
+    gap: 8,
+  },
+  existentesList: {
+    gap: 8,
+  },
+  existenteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  existenteTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  existenteNome: {
+    fontSize: 15,
+    fontWeight: '800',
   },
   label: {
     fontWeight: '700',

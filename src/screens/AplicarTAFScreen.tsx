@@ -1932,6 +1932,13 @@ export default function AplicarTAFScreen() {
     });
   }, [recarregarListaPreCadastros]);
 
+  const abrirFatoresRisco = useCallback(() => {
+    Alert.alert(
+      'Fatores de Risco',
+      'Esta seção será usada para avaliar condições de saúde antes da prova.',
+    );
+  }, []);
+
   const voltarInicioAplicarTaf = useCallback(() => {
     setMostrarListaPreCadastro(false);
     setModoPreCadastro(false);
@@ -2580,6 +2587,7 @@ export default function AplicarTAFScreen() {
               onIniciarTaf={iniciarTaf}
               onIniciarTafNaval={iniciarTafNaval}
               onPreCadastro={abrirListaPreCadastro}
+              onFatoresRisco={abrirFatoresRisco}
             />
           ) : null}
 

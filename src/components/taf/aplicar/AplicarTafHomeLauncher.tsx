@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ship, ClipboardList, Sparkles, Anchor } from 'lucide-react-native';
+import { Ship, ClipboardList, Sparkles, Anchor, ShieldAlert } from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
@@ -16,9 +16,15 @@ type Props = {
   onIniciarTaf: () => void;
   onIniciarTafNaval: () => void;
   onPreCadastro: () => void;
+  onFatoresRisco: () => void;
 };
 
-export function AplicarTafHomeLauncher({ onIniciarTaf, onIniciarTafNaval, onPreCadastro }: Props) {
+export function AplicarTafHomeLauncher({
+  onIniciarTaf,
+  onIniciarTafNaval,
+  onPreCadastro,
+  onFatoresRisco,
+}: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const glass = getAplicarTafGlass(theme);
@@ -112,6 +118,48 @@ export function AplicarTafHomeLauncher({ onIniciarTaf, onIniciarTafNaval, onPreC
                 </Text>
                 <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
                   Prepare participantes antes da prova
+                </Text>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          accessibilityLabel="Fatores de Risco"
+          activeOpacity={0.92}
+          onPress={onFatoresRisco}
+          style={styles.tileWrap}
+        >
+          <View
+            style={[
+              styles.tileSecondary,
+              {
+                backgroundColor: glass.bg,
+                borderColor: glass.border,
+              },
+            ]}
+          >
+            <View style={styles.tileBody}>
+              <View
+                style={[
+                  styles.iconRingMuted,
+                  {
+                    backgroundColor: theme.isDark
+                      ? 'rgba(245,158,11,0.18)'
+                      : 'rgba(245,158,11,0.14)',
+                  },
+                ]}
+              >
+                <ShieldAlert size={24} color="#d97706" strokeWidth={2.2} />
+              </View>
+              <View style={styles.textCol}>
+                <Text
+                  style={[styles.tileTitle, { color: ui.text }, isNarrowPhone ? styles.tileTitleCompact : null]}
+                >
+                  Fatores de Risco
+                </Text>
+                <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
+                  Avalie condições de saúde antes da prova
                 </Text>
               </View>
             </View>

@@ -97,6 +97,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
   const [nome, setNome] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [respostas, setRespostas] = useState<RespostasFatoresRisco>(respostasFatoresVazias);
+  const [usoRemedios, setUsoRemedios] = useState('');
   const [altura, setAltura] = useState('');
   const [peso, setPeso] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -132,6 +133,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
     setNip(formatNipInput(reg.nip));
     setNome(reg.nome?.trim() || '');
     setRespostas({ ...respostasFatoresVazias(), ...reg.respostas });
+    setUsoRemedios(reg.usoRemedios ?? '');
     setAltura(reg.altura ?? '');
     setPeso(reg.peso ?? '');
     setErroSalvar(null);
@@ -153,6 +155,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         aplicarRegistroNoFormulario(reg);
       } else {
         setRespostas(respostasFatoresVazias());
+        setUsoRemedios('');
         setAltura('');
         setPeso('');
         setEditandoExistente(false);
@@ -170,6 +173,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         else setNip('');
         setFeedback(null);
         setRespostas(respostasFatoresVazias());
+        setUsoRemedios('');
         limparAntropometria();
         setEditandoExistente(false);
         return;
@@ -203,6 +207,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
           setFeedback('NIP não encontrado no cadastro.');
           setNome('');
           setRespostas(respostasFatoresVazias());
+          setUsoRemedios('');
           limparAntropometria();
           setEditandoExistente(false);
         } else {
@@ -213,6 +218,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         setFeedback('Nome não encontrado no cadastro.');
         setNip('');
         setRespostas(respostasFatoresVazias());
+        setUsoRemedios('');
         limparAntropometria();
         setEditandoExistente(false);
       } else {
@@ -270,6 +276,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         nip,
         nome,
         respostas,
+        usoRemedios: usoRemedios.trim() || undefined,
         altura: altura.trim() || undefined,
         peso: peso.trim() || undefined,
         imc: imcResultado?.imc,
@@ -284,7 +291,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
     } finally {
       setSalvando(false);
     }
-  }, [nip, nome, respostas, altura, peso, imcResultado, onSalvo, recarregarRegistrosSalvos]);
+  }, [nip, nome, respostas, usoRemedios, altura, peso, imcResultado, onSalvo, recarregarRegistrosSalvos]);
 
   const fecharToastEVoltar = useCallback(() => {
     setToastSalvoVisible(false);
@@ -441,6 +448,23 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
             </View>
           ))}
         </View>
+
+        <View style={styles.field}>
+          <Text style={[ts.caption, styles.label, { color: theme.textMuted }]}>Uso de remédios</Text>
+          <AplicarTafInput
+            value={usoRemedios}
+            onChangeText={setUsoRemedios}
+            placeholder="Ex.: Losartana, Metformina…"
+            autoCapitalize="sentences"
+            autoCorrect
+            multiline
+            accessibilityLabel="Uso de remédios"
+            style={styles.remediosInput}
+          />
+          <Text style={[ts.caption, { color: theme.textSecondary }]}>
+            Informe os nomes dos medicamentos em uso, se houver.
+          </Text>
+        </View>
       </View>
 
       <View style={styles.imcBlock}>
@@ -591,6 +615,11 @@ const styles = StyleSheet.create({
   },
   checklistList: {
     gap: 10,
+  },
+  remediosInput: {
+    minHeight: 72,
+    textAlignVertical: 'top' as const,
+    paddingTop: 12,
   },
   checklistItem: {
     borderWidth: 1,

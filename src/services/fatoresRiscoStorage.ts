@@ -19,6 +19,8 @@ export type FatoresRiscoRegistro = {
   nip: string;
   nome: string;
   respostas: RespostasFatoresRisco;
+  /** Medicamentos em uso (texto livre). */
+  usoRemedios?: string;
   /** Altura informada (m ou cm, texto original). */
   altura?: string;
   /** Peso em kg (texto original). */
@@ -151,6 +153,7 @@ export async function saveFatoresRisco(input: {
   nip: string;
   nome: string;
   respostas: RespostasFatoresRisco;
+  usoRemedios?: string;
   altura?: string;
   peso?: string;
   imc?: number;
@@ -165,6 +168,7 @@ export async function saveFatoresRisco(input: {
     nip: key,
     nome: input.nome.trim(),
     respostas: { ...input.respostas },
+    usoRemedios: input.usoRemedios?.trim() || undefined,
     altura: input.altura?.trim() || undefined,
     peso: input.peso?.trim() || undefined,
     imc: input.imc,

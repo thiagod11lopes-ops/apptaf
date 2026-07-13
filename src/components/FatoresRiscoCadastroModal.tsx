@@ -125,6 +125,23 @@ export function FatoresRiscoCadastroModal({ visible, nome, nip, registro, onClos
                   );
                 })}
 
+                <View
+                  style={[
+                    styles.item,
+                    {
+                      flexDirection: 'column',
+                      alignItems: 'stretch',
+                      borderColor: theme.border,
+                      backgroundColor: theme.isDark ? 'rgba(2,6,23,0.35)' : 'rgba(248,250,252,0.9)',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.itemLabel, { color: ui.text }]}>Uso de remédios</Text>
+                  <Text style={[styles.itemValue, { color: theme.textSecondary, fontWeight: '600' }]}>
+                    {registro.usoRemedios?.trim() || '—'}
+                  </Text>
+                </View>
+
                 <View style={[styles.imcBox, { borderColor: theme.border }]}>
                   <Text style={[ts.caption, styles.imcTitle, { color: theme.textMuted }]}>
                     ANTROPOMETRIA / IMC

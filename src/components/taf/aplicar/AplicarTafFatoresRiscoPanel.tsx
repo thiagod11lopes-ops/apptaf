@@ -12,6 +12,7 @@ import {
   type RespostaFatorRisco,
   type RespostasFatoresRisco,
 } from '../../../services/fatoresRiscoStorage';
+import { calcularImc, formatDecimalInput } from '../../../utils/imcFatoresRisco';
 import { buscarCadastroPorNomeOuNip } from '../../../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput, nipDigitos } from '../../../utils/nipFormat';
 import { getAplicarTafGlass } from './aplicarTafTheme';
@@ -88,12 +89,21 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
   const [nome, setNome] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [respostas, setRespostas] = useState<RespostasFatoresRisco>(respostasFatoresVazias);
+  const [altura, setAltura] = useState('');
+  const [peso, setPeso] = useState('');
   const [salvando, setSalvando] = useState(false);
+
+  const imcResultado = useMemo(() => calcularImc(altura, peso), [altura, peso]);
 
   useEffect(() => {
     void getAllCadastros()
       .then(setCadastros)
       .catch(() => setCadastros([]));
+  }, []);
+
+  const limparAntropometria = useCallback(() => {
+    setAltura('');
+    setPeso('');
   }, []);
 
   const carregarRespostasSalvas = useCallback(async (nipValor: string) => {
@@ -103,8 +113,12 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
       const reg = await getFatoresRiscoByNip(key);
       if (reg) {
         setRespostas({ ...respostasFatoresVazias(), ...reg.respostas });
+        setAltura(reg.altura ?? '');
+        setPeso(reg.peso ?? '');
       } else {
         setRespostas(respostasFatoresVazias());
+        setAltura('');
+        setPeso('');
       }
     } catch {
       // silencioso
@@ -119,6 +133,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         else setNip('');
         setFeedback(null);
         setRespostas(respostasFatoresVazias());
+        limparAntropometria();
         return;
       }
 
@@ -150,6 +165,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
           setFeedback('NIP não encontrado no cadastro.');
           setNome('');
           setRespostas(respostasFatoresVazias());
+          limparAntropometria();
         } else {
           setNome('');
           setFeedback(null);
@@ -158,11 +174,12 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         setFeedback('Nome não encontrado no cadastro.');
         setNip('');
         setRespostas(respostasFatoresVazias());
+        limparAntropometria();
       } else {
         setFeedback(null);
       }
     },
-    [cadastros, carregarRespostasSalvas],
+    [cadastros, carregarRespostasSalvas, limparAntropometria],
   );
 
   const onChangeNip = useCallback(
@@ -210,7 +227,14 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
 
     setSalvando(true);
     try {
-      await saveFatoresRisco({ nip, nome, respostas });
+      await saveFatoresRisco({
+        nip,
+        nome,
+        respostas,
+        altura: altura.trim() || undefined,
+        peso: peso.trim() || undefined,
+        imc: imcResultado?.imc,
+      });
       onSalvo?.();
       Alert.alert('Salvo', 'Fatores de risco registrados para este militar.', [
         { text: 'OK', onPress: onVoltar },
@@ -220,7 +244,7 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
     } finally {
       setSalvando(false);
     }
-  }, [nip, nome, respostas, onSalvo, onVoltar]);
+  }, [nip, nome, respostas, altura, peso, imcResultado, onSalvo, onVoltar]);
 
   return (
     <AplicarTafGlassPanel accent="violet">
@@ -309,6 +333,71 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
         </View>
       </View>
 
+      <View style={styles.imcBlock}>
+        <Text style={[ts.caption, styles.checklistTitle, { color: theme.textMuted }]}>
+          Antropometria / IMC
+        </Text>
+        <Text style={[ts.caption, styles.checklistHint, { color: theme.textSecondary }]}>
+          Informe a altura (m ou cm) e o peso (kg). O IMC é calculado automaticamente.
+        </Text>
+
+        <View style={styles.imcFieldsRow}>
+          <View style={[styles.field, styles.imcField]}>
+            <Text style={[ts.caption, styles.label, { color: theme.textMuted }]}>Altura</Text>
+            <AplicarTafInput
+              value={altura}
+              onChangeText={(t) => setAltura(formatDecimalInput(t))}
+              placeholder="1,75 ou 175"
+              keyboardType="decimal-pad"
+              inputMode="decimal"
+              accessibilityLabel="Altura do militar"
+            />
+          </View>
+          <View style={[styles.field, styles.imcField]}>
+            <Text style={[ts.caption, styles.label, { color: theme.textMuted }]}>Peso (kg)</Text>
+            <AplicarTafInput
+              value={peso}
+              onChangeText={(t) => setPeso(formatDecimalInput(t))}
+              placeholder="75,5"
+              keyboardType="decimal-pad"
+              inputMode="decimal"
+              accessibilityLabel="Peso do militar"
+            />
+          </View>
+        </View>
+
+        {imcResultado ? (
+          <View
+            style={[
+              styles.imcResultCard,
+              {
+                borderColor: imcResultado.classificacao.corHex,
+                backgroundColor: theme.isDark
+                  ? `${imcResultado.classificacao.corHex}22`
+                  : `${imcResultado.classificacao.corHex}14`,
+              },
+            ]}
+          >
+            <Text style={[styles.imcValue, { color: imcResultado.classificacao.corHex }]}>
+              IMC {imcResultado.imcFormatado}
+            </Text>
+            <Text style={[styles.imcTitulo, { color: imcResultado.classificacao.corHex }]}>
+              {imcResultado.classificacao.titulo}
+            </Text>
+            <Text style={[ts.caption, styles.imcFaixa, { color: theme.textSecondary }]}>
+              {imcResultado.classificacao.faixa}
+            </Text>
+            <Text style={[ts.caption, { color: ui.text, lineHeight: 18 }]}>
+              {imcResultado.classificacao.descricao}
+            </Text>
+          </View>
+        ) : altura.trim() || peso.trim() ? (
+          <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
+            Preencha altura e peso válidos para calcular o IMC.
+          </Text>
+        ) : null}
+      </View>
+
       <View style={styles.saveWrap}>
         <AplicarTafPrimaryButton
           label={salvando ? 'Salvando…' : 'OK — Confirmar fatores'}
@@ -381,6 +470,37 @@ const styles = StyleSheet.create({
   toggleBtnText: {
     fontSize: 14,
     fontWeight: '800',
+  },
+  imcBlock: {
+    marginTop: 20,
+    gap: 8,
+  },
+  imcFieldsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  imcField: {
+    flex: 1,
+  },
+  imcResultCard: {
+    marginTop: 6,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  imcValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  imcTitulo: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  imcFaixa: {
+    marginBottom: 2,
   },
   saveWrap: {
     marginTop: 18,

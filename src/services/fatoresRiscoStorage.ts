@@ -19,6 +19,12 @@ export type FatoresRiscoRegistro = {
   nip: string;
   nome: string;
   respostas: RespostasFatoresRisco;
+  /** Altura informada (m ou cm, texto original). */
+  altura?: string;
+  /** Peso em kg (texto original). */
+  peso?: string;
+  /** IMC calculado no momento do salvamento. */
+  imc?: number;
   updatedAt: number;
 };
 
@@ -92,9 +98,14 @@ export async function saveFatoresRisco(input: {
   nip: string;
   nome: string;
   respostas: RespostasFatoresRisco;
-}): Promise<FatoresRiscoRegistro | null> {
+  altura?: string;
+  peso?: string;
+  imc?: number;
+}): Promise<FatoresRiscoRegistro> {
   const key = nipDigitos(input.nip);
-  if (key.length !== 8) return null;
+  if (key.length !== 8) {
+    throw new Error('NIP inválido');
+  }
 
   const ownerUid = await resolveOwnerUid();
   const map = await readMap(ownerUid);
@@ -102,16 +113,13 @@ export async function saveFatoresRisco(input: {
     nip: key,
     nome: input.nome.trim(),
     respostas: { ...input.respostas },
+    altura: input.altura?.trim() || undefined,
+    peso: input.peso?.trim() || undefined,
+    imc: input.imc,
     updatedAt: Date.now(),
   };
 
-  if (temFatorRiscoSim(registro.respostas)) {
-    map[key] = registro;
-  } else {
-    // Sem nenhum "Sim": remove o destaque de risco.
-    delete map[key];
-  }
-
+  map[key] = registro;
   await writeAppMeta(metaKey(ownerUid), JSON.stringify(map));
-  return temFatorRiscoSim(registro.respostas) ? registro : null;
+  return registro;
 }

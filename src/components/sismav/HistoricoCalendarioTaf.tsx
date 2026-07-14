@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft, ChevronRight, CalendarDays, Download, FlaskConical } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CalendarDays, Download, FlaskConical, FolderDown } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SectionCard } from './SectionCard';
 import { PressableScale } from '../premium/PressableScale';
@@ -29,7 +29,11 @@ import {
 import { listarResultadosGeralFromHistorico } from '../../utils/resultadoGeralHistorico';
 import { enriquecerLinhasComRubricas } from '../../utils/resultadoTafCadastro';
 import { carregarRubricasDasSessoesPorNip } from '../../utils/rubricasDasSessoes';
-import { exportResultadosTafPdf, PERMANENCIA_TEMPO_PDF_PADRAO } from '../../utils/exportResultadosTafPdf';
+import {
+  exportResultadosTafPdf,
+  PERMANENCIA_TEMPO_PDF_PADRAO,
+  salvarResultadosTafPdfNaPasta,
+} from '../../utils/exportResultadosTafPdf';
 import { assinaturasUnicasDasSessoes } from '../../utils/assinaturaAplicadorDasSessoes';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
 import { RubricaCell } from '../RubricaThumb';
@@ -99,6 +103,7 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
   const [mes, setMes] = useState(hojeDate.getMonth());
   const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [salvandoPdfPasta, setSalvandoPdfPasta] = useState(false);
 
   const diasComTeste = useMemo(() => diasComTestesIso(sessoes), [sessoes]);
   const grade = useMemo(() => gradeCalendarioMes(ano, mes), [ano, mes]);
@@ -146,26 +151,64 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
     [diasComTeste, onAviso],
   );
 
+  const prepararLinhasPdfDoDia = useCallback(async () => {
+    const linhasBase = listarResultadosGeralFromHistorico(sessoesDoDia, cadastros);
+    if (linhasBase.length === 0) {
+      throw new Error('Não há participantes para exportar neste dia.');
+    }
+    const rubSessoes = await carregarRubricasDasSessoesPorNip();
+    const linhas = enriquecerLinhasComRubricas(linhasBase, cadastros, rubSessoes);
+    const assinaturas = assinaturasUnicasDasSessoes(sessoesDoDia);
+    return { linhas, assinaturas };
+  }, [sessoesDoDia, cadastros]);
+
   const gerarPdfDoDia = useCallback(async () => {
-    if (!diaSelecionado || sessoesDoDia.length === 0) return;
+    if (!diaSelecionado || sessoesDoDia.length === 0 || salvandoPdfPasta) return;
     setGerandoPdf(true);
     onAviso?.(null);
     try {
-      const linhasBase = listarResultadosGeralFromHistorico(sessoesDoDia, cadastros);
-      if (linhasBase.length === 0) {
-        onAviso?.('Não há participantes para exportar neste dia.');
-        return;
-      }
-      const rubSessoes = await carregarRubricasDasSessoesPorNip();
-      const linhas = enriquecerLinhasComRubricas(linhasBase, cadastros, rubSessoes);
-      const assinaturas = assinaturasUnicasDasSessoes(sessoesDoDia);
+      const { linhas, assinaturas } = await prepararLinhasPdfDoDia();
       await exportResultadosTafPdf(linhas, `Resultados do dia — ${dataBrSelecionada}`, assinaturas);
     } catch (e) {
       onAviso?.(e instanceof Error ? e.message : 'Falha ao gerar PDF.');
     } finally {
       setGerandoPdf(false);
     }
-  }, [diaSelecionado, sessoesDoDia, cadastros, dataBrSelecionada, onAviso]);
+  }, [
+    diaSelecionado,
+    sessoesDoDia.length,
+    salvandoPdfPasta,
+    prepararLinhasPdfDoDia,
+    dataBrSelecionada,
+    onAviso,
+  ]);
+
+  const salvarPdfDoDiaNaPasta = useCallback(async () => {
+    if (!diaSelecionado || sessoesDoDia.length === 0 || gerandoPdf) return;
+    setSalvandoPdfPasta(true);
+    onAviso?.(null);
+    try {
+      const { linhas, assinaturas } = await prepararLinhasPdfDoDia();
+      const msg = await salvarResultadosTafPdfNaPasta(
+        linhas,
+        `Resultados do dia — ${dataBrSelecionada}`,
+        assinaturas,
+      );
+      onAviso?.(msg);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Falha ao salvar PDF na pasta.';
+      if (!/cancelad/i.test(msg)) onAviso?.(msg);
+    } finally {
+      setSalvandoPdfPasta(false);
+    }
+  }, [
+    diaSelecionado,
+    sessoesDoDia.length,
+    gerandoPdf,
+    prepararLinhasPdfDoDia,
+    dataBrSelecionada,
+    onAviso,
+  ]);
 
   const totalParticipantesDia = useMemo(
     () => sessoesDoDia.reduce((acc, s) => acc + s.resultados.length, 0),
@@ -336,8 +379,8 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
 
           <PressableScale
             onPress={() => void gerarPdfDoDia()}
-            disabled={gerandoPdf}
-            style={[styles.btnPdfOuter, gerandoPdf ? { opacity: 0.7 } : null]}
+            disabled={gerandoPdf || salvandoPdfPasta}
+            style={[styles.btnPdfOuter, gerandoPdf || salvandoPdfPasta ? { opacity: 0.7 } : null]}
           >
             <LinearGradient
               colors={[...theme.tokens.gradientPrimaryBtn]}
@@ -361,6 +404,31 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
                 </>
               )}
             </LinearGradient>
+          </PressableScale>
+
+          <PressableScale
+            onPress={() => void salvarPdfDoDiaNaPasta()}
+            disabled={gerandoPdf || salvandoPdfPasta}
+            style={[
+              styles.btnSalvarPasta,
+              {
+                borderColor: theme.border,
+                backgroundColor: theme.surface,
+                opacity: gerandoPdf || salvandoPdfPasta ? 0.7 : 1,
+              },
+            ]}
+            accessibilityLabel="Salvar PDF do dia na pasta escolhida"
+          >
+            {salvandoPdfPasta ? (
+              <ActivityIndicator color={theme.primary} size="small" />
+            ) : (
+              <>
+                <FolderDown size={18} color={theme.primary} strokeWidth={2.4} />
+                <Text style={[styles.btnSalvarPastaText, { color: theme.primary }]}>
+                  Salvar PDF na pasta…
+                </Text>
+              </>
+            )}
           </PressableScale>
 
           {sessoesDoDia.map((sessao) => (
@@ -525,7 +593,7 @@ const styles = StyleSheet.create({
     minWidth: 120,
     maxWidth: 130,
   },
-  btnPdfOuter: { borderRadius: 12, overflow: 'hidden', marginBottom: 14 },
+  btnPdfOuter: { borderRadius: 12, overflow: 'hidden', marginBottom: 10 },
   btnPdf: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -537,6 +605,23 @@ const styles = StyleSheet.create({
   },
   btnPdfText: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  btnSalvarPasta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  btnSalvarPastaText: {
     fontSize: 14,
     fontWeight: '800',
     textAlign: 'center',

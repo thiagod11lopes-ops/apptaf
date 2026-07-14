@@ -7,11 +7,12 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { Download, Upload } from 'lucide-react-native';
+import { Download, FolderDown, Upload } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   exportarBackupTafCsv,
+  exportarBackupTafCsvNaPasta,
   importarBackupTafCsv,
   readBackupCsvFile,
   type ResultadoImportacaoBackupCsv,
@@ -24,12 +25,14 @@ export function BackupTafCsvBlock() {
   const { isAuthenticated } = useAuth();
   const inputRef = useRef<unknown>(null);
   const [exportando, setExportando] = useState(false);
+  const [salvandoPasta, setSalvandoPasta] = useState(false);
   const [importando, setImportando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ResultadoImportacaoBackupCsv | null>(null);
 
   const handleExport = useCallback(async () => {
+    if (salvandoPasta) return;
     setExportando(true);
     setErro(null);
     setExportMsg(null);
@@ -43,7 +46,25 @@ export function BackupTafCsvBlock() {
     } finally {
       setExportando(false);
     }
-  }, []);
+  }, [salvandoPasta]);
+
+  const handleSalvarNaPasta = useCallback(async () => {
+    if (exportando || importando) return;
+    setSalvandoPasta(true);
+    setErro(null);
+    setExportMsg(null);
+    try {
+      const result = await exportarBackupTafCsvNaPasta();
+      setExportMsg(
+        `${result.mensagem} (${result.filename}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões.`,
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Falha ao salvar backup CSV na pasta.';
+      if (!/cancelad/i.test(msg)) setErro(msg);
+    } finally {
+      setSalvandoPasta(false);
+    }
+  }, [exportando, importando]);
 
   const processarArquivo = useCallback(async (file: File | { uri: string }) => {
     setImportando(true);
@@ -97,7 +118,7 @@ export function BackupTafCsvBlock() {
     [processarArquivo],
   );
 
-  const busy = exportando || importando;
+  const busy = exportando || importando || salvandoPasta;
 
   return (
     <View style={styles.wrap}>
@@ -132,6 +153,33 @@ export function BackupTafCsvBlock() {
       </TouchableOpacity>
 
       <TouchableOpacity
+        accessibilityLabel="Salvar backup CSV na pasta escolhida"
+        activeOpacity={0.85}
+        disabled={busy}
+        onPress={() => void handleSalvarNaPasta()}
+        style={[
+          styles.btn,
+          styles.btnSecondary,
+          {
+            backgroundColor: theme.backgroundSecondary,
+            borderColor: theme.border,
+            opacity: busy ? 0.7 : 1,
+          },
+        ]}
+      >
+        {salvandoPasta ? (
+          <ActivityIndicator color={theme.primary} size="small" />
+        ) : (
+          <>
+            <FolderDown size={18} color={theme.primary} strokeWidth={2.2} />
+            <Text style={[ts.caption, styles.btnText, { color: theme.primary }]}>
+              Salvar backup na pasta…
+            </Text>
+          </>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity
         accessibilityLabel="Carregar dados CSV"
         activeOpacity={0.85}
         disabled={busy}
@@ -160,7 +208,8 @@ export function BackupTafCsvBlock() {
 
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
         Exporta e restaura cadastros, resultados, aplicadores, pré-cadastros, e-mails autorizados, fila de
-        sync e metadados em um único arquivo CSV.
+        sync e metadados em um único arquivo CSV. Em Android, “Salvar backup na pasta…” abre o seletor de
+        pastas do aparelho; no iOS use “Salvar em Arquivos”.
         {isAuthenticated ? ' Com login ativo, os dados são gravados na nuvem.' : ''}
       </Text>
 

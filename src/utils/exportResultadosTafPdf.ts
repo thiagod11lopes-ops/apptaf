@@ -17,6 +17,11 @@ import {
   PDF_A4_LANDSCAPE_WIDTH,
   PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
+import {
+  mensagemSucessoSalvarNaPasta,
+  sanitizarNomeArquivo,
+  salvarArquivoCacheNaPastaEscolhida,
+} from './salvarArquivoNaPasta';
 
 /** Estima quantas folhas A4 paisagem serão necessárias para imprimir a tabela de resultados. */
 export function estimarFolhasA4PdfResultadosTaf(
@@ -101,6 +106,14 @@ export function buildResultadosTafHtml(
   });
 }
 
+function nomeArquivoPdfResultados(subtitulo: string): string {
+  const base = sanitizarNomeArquivo(subtitulo || 'Resultados TAF')
+    .replace(/[.—]/g, '-')
+    .replace(/\s+/g, '_')
+    .slice(0, 80);
+  return sanitizarNomeArquivo(base || 'Resultados_TAF', '.pdf');
+}
+
 export async function exportResultadosTafPdf(
   linhas: ResultadoTafLinha[],
   subtitulo: string,
@@ -142,4 +155,54 @@ export async function exportResultadosTafPdf(
   } else {
     Alert.alert('PDF gerado', 'Arquivo salvo na área de cache do app.');
   }
+}
+
+/** Gera o PDF e salva na pasta escolhida (Android SAF / iOS Arquivos / web download). */
+export async function salvarResultadosTafPdfNaPasta(
+  linhas: ResultadoTafLinha[],
+  subtitulo: string,
+  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
+): Promise<string> {
+  if (linhas.length === 0) {
+    throw new Error('Não há resultados para exportar.');
+  }
+
+  const html = buildResultadosTafHtml(linhas, subtitulo, aplicadorAssinaturas);
+  const filename = nomeArquivoPdfResultados(subtitulo);
+
+  if (Platform.OS === 'web') {
+    if (typeof window === 'undefined') {
+      throw new Error('Salvar PDF indisponível neste ambiente.');
+    }
+    const win = window.open('', '_blank');
+    if (!win) {
+      throw new Error(
+        'Não foi possível abrir a visualização do PDF. Permita pop-ups neste site e tente novamente.',
+      );
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    return 'Use Imprimir → Salvar como PDF e escolha a pasta no computador.';
+  }
+
+  const { uri } = await Print.printToFileAsync({
+    html,
+    width: PDF_A4_LANDSCAPE_WIDTH,
+    height: PDF_A4_LANDSCAPE_HEIGHT,
+  });
+
+  const resultado = await salvarArquivoCacheNaPastaEscolhida({
+    sourceUri: uri,
+    filename,
+    mimeType: 'application/pdf',
+    uti: 'com.adobe.pdf',
+    dialogTitle: 'Salvar PDF na pasta',
+  });
+
+  if (!resultado.ok) {
+    throw new Error('Seleção de pasta cancelada.');
+  }
+  return mensagemSucessoSalvarNaPasta(resultado);
 }

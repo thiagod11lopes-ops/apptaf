@@ -669,6 +669,36 @@ export async function downloadBackupCsvFile(content: string, filename: string): 
   await shareOrDownloadCsv(content, filename);
 }
 
+export async function exportarBackupTafCsvNaPasta(): Promise<{
+  cadastros: number;
+  sessoes: number;
+  filename: string;
+  mensagem: string;
+}> {
+  const { salvarConteudoTextoNaPastaEscolhida, mensagemSucessoSalvarNaPasta } = await import(
+    './salvarArquivoNaPasta'
+  );
+  const payload = await gatherSystemBackupData();
+  const content = buildBackupCsvContent(payload);
+  const filename = backupFilename();
+  const resultado = await salvarConteudoTextoNaPastaEscolhida({
+    content,
+    filename,
+    mimeType: 'text/csv',
+    uti: 'public.comma-separated-values-text',
+    dialogTitle: 'Salvar backup CSV na pasta',
+  });
+  if (!resultado.ok) {
+    throw new Error('Seleção de pasta cancelada.');
+  }
+  return {
+    cadastros: payload.cadastros.length,
+    sessoes: payload.sessoes.length,
+    filename,
+    mensagem: mensagemSucessoSalvarNaPasta(resultado),
+  };
+}
+
 async function shareOrDownloadCsv(content: string, filename: string): Promise<void> {
   if (Platform.OS === 'web') {
     if (typeof document === 'undefined') {

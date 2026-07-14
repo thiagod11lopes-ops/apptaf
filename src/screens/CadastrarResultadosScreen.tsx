@@ -11,13 +11,17 @@ import {
   Alert,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ChevronLeft, FileDown } from 'lucide-react-native';
+import { ChevronLeft, FileDown, FolderDown } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
 import { AplicadorAssinaturaBloco } from '../components/AplicadorAssinaturaBloco';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { formatMsByModality } from '../taf/tafTimeFormat';
-import { cabecalhoColunaProvaResultados, exportResumoAplicacaoPdf } from '../utils/exportResumoAplicacaoPdf';
+import {
+  cabecalhoColunaProvaResultados,
+  exportResumoAplicacaoPdf,
+  salvarResumoAplicacaoPdfNaPasta,
+} from '../utils/exportResumoAplicacaoPdf';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
@@ -43,12 +47,14 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
   const returnTo = route.params?.returnTo ?? 'AplicarTAF';
   const aplicadorAssinatura = route.params?.aplicadorAssinatura;
   const [exportandoPdf, setExportandoPdf] = useState(false);
+  const [salvandoPdfPasta, setSalvandoPdfPasta] = useState(false);
   const grayBg = 'transparent';
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = theme.border;
+  const pdfBusy = exportandoPdf || salvandoPdfPasta;
 
   const exportarPdf = useCallback(async () => {
-    if (exportandoPdf || resultados.length === 0) return;
+    if (pdfBusy || resultados.length === 0) return;
     setExportandoPdf(true);
     try {
       await exportResumoAplicacaoPdf(resultados, textoColunaCadastro, aplicadorAssinatura);
@@ -57,7 +63,25 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
     } finally {
       setExportandoPdf(false);
     }
-  }, [aplicadorAssinatura, exportandoPdf, resultados, textoColunaCadastro]);
+  }, [aplicadorAssinatura, pdfBusy, resultados, textoColunaCadastro]);
+
+  const salvarPdfNaPasta = useCallback(async () => {
+    if (pdfBusy || resultados.length === 0) return;
+    setSalvandoPdfPasta(true);
+    try {
+      const msg = await salvarResumoAplicacaoPdfNaPasta(
+        resultados,
+        textoColunaCadastro,
+        aplicadorAssinatura,
+      );
+      Alert.alert('PDF', msg);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Não foi possível salvar o PDF na pasta.';
+      if (!/cancelad/i.test(msg)) Alert.alert('PDF', msg);
+    } finally {
+      setSalvandoPdfPasta(false);
+    }
+  }, [aplicadorAssinatura, pdfBusy, resultados, textoColunaCadastro]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
@@ -136,21 +160,47 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
             {aplicadorAssinatura ? <AplicadorAssinaturaBloco assinatura={aplicadorAssinatura} /> : null}
 
             {resultados.length > 0 ? (
-              <TouchableOpacity
-                onPress={() => void exportarPdf()}
-                disabled={exportandoPdf}
-                style={[styles.btnPdf, { backgroundColor: theme.primary, opacity: exportandoPdf ? 0.7 : 1 }]}
-                accessibilityLabel="Gerar PDF do resumo"
-              >
-                {exportandoPdf ? (
-                  <ActivityIndicator color={theme.text} />
-                ) : (
-                  <>
-                    <FileDown size={18} color={theme.text} strokeWidth={2.5} />
-                    <Text style={[styles.btnPdfText, { color: theme.text }]}>Gerar PDF</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  onPress={() => void exportarPdf()}
+                  disabled={pdfBusy}
+                  style={[styles.btnPdf, { backgroundColor: theme.primary, opacity: pdfBusy ? 0.7 : 1 }]}
+                  accessibilityLabel="Gerar PDF do resumo"
+                >
+                  {exportandoPdf ? (
+                    <ActivityIndicator color={theme.text} />
+                  ) : (
+                    <>
+                      <FileDown size={18} color={theme.text} strokeWidth={2.5} />
+                      <Text style={[styles.btnPdfText, { color: theme.text }]}>Gerar PDF</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void salvarPdfNaPasta()}
+                  disabled={pdfBusy}
+                  style={[
+                    styles.btnPdfPasta,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: ui.inputBg,
+                      opacity: pdfBusy ? 0.7 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="Salvar PDF do resumo na pasta escolhida"
+                >
+                  {salvandoPdfPasta ? (
+                    <ActivityIndicator color={theme.primary} />
+                  ) : (
+                    <>
+                      <FolderDown size={18} color={theme.primary} strokeWidth={2.5} />
+                      <Text style={[styles.btnPdfText, { color: theme.primary }]}>
+                        Salvar PDF na pasta…
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
             ) : null}
           </Card>
         </View>
@@ -286,6 +336,16 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
       gap: 8,
       paddingVertical: 14,
       borderRadius: 12,
+    },
+    btnPdfPasta: {
+      marginTop: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      borderRadius: 12,
+      borderWidth: 1,
     },
     btnPdfText: {
       fontSize: 15,

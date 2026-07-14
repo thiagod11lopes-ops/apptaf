@@ -1,6 +1,5 @@
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { tituloTipoProva, type TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
@@ -19,6 +18,13 @@ import {
   PDF_A4_LANDSCAPE_WIDTH,
   PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
+import {
+  baixarArquivoParaDownloads,
+  baixarHtmlComoPdfWeb,
+  mensagemSucessoSalvarNaPasta,
+  sanitizarNomeArquivo,
+  SalvamentoCanceladoError,
+} from './salvarArquivoNaPasta';
 /** Estima quantas folhas A4 paisagem serão necessárias para o resumo da aplicação. */
 export function estimarFolhasA4PdfResumoAplicacao(
   quantidadeLinhas: number,
@@ -108,28 +114,34 @@ export function buildResumoAplicacaoHtml(
   });
 }
 
+function nomeArquivoPdfResumo(resultados: ResultadoCorridaItem[]): string {
+  const prova = sanitizarNomeArquivo(tituloProvaResumoPdf(resultados)).replace(/\s+/g, '_');
+  const data = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+  return sanitizarNomeArquivo(`Resumo_aplicacao_${prova}_${data}`, '.pdf');
+}
+
 /**
- * Gera PDF no dispositivo (nativo) ou abre visualização HTML (web — imprimir/salvar manualmente).
+ * Gera o PDF em silêncio e baixa para Downloads (web/Android) ou Arquivos (iOS).
+ * Não abre o PDF na tela.
  */
 export async function exportResumoAplicacaoPdf(
   resultados: ResultadoCorridaItem[],
   textoColunaCadastro: string,
   aplicadorAssinatura?: AplicadorAssinaturaResumo,
-): Promise<void> {
+): Promise<string> {
+  if (resultados.length === 0) {
+    throw new Error('Não há resultados para salvar.');
+  }
+
   const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro, undefined, aplicadorAssinatura);
+  const filename = nomeArquivoPdfResumo(resultados);
 
   if (Platform.OS === 'web') {
-    const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
-    if (!win) {
-      throw new Error(
-        'Não foi possível abrir a visualização do PDF. Permita pop-ups neste site e tente novamente.',
-      );
+    const resultado = await baixarHtmlComoPdfWeb(html, filename);
+    if (!resultado.ok) {
+      throw new SalvamentoCanceladoError();
     }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    return;
+    return mensagemSucessoSalvarNaPasta(resultado);
   }
 
   const { uri } = await Print.printToFileAsync({
@@ -138,17 +150,16 @@ export async function exportResumoAplicacaoPdf(
     height: PDF_A4_LANDSCAPE_HEIGHT,
   });
 
-  const canShare = await Sharing.isAvailableAsync();
-  if (canShare) {
-    await Sharing.shareAsync(uri, {
-      mimeType: 'application/pdf',
-      dialogTitle: 'Salvar PDF — Resumo TAF',
-      UTI: 'com.adobe.pdf',
-    });
-  } else {
-    Alert.alert(
-      'PDF gerado',
-      'Não foi possível abrir o compartilhamento neste dispositivo. O arquivo foi salvo na área de cache do app.',
-    );
+  const resultado = await baixarArquivoParaDownloads({
+    sourceUri: uri,
+    filename,
+    mimeType: 'application/pdf',
+    uti: 'com.adobe.pdf',
+    dialogTitle: 'Salvar PDF em Downloads',
+  });
+
+  if (!resultado.ok) {
+    throw new SalvamentoCanceladoError();
   }
+  return mensagemSucessoSalvarNaPasta(resultado);
 }

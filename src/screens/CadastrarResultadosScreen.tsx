@@ -54,9 +54,15 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
     if (exportandoPdf || resultados.length === 0) return;
     setExportandoPdf(true);
     try {
-      await exportResumoAplicacaoPdf(resultados, textoColunaCadastro, aplicadorAssinatura);
+      const msg = await exportResumoAplicacaoPdf(
+        resultados,
+        textoColunaCadastro,
+        aplicadorAssinatura,
+      );
+      Alert.alert('Salvar', msg);
     } catch (e) {
-      Alert.alert('PDF', e instanceof Error ? e.message : 'Não foi possível gerar o PDF.');
+      const msg = e instanceof Error ? e.message : 'Não foi possível salvar o PDF.';
+      if (!/cancelad/i.test(msg)) Alert.alert('Salvar', msg);
     } finally {
       setExportandoPdf(false);
     }
@@ -101,14 +107,14 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                     styles.btnAcaoTopo,
                     { backgroundColor: theme.primary, opacity: exportandoPdf ? 0.7 : 1 },
                   ]}
-                  accessibilityLabel="Gerar PDF do resumo"
+                  accessibilityLabel="Salvar PDF do resumo"
                 >
                   {exportandoPdf ? (
                     <ActivityIndicator color={theme.text} />
                   ) : (
                     <>
                       <FileDown size={18} color={theme.text} strokeWidth={2.5} />
-                      <Text style={[styles.btnPdfText, { color: theme.text }]}>Gerar PDF</Text>
+                      <Text style={[styles.btnPdfText, { color: theme.text }]}>Salvar</Text>
                     </>
                   )}
                 </TouchableOpacity>

@@ -16,9 +16,11 @@ import { getUiColors } from '../../theme/uiColors';
 import type { ResultadoCorridaItem } from '../../navigation/types';
 import type { AplicadorAssinaturaResumo } from '../../types/aplicadorAssinatura';
 import {
-  executarEnvioResultadoPorEmail,
+  enviarAnexoResultadoPorEmail,
   listarOpcoesEmailResultado,
+  prepararAnexoEmailResumo,
   type OpcaoEmailResultado,
+  type PdfResumoPronto,
   type ProvedorEmailResultado,
 } from '../../utils/enviarResumoAplicacaoEmail';
 
@@ -55,6 +57,9 @@ export function EnviarEmailResultadoModal({
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const [opcoes, setOpcoes] = useState<OpcaoEmailResultado[]>([]);
   const [carregandoOpcoes, setCarregandoOpcoes] = useState(false);
+  const [preparandoAnexo, setPreparandoAnexo] = useState(false);
+  const [anexo, setAnexo] = useState<PdfResumoPronto | null>(null);
+  const [erroAnexo, setErroAnexo] = useState<string | null>(null);
   const [enviandoId, setEnviandoId] = useState<ProvedorEmailResultado | null>(null);
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
 
@@ -62,10 +67,18 @@ export function EnviarEmailResultadoModal({
     if (!visible) {
       setEnviandoId(null);
       setFeedback(null);
+      setAnexo(null);
+      setErroAnexo(null);
+      setPreparandoAnexo(false);
       return;
     }
+
     let ativo = true;
     setCarregandoOpcoes(true);
+    setPreparandoAnexo(true);
+    setErroAnexo(null);
+    setAnexo(null);
+
     void listarOpcoesEmailResultado()
       .then((lista) => {
         if (ativo) setOpcoes(lista);
@@ -76,13 +89,13 @@ export function EnviarEmailResultadoModal({
             {
               id: 'gmail',
               titulo: 'Gmail',
-              subtitulo: 'Abrir Gmail com PDF anexado',
+              subtitulo: 'Abrir Gmail com o PDF anexado',
               disponivel: true,
             },
             {
               id: 'zimbra',
               titulo: 'Zimbra',
-              subtitulo: 'Abrir Zimbra com PDF anexado',
+              subtitulo: 'Abrir Zimbra com o PDF anexado',
               disponivel: true,
             },
             {
@@ -97,33 +110,49 @@ export function EnviarEmailResultadoModal({
       .finally(() => {
         if (ativo) setCarregandoOpcoes(false);
       });
+
+    // Prepara o anexo em silêncio (sem abrir na tela) antes do clique.
+    void prepararAnexoEmailResumo(resultados, textoColunaCadastro, aplicadorAssinatura)
+      .then((pdf) => {
+        if (ativo) setAnexo(pdf);
+      })
+      .catch((e: unknown) => {
+        if (ativo) {
+          setErroAnexo(
+            e instanceof Error ? e.message : 'Não foi possível preparar o anexo do e-mail.',
+          );
+        }
+      })
+      .finally(() => {
+        if (ativo) setPreparandoAnexo(false);
+      });
+
     return () => {
       ativo = false;
     };
-  }, [visible]);
+  }, [aplicadorAssinatura, resultados, textoColunaCadastro, visible]);
 
   const enviar = useCallback(
     (id: ProvedorEmailResultado) => {
-      if (enviandoId) return;
+      if (enviandoId || preparandoAnexo) return;
+      if (!anexo) {
+        const msg = erroAnexo ?? 'Aguarde a preparação do anexo e tente de novo.';
+        setFeedback({ tipo: 'erro', texto: msg });
+        onAviso?.(msg);
+        return;
+      }
+
       setEnviandoId(id);
       setFeedback(null);
 
-      // Na web, o e-mail DEVE abrir no mesmo gesto (sem await antes).
-      // No nativo, gera o PDF e abre o app já com anexo.
-      void executarEnvioResultadoPorEmail({
-        provedor: id,
-        resultados,
-        textoColunaCadastro,
-        aplicadorAssinatura,
-        abrirEmailNoGesto: Platform.OS === 'web',
-      })
+      void enviarAnexoResultadoPorEmail(id, anexo)
         .then((resultado) => {
           setFeedback({ tipo: 'ok', texto: resultado.mensagem });
           onAviso?.(resultado.mensagem);
         })
         .catch((e: unknown) => {
           const msg =
-            e instanceof Error ? e.message : 'Não foi possível abrir o e-mail com o PDF.';
+            e instanceof Error ? e.message : 'Não foi possível abrir o e-mail com o anexo.';
           setFeedback({ tipo: 'erro', texto: msg });
           onAviso?.(msg);
         })
@@ -131,10 +160,11 @@ export function EnviarEmailResultadoModal({
           setEnviandoId(null);
         });
     },
-    [aplicadorAssinatura, enviandoId, onAviso, resultados, textoColunaCadastro],
+    [anexo, enviandoId, erroAnexo, onAviso, preparandoAnexo],
   );
 
-  const busy = Boolean(enviandoId);
+  const busy = Boolean(enviandoId) || preparandoAnexo;
+  const podeEnviar = Boolean(anexo) && !preparandoAnexo && !enviandoId;
 
   return (
     <AppModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -195,7 +225,7 @@ export function EnviarEmailResultadoModal({
                   <Text style={[styles.kicker, { color: theme.primary }]}>ENVIO RÁPIDO</Text>
                   <Text style={[styles.title, { color: ui.text }]}>Enviar Resultado por Email</Text>
                   <Text style={[styles.subtitle, { color: ui.textSecondary }]}>
-                    Escolha o app. O PDF do resumo será gerado e anexado automaticamente.
+                    O PDF não abre na tela — vai direto como anexo do e-mail escolhido.
                   </Text>
                 </View>
                 <PressableScale
@@ -208,9 +238,12 @@ export function EnviarEmailResultadoModal({
                 </PressableScale>
               </View>
 
-              {carregandoOpcoes ? (
+              {carregandoOpcoes || preparandoAnexo ? (
                 <View style={styles.loadingBox}>
                   <ActivityIndicator color={theme.primary} />
+                  <Text style={[styles.loadingText, { color: ui.textMuted }]}>
+                    Preparando anexo…
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.options}>
@@ -222,10 +255,15 @@ export function EnviarEmailResultadoModal({
                       <PressableScale
                         key={opcao.id}
                         onPress={() => void enviar(opcao.id)}
-                        disabled={busy || !opcao.disponivel}
+                        disabled={!podeEnviar || !opcao.disponivel}
                         style={[
                           styles.optionOuter,
-                          { opacity: busy && !loading ? 0.55 : opcao.disponivel ? 1 : 0.45 },
+                          {
+                            opacity:
+                              (!podeEnviar && !loading) || !opcao.disponivel
+                                ? 0.55
+                                : 1,
+                          },
                           Platform.OS === 'web'
                             ? ({
                                 animationName: 'fadeInUp',
@@ -269,7 +307,7 @@ export function EnviarEmailResultadoModal({
                           <View style={styles.optionText}>
                             <Text style={[styles.optionTitle, { color: ui.text }]}>{opcao.titulo}</Text>
                             <Text style={[styles.optionSub, { color: ui.textMuted }]}>
-                              {loading ? 'Gerando PDF e abrindo…' : opcao.subtitulo}
+                              {loading ? 'Abrindo e-mail com anexo…' : opcao.subtitulo}
                             </Text>
                           </View>
                           <Text style={[styles.optionChevron, { color: theme.primary }]}>›</Text>
@@ -279,6 +317,20 @@ export function EnviarEmailResultadoModal({
                   })}
                 </View>
               )}
+
+              {erroAnexo && !preparandoAnexo ? (
+                <View
+                  style={[
+                    styles.feedbackBox,
+                    {
+                      backgroundColor: theme.isDark ? 'rgba(239,68,68,0.18)' : '#FEF2F2',
+                      borderColor: '#F87171',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.feedbackText, { color: theme.loss }]}>{erroAnexo}</Text>
+                </View>
+              ) : null}
 
               {feedback ? (
                 <View
@@ -310,8 +362,8 @@ export function EnviarEmailResultadoModal({
 
               <Text style={[styles.hint, { color: ui.textMuted }]}>
                 {Platform.OS === 'web'
-                  ? 'Ao tocar, o e-mail abre na hora. Depois anexe o arquivo que o app baixar.'
-                  : 'O app de e-mail abre e o PDF é anexado (ou pelo menu Compartilhar).'}
+                  ? 'No celular, o menu de compartilhar envia o arquivo anexo. No computador, se o anexo não for automático, use “Salvar PDF na pasta…”.'
+                  : 'O app de e-mail abre já com o PDF anexado — sem visualizar o relatório antes.'}
               </Text>
             </View>
           </LinearGradient>
@@ -395,6 +447,11 @@ const styles = StyleSheet.create({
     minHeight: 120,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   options: { gap: 10 },
   optionOuter: {

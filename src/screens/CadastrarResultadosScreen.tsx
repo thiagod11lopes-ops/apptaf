@@ -11,10 +11,11 @@ import {
   Alert,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ChevronLeft, FileDown, FolderDown } from 'lucide-react-native';
+import { ChevronLeft, FileDown, FolderDown, Mail } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
 import { AplicadorAssinaturaBloco } from '../components/AplicadorAssinaturaBloco';
+import { EnviarEmailResultadoModal } from '../components/sismav/EnviarEmailResultadoModal';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import {
@@ -48,6 +49,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
   const aplicadorAssinatura = route.params?.aplicadorAssinatura;
   const [exportandoPdf, setExportandoPdf] = useState(false);
   const [salvandoPdfPasta, setSalvandoPdfPasta] = useState(false);
+  const [emailModalVisible, setEmailModalVisible] = useState(false);
   const grayBg = 'transparent';
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = theme.border;
@@ -177,6 +179,23 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
+                  onPress={() => setEmailModalVisible(true)}
+                  disabled={pdfBusy}
+                  style={[
+                    styles.btnEmail,
+                    {
+                      backgroundColor: theme.isDark ? '#0F766E' : '#0D9488',
+                      opacity: pdfBusy ? 0.7 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="Enviar Resultado por Email"
+                >
+                  <Mail size={18} color="#FFFFFF" strokeWidth={2.5} />
+                  <Text style={[styles.btnPdfText, { color: '#FFFFFF' }]}>
+                    Enviar Resultado por Email
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                   onPress={() => void salvarPdfNaPasta()}
                   disabled={pdfBusy}
                   style={[
@@ -205,6 +224,15 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
           </Card>
         </View>
       </ScrollView>
+
+      <EnviarEmailResultadoModal
+        visible={emailModalVisible}
+        onClose={() => setEmailModalVisible(false)}
+        resultados={resultados}
+        textoColunaCadastro={textoColunaCadastro}
+        aplicadorAssinatura={aplicadorAssinatura}
+        onAviso={(msg) => Alert.alert('E-mail', msg)}
+      />
     </SafeAreaView>
   );
 }
@@ -330,6 +358,15 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
     },
     btnPdf: {
       marginTop: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      borderRadius: 12,
+    },
+    btnEmail: {
+      marginTop: 10,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',

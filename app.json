@@ -30,7 +30,8 @@
     "plugins": [
       "expo-sharing",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-mail-composer"
     ]
   }
 }

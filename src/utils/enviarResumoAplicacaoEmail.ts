@@ -105,14 +105,13 @@ export async function prepararAnexoEmailResumo(
 ): Promise<PdfResumoPronto> {
   const base = montarConteudoEmailResumoSync(resultados, textoColunaCadastro, aplicadorAssinatura);
 
-  if (Platform.OS === 'web') {
-    if (typeof File !== 'undefined') {
-      const blob = new Blob([base.html], { type: 'text/html;charset=utf-8' });
-      const webName = base.filename.replace(/\.pdf$/i, '.html');
-      const webFile = new File([blob], webName, { type: 'text/html;charset=utf-8' });
-      return { ...base, webFile };
-    }
-    return base;
+  if (Platform.OS === 'web' && typeof File !== 'undefined' && typeof window !== 'undefined') {
+    // Na web o navegador não gera PDF silencioso; usamos o HTML do relatório
+    // como File só para o Web Share (anexo), sem abrir aba nem forçar download.
+    const blob = new Blob([base.html], { type: 'text/html;charset=utf-8' });
+    const webName = base.filename.replace(/\.pdf$/i, '.html');
+    const webFile = new File([blob], webName, { type: 'text/html;charset=utf-8' });
+    return { ...base, webFile };
   }
 
   const { uri } = await Print.printToFileAsync({

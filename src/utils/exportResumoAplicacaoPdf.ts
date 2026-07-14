@@ -19,12 +19,6 @@ import {
   PDF_A4_LANDSCAPE_WIDTH,
   PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
-import {
-  mensagemSucessoSalvarNaPasta,
-  sanitizarNomeArquivo,
-  salvarArquivoCacheNaPastaEscolhida,
-} from './salvarArquivoNaPasta';
-
 /** Estima quantas folhas A4 paisagem serão necessárias para o resumo da aplicação. */
 export function estimarFolhasA4PdfResumoAplicacao(
   quantidadeLinhas: number,
@@ -157,60 +151,4 @@ export async function exportResumoAplicacaoPdf(
       'Não foi possível abrir o compartilhamento neste dispositivo. O arquivo foi salvo na área de cache do app.',
     );
   }
-}
-
-function nomeArquivoPdfResumo(resultados: ResultadoCorridaItem[]): string {
-  const prova = sanitizarNomeArquivo(tituloProvaResumoPdf(resultados)).replace(/\s+/g, '_');
-  const data = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
-  return sanitizarNomeArquivo(`Resumo_aplicacao_${prova}_${data}`, '.pdf');
-}
-
-/** Gera o PDF do resumo e salva na pasta escolhida (Android SAF / iOS Arquivos / web). */
-export async function salvarResumoAplicacaoPdfNaPasta(
-  resultados: ResultadoCorridaItem[],
-  textoColunaCadastro: string,
-  aplicadorAssinatura?: AplicadorAssinaturaResumo,
-): Promise<string> {
-  if (resultados.length === 0) {
-    throw new Error('Não há resultados para exportar.');
-  }
-
-  const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro, undefined, aplicadorAssinatura);
-  const filename = nomeArquivoPdfResumo(resultados);
-
-  if (Platform.OS === 'web') {
-    if (typeof window === 'undefined') {
-      throw new Error('Salvar PDF indisponível neste ambiente.');
-    }
-    const win = window.open('', '_blank');
-    if (!win) {
-      throw new Error(
-        'Não foi possível abrir a visualização do PDF. Permita pop-ups neste site e tente novamente.',
-      );
-    }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    return 'Use Imprimir → Salvar como PDF e escolha a pasta no computador.';
-  }
-
-  const { uri } = await Print.printToFileAsync({
-    html,
-    width: PDF_A4_LANDSCAPE_WIDTH,
-    height: PDF_A4_LANDSCAPE_HEIGHT,
-  });
-
-  const resultado = await salvarArquivoCacheNaPastaEscolhida({
-    sourceUri: uri,
-    filename,
-    mimeType: 'application/pdf',
-    uti: 'com.adobe.pdf',
-    dialogTitle: 'Salvar PDF do resumo na pasta',
-  });
-
-  if (!resultado.ok) {
-    throw new Error('Seleção de pasta cancelada.');
-  }
-  return mensagemSucessoSalvarNaPasta(resultado);
 }

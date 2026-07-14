@@ -11,17 +11,15 @@ import {
   Alert,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ChevronLeft, FileDown, FolderDown, Mail } from 'lucide-react-native';
+import { ChevronLeft, FileDown } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
 import { AplicadorAssinaturaBloco } from '../components/AplicadorAssinaturaBloco';
-import { EnviarEmailResultadoModal } from '../components/sismav/EnviarEmailResultadoModal';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import {
   cabecalhoColunaProvaResultados,
   exportResumoAplicacaoPdf,
-  salvarResumoAplicacaoPdfNaPasta,
 } from '../utils/exportResumoAplicacaoPdf';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
@@ -48,15 +46,12 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
   const returnTo = route.params?.returnTo ?? 'AplicarTAF';
   const aplicadorAssinatura = route.params?.aplicadorAssinatura;
   const [exportandoPdf, setExportandoPdf] = useState(false);
-  const [salvandoPdfPasta, setSalvandoPdfPasta] = useState(false);
-  const [emailModalVisible, setEmailModalVisible] = useState(false);
   const grayBg = 'transparent';
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = theme.border;
-  const pdfBusy = exportandoPdf || salvandoPdfPasta;
 
   const exportarPdf = useCallback(async () => {
-    if (pdfBusy || resultados.length === 0) return;
+    if (exportandoPdf || resultados.length === 0) return;
     setExportandoPdf(true);
     try {
       await exportResumoAplicacaoPdf(resultados, textoColunaCadastro, aplicadorAssinatura);
@@ -65,25 +60,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
     } finally {
       setExportandoPdf(false);
     }
-  }, [aplicadorAssinatura, pdfBusy, resultados, textoColunaCadastro]);
-
-  const salvarPdfNaPasta = useCallback(async () => {
-    if (pdfBusy || resultados.length === 0) return;
-    setSalvandoPdfPasta(true);
-    try {
-      const msg = await salvarResumoAplicacaoPdfNaPasta(
-        resultados,
-        textoColunaCadastro,
-        aplicadorAssinatura,
-      );
-      Alert.alert('PDF', msg);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Não foi possível salvar o PDF na pasta.';
-      if (!/cancelad/i.test(msg)) Alert.alert('PDF', msg);
-    } finally {
-      setSalvandoPdfPasta(false);
-    }
-  }, [aplicadorAssinatura, pdfBusy, resultados, textoColunaCadastro]);
+  }, [aplicadorAssinatura, exportandoPdf, resultados, textoColunaCadastro]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: grayBg }]}>
@@ -118,8 +95,12 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
               <View style={styles.acoesTopo}>
                 <TouchableOpacity
                   onPress={() => void exportarPdf()}
-                  disabled={pdfBusy}
-                  style={[styles.btnPdf, styles.btnAcaoTopo, { backgroundColor: theme.primary, opacity: pdfBusy ? 0.7 : 1 }]}
+                  disabled={exportandoPdf}
+                  style={[
+                    styles.btnPdf,
+                    styles.btnAcaoTopo,
+                    { backgroundColor: theme.primary, opacity: exportandoPdf ? 0.7 : 1 },
+                  ]}
                   accessibilityLabel="Gerar PDF do resumo"
                 >
                   {exportandoPdf ? (
@@ -128,49 +109,6 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                     <>
                       <FileDown size={18} color={theme.text} strokeWidth={2.5} />
                       <Text style={[styles.btnPdfText, { color: theme.text }]}>Gerar PDF</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setEmailModalVisible(true)}
-                  disabled={pdfBusy}
-                  style={[
-                    styles.btnEmail,
-                    styles.btnAcaoTopo,
-                    {
-                      backgroundColor: theme.isDark ? '#0F766E' : '#0D9488',
-                      opacity: pdfBusy ? 0.7 : 1,
-                    },
-                  ]}
-                  accessibilityLabel="Enviar Resultado por Email"
-                >
-                  <Mail size={18} color="#FFFFFF" strokeWidth={2.5} />
-                  <Text style={[styles.btnPdfText, { color: '#FFFFFF' }]}>
-                    Enviar Resultado por Email
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => void salvarPdfNaPasta()}
-                  disabled={pdfBusy}
-                  style={[
-                    styles.btnPdfPasta,
-                    styles.btnAcaoTopo,
-                    {
-                      borderColor: theme.border,
-                      backgroundColor: ui.inputBg,
-                      opacity: pdfBusy ? 0.7 : 1,
-                    },
-                  ]}
-                  accessibilityLabel="Salvar PDF do resumo na pasta escolhida"
-                >
-                  {salvandoPdfPasta ? (
-                    <ActivityIndicator color={theme.primary} />
-                  ) : (
-                    <>
-                      <FolderDown size={18} color={theme.primary} strokeWidth={2.5} />
-                      <Text style={[styles.btnPdfText, { color: theme.primary }]}>
-                        Salvar PDF na pasta…
-                      </Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -226,22 +164,6 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
           </Card>
         </View>
       </ScrollView>
-
-      <EnviarEmailResultadoModal
-        visible={emailModalVisible}
-        onClose={() => setEmailModalVisible(false)}
-        resultados={resultados}
-        textoColunaCadastro={textoColunaCadastro}
-        aplicadorAssinatura={aplicadorAssinatura}
-        onAviso={(msg) => {
-          if (Platform.OS === 'web' && typeof window !== 'undefined') {
-            // Alert.alert é silencioso em vários navegadores
-            console.info('[TAF e-mail]', msg);
-            return;
-          }
-          Alert.alert('E-mail', msg);
-        }}
-      />
     </SafeAreaView>
   );
 }
@@ -380,25 +302,6 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
       gap: 8,
       paddingVertical: 14,
       borderRadius: 12,
-    },
-    btnEmail: {
-      marginTop: 0,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 14,
-      borderRadius: 12,
-    },
-    btnPdfPasta: {
-      marginTop: 0,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 14,
-      borderRadius: 12,
-      borderWidth: 1,
     },
     btnPdfText: {
       fontSize: 15,

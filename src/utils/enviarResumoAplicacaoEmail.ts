@@ -3,6 +3,9 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import { buildBackupCsvContent } from './backupTafCsv';
+import { buildBackupApptafFilename } from './backupNaming';
+import { gatherSystemBackupData } from './gatherSystemBackupData';
 import {
   buildResumoAplicacaoHtml,
   tituloProvaResumoPdf,
@@ -27,11 +30,15 @@ export function montarCorpoEmailResumo(resultados: ResultadoCorridaItem[]): stri
   const prova = tituloProvaResumoPdf(resultados);
   const qtd = resultados.length;
   return [
-    'Segue em anexo o PDF com o resumo da aplicação do TAF.',
+    'Seguem em anexo:',
+    '1) PDF com o resumo da aplicação do TAF',
+    '2) CSV de backup (Cadastros/Sessões) para importar em outro dispositivo',
     '',
     `Prova: ${prova}`,
     `Participantes: ${qtd}`,
     `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+    '',
+    'No outro aparelho: Configurações → Backup em CSV → Importar.',
     '',
     '— App TAF',
   ].join('\n');
@@ -49,8 +56,13 @@ export type PdfResumoPronto = {
   subject: string;
   body: string;
   html: string;
-  /** Anexo web (File) — nunca aberto em aba; só share/anexo. */
+  csvContent: string;
+  csvFilename: string;
+  csvUri: string;
+  /** @deprecated Prefira webFiles — relatório web. */
   webFile?: File;
+  /** Anexos web (relatório + CSV) para Web Share. */
+  webFiles?: File[];
 };
 
 export function urlMailto(subject: string, body: string): string {
@@ -76,12 +88,28 @@ export function urlComposerParaProvedor(
   return urlMailto(subject, body);
 }
 
-/** Monta HTML/assunto de forma síncrona (sem await). */
+function anexosUris(pdf: PdfResumoPronto): string[] {
+  return [pdf.uri, pdf.csvUri].filter(Boolean);
+}
+
+async function escreverTextoNoCache(content: string, filename: string): Promise<string> {
+  const FileSystem = await import('expo-file-system/legacy');
+  const safe = sanitizarNomeArquivo(filename);
+  const uri = `${FileSystem.cacheDirectory ?? ''}${safe}`;
+  await FileSystem.writeAsStringAsync(uri, content);
+  return uri;
+}
+
+/** Monta HTML/assunto de forma síncrona (sem await). CSV vem depois. */
 export function montarConteudoEmailResumoSync(
   resultados: ResultadoCorridaItem[],
   textoColunaCadastro: string,
   aplicadorAssinatura?: AplicadorAssinaturaResumo,
-): PdfResumoPronto {
+): Omit<PdfResumoPronto, 'csvContent' | 'csvFilename' | 'csvUri'> & {
+  csvContent: string;
+  csvFilename: string;
+  csvUri: string;
+} {
   if (resultados.length === 0) {
     throw new Error('Não há resultados para enviar.');
   }
@@ -92,11 +120,14 @@ export function montarConteudoEmailResumoSync(
     subject: montarAssuntoEmailResumo(resultados),
     body: montarCorpoEmailResumo(resultados),
     html,
+    csvContent: '',
+    csvFilename: buildBackupApptafFilename(),
+    csvUri: '',
   };
 }
 
 /**
- * Prepara o anexo em cache / memória — sem abrir PDF, sem download, sem janela.
+ * Prepara PDF + CSV de backup (importável) — sem abrir na tela.
  */
 export async function prepararAnexoEmailResumo(
   resultados: ResultadoCorridaItem[],
@@ -104,22 +135,40 @@ export async function prepararAnexoEmailResumo(
   aplicadorAssinatura?: AplicadorAssinaturaResumo,
 ): Promise<PdfResumoPronto> {
   const base = montarConteudoEmailResumoSync(resultados, textoColunaCadastro, aplicadorAssinatura);
+  const payload = await gatherSystemBackupData();
+  const csvContent = buildBackupCsvContent(payload);
+  const csvFilename = buildBackupApptafFilename();
 
   if (Platform.OS === 'web' && typeof File !== 'undefined' && typeof window !== 'undefined') {
-    // Na web o navegador não gera PDF silencioso; usamos o HTML do relatório
-    // como File só para o Web Share (anexo), sem abrir aba nem forçar download.
-    const blob = new Blob([base.html], { type: 'text/html;charset=utf-8' });
-    const webName = base.filename.replace(/\.pdf$/i, '.html');
-    const webFile = new File([blob], webName, { type: 'text/html;charset=utf-8' });
-    return { ...base, webFile };
+    const reportBlob = new Blob([base.html], { type: 'text/html;charset=utf-8' });
+    const reportName = base.filename.replace(/\.pdf$/i, '.html');
+    const reportFile = new File([reportBlob], reportName, { type: 'text/html;charset=utf-8' });
+    const csvFile = new File([csvContent], csvFilename, { type: 'text/csv;charset=utf-8' });
+    return {
+      ...base,
+      csvContent,
+      csvFilename,
+      webFile: reportFile,
+      webFiles: [reportFile, csvFile],
+    };
   }
 
-  const { uri } = await Print.printToFileAsync({
-    html: base.html,
-    width: PDF_A4_LANDSCAPE_WIDTH,
-    height: PDF_A4_LANDSCAPE_HEIGHT,
-  });
-  return { ...base, uri };
+  const [{ uri }, csvUri] = await Promise.all([
+    Print.printToFileAsync({
+      html: base.html,
+      width: PDF_A4_LANDSCAPE_WIDTH,
+      height: PDF_A4_LANDSCAPE_HEIGHT,
+    }),
+    escreverTextoNoCache(csvContent, csvFilename),
+  ]);
+
+  return {
+    ...base,
+    uri,
+    csvContent,
+    csvFilename,
+    csvUri,
+  };
 }
 
 /** @deprecated Use prepararAnexoEmailResumo */
@@ -133,14 +182,15 @@ export async function prepararPdfResumoAplicacao(
 
 async function enviarViaMailComposer(pdf: PdfResumoPronto): Promise<boolean> {
   try {
-    if (!pdf.uri) return false;
+    const attachments = anexosUris(pdf);
+    if (attachments.length === 0) return false;
     const MailComposer = await import('expo-mail-composer');
     const available = await MailComposer.isAvailableAsync();
     if (!available) return false;
     await MailComposer.composeAsync({
       subject: pdf.subject,
       body: pdf.body,
-      attachments: [pdf.uri],
+      attachments,
     });
     return true;
   } catch {
@@ -148,15 +198,42 @@ async function enviarViaMailComposer(pdf: PdfResumoPronto): Promise<boolean> {
   }
 }
 
-async function enviarViaShare(pdf: PdfResumoPronto): Promise<boolean> {
+async function enviarViaShareMultiploAndroid(pdf: PdfResumoPronto): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  const uris = anexosUris(pdf);
+  if (uris.length < 2) return false;
   try {
-    if (!pdf.uri) return false;
+    const FileSystem = await import('expo-file-system/legacy');
+    const IntentLauncher = await import('expo-intent-launcher');
+    const contentUris: string[] = [];
+    for (const uri of uris) {
+      contentUris.push(await FileSystem.getContentUriAsync(uri));
+    }
+    await IntentLauncher.startActivityAsync('android.intent.action.SEND_MULTIPLE', {
+      type: '*/*',
+      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+      extra: {
+        'android.intent.extra.STREAM': contentUris,
+        'android.intent.extra.SUBJECT': pdf.subject,
+        'android.intent.extra.TEXT': pdf.body,
+        'android.intent.extra.TITLE': 'Enviar Resultados',
+      },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function enviarViaShareUmArquivo(uri: string, mimeType: string, dialogTitle: string): Promise<boolean> {
+  try {
+    if (!uri) return false;
     const canShare = await Sharing.isAvailableAsync();
     if (!canShare) return false;
-    await Sharing.shareAsync(pdf.uri, {
-      mimeType: 'application/pdf',
-      dialogTitle: 'Enviar Resultados',
-      UTI: 'com.adobe.pdf',
+    await Sharing.shareAsync(uri, {
+      mimeType,
+      dialogTitle,
+      UTI: mimeType === 'text/csv' ? 'public.comma-separated-values-text' : 'com.adobe.pdf',
     });
     return true;
   } catch {
@@ -166,17 +243,23 @@ async function enviarViaShare(pdf: PdfResumoPronto): Promise<boolean> {
 
 async function compartilharAnexoWeb(pdf: PdfResumoPronto): Promise<boolean> {
   if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
-  const file = pdf.webFile;
-  if (!file) return false;
+  const files = pdf.webFiles?.length ? pdf.webFiles : pdf.webFile ? [pdf.webFile] : [];
+  if (files.length === 0) return false;
 
   try {
     const payload: ShareData = {
-      files: [file],
+      files,
       title: pdf.subject,
       text: pdf.body,
     };
     if (typeof navigator.canShare === 'function' && !navigator.canShare(payload)) {
-      return false;
+      // Tenta só o CSV (essencial para atualizar outros dispositivos)
+      const csvOnly = files.filter((f) => f.name.toLowerCase().endsWith('.csv'));
+      if (csvOnly.length === 0) return false;
+      const csvPayload: ShareData = { files: csvOnly, title: pdf.subject, text: pdf.body };
+      if (!navigator.canShare(csvPayload)) return false;
+      await navigator.share(csvPayload);
+      return true;
     }
     await navigator.share(payload);
     return true;
@@ -193,8 +276,8 @@ function abrirMailtoWeb(pdf: PdfResumoPronto): boolean {
 }
 
 /**
- * Compartilha o anexo já preparado — abre o seletor de apps (Gmail, Zimbra, etc.).
- * Não abre o PDF/relatório na tela.
+ * Compartilha PDF + CSV de backup — abre o seletor de apps.
+ * O CSV pode ser importado em outro dispositivo (Configurações → Backup em CSV).
  */
 export async function compartilharResultadosAnexo(
   pdf: PdfResumoPronto,
@@ -202,30 +285,56 @@ export async function compartilharResultadosAnexo(
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     if (await compartilharAnexoWeb(pdf)) {
       return {
-        mensagem: 'Escolha o aplicativo no menu — o relatório vai anexado.',
+        mensagem:
+          'Escolha o aplicativo — PDF/relatório e CSV de backup vão anexados. No outro aparelho: Configurações → Importar CSV.',
       };
     }
     if (abrirMailtoWeb(pdf)) {
       return {
         mensagem:
-          'E-mail aberto. Neste navegador o anexo automático não está disponível — use “Salvar PDF na pasta…” e anexe o arquivo na mensagem.',
+          'E-mail aberto. Neste navegador o anexo automático pode falhar — use “Salvar PDF na pasta…” e o Backup CSV em Configurações.',
       };
     }
   }
 
-  // Preferir o sheet de compartilhar: o usuário escolhe Gmail, Zimbra ou outro app.
-  if (await enviarViaShare(pdf)) {
+  if (await enviarViaShareMultiploAndroid(pdf)) {
     return {
-      mensagem: 'Escolha o aplicativo — o PDF já vai anexado.',
+      mensagem:
+        'Escolha o aplicativo — PDF e CSV anexados. No outro aparelho: Configurações → Backup em CSV → Importar.',
     };
   }
 
   if (await enviarViaMailComposer(pdf)) {
-    return { mensagem: 'App de e-mail aberto com o PDF anexado.' };
+    return {
+      mensagem:
+        'App de e-mail aberto com PDF e CSV anexados. No outro aparelho: Configurações → Backup em CSV → Importar.',
+    };
+  }
+
+  // Fallback: compartilha CSV (prioritário para sync) e depois o PDF
+  const compartilhouCsv = await enviarViaShareUmArquivo(
+    pdf.csvUri,
+    'text/csv',
+    'Enviar CSV de backup',
+  );
+  const compartilhouPdf = await enviarViaShareUmArquivo(
+    pdf.uri,
+    'application/pdf',
+    'Enviar PDF do resultado',
+  );
+
+  if (compartilhouCsv || compartilhouPdf) {
+    return {
+      mensagem: compartilhouCsv && compartilhouPdf
+        ? 'Arquivos compartilhados (CSV + PDF). No outro aparelho: Configurações → Backup em CSV → Importar.'
+        : compartilhouCsv
+          ? 'CSV de backup compartilhado. No outro aparelho: Configurações → Backup em CSV → Importar.'
+          : 'PDF compartilhado. Para sincronizar dados, exporte também o Backup CSV em Configurações.',
+    };
   }
 
   throw new Error(
-    'Não foi possível compartilhar o PDF. Verifique se há um app de e-mail instalado.',
+    'Não foi possível compartilhar os arquivos. Verifique se há um app de e-mail instalado.',
   );
 }
 

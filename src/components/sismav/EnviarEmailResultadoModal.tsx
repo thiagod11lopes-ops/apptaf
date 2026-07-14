@@ -172,7 +172,7 @@ export function EnviarEmailResultadoModal({
                   <Text style={[styles.kicker, { color: theme.primary }]}>ENVIO RÁPIDO</Text>
                   <Text style={[styles.title, { color: ui.text }]}>Enviar Resultado por Email</Text>
                   <Text style={[styles.subtitle, { color: ui.textSecondary }]}>
-                    O PDF vai anexado — escolha o aplicativo de e-mail no menu de compartilhar.
+                    Envia o PDF do resumo e o CSV de backup para importar em outro dispositivo.
                   </Text>
                 </View>
                 <PressableScale
@@ -189,7 +189,7 @@ export function EnviarEmailResultadoModal({
                 <View style={styles.loadingBox}>
                   <ActivityIndicator color={theme.primary} />
                   <Text style={[styles.loadingText, { color: ui.textMuted }]}>
-                    Preparando anexo…
+                    Preparando PDF e CSV…
                   </Text>
                 </View>
               ) : (
@@ -261,8 +261,8 @@ export function EnviarEmailResultadoModal({
 
               <Text style={[styles.hint, { color: ui.textMuted }]}>
                 {Platform.OS === 'web'
-                  ? 'No celular, o menu de compartilhar deixa escolher Gmail, Zimbra ou outro app. No computador, se o anexo não for automático, use “Salvar PDF na pasta…”.'
-                  : 'No menu de compartilhar, escolha Gmail, Zimbra ou outro aplicativo — o PDF já vai anexado.'}
+                  ? 'Vão anexados o relatório e o CSV. No outro aparelho: Configurações → Backup em CSV → Importar.'
+                  : 'PDF + CSV anexados. No outro aparelho: Configurações → Backup em CSV → Importar.'}
               </Text>
             </View>
           </LinearGradient>

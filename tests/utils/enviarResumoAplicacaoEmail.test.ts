@@ -15,12 +15,30 @@ vi.mock('expo-sharing', () => ({
   shareAsync: async () => undefined,
 }));
 
+vi.mock('expo-file-system/legacy', () => ({
+  cacheDirectory: 'file:///tmp/',
+  writeAsStringAsync: async () => undefined,
+  getContentUriAsync: async (uri: string) => uri,
+}));
+
+vi.mock('../../src/utils/gatherSystemBackupData', () => ({
+  gatherSystemBackupData: async () => ({
+    cadastros: [],
+    sessoes: [],
+    aplicadores: [],
+    preCadastros: [],
+    authorizedEmails: [],
+    syncQueue: [],
+    appMeta: [],
+  }),
+}));
+
 describe('enviarResumoAplicacaoEmail', () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  it('monta assunto e corpo com prova e quantidade', async () => {
+  it('monta assunto e corpo mencionando PDF e CSV', async () => {
     const { montarAssuntoEmailResumo, montarCorpoEmailResumo } = await import(
       '../../src/utils/enviarResumoAplicacaoEmail'
     );
@@ -45,10 +63,13 @@ describe('enviarResumoAplicacaoEmail', () => {
     ];
 
     expect(montarAssuntoEmailResumo(resultados)).toContain('Corrida');
-    expect(montarCorpoEmailResumo(resultados)).toContain('Participantes: 2');
+    const corpo = montarCorpoEmailResumo(resultados);
+    expect(corpo).toContain('Participantes: 2');
+    expect(corpo).toContain('CSV');
+    expect(corpo).toContain('PDF');
   });
 
-  it('prepara anexo e compartilha resultados', async () => {
+  it('prepara PDF e CSV de backup e compartilha', async () => {
     const {
       montarConteudoEmailResumoSync,
       prepararAnexoEmailResumo,
@@ -73,8 +94,11 @@ describe('enviarResumoAplicacaoEmail', () => {
 
     const pronto = await prepararAnexoEmailResumo(resultados, 'Corrida');
     expect(pronto.filename.toLowerCase().endsWith('.pdf')).toBe(true);
+    expect(pronto.csvFilename.toLowerCase().endsWith('.csv')).toBe(true);
+    expect(pronto.csvContent).toContain('TAF_BACKUP_VERSION');
+    expect(pronto.csvUri || pronto.webFiles?.length).toBeTruthy();
 
     const resultado = await compartilharResultadosAnexo(pronto);
-    expect(resultado.mensagem.toLowerCase()).toMatch(/aplicativo|anexado|e-mail/);
+    expect(resultado.mensagem.toLowerCase()).toMatch(/csv|pdf|backup|anexad/);
   });
 });

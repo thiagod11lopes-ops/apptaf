@@ -114,6 +114,69 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
               resumo desta aplicação.
             </Text>
 
+            {resultados.length > 0 ? (
+              <View style={styles.acoesTopo}>
+                <TouchableOpacity
+                  onPress={() => void exportarPdf()}
+                  disabled={pdfBusy}
+                  style={[styles.btnPdf, styles.btnAcaoTopo, { backgroundColor: theme.primary, opacity: pdfBusy ? 0.7 : 1 }]}
+                  accessibilityLabel="Gerar PDF do resumo"
+                >
+                  {exportandoPdf ? (
+                    <ActivityIndicator color={theme.text} />
+                  ) : (
+                    <>
+                      <FileDown size={18} color={theme.text} strokeWidth={2.5} />
+                      <Text style={[styles.btnPdfText, { color: theme.text }]}>Gerar PDF</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setEmailModalVisible(true)}
+                  disabled={pdfBusy}
+                  style={[
+                    styles.btnEmail,
+                    styles.btnAcaoTopo,
+                    {
+                      backgroundColor: theme.isDark ? '#0F766E' : '#0D9488',
+                      opacity: pdfBusy ? 0.7 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="Enviar Resultado por Email"
+                >
+                  <Mail size={18} color="#FFFFFF" strokeWidth={2.5} />
+                  <Text style={[styles.btnPdfText, { color: '#FFFFFF' }]}>
+                    Enviar Resultado por Email
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void salvarPdfNaPasta()}
+                  disabled={pdfBusy}
+                  style={[
+                    styles.btnPdfPasta,
+                    styles.btnAcaoTopo,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: ui.inputBg,
+                      opacity: pdfBusy ? 0.7 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="Salvar PDF do resumo na pasta escolhida"
+                >
+                  {salvandoPdfPasta ? (
+                    <ActivityIndicator color={theme.primary} />
+                  ) : (
+                    <>
+                      <FolderDown size={18} color={theme.primary} strokeWidth={2.5} />
+                      <Text style={[styles.btnPdfText, { color: theme.primary }]}>
+                        Salvar PDF na pasta…
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
             {resultados.length === 0 ? (
               <Text style={styles.vazioText}>Nenhum resultado nesta sessão.</Text>
             ) : null}
@@ -160,67 +223,6 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
             ))}
 
             {aplicadorAssinatura ? <AplicadorAssinaturaBloco assinatura={aplicadorAssinatura} /> : null}
-
-            {resultados.length > 0 ? (
-              <>
-                <TouchableOpacity
-                  onPress={() => void exportarPdf()}
-                  disabled={pdfBusy}
-                  style={[styles.btnPdf, { backgroundColor: theme.primary, opacity: pdfBusy ? 0.7 : 1 }]}
-                  accessibilityLabel="Gerar PDF do resumo"
-                >
-                  {exportandoPdf ? (
-                    <ActivityIndicator color={theme.text} />
-                  ) : (
-                    <>
-                      <FileDown size={18} color={theme.text} strokeWidth={2.5} />
-                      <Text style={[styles.btnPdfText, { color: theme.text }]}>Gerar PDF</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setEmailModalVisible(true)}
-                  disabled={pdfBusy}
-                  style={[
-                    styles.btnEmail,
-                    {
-                      backgroundColor: theme.isDark ? '#0F766E' : '#0D9488',
-                      opacity: pdfBusy ? 0.7 : 1,
-                    },
-                  ]}
-                  accessibilityLabel="Enviar Resultado por Email"
-                >
-                  <Mail size={18} color="#FFFFFF" strokeWidth={2.5} />
-                  <Text style={[styles.btnPdfText, { color: '#FFFFFF' }]}>
-                    Enviar Resultado por Email
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => void salvarPdfNaPasta()}
-                  disabled={pdfBusy}
-                  style={[
-                    styles.btnPdfPasta,
-                    {
-                      borderColor: theme.border,
-                      backgroundColor: ui.inputBg,
-                      opacity: pdfBusy ? 0.7 : 1,
-                    },
-                  ]}
-                  accessibilityLabel="Salvar PDF do resumo na pasta escolhida"
-                >
-                  {salvandoPdfPasta ? (
-                    <ActivityIndicator color={theme.primary} />
-                  ) : (
-                    <>
-                      <FolderDown size={18} color={theme.primary} strokeWidth={2.5} />
-                      <Text style={[styles.btnPdfText, { color: theme.primary }]}>
-                        Salvar PDF na pasta…
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </>
-            ) : null}
           </Card>
         </View>
       </ScrollView>
@@ -243,7 +245,7 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
   const muted = ui.textMuted;
   return StyleSheet.create({
     safe: { flex: 1, position: 'relative' as const },
-    scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 10, paddingBottom: 28 },
+    scrollContentCadastro: { paddingHorizontal: 16, paddingVertical: 10, paddingBottom: 48 },
     centerWrap: { flex: 1, alignItems: 'stretch' as const },
     headerRow: {
       width: '100%',
@@ -356,8 +358,15 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
       color: theme.isDark ? ink : '#B91C1C',
       fontSize: 12,
     },
+    acoesTopo: {
+      marginBottom: 16,
+      gap: 10,
+    },
+    btnAcaoTopo: {
+      marginTop: 0,
+    },
     btnPdf: {
-      marginTop: 20,
+      marginTop: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -366,7 +375,7 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
       borderRadius: 12,
     },
     btnEmail: {
-      marginTop: 10,
+      marginTop: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -375,7 +384,7 @@ function createCadastrarResultadosStyles(theme: AppTheme, ui: UiColors) {
       borderRadius: 12,
     },
     btnPdfPasta: {
-      marginTop: 10,
+      marginTop: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',

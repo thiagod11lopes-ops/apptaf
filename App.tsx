@@ -51,6 +51,12 @@ function AppRoot() {
           : '';
       void navigator.serviceWorker
         .register(`${base}/sw.js`, { scope: `${base}/` })
+        .then((reg) => {
+          void reg.update();
+          if (reg.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+        })
         .catch(() => undefined);
     }
     body.style.backgroundColor = theme.tokens.bg;

@@ -3,7 +3,7 @@
  * Service worker base (dev). O build de produção gera dist/sw.js com precache
  * completo via scripts/patch-web-dist.mjs (caminho /apptaf no GitHub Pages).
  */
-const CACHE = 'taf-app-shell-dev';
+const CACHE = 'taf-app-shell-dev-v2';
 const BASE = (() => {
   const scope = self.registration?.scope ?? self.location.origin + '/';
   try {
@@ -61,13 +61,17 @@ self.addEventListener('fetch', (event) => {
 
   if (isNavigation(request)) {
     event.respondWith(
-      caches.match(withBase('/index.html')).then(
-        (cached) =>
-          cached ||
-          fetch(request).catch(
-            () => caches.match(withBase('/')) || caches.match(withBase('/index.html')),
-          ),
-      ),
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(withBase('/index.html'), clone));
+          }
+          return response;
+        })
+        .catch(
+          () => caches.match(withBase('/index.html')) || caches.match(withBase('/')),
+        ),
     );
     return;
   }

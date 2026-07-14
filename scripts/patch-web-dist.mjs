@@ -151,38 +151,53 @@ self.addEventListener('fetch', (event) => {
 
   if (!isSameOrigin(url)) return;
 
+  // HTML: network-first — evita tela antiga sem novos botões (PWA cache)
   if (isNavigation(request)) {
     event.respondWith(
-      shellFallback().then(
-        (cached) =>
-          cached ||
-          fetch(request)
-            .then((response) => {
-              if (response && response.status === 200) {
-                const clone = response.clone();
-                caches.open(CACHE).then((cache) => cache.put(BASE + '/index.html', clone));
-              }
-              return response;
-            })
-            .catch(() => shellFallback()),
-      ),
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE).then((cache) => {
+              cache.put(BASE + '/index.html', clone);
+              cache.put(request, response.clone());
+            });
+          }
+          return response;
+        })
+        .catch(() => shellFallback()),
     );
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request)
-        .then((response) => {
+  // Assets com hash: cache-first; demais: network-first com fallback
+  const isHashedAsset = /\\/_expo\\/static\\//.test(url);
+  if (isHashedAsset) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
           if (response && response.status === 200) {
             const clone = response.clone();
             caches.open(CACHE).then((cache) => cache.put(request, clone));
           }
           return response;
-        })
-        .catch(() => cached);
-    }),
+        });
+      }),
+    );
+    return;
+  }
+
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request)),
   );
 });
 `;

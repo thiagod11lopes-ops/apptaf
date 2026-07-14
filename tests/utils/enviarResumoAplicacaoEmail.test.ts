@@ -15,10 +15,6 @@ vi.mock('expo-sharing', () => ({
   shareAsync: async () => undefined,
 }));
 
-vi.mock('expo-intent-launcher', () => ({
-  startActivityAsync: async () => undefined,
-}));
-
 describe('enviarResumoAplicacaoEmail', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -52,11 +48,12 @@ describe('enviarResumoAplicacaoEmail', () => {
     expect(montarCorpoEmailResumo(resultados)).toContain('Participantes: 2');
   });
 
-  it('prepara anexo em silêncio e monta URLs de composer', async () => {
+  it('prepara anexo e compartilha resultados', async () => {
     const {
-      urlComposerParaProvedor,
       montarConteudoEmailResumoSync,
       prepararAnexoEmailResumo,
+      compartilharResultadosAnexo,
+      urlMailto,
     } = await import('../../src/utils/enviarResumoAplicacaoEmail');
 
     const resultados = [
@@ -71,15 +68,13 @@ describe('enviarResumoAplicacaoEmail', () => {
     ];
 
     const base = montarConteudoEmailResumoSync(resultados, 'Corrida');
-    const gmail = urlComposerParaProvedor('gmail', base.subject, base.body);
-    const outros = urlComposerParaProvedor('outros', base.subject, base.body);
-    expect(gmail).toMatch(/mail\.google\.com|mailto:/);
-    expect(outros.startsWith('mailto:')).toBe(true);
     expect(base.html).toContain('Resumo da aplicação');
+    expect(urlMailto(base.subject, base.body).startsWith('mailto:')).toBe(true);
 
     const pronto = await prepararAnexoEmailResumo(resultados, 'Corrida');
-    // Em ambiente de teste (sem web File), o PDF nativo mocked deve ter uri.
-    expect(pronto.uri === '' || pronto.uri.startsWith('file://')).toBe(true);
     expect(pronto.filename.toLowerCase().endsWith('.pdf')).toBe(true);
+
+    const resultado = await compartilharResultadosAnexo(pronto);
+    expect(resultado.mensagem.toLowerCase()).toMatch(/aplicativo|anexado|e-mail/);
   });
 });

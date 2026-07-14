@@ -15,6 +15,10 @@ vi.mock('expo-sharing', () => ({
   shareAsync: async () => undefined,
 }));
 
+vi.mock('expo-intent-launcher', () => ({
+  startActivityAsync: async () => undefined,
+}));
+
 describe('enviarResumoAplicacaoEmail', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -61,5 +65,27 @@ describe('enviarResumoAplicacaoEmail', () => {
     );
     const opcoes = await listarOpcoesEmailResultado();
     expect(opcoes.map((o) => o.id)).toEqual(['gmail', 'zimbra', 'outros']);
+  });
+
+  it('na web prepara HTML sem exigir print nativo', async () => {
+    const { prepararPdfResumoAplicacao } = await import(
+      '../../src/utils/enviarResumoAplicacaoEmail'
+    );
+    const pdf = await prepararPdfResumoAplicacao(
+      [
+        {
+          corredor: 1,
+          nome: 'Militar A',
+          nip: '12.3456.78',
+          tempoMs: 720000,
+          notaTexto: '90',
+          prova: 'corrida',
+        },
+      ],
+      'Corrida',
+    );
+    expect(pdf.html).toContain('Resumo da aplicação');
+    expect(pdf.subject).toContain('Corrida');
+    expect(pdf.body).toContain('Participantes: 1');
   });
 });

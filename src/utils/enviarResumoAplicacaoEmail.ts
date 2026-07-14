@@ -1,7 +1,6 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as MailComposer from 'expo-mail-composer';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import {
@@ -18,6 +17,10 @@ export type OpcaoEmailResultado = {
   titulo: string;
   subtitulo: string;
   disponivel: boolean;
+};
+
+export type ResultadoEnvioEmail = {
+  mensagem: string;
 };
 
 const GMAIL_PACKAGES = ['com.google.android.gm'] as const;
@@ -61,9 +64,114 @@ export type PdfResumoPronto = {
   filename: string;
   subject: string;
   body: string;
+  html: string;
 };
 
-/** Gera o PDF do resumo no cache do dispositivo (nativo). */
+export async function listarOpcoesEmailResultado(): Promise<OpcaoEmailResultado[]> {
+  return [
+    {
+      id: 'gmail',
+      titulo: 'Gmail',
+      subtitulo:
+        Platform.OS === 'web'
+          ? 'Abrir Gmail na web (anexe o PDF baixado)'
+          : 'Abrir Gmail com o PDF anexado',
+      disponivel: true,
+    },
+    {
+      id: 'zimbra',
+      titulo: 'Zimbra',
+      subtitulo:
+        Platform.OS === 'web'
+          ? 'Abrir app de e-mail (anexe o PDF baixado)'
+          : 'Abrir Zimbra com o PDF anexado',
+      disponivel: true,
+    },
+    {
+      id: 'outros',
+      titulo: 'Outros',
+      subtitulo:
+        Platform.OS === 'web'
+          ? 'Abrir cliente de e-mail padrão'
+          : 'Escolher outro app de e-mail',
+      disponivel: true,
+    },
+  ];
+}
+
+function urlGmailCompose(subject: string, body: string): string {
+  const params = new URLSearchParams({
+    view: 'cm',
+    fs: '1',
+    tf: '1',
+    su: subject,
+    body,
+  });
+  return `https://mail.google.com/mail/?${params.toString()}`;
+}
+
+function urlMailto(subject: string, body: string): string {
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function abrirHtmlPreview(html: string): boolean {
+  if (typeof window === 'undefined') return false;
+  const win = window.open('', '_blank');
+  if (!win) return false;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  return true;
+}
+
+function baixarHtmlComoArquivo(html: string, filename: string): void {
+  if (typeof document === 'undefined') return;
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.replace(/\.pdf$/i, '.html');
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function enviarViaWeb(
+  provedor: ProvedorEmailResultado,
+  pdf: PdfResumoPronto,
+): Promise<ResultadoEnvioEmail> {
+  const previewOk = abrirHtmlPreview(pdf.html);
+  baixarHtmlComoArquivo(pdf.html, pdf.filename);
+
+  if (provedor === 'gmail') {
+    const url = urlGmailCompose(pdf.subject, pdf.body);
+    const opened = typeof window !== 'undefined' ? window.open(url, '_blank') : null;
+    if (!opened && typeof window !== 'undefined') {
+      window.location.href = url;
+    }
+    return {
+      mensagem: previewOk
+        ? 'Gmail aberto. Anexe o arquivo HTML/PDF baixado (ou use Imprimir → Salvar como PDF na aba do relatório).'
+        : 'Gmail aberto. Permita pop-ups e use Gerar PDF para obter o arquivo a anexar.',
+    };
+  }
+
+  const mailto = urlMailto(pdf.subject, pdf.body);
+  if (typeof window !== 'undefined') {
+    window.location.href = mailto;
+  } else {
+    await Linking.openURL(mailto);
+  }
+
+  return {
+    mensagem:
+      provedor === 'zimbra'
+        ? 'Cliente de e-mail aberto. Anexe o arquivo baixado na mensagem (Zimbra web).'
+        : 'Cliente de e-mail aberto. Anexe o arquivo baixado na mensagem.',
+  };
+}
+
+/** Gera o PDF/HTML do resumo para envio. */
 export async function prepararPdfResumoAplicacao(
   resultados: ResultadoCorridaItem[],
   textoColunaCadastro: string,
@@ -72,163 +180,153 @@ export async function prepararPdfResumoAplicacao(
   if (resultados.length === 0) {
     throw new Error('Não há resultados para enviar.');
   }
-  if (Platform.OS === 'web') {
-    throw new Error(
-      'No navegador, use “Gerar PDF” e anexe o arquivo manualmente no e-mail. Em celular/tablet o PDF já vai anexado.',
-    );
-  }
 
   const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro, undefined, aplicadorAssinatura);
+  const subject = montarAssuntoEmailResumo(resultados);
+  const body = montarCorpoEmailResumo(resultados);
+  const filename = nomeArquivoPdf(resultados);
+
+  if (Platform.OS === 'web') {
+    return { uri: '', filename, subject, body, html };
+  }
+
   const { uri } = await Print.printToFileAsync({
     html,
     width: PDF_A4_LANDSCAPE_WIDTH,
     height: PDF_A4_LANDSCAPE_HEIGHT,
   });
 
-  return {
-    uri,
-    filename: nomeArquivoPdf(resultados),
-    subject: montarAssuntoEmailResumo(resultados),
-    body: montarCorpoEmailResumo(resultados),
-  };
-}
-
-function clienteCorresponde(
-  label: string,
-  packageName: string | undefined,
-  id: ProvedorEmailResultado,
-): boolean {
-  const text = `${label} ${packageName ?? ''}`.toLowerCase();
-  if (id === 'gmail') return text.includes('gmail') || text.includes('google.android.gm');
-  if (id === 'zimbra') return text.includes('zimbra');
-  return false;
-}
-
-export async function listarOpcoesEmailResultado(): Promise<OpcaoEmailResultado[]> {
-  let clients: ReturnType<typeof MailComposer.getClients> = [];
-  try {
-    clients = MailComposer.getClients();
-  } catch {
-    clients = [];
-  }
-
-  const temZimbra = clients.some((c) => clienteCorresponde(c.label, c.packageName, 'zimbra'));
-
-  return [
-    {
-      id: 'gmail',
-      titulo: 'Gmail',
-      subtitulo:
-        Platform.OS === 'android'
-          ? 'Abrir Gmail com o PDF anexado'
-          : 'Abrir e-mail com o PDF anexado',
-      disponivel: true,
-    },
-    {
-      id: 'zimbra',
-      titulo: 'Zimbra',
-      subtitulo: temZimbra
-        ? 'Abrir Zimbra com o PDF anexado'
-        : Platform.OS === 'android'
-          ? 'Tenta Zimbra; se ausente, abre seletor'
-          : 'Se Zimbra não abrir, use Outros',
-      disponivel: true,
-    },
-    {
-      id: 'outros',
-      titulo: 'Outros',
-      subtitulo: 'Escolher outro app de e-mail',
-      disponivel: true,
-    },
-  ];
+  return { uri, filename, subject, body, html };
 }
 
 async function enviarViaIntentAndroid(
   pdf: PdfResumoPronto,
   packageNames: readonly string[],
 ): Promise<boolean> {
-  const FileSystem = await import('expo-file-system/legacy');
-  const IntentLauncher = await import('expo-intent-launcher');
-  const contentUri = await FileSystem.getContentUriAsync(pdf.uri);
+  try {
+    const FileSystem = await import('expo-file-system/legacy');
+    const IntentLauncher = await import('expo-intent-launcher');
+    if (!pdf.uri) return false;
+    const contentUri = await FileSystem.getContentUriAsync(pdf.uri);
 
-  for (const packageName of packageNames) {
-    try {
-      await IntentLauncher.startActivityAsync('android.intent.action.SEND', {
-        type: 'application/pdf',
-        packageName,
-        flags: FLAG_GRANT_READ_URI_PERMISSION,
-        extra: {
-          'android.intent.extra.STREAM': contentUri,
-          'android.intent.extra.SUBJECT': pdf.subject,
-          'android.intent.extra.TEXT': pdf.body,
-          'android.intent.extra.TITLE': pdf.filename,
-        },
-      });
-      return true;
-    } catch {
-      // tenta próximo pacote
+    for (const packageName of packageNames) {
+      try {
+        await IntentLauncher.startActivityAsync('android.intent.action.SEND', {
+          type: 'application/pdf',
+          packageName,
+          flags: FLAG_GRANT_READ_URI_PERMISSION,
+          extra: {
+            'android.intent.extra.STREAM': contentUri,
+            'android.intent.extra.SUBJECT': pdf.subject,
+            'android.intent.extra.TEXT': pdf.body,
+            'android.intent.extra.TITLE': pdf.filename,
+          },
+        });
+        return true;
+      } catch {
+        // tenta próximo pacote
+      }
     }
+  } catch {
+    return false;
   }
   return false;
 }
 
-async function enviarViaMailComposer(pdf: PdfResumoPronto): Promise<void> {
-  const available = await MailComposer.isAvailableAsync();
-  if (!available) {
-    throw new Error('Nenhum app de e-mail disponível neste dispositivo.');
+async function enviarViaMailComposer(pdf: PdfResumoPronto): Promise<boolean> {
+  try {
+    const MailComposer = await import('expo-mail-composer');
+    const available = await MailComposer.isAvailableAsync();
+    if (!available || !pdf.uri) return false;
+    await MailComposer.composeAsync({
+      subject: pdf.subject,
+      body: pdf.body,
+      attachments: [pdf.uri],
+    });
+    return true;
+  } catch {
+    return false;
   }
-  await MailComposer.composeAsync({
-    subject: pdf.subject,
-    body: pdf.body,
-    attachments: [pdf.uri],
-  });
 }
 
-async function enviarViaShare(pdf: PdfResumoPronto): Promise<void> {
-  const canShare = await Sharing.isAvailableAsync();
-  if (!canShare) {
-    throw new Error('Compartilhamento indisponível neste dispositivo.');
+async function enviarViaShare(pdf: PdfResumoPronto): Promise<boolean> {
+  try {
+    if (!pdf.uri) return false;
+    const canShare = await Sharing.isAvailableAsync();
+    if (!canShare) return false;
+    await Sharing.shareAsync(pdf.uri, {
+      mimeType: 'application/pdf',
+      dialogTitle: pdf.subject,
+      UTI: 'com.adobe.pdf',
+    });
+    return true;
+  } catch {
+    return false;
   }
-  await Sharing.shareAsync(pdf.uri, {
-    mimeType: 'application/pdf',
-    dialogTitle: pdf.subject,
-    UTI: 'com.adobe.pdf',
-  });
+}
+
+async function enviarViaMailtoNativo(
+  provedor: ProvedorEmailResultado,
+  pdf: PdfResumoPronto,
+): Promise<boolean> {
+  try {
+    if (provedor === 'gmail' && Platform.OS === 'android') {
+      const gmailUrl = `googlegmail://co?subject=${encodeURIComponent(pdf.subject)}&body=${encodeURIComponent(pdf.body)}`;
+      const can = await Linking.canOpenURL(gmailUrl);
+      if (can) {
+        await Linking.openURL(gmailUrl);
+        return true;
+      }
+    }
+    await Linking.openURL(urlMailto(pdf.subject, pdf.body));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Abre o provedor de e-mail escolhido com o PDF do resumo anexado.
+ * Abre o provedor de e-mail escolhido com o PDF do resumo (anexado no nativo; na web com preview + compose).
  */
 export async function enviarPdfResumoPorEmail(
   provedor: ProvedorEmailResultado,
   pdf: PdfResumoPronto,
-): Promise<void> {
+): Promise<ResultadoEnvioEmail> {
+  if (Platform.OS === 'web') {
+    return enviarViaWeb(provedor, pdf);
+  }
+
   if (Platform.OS === 'android') {
     if (provedor === 'gmail') {
-      const ok = await enviarViaIntentAndroid(pdf, GMAIL_PACKAGES);
-      if (ok) return;
+      if (await enviarViaIntentAndroid(pdf, GMAIL_PACKAGES)) {
+        return { mensagem: 'Gmail aberto com o PDF anexado.' };
+      }
     }
     if (provedor === 'zimbra') {
-      const ok = await enviarViaIntentAndroid(pdf, ZIMBRA_PACKAGES);
-      if (ok) return;
+      if (await enviarViaIntentAndroid(pdf, ZIMBRA_PACKAGES)) {
+        return { mensagem: 'Zimbra aberto com o PDF anexado.' };
+      }
     }
   }
 
-  if (provedor === 'gmail' || provedor === 'zimbra') {
-    // iOS / fallback: composer nativo com anexo (usuário escolhe conta/app se necessário)
-    try {
-      await enviarViaMailComposer(pdf);
-      return;
-    } catch {
-      await enviarViaShare(pdf);
-      return;
-    }
+  if (await enviarViaMailComposer(pdf)) {
+    return { mensagem: 'App de e-mail aberto com o PDF anexado.' };
   }
 
-  // Outros
-  try {
-    await enviarViaMailComposer(pdf);
-  } catch {
-    await enviarViaShare(pdf);
+  if (await enviarViaShare(pdf)) {
+    return {
+      mensagem: 'Escolha o app de e-mail no menu de compartilhamento — o PDF já está pronto para anexar.',
+    };
   }
+
+  if (await enviarViaMailtoNativo(provedor, pdf)) {
+    return {
+      mensagem:
+        'E-mail aberto. Se o PDF não veio anexado, use “Salvar PDF na pasta…” e anexe manualmente.',
+    };
+  }
+
+  throw new Error(
+    'Não foi possível abrir o e-mail. Verifique se há um app de e-mail instalado ou use “Salvar PDF na pasta…”.',
+  );
 }

@@ -57,10 +57,12 @@ export function EnviarEmailResultadoModal({
   const [opcoes, setOpcoes] = useState<OpcaoEmailResultado[]>([]);
   const [carregandoOpcoes, setCarregandoOpcoes] = useState(false);
   const [enviandoId, setEnviandoId] = useState<ProvedorEmailResultado | null>(null);
+  const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
 
   useEffect(() => {
     if (!visible) {
       setEnviandoId(null);
+      setFeedback(null);
       return;
     }
     let ativo = true;
@@ -105,29 +107,32 @@ export function EnviarEmailResultadoModal({
     async (id: ProvedorEmailResultado) => {
       if (enviandoId) return;
       setEnviandoId(id);
+      setFeedback(null);
       try {
         const pdf = await prepararPdfResumoAplicacao(
           resultados,
           textoColunaCadastro,
           aplicadorAssinatura,
         );
-        await enviarPdfResumoPorEmail(id, pdf);
-        onClose();
+        const resultado = await enviarPdfResumoPorEmail(id, pdf);
+        setFeedback({ tipo: 'ok', texto: resultado.mensagem });
+        onAviso?.(resultado.mensagem);
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Não foi possível abrir o e-mail com o PDF.';
+        setFeedback({ tipo: 'erro', texto: msg });
         onAviso?.(msg);
       } finally {
         setEnviandoId(null);
       }
     },
-    [aplicadorAssinatura, enviandoId, onAviso, onClose, resultados, textoColunaCadastro],
+    [aplicadorAssinatura, enviandoId, onAviso, resultados, textoColunaCadastro],
   );
 
   const busy = Boolean(enviandoId);
 
   return (
     <AppModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlayRoot}>
+      <View style={styles.overlayRoot} pointerEvents="box-none">
         <LinearGradient
           colors={
             theme.isDark
@@ -135,15 +140,21 @@ export function EnviarEmailResultadoModal({
               : ['rgba(15,23,42,0.55)', 'rgba(15,23,42,0.78)']
           }
           style={StyleSheet.absoluteFill}
+          pointerEvents="none"
         />
-        <Pressable style={StyleSheet.absoluteFill} onPress={busy ? undefined : onClose} />
+        <Pressable
+          style={[StyleSheet.absoluteFill, styles.backdropHit]}
+          onPress={busy ? undefined : onClose}
+          accessibilityLabel="Fechar modal"
+        />
 
-        <View style={styles.center}>
+        <View style={styles.center} pointerEvents="box-none">
           <LinearGradient
             colors={['#38BDF8', '#2563EB', '#0EA5E9']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.cardRing}
+            pointerEvents="auto"
           >
             <View
               style={[
@@ -153,6 +164,7 @@ export function EnviarEmailResultadoModal({
                   borderColor: theme.isDark ? 'rgba(148,163,184,0.2)' : 'rgba(226,232,240,0.9)',
                 },
               ]}
+              pointerEvents="auto"
             >
               <LinearGradient
                 colors={['rgba(56,189,248,0.35)', 'transparent']}
@@ -262,10 +274,38 @@ export function EnviarEmailResultadoModal({
                 </View>
               )}
 
+              {feedback ? (
+                <View
+                  style={[
+                    styles.feedbackBox,
+                    {
+                      backgroundColor:
+                        feedback.tipo === 'ok'
+                          ? theme.isDark
+                            ? 'rgba(16,185,129,0.18)'
+                            : '#ECFDF5'
+                          : theme.isDark
+                            ? 'rgba(239,68,68,0.18)'
+                            : '#FEF2F2',
+                      borderColor: feedback.tipo === 'ok' ? '#34D399' : '#F87171',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.feedbackText,
+                      { color: feedback.tipo === 'ok' ? '#059669' : theme.loss },
+                    ]}
+                  >
+                    {feedback.texto}
+                  </Text>
+                </View>
+              ) : null}
+
               <Text style={[styles.hint, { color: ui.textMuted }]}>
                 {Platform.OS === 'web'
-                  ? 'No navegador o anexo automático é limitado — use Gerar PDF e anexe no e-mail.'
-                  : 'Se o app escolher não abrir, use Outros para o seletor do sistema.'}
+                  ? 'No navegador: abre o e-mail e baixa o relatório para você anexar. Em celular o PDF vai anexado.'
+                  : 'Se o app não abrir com anexo, use Outros ou Salvar PDF na pasta.'}
               </Text>
             </View>
           </LinearGradient>
@@ -281,10 +321,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 18,
   },
+  backdropHit: {
+    zIndex: 0,
+  },
   center: {
     width: '100%',
     maxWidth: 440,
     alignSelf: 'center',
+    zIndex: 10,
+    elevation: 12,
   },
   cardRing: {
     borderRadius: 28,
@@ -390,6 +435,19 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '300',
     marginTop: -2,
+  },
+  feedbackBox: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  feedbackText: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    textAlign: 'center',
   },
   hint: {
     marginTop: 14,

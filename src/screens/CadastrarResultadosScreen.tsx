@@ -233,7 +233,14 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
         resultados={resultados}
         textoColunaCadastro={textoColunaCadastro}
         aplicadorAssinatura={aplicadorAssinatura}
-        onAviso={(msg) => Alert.alert('E-mail', msg)}
+        onAviso={(msg) => {
+          if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            // Alert.alert é silencioso em vários navegadores
+            console.info('[TAF e-mail]', msg);
+            return;
+          }
+          Alert.alert('E-mail', msg);
+        }}
       />
     </SafeAreaView>
   );

@@ -200,20 +200,18 @@ function abrirMailtoWeb(pdf: PdfResumoPronto): boolean {
 export async function compartilharResultadosAnexo(
   pdf: PdfResumoPronto,
 ): Promise<ResultadoEnvioEmail> {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
     if (await compartilharAnexoWeb(pdf)) {
       return {
         mensagem: 'Escolha o aplicativo no menu — o relatório vai anexado.',
       };
     }
-    const abriu = abrirMailtoWeb(pdf);
-    if (!abriu) {
-      throw new Error('Não foi possível abrir o compartilhamento. Tente de novo.');
+    if (abrirMailtoWeb(pdf)) {
+      return {
+        mensagem:
+          'E-mail aberto. Neste navegador o anexo automático não está disponível — use “Salvar PDF na pasta…” e anexe o arquivo na mensagem.',
+      };
     }
-    return {
-      mensagem:
-        'E-mail aberto. Neste navegador o anexo automático não está disponível — use “Salvar PDF na pasta…” e anexe o arquivo na mensagem.',
-    };
   }
 
   // Preferir o sheet de compartilhar: o usuário escolhe Gmail, Zimbra ou outro app.

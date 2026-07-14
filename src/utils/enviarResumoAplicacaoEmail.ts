@@ -72,34 +72,25 @@ export async function listarOpcoesEmailResultado(): Promise<OpcaoEmailResultado[
     {
       id: 'gmail',
       titulo: 'Gmail',
-      subtitulo:
-        Platform.OS === 'web'
-          ? 'Abrir Gmail na web (anexe o PDF baixado)'
-          : 'Abrir Gmail com o PDF anexado',
+      subtitulo: 'Abrir Gmail para enviar o resultado',
       disponivel: true,
     },
     {
       id: 'zimbra',
       titulo: 'Zimbra',
-      subtitulo:
-        Platform.OS === 'web'
-          ? 'Abrir app de e-mail (anexe o PDF baixado)'
-          : 'Abrir Zimbra com o PDF anexado',
+      subtitulo: 'Abrir Zimbra / e-mail para enviar',
       disponivel: true,
     },
     {
       id: 'outros',
       titulo: 'Outros',
-      subtitulo:
-        Platform.OS === 'web'
-          ? 'Abrir cliente de e-mail padrão'
-          : 'Escolher outro app de e-mail',
+      subtitulo: 'Abrir app de e-mail ou compartilhar',
       disponivel: true,
     },
   ];
 }
 
-function urlGmailCompose(subject: string, body: string): string {
+export function urlGmailCompose(subject: string, body: string): string {
   const params = new URLSearchParams({
     view: 'cm',
     fs: '1',
@@ -110,19 +101,51 @@ function urlGmailCompose(subject: string, body: string): string {
   return `https://mail.google.com/mail/?${params.toString()}`;
 }
 
-function urlMailto(subject: string, body: string): string {
+export function urlMailto(subject: string, body: string): string {
   return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-function abrirHtmlPreview(html: string): boolean {
-  if (typeof window === 'undefined') return false;
-  const win = window.open('', '_blank');
-  if (!win) return false;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  return true;
+/** URL do composer — usada no clique (antes de qualquer await). */
+export function urlComposerParaProvedor(
+  provedor: ProvedorEmailResultado,
+  subject: string,
+  body: string,
+): string {
+  if (provedor === 'gmail') {
+    if (Platform.OS === 'web') return urlGmailCompose(subject, body);
+    // Scheme do app Gmail (Android/iOS); se falhar, o fluxo nativo usa Intent/Share.
+    return `googlegmail://co?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+  return urlMailto(subject, body);
+}
+
+/**
+ * Abre o cliente de e-mail no mesmo gesto do toque (obrigatório na web —
+ * depois de await o navegador bloqueia pop-ups / redirects).
+ */
+export function abrirClienteEmailNoGestoDoClique(
+  provedor: ProvedorEmailResultado,
+  subject: string,
+  body: string,
+): { abriu: boolean; url: string } {
+  const url = urlComposerParaProvedor(provedor, subject, body);
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (provedor === 'gmail') {
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (win) return { abriu: true, url };
+      // Fallback síncrono: navega a aba atual para o Gmail
+      window.location.assign(url);
+      return { abriu: true, url };
+    }
+    // mailto: abre o app de e-mail do sistema / cliente padrão
+    window.location.href = url;
+    return { abriu: true, url };
+  }
+
+  // Nativo: dispara openURL sem await (gesto preservado o máximo possível)
+  void Linking.openURL(url).catch(() => undefined);
+  return { abriu: true, url };
 }
 
 function baixarHtmlComoArquivo(html: string, filename: string): void {
@@ -136,67 +159,44 @@ function baixarHtmlComoArquivo(html: string, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-async function enviarViaWeb(
-  provedor: ProvedorEmailResultado,
-  pdf: PdfResumoPronto,
-): Promise<ResultadoEnvioEmail> {
-  const previewOk = abrirHtmlPreview(pdf.html);
-  baixarHtmlComoArquivo(pdf.html, pdf.filename);
-
-  if (provedor === 'gmail') {
-    const url = urlGmailCompose(pdf.subject, pdf.body);
-    const opened = typeof window !== 'undefined' ? window.open(url, '_blank') : null;
-    if (!opened && typeof window !== 'undefined') {
-      window.location.href = url;
-    }
-    return {
-      mensagem: previewOk
-        ? 'Gmail aberto. Anexe o arquivo HTML/PDF baixado (ou use Imprimir → Salvar como PDF na aba do relatório).'
-        : 'Gmail aberto. Permita pop-ups e use Gerar PDF para obter o arquivo a anexar.',
-    };
+/** Monta HTML/assunto de forma síncrona (sem await). */
+export function montarConteudoEmailResumoSync(
+  resultados: ResultadoCorridaItem[],
+  textoColunaCadastro: string,
+  aplicadorAssinatura?: AplicadorAssinaturaResumo,
+): PdfResumoPronto {
+  if (resultados.length === 0) {
+    throw new Error('Não há resultados para enviar.');
   }
-
-  const mailto = urlMailto(pdf.subject, pdf.body);
-  if (typeof window !== 'undefined') {
-    window.location.href = mailto;
-  } else {
-    await Linking.openURL(mailto);
-  }
-
+  const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro, undefined, aplicadorAssinatura);
   return {
-    mensagem:
-      provedor === 'zimbra'
-        ? 'Cliente de e-mail aberto. Anexe o arquivo baixado na mensagem (Zimbra web).'
-        : 'Cliente de e-mail aberto. Anexe o arquivo baixado na mensagem.',
+    uri: '',
+    filename: nomeArquivoPdf(resultados),
+    subject: montarAssuntoEmailResumo(resultados),
+    body: montarCorpoEmailResumo(resultados),
+    html,
   };
 }
 
-/** Gera o PDF/HTML do resumo para envio. */
+/** Gera o arquivo PDF no cache (nativo). */
+export async function gerarPdfArquivoNativo(conteudo: PdfResumoPronto): Promise<PdfResumoPronto> {
+  if (Platform.OS === 'web') return conteudo;
+  const { uri } = await Print.printToFileAsync({
+    html: conteudo.html,
+    width: PDF_A4_LANDSCAPE_WIDTH,
+    height: PDF_A4_LANDSCAPE_HEIGHT,
+  });
+  return { ...conteudo, uri };
+}
+
+/** @deprecated Use montarConteudoEmailResumoSync + gerarPdfArquivoNativo */
 export async function prepararPdfResumoAplicacao(
   resultados: ResultadoCorridaItem[],
   textoColunaCadastro: string,
   aplicadorAssinatura?: AplicadorAssinaturaResumo,
 ): Promise<PdfResumoPronto> {
-  if (resultados.length === 0) {
-    throw new Error('Não há resultados para enviar.');
-  }
-
-  const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro, undefined, aplicadorAssinatura);
-  const subject = montarAssuntoEmailResumo(resultados);
-  const body = montarCorpoEmailResumo(resultados);
-  const filename = nomeArquivoPdf(resultados);
-
-  if (Platform.OS === 'web') {
-    return { uri: '', filename, subject, body, html };
-  }
-
-  const { uri } = await Print.printToFileAsync({
-    html,
-    width: PDF_A4_LANDSCAPE_WIDTH,
-    height: PDF_A4_LANDSCAPE_HEIGHT,
-  });
-
-  return { uri, filename, subject, body, html };
+  const base = montarConteudoEmailResumoSync(resultados, textoColunaCadastro, aplicadorAssinatura);
+  return gerarPdfArquivoNativo(base);
 }
 
 async function enviarViaIntentAndroid(
@@ -204,9 +204,9 @@ async function enviarViaIntentAndroid(
   packageNames: readonly string[],
 ): Promise<boolean> {
   try {
+    if (!pdf.uri) return false;
     const FileSystem = await import('expo-file-system/legacy');
     const IntentLauncher = await import('expo-intent-launcher');
-    if (!pdf.uri) return false;
     const contentUri = await FileSystem.getContentUriAsync(pdf.uri);
 
     for (const packageName of packageNames) {
@@ -224,7 +224,7 @@ async function enviarViaIntentAndroid(
         });
         return true;
       } catch {
-        // tenta próximo pacote
+        // próximo
       }
     }
   } catch {
@@ -235,9 +235,10 @@ async function enviarViaIntentAndroid(
 
 async function enviarViaMailComposer(pdf: PdfResumoPronto): Promise<boolean> {
   try {
+    if (!pdf.uri) return false;
     const MailComposer = await import('expo-mail-composer');
     const available = await MailComposer.isAvailableAsync();
-    if (!available || !pdf.uri) return false;
+    if (!available) return false;
     await MailComposer.composeAsync({
       subject: pdf.subject,
       body: pdf.body,
@@ -256,7 +257,7 @@ async function enviarViaShare(pdf: PdfResumoPronto): Promise<boolean> {
     if (!canShare) return false;
     await Sharing.shareAsync(pdf.uri, {
       mimeType: 'application/pdf',
-      dialogTitle: pdf.subject,
+      dialogTitle: 'Enviar resultado por e-mail',
       UTI: 'com.adobe.pdf',
     });
     return true;
@@ -265,47 +266,50 @@ async function enviarViaShare(pdf: PdfResumoPronto): Promise<boolean> {
   }
 }
 
-async function enviarViaMailtoNativo(
-  provedor: ProvedorEmailResultado,
-  pdf: PdfResumoPronto,
-): Promise<boolean> {
-  try {
-    if (provedor === 'gmail' && Platform.OS === 'android') {
-      const gmailUrl = `googlegmail://co?subject=${encodeURIComponent(pdf.subject)}&body=${encodeURIComponent(pdf.body)}`;
-      const can = await Linking.canOpenURL(gmailUrl);
-      if (can) {
-        await Linking.openURL(gmailUrl);
-        return true;
-      }
-    }
-    await Linking.openURL(urlMailto(pdf.subject, pdf.body));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Abre o provedor de e-mail escolhido com o PDF do resumo (anexado no nativo; na web com preview + compose).
+ * Fluxo completo:
+ * 1) Abre o e-mail no gesto do clique (web/nativo)
+ * 2) Depois gera/anexa o PDF quando possível
  */
-export async function enviarPdfResumoPorEmail(
-  provedor: ProvedorEmailResultado,
-  pdf: PdfResumoPronto,
-): Promise<ResultadoEnvioEmail> {
-  if (Platform.OS === 'web') {
-    return enviarViaWeb(provedor, pdf);
+export async function executarEnvioResultadoPorEmail(options: {
+  provedor: ProvedorEmailResultado;
+  resultados: ResultadoCorridaItem[];
+  textoColunaCadastro: string;
+  aplicadorAssinatura?: AplicadorAssinaturaResumo;
+  /** Deve ser chamado sincronamente no onPress — abre o e-mail antes de qualquer await. */
+  abrirEmailNoGesto: boolean;
+}): Promise<ResultadoEnvioEmail> {
+  const { provedor, resultados, textoColunaCadastro, aplicadorAssinatura, abrirEmailNoGesto } =
+    options;
+
+  const base = montarConteudoEmailResumoSync(resultados, textoColunaCadastro, aplicadorAssinatura);
+
+  let emailAbertoNoGesto = false;
+  if (abrirEmailNoGesto) {
+    const aberto = abrirClienteEmailNoGestoDoClique(provedor, base.subject, base.body);
+    emailAbertoNoGesto = aberto.abriu;
   }
+
+  if (Platform.OS === 'web') {
+    baixarHtmlComoArquivo(base.html, base.filename);
+    return {
+      mensagem: emailAbertoNoGesto
+        ? provedor === 'gmail'
+          ? 'Gmail aberto. Anexe o arquivo baixado (ou Imprimir → Salvar como PDF na aba do relatório, se abrir).'
+          : 'App de e-mail aberto. Anexe o arquivo do relatório que foi baixado.'
+        : 'Não foi possível abrir o e-mail automaticamente. Permita pop-ups e tente de novo.',
+    };
+  }
+
+  // Nativo: gera PDF e tenta anexo real no app escolhido / share sheet
+  const pdf = await gerarPdfArquivoNativo(base);
 
   if (Platform.OS === 'android') {
-    if (provedor === 'gmail') {
-      if (await enviarViaIntentAndroid(pdf, GMAIL_PACKAGES)) {
-        return { mensagem: 'Gmail aberto com o PDF anexado.' };
-      }
+    if (provedor === 'gmail' && (await enviarViaIntentAndroid(pdf, GMAIL_PACKAGES))) {
+      return { mensagem: 'Gmail aberto com o PDF anexado.' };
     }
-    if (provedor === 'zimbra') {
-      if (await enviarViaIntentAndroid(pdf, ZIMBRA_PACKAGES)) {
-        return { mensagem: 'Zimbra aberto com o PDF anexado.' };
-      }
+    if (provedor === 'zimbra' && (await enviarViaIntentAndroid(pdf, ZIMBRA_PACKAGES))) {
+      return { mensagem: 'Zimbra aberto com o PDF anexado.' };
     }
   }
 
@@ -313,20 +317,51 @@ export async function enviarPdfResumoPorEmail(
     return { mensagem: 'App de e-mail aberto com o PDF anexado.' };
   }
 
+  // Share sheet: usuário escolhe Gmail/Zimbra — anexo incluso
   if (await enviarViaShare(pdf)) {
     return {
-      mensagem: 'Escolha o app de e-mail no menu de compartilhamento — o PDF já está pronto para anexar.',
+      mensagem: 'Escolha Gmail, Zimbra ou outro e-mail no menu — o PDF já vai anexado.',
     };
   }
 
-  if (await enviarViaMailtoNativo(provedor, pdf)) {
+  if (emailAbertoNoGesto) {
     return {
       mensagem:
-        'E-mail aberto. Se o PDF não veio anexado, use “Salvar PDF na pasta…” e anexe manualmente.',
+        'E-mail aberto. Se o PDF não veio anexado, use “Salvar PDF na pasta…” e anexe na mensagem.',
     };
   }
 
   throw new Error(
-    'Não foi possível abrir o e-mail. Verifique se há um app de e-mail instalado ou use “Salvar PDF na pasta…”.',
+    'Não foi possível abrir o app de e-mail. Verifique se há um cliente instalado ou use “Salvar PDF na pasta…”.',
   );
+}
+
+/** Compatibilidade com chamadas antigas. */
+export async function enviarPdfResumoPorEmail(
+  provedor: ProvedorEmailResultado,
+  pdf: PdfResumoPronto,
+): Promise<ResultadoEnvioEmail> {
+  if (Platform.OS === 'web') {
+    abrirClienteEmailNoGestoDoClique(provedor, pdf.subject, pdf.body);
+    baixarHtmlComoArquivo(pdf.html, pdf.filename);
+    return {
+      mensagem: 'Cliente de e-mail aberto. Anexe o arquivo baixado na mensagem.',
+    };
+  }
+  if (Platform.OS === 'android') {
+    if (provedor === 'gmail' && (await enviarViaIntentAndroid(pdf, GMAIL_PACKAGES))) {
+      return { mensagem: 'Gmail aberto com o PDF anexado.' };
+    }
+    if (provedor === 'zimbra' && (await enviarViaIntentAndroid(pdf, ZIMBRA_PACKAGES))) {
+      return { mensagem: 'Zimbra aberto com o PDF anexado.' };
+    }
+  }
+  if (await enviarViaMailComposer(pdf)) {
+    return { mensagem: 'App de e-mail aberto com o PDF anexado.' };
+  }
+  if (await enviarViaShare(pdf)) {
+    return { mensagem: 'Escolha o app de e-mail — o PDF já vai anexado.' };
+  }
+  await Linking.openURL(urlMailto(pdf.subject, pdf.body));
+  return { mensagem: 'E-mail aberto. Anexe o PDF se necessário.' };
 }

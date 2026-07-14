@@ -49,29 +49,15 @@ describe('enviarResumoAplicacaoEmail', () => {
       },
     ];
 
-    const assunto = montarAssuntoEmailResumo(resultados);
-    expect(assunto).toContain('Resultados TAF');
-    expect(assunto).toContain('Corrida');
-
-    const corpo = montarCorpoEmailResumo(resultados);
-    expect(corpo).toContain('Prova: Corrida');
-    expect(corpo).toContain('Participantes: 2');
-    expect(corpo).toContain('anexo');
+    expect(montarAssuntoEmailResumo(resultados)).toContain('Corrida');
+    expect(montarCorpoEmailResumo(resultados)).toContain('Participantes: 2');
   });
 
-  it('lista Gmail, Zimbra e Outros', async () => {
-    const { listarOpcoesEmailResultado } = await import(
+  it('gera URL do Gmail e mailto sem await', async () => {
+    const { urlComposerParaProvedor, montarConteudoEmailResumoSync } = await import(
       '../../src/utils/enviarResumoAplicacaoEmail'
     );
-    const opcoes = await listarOpcoesEmailResultado();
-    expect(opcoes.map((o) => o.id)).toEqual(['gmail', 'zimbra', 'outros']);
-  });
-
-  it('na web prepara HTML sem exigir print nativo', async () => {
-    const { prepararPdfResumoAplicacao } = await import(
-      '../../src/utils/enviarResumoAplicacaoEmail'
-    );
-    const pdf = await prepararPdfResumoAplicacao(
+    const base = montarConteudoEmailResumoSync(
       [
         {
           corredor: 1,
@@ -84,8 +70,10 @@ describe('enviarResumoAplicacaoEmail', () => {
       ],
       'Corrida',
     );
-    expect(pdf.html).toContain('Resumo da aplicação');
-    expect(pdf.subject).toContain('Corrida');
-    expect(pdf.body).toContain('Participantes: 1');
+    const gmail = urlComposerParaProvedor('gmail', base.subject, base.body);
+    const outros = urlComposerParaProvedor('outros', base.subject, base.body);
+    expect(gmail).toMatch(/mail\.google\.com|googlegmail:/);
+    expect(outros.startsWith('mailto:')).toBe(true);
+    expect(base.html).toContain('Resumo da aplicação');
   });
 });

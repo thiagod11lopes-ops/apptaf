@@ -16,9 +16,8 @@ import { getUiColors } from '../../theme/uiColors';
 import type { ResultadoCorridaItem } from '../../navigation/types';
 import type { AplicadorAssinaturaResumo } from '../../types/aplicadorAssinatura';
 import {
-  enviarPdfResumoPorEmail,
+  executarEnvioResultadoPorEmail,
   listarOpcoesEmailResultado,
-  prepararPdfResumoAplicacao,
   type OpcaoEmailResultado,
   type ProvedorEmailResultado,
 } from '../../utils/enviarResumoAplicacaoEmail';
@@ -104,26 +103,33 @@ export function EnviarEmailResultadoModal({
   }, [visible]);
 
   const enviar = useCallback(
-    async (id: ProvedorEmailResultado) => {
+    (id: ProvedorEmailResultado) => {
       if (enviandoId) return;
       setEnviandoId(id);
       setFeedback(null);
-      try {
-        const pdf = await prepararPdfResumoAplicacao(
-          resultados,
-          textoColunaCadastro,
-          aplicadorAssinatura,
-        );
-        const resultado = await enviarPdfResumoPorEmail(id, pdf);
-        setFeedback({ tipo: 'ok', texto: resultado.mensagem });
-        onAviso?.(resultado.mensagem);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Não foi possível abrir o e-mail com o PDF.';
-        setFeedback({ tipo: 'erro', texto: msg });
-        onAviso?.(msg);
-      } finally {
-        setEnviandoId(null);
-      }
+
+      // Na web, o e-mail DEVE abrir no mesmo gesto (sem await antes).
+      // No nativo, gera o PDF e abre o app já com anexo.
+      void executarEnvioResultadoPorEmail({
+        provedor: id,
+        resultados,
+        textoColunaCadastro,
+        aplicadorAssinatura,
+        abrirEmailNoGesto: Platform.OS === 'web',
+      })
+        .then((resultado) => {
+          setFeedback({ tipo: 'ok', texto: resultado.mensagem });
+          onAviso?.(resultado.mensagem);
+        })
+        .catch((e: unknown) => {
+          const msg =
+            e instanceof Error ? e.message : 'Não foi possível abrir o e-mail com o PDF.';
+          setFeedback({ tipo: 'erro', texto: msg });
+          onAviso?.(msg);
+        })
+        .finally(() => {
+          setEnviandoId(null);
+        });
     },
     [aplicadorAssinatura, enviandoId, onAviso, resultados, textoColunaCadastro],
   );
@@ -304,8 +310,8 @@ export function EnviarEmailResultadoModal({
 
               <Text style={[styles.hint, { color: ui.textMuted }]}>
                 {Platform.OS === 'web'
-                  ? 'No navegador: abre o e-mail e baixa o relatório para você anexar. Em celular o PDF vai anexado.'
-                  : 'Se o app não abrir com anexo, use Outros ou Salvar PDF na pasta.'}
+                  ? 'Ao tocar, o e-mail abre na hora. Depois anexe o arquivo que o app baixar.'
+                  : 'O app de e-mail abre e o PDF é anexado (ou pelo menu Compartilhar).'}
               </Text>
             </View>
           </LinearGradient>

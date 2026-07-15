@@ -6,15 +6,9 @@ import {
   desenharRubricaJsPdf,
   renderRubricaSvgToPngDataUrl,
 } from './gerarResumoAplicacaoPdfWeb';
+import { pdfTextoParaJsPdf } from './pdfLayout';
 
-/** Helvetica do jsPDF não cobre acentos. */
-function pdfTexto(valor: string): string {
-  return String(valor ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[·•]/g, '-')
-    .replace(/[^\x20-\x7E]/g, '?');
-}
+const pdfTexto = pdfTextoParaJsPdf;
 
 type Coluna = {
   key: string;

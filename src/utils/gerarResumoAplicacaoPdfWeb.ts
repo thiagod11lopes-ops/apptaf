@@ -5,6 +5,7 @@ import { tituloTipoProva, type TipoProvaAplicada } from '../services/resultadosA
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import { RUBRICA_PDF_ALTURA, RUBRICA_PDF_LARGURA } from './rubricaConstants';
 import { rubricaSvgParaPdf } from './rubricaSvgNormalize';
+import { pdfTextoParaJsPdf } from './pdfLayout';
 
 function tituloProva(resultados: ResultadoCorridaItem[]): string {
   const prova = resultados.find((r) => r.prova)?.prova ?? 'corrida';
@@ -19,14 +20,7 @@ function cabecalhoColuna(resultados: ResultadoCorridaItem[]): string {
   return 'Corredor / Nadador';
 }
 
-/** Helvetica do jsPDF não cobre acentos — normaliza para exibição legível no PDF. */
-function pdfTexto(valor: string): string {
-  return String(valor ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[·•]/g, '-')
-    .replace(/[^\x20-\x7E]/g, '?');
-}
+const pdfTexto = pdfTextoParaJsPdf;
 
 function formatarTempo(r: ResultadoCorridaItem): string {
   if (r.desempenhoTexto?.trim()) return r.desempenhoTexto.trim();

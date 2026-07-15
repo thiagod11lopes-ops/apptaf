@@ -28,6 +28,19 @@ export function escapeHtmlPdf(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Texto seguro para fontes padrão do jsPDF (Helvetica / WinAnsi).
+ * Remove acentos compostos, mas preserva ° º e demais Latin-1 (P/G militar).
+ */
+export function pdfTextoParaJsPdf(valor: string): string {
+  return String(valor ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[·•]/g, '-')
+    // ASCII + Latin-1 Supplement (inclui ° U+00B0 e º U+00BA)
+    .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '?');
+}
+
 /** Estilos de tabela — blocos paginados mantêm thead junto às linhas da folha. */
 export const PDF_PRINT_TABLE_STYLES = `
   .pdf-print-body table {

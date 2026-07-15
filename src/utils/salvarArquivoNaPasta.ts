@@ -62,22 +62,35 @@ export async function baixarHtmlComoPdfWeb(html: string, filename: string): Prom
     import('jspdf'),
   ]);
 
+  // Overlay cobre o iframe (opacidade 1) para o usuário não ver o flash do relatório.
+  const overlay = document.createElement('div');
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.style.cssText = [
+    'position:fixed',
+    'inset:0',
+    'z-index:2147483646',
+    'background:rgba(2,6,23,0.35)',
+    'pointer-events:none',
+  ].join(';');
+
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
-  // Precisa estar no viewport com opacidade mínima — opacity:0 / offscreen gera PDF em branco.
+  iframe.title = 'Gerando PDF';
   iframe.style.cssText = [
     'position:fixed',
     'left:0',
     'top:0',
     `width:${PDF_A4_LANDSCAPE_WIDTH}px`,
-    'height:1200px',
-    'opacity:0.01',
+    'height:1600px',
+    'opacity:1',
     'pointer-events:none',
     'border:0',
-    'z-index:-1',
+    'z-index:2147483645',
     'background:#ffffff',
   ].join(';');
+
   document.body.appendChild(iframe);
+  document.body.appendChild(overlay);
 
   try {
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
@@ -85,44 +98,89 @@ export async function baixarHtmlComoPdfWeb(html: string, filename: string): Prom
       throw new Error('Não foi possível preparar o PDF para download.');
     }
 
+    // Estilos extras: tira position:fixed (html2canvas falha com header/footer fixos).
+    const htmlParaCaptura = html.replace(
+      '</head>',
+      `<style id="taf-pdf-capture">
+        .pdf-print-header,
+        .pdf-print-footer {
+          position: static !important;
+          left: auto !important;
+          right: auto !important;
+          top: auto !important;
+          bottom: auto !important;
+          width: 100% !important;
+        }
+        .pdf-print-body {
+          padding-top: 8px !important;
+        }
+        html, body {
+          background: #ffffff !important;
+          color: #111827 !important;
+        }
+      </style></head>`,
+    );
+
     doc.open();
-    doc.write(html);
+    doc.write(htmlParaCaptura);
     doc.close();
 
-    await new Promise<void>((resolve) => {
-      const finish = () => resolve();
-      const win = iframe.contentWindow;
-      if (win?.document.readyState === 'complete') {
-        window.setTimeout(finish, 350);
-        return;
-      }
-      iframe.onload = () => window.setTimeout(finish, 350);
-      window.setTimeout(finish, 1600);
-    });
+    await esperarDocumentoPronto(iframe);
 
     const target = doc.body;
-    if (!target) {
+    if (!target || !target.innerText?.trim()) {
       throw new Error('Conteúdo do PDF vazio.');
     }
 
-    // Aguarda layout/paint do conteúdo no iframe
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    // Tempo extra para fontes/SVG (rúbricas)
+    await new Promise<void>((r) => window.setTimeout(r, 450));
 
-    const canvas = await html2canvas(target, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      width: Math.max(target.scrollWidth, PDF_A4_LANDSCAPE_WIDTH),
-      windowWidth: Math.max(target.scrollWidth, PDF_A4_LANDSCAPE_WIDTH),
-      scrollX: 0,
-      scrollY: 0,
-      foreignObjectRendering: false,
-    });
+    const captureW = Math.max(target.scrollWidth, target.offsetWidth, PDF_A4_LANDSCAPE_WIDTH);
+    const captureH = Math.max(target.scrollHeight, target.offsetHeight, 400);
 
+    const capturar = async (el: HTMLElement) =>
+      html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: Math.max(el.scrollWidth, el.offsetWidth, PDF_A4_LANDSCAPE_WIDTH),
+        height: Math.max(el.scrollHeight, el.offsetHeight, 200),
+        windowWidth: Math.max(el.scrollWidth, el.offsetWidth, PDF_A4_LANDSCAPE_WIDTH),
+        windowHeight: Math.max(el.scrollHeight, el.offsetHeight, 200),
+        scrollX: 0,
+        scrollY: 0,
+        foreignObjectRendering: false,
+        onclone: (clonedDoc) => {
+          const style = clonedDoc.createElement('style');
+          style.textContent = `
+            .pdf-print-header, .pdf-print-footer { position: static !important; }
+            html, body { background:#fff !important; color:#111827 !important; }
+          `;
+          clonedDoc.head.appendChild(style);
+        },
+      });
+
+    let canvas = await capturar(target);
+
+    // Fallback: captura só o corpo da tabela se a página inteira vier “vazia”.
     if (canvas.width < 8 || canvas.height < 8 || canvasPareceEmBranco(canvas)) {
-      throw new Error('O PDF gerado ficou em branco. Tente novamente.');
+      const bodyOnly = doc.querySelector('.pdf-print-body') as HTMLElement | null;
+      if (bodyOnly) {
+        canvas = await capturar(bodyOnly);
+      }
+    }
+
+    if (canvas.width < 8 || canvas.height < 8) {
+      throw new Error('Não foi possível gerar o PDF. Tente novamente.');
+    }
+
+    if (canvasPareceEmBranco(canvas)) {
+      throw new Error(
+        'Não foi possível capturar o conteúdo do PDF. Atualize a página e tente novamente.',
+      );
     }
 
     const pdf = new jsPDF({
@@ -163,24 +221,53 @@ export async function baixarHtmlComoPdfWeb(html: string, filename: string): Prom
     const blob = pdf.output('blob');
     return downloadWebBlob(blob, sanitizarNomeArquivo(filename, '.pdf'), 'application/pdf');
   } finally {
+    overlay.remove();
     iframe.remove();
   }
 }
 
+async function esperarDocumentoPronto(iframe: HTMLIFrameElement): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const finish = () => resolve();
+    const win = iframe.contentWindow;
+    if (win?.document.readyState === 'complete') {
+      window.setTimeout(finish, 200);
+      return;
+    }
+    iframe.onload = () => window.setTimeout(finish, 200);
+    window.setTimeout(finish, 2000);
+  });
+}
+
+/** Amostra centro e várias regiões — o canto superior do relatório é quase branco. */
 function canvasPareceEmBranco(canvas: HTMLCanvasElement): boolean {
   const ctx = canvas.getContext('2d');
   if (!ctx) return true;
-  const w = Math.min(48, canvas.width);
-  const h = Math.min(48, canvas.height);
-  const sample = ctx.getImageData(0, 0, w, h).data;
-  let naoBranco = 0;
-  for (let i = 0; i < sample.length; i += 4) {
-    if (sample[i] < 248 || sample[i + 1] < 248 || sample[i + 2] < 248) {
-      naoBranco += 1;
-      if (naoBranco > 8) return false;
+
+  const pontos: Array<[number, number]> = [
+    [0.5, 0.5],
+    [0.25, 0.35],
+    [0.75, 0.35],
+    [0.5, 0.25],
+    [0.5, 0.7],
+    [0.15, 0.55],
+    [0.85, 0.55],
+  ];
+
+  let pixelsComConteudo = 0;
+  for (const [px, py] of pontos) {
+    const x = Math.max(0, Math.min(canvas.width - 8, Math.floor(canvas.width * px) - 4));
+    const y = Math.max(0, Math.min(canvas.height - 8, Math.floor(canvas.height * py) - 4));
+    const sample = ctx.getImageData(x, y, 8, 8).data;
+    for (let i = 0; i < sample.length; i += 4) {
+      // Texto/tabela/borda (não branco puro)
+      if (sample[i] < 245 || sample[i + 1] < 245 || sample[i + 2] < 245) {
+        pixelsComConteudo += 1;
+      }
     }
+    if (pixelsComConteudo > 30) return false;
   }
-  return true;
+  return pixelsComConteudo < 12;
 }
 
 async function obterUriPastaAndroidPersistida(): Promise<string | null> {

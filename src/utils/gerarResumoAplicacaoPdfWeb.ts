@@ -221,7 +221,7 @@ export function extrairStrokesRubricaParaPdf(
   return strokes.length > 0 ? { strokes, vbW, vbH } : null;
 }
 
-function desenharRubricaJsPdf(
+export function desenharRubricaJsPdf(
   doc: import('jspdf').jsPDF,
   svgUri: string | undefined | null,
   boxX: number,

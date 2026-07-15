@@ -44,15 +44,80 @@ async function downloadWebBlob(
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
   return { ok: true, modo: 'download' };
 }
 
+function isIosWeb(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/iPad|iPhone|iPod/i.test(ua)) return true;
+  return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1;
+}
+
 /**
- * Converte HTML do relatório em Blob PDF (só web) e dispara download para Downloads —
- * sem abrir visualização na tela.
+ * Entrega PDF no navegador. No iPhone usa Compartilhar → Salvar em Arquivos/Downloads.
+ */
+export async function entregarPdfBlobWeb(
+  blob: Blob,
+  filename: string,
+): Promise<SalvarArquivoNaPastaResultado> {
+  const safeName = sanitizarNomeArquivo(filename, '.pdf');
+  const file =
+    typeof File !== 'undefined'
+      ? new File([blob], safeName, { type: 'application/pdf' })
+      : null;
+
+  const tryShare = async (): Promise<boolean> => {
+    if (!file || typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
+      return false;
+    }
+    const payload: ShareData = { files: [file], title: safeName };
+    if (typeof navigator.canShare === 'function' && !navigator.canShare(payload)) {
+      return false;
+    }
+    try {
+      await navigator.share(payload);
+      return true;
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') return true;
+      return false;
+    }
+  };
+
+  // iPhone: share sheet é o caminho certo (download nativo falha no Safari).
+  if (isIosWeb()) {
+    if (await tryShare()) {
+      return { ok: true, modo: 'compartilhar' };
+    }
+    // Fallback se o gesto/await bloquear o share: abre o PDF para Salvar em Arquivos.
+    if (typeof window !== 'undefined') {
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        window.location.assign(url);
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return { ok: true, modo: 'compartilhar' };
+    }
+  }
+
+  if (await tryShare()) {
+    return { ok: true, modo: 'compartilhar' };
+  }
+
+  return downloadWebBlob(blob, safeName, 'application/pdf');
+}
+
+/**
+ * @deprecated Preferir gerarResumoAplicacaoPdfBlobWeb + entregarPdfBlobWeb.
+ * html2canvas falha em iPhone (PDF em branco).
  */
 export async function baixarHtmlComoPdfWeb(html: string, filename: string): Promise<SalvarArquivoNaPastaResultado> {
+  // Evita o caminho quebrado no iPhone.
+  if (isIosWeb()) {
+    throw new Error('Atualize a página e use Salvar novamente (versão com suporte ao iPhone).');
+  }
   if (typeof document === 'undefined' || typeof window === 'undefined') {
     throw new Error('Download PDF indisponível neste ambiente.');
   }
@@ -483,5 +548,5 @@ export function mensagemSucessoSalvarNaPasta(
   if (resultado.modo === 'download') {
     return 'PDF baixado para a pasta Downloads.';
   }
-  return 'Use “Salvar em Arquivos” / Downloads no menu do sistema.';
+  return 'Escolha “Salvar em Arquivos” / Downloads no menu do iPhone para guardar o PDF.';
 }

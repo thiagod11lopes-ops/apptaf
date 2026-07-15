@@ -20,12 +20,13 @@ import {
 } from './pdfLayout';
 import {
   baixarArquivoParaDownloads,
-  baixarHtmlComoPdfWeb,
+  entregarPdfBlobWeb,
   mensagemSucessoSalvarNaPasta,
   sanitizarNomeArquivo,
   SalvamentoCanceladoError,
 } from './salvarArquivoNaPasta';
 import { formatBrDateKey, formatBrTimeKey } from './backupNaming';
+import { gerarResumoAplicacaoPdfBlobWeb } from './gerarResumoAplicacaoPdfWeb';
 /** Estima quantas folhas A4 paisagem serão necessárias para o resumo da aplicação. */
 export function estimarFolhasA4PdfResumoAplicacao(
   quantidadeLinhas: number,
@@ -142,16 +143,20 @@ export async function exportResumoAplicacaoPdf(
     throw new Error('Não há resultados para salvar.');
   }
 
-  const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro, undefined, aplicadorAssinatura);
   const filename = nomeArquivoPdfResumo(resultados);
 
   if (Platform.OS === 'web') {
-    const resultado = await baixarHtmlComoPdfWeb(html, filename);
+    // iPhone/Safari: html2canvas gera PDF em branco — usa jsPDF + Compartilhar.
+    const blob = await gerarResumoAplicacaoPdfBlobWeb(resultados, aplicadorAssinatura);
+    const resultado = await entregarPdfBlobWeb(blob, filename);
     if (!resultado.ok) {
       throw new SalvamentoCanceladoError();
     }
     return mensagemSucessoSalvarNaPasta(resultado);
   }
+
+  // HTML ainda alimenta o print nativo (Android/iOS app).
+  const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro, undefined, aplicadorAssinatura);
 
   const { uri } = await Print.printToFileAsync({
     html,

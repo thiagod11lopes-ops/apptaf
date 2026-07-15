@@ -209,8 +209,9 @@ export function BackupTafCsvBlock() {
 
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
         Exporta e restaura cadastros, resultados, aplicadores, pré-cadastros, e-mails autorizados, fila de
-        sync e metadados em um único arquivo CSV. “Backup em CSV” salva na pasta Downloads; no iPhone use
-        Compartilhar → Salvar em Arquivos. “Salvar backup na pasta…” permite escolher outra pasta.
+        sync e metadados em um único arquivo CSV. Ao carregar, o sistema usa a mesma regra do disquete: em
+        conflito pelo mesmo registro, prevalece o updatedAt mais recente (o aparelho não perde edições mais
+        novas). “Backup em CSV” salva na pasta Downloads; “Salvar backup na pasta…” escolhe outra pasta.
         {isAuthenticated ? ' Com login ativo, os dados são gravados na nuvem.' : ''}
       </Text>
 
@@ -226,10 +227,15 @@ export function BackupTafCsvBlock() {
           ]}
         >
           <Text style={[ts.caption, { color: theme.text }]}>
-            Restauração concluída: {importResult.cadastrosImportados.toLocaleString('pt-BR')} cadastros,{' '}
+            Atualização concluída (dados mais recentes):{' '}
+            {importResult.cadastrosImportados.toLocaleString('pt-BR')} cadastros,{' '}
             {importResult.sessoesImportadas.toLocaleString('pt-BR')} sessões,{' '}
             {importResult.aplicadoresImportados.toLocaleString('pt-BR')} aplicadores,{' '}
-            {importResult.preCadastrosImportados.toLocaleString('pt-BR')} pré-cadastros.
+            {importResult.preCadastrosImportados.toLocaleString('pt-BR')} pré-cadastros
+            {importResult.mantidosLocais > 0
+              ? ` (${importResult.mantidosLocais.toLocaleString('pt-BR')} mantidos por já estarem mais novos neste aparelho)`
+              : ''}
+            .
           </Text>
           {(importResult.emailsAutorizadosImportados > 0 ||
             importResult.syncQueueImportados > 0 ||

@@ -715,6 +715,142 @@ export async function applyRemoteAplicador(
   return 'download';
 }
 
+export type ApplyCsvLwwResult = 'created' | 'applied' | 'kept_local';
+
+/**
+ * Importação CSV no estilo do sync por disquete (last-write-wins por updatedAt).
+ * Se o CSV não trouxer updatedAt, trata como 0 — o local mais recente prevalece.
+ */
+export async function applyCsvCadastroLww(
+  remote: CadastroItemPersist,
+  ownerUid: string,
+): Promise<ApplyCsvLwwResult> {
+  const db = getTafDatabase();
+  if (!db) throw new Error('Armazenamento local indisponível.');
+
+  let payload = { ...remote };
+  const byNip = await findCadastroByNipDigits(ownerUid, payload.nip, payload.id);
+  if (byNip && !byNip.deleted) {
+    payload = { ...payload, id: byNip.id };
+  }
+
+  const local = await db.cadastros.get(payload.id);
+  const remoteAt =
+    typeof payload.updatedAt === 'number' && payload.updatedAt > 0 ? payload.updatedAt : 0;
+
+  if (!local || local.deleted || local.ownerUid !== ownerUid) {
+    const record = ensureRecordMeta(
+      { ...payload, ownerUid, updatedAt: remoteAt || Date.now() } as CadastroRecord,
+      ownerUid,
+    );
+    await db.cadastros.put(markRecordSynced(record, getCachedLoginUid()));
+    return 'created';
+  }
+
+  const remoteForLww = { ...local, ...payload, ownerUid, updatedAt: remoteAt };
+  const decision = decideLastWriteWins(local, remoteForLww);
+  if (decision.action !== 'download') return 'kept_local';
+
+  await db.cadastros.put(
+    markRecordSynced(
+      {
+        ...local,
+        ...payload,
+        ownerUid,
+        updatedAt: remoteAt > 0 ? remoteAt : local.updatedAt,
+        createdAt: local.createdAt,
+      } as CadastroRecord,
+      getCachedLoginUid(),
+    ),
+  );
+  return 'applied';
+}
+
+export async function applyCsvSessaoLww(
+  remote: SessaoAplicacaoTaf,
+  ownerUid: string,
+): Promise<ApplyCsvLwwResult> {
+  const db = getTafDatabase();
+  if (!db) throw new Error('Armazenamento local indisponível.');
+
+  const normalized = normalizeSessaoShape(remote);
+  const local = await db.sessoes.get(normalized.id);
+  const remoteAt =
+    typeof normalized.updatedAt === 'number' && normalized.updatedAt > 0
+      ? normalized.updatedAt
+      : readUpdatedAt({ criadoEm: normalized.criadoEm, updatedAt: normalized.updatedAt });
+
+  if (!local || local.deleted || local.ownerUid !== ownerUid) {
+    const record = ensureRecordMeta(
+      {
+        ...normalized,
+        ownerUid,
+        updatedAt: remoteAt || Date.now(),
+      } as SessaoRecord,
+      ownerUid,
+    );
+    await db.sessoes.put(markRecordSynced(record, null));
+    return 'created';
+  }
+
+  const remoteForLww = { ...local, ...normalized, ownerUid, updatedAt: remoteAt };
+  const decision = decideLastWriteWins(local, remoteForLww);
+  if (decision.action !== 'download') return 'kept_local';
+
+  await db.sessoes.put(
+    markRecordSynced(
+      {
+        ...local,
+        ...normalized,
+        ownerUid,
+        updatedAt: remoteAt > 0 ? remoteAt : local.updatedAt,
+        createdAt: local.createdAt,
+      } as SessaoRecord,
+      null,
+    ),
+  );
+  return 'applied';
+}
+
+export async function applyCsvAplicadorLww(
+  remote: AplicadorItemPersist,
+  ownerUid: string,
+): Promise<ApplyCsvLwwResult> {
+  const db = getTafDatabase();
+  if (!db) throw new Error('Armazenamento local indisponível.');
+
+  const local = await db.aplicadores.get(remote.id);
+  const remoteAt =
+    typeof remote.updatedAt === 'number' && remote.updatedAt > 0 ? remote.updatedAt : 0;
+
+  if (!local || local.deleted || local.ownerUid !== ownerUid) {
+    const record = ensureRecordMeta(
+      { ...remote, ownerUid, updatedAt: remoteAt || Date.now() } as AplicadorRecord,
+      ownerUid,
+    );
+    await db.aplicadores.put(markRecordSynced(record, null));
+    return 'created';
+  }
+
+  const remoteForLww = { ...local, ...remote, ownerUid, updatedAt: remoteAt };
+  const decision = decideLastWriteWins(local, remoteForLww);
+  if (decision.action !== 'download') return 'kept_local';
+
+  await db.aplicadores.put(
+    markRecordSynced(
+      {
+        ...local,
+        ...remote,
+        ownerUid,
+        updatedAt: remoteAt > 0 ? remoteAt : local.updatedAt,
+        createdAt: local.createdAt,
+      } as AplicadorRecord,
+      null,
+    ),
+  );
+  return 'applied';
+}
+
 export async function wipeOwnerData(ownerUid: string): Promise<void> {
   const db = getTafDatabase();
   if (!db) return;

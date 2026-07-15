@@ -12,6 +12,15 @@ import type { SyncQueueEntry } from '../offline-first/types';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { writeAppMeta } from '../offline-first/db/appMeta';
 import {
+  applyCsvAplicadorLww,
+  applyCsvCadastroLww,
+  applyCsvSessaoLww,
+  resolveOwnerUid,
+} from '../offline-first/db/localDb';
+import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
+import { resolveStorageOwnerUid } from '../services/firebase/authUid';
+import { readUpdatedAt } from '../offline-first/sync/recordMeta';
+import {
   gatherSystemBackupData,
   type AppMetaBackupEntry,
   type SystemBackupPayload,
@@ -160,6 +169,8 @@ export type ResultadoImportacaoBackupCsv = {
   emailsAutorizadosImportados: number;
   syncQueueImportados: number;
   appMetaImportados: number;
+  /** Registros do CSV ignorados porque o aparelho já tinha versão mais recente (LWW). */
+  mantidosLocais: number;
   erros: string[];
 };
 
@@ -852,30 +863,83 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
     }
   }
 
-  if (cadastros.length > 0) {
-    await addCadastrosEmLote(cadastros);
-  }
-
-  for (const sessao of sessoes) {
-    await updateSessaoAplicacao(sessao);
-  }
-
-  for (const aplicador of aplicadores) {
-    await addAplicador(aplicador);
-  }
-
-  for (const preCadastro of preCadastros) {
-    await addPreCadastroTaf(preCadastro);
-  }
-
   const db = getTafDatabase();
+  let cadastrosImportados = 0;
+  let sessoesImportadas = 0;
+  let aplicadoresImportados = 0;
+  let preCadastrosImportados = 0;
+  let emailsAutorizadosImportados = 0;
+  let mantidosLocais = 0;
+
   if (db) {
-    if (authorizedEmails.length > 0) {
-      await db.authorizedEmails.bulkPut(authorizedEmails);
+    const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
+
+    for (const item of cadastros) {
+      const result = await applyCsvCadastroLww(item, ownerUid);
+      if (result === 'kept_local') mantidosLocais += 1;
+      else cadastrosImportados += 1;
     }
+
+    for (const sessao of sessoes) {
+      const result = await applyCsvSessaoLww(sessao, ownerUid);
+      if (result === 'kept_local') mantidosLocais += 1;
+      else sessoesImportadas += 1;
+    }
+
+    for (const aplicador of aplicadores) {
+      const result = await applyCsvAplicadorLww(aplicador, ownerUid);
+      if (result === 'kept_local') mantidosLocais += 1;
+      else aplicadoresImportados += 1;
+    }
+
+    for (const preCadastro of preCadastros) {
+      const local = await db.preCadastros.get(preCadastro.id);
+      if (
+        local &&
+        local.ownerUid === ownerUid &&
+        !local.deleted &&
+        (local.criadoEm ?? 0) >= (preCadastro.criadoEm ?? 0)
+      ) {
+        mantidosLocais += 1;
+        continue;
+      }
+      await addPreCadastroTaf(preCadastro);
+      preCadastrosImportados += 1;
+    }
+
+    for (const email of authorizedEmails) {
+      const local = await db.authorizedEmails.get(email.id);
+      if (local && readUpdatedAt(local) >= readUpdatedAt(email)) {
+        mantidosLocais += 1;
+        continue;
+      }
+      await db.authorizedEmails.put(email);
+      emailsAutorizadosImportados += 1;
+    }
+
     if (syncQueueEntries.length > 0) {
       await db.syncQueue.bulkPut(syncQueueEntries);
     }
+
+    notifyDataChanged();
+  } else {
+    if (cadastros.length > 0) {
+      await addCadastrosEmLote(cadastros);
+      cadastrosImportados = cadastros.length;
+    }
+    for (const sessao of sessoes) {
+      await updateSessaoAplicacao(sessao);
+      sessoesImportadas += 1;
+    }
+    for (const aplicador of aplicadores) {
+      await addAplicador(aplicador);
+      aplicadoresImportados += 1;
+    }
+    for (const preCadastro of preCadastros) {
+      await addPreCadastroTaf(preCadastro);
+      preCadastrosImportados += 1;
+    }
+    emailsAutorizadosImportados = authorizedEmails.length;
   }
 
   for (const meta of appMetaEntries) {
@@ -883,13 +947,14 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
   }
 
   return {
-    cadastrosImportados: cadastros.length,
-    sessoesImportadas: sessoes.length,
-    aplicadoresImportados: aplicadores.length,
-    preCadastrosImportados: preCadastros.length,
-    emailsAutorizadosImportados: authorizedEmails.length,
+    cadastrosImportados,
+    sessoesImportadas,
+    aplicadoresImportados,
+    preCadastrosImportados,
+    emailsAutorizadosImportados,
     syncQueueImportados: syncQueueEntries.length,
     appMetaImportados: appMetaEntries.length,
+    mantidosLocais,
     erros,
   };
 }

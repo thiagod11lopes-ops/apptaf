@@ -45,47 +45,223 @@ function papelLinha(r: ResultadoCorridaItem): string {
   return `${label} ${r.corredor}`;
 }
 
-/** Converte SVG data-URL da rúbrica em PNG para o jsPDF (funciona no iPhone). */
-async function svgRubricaParaPngDataUrl(
+/** Decodifica data-URL SVG (utf8 ou base64) para string SVG. */
+export function decodeSvgDataUrl(svgUri: string): string | null {
+  const normalized = rubricaSvgParaPdf(svgUri) ?? svgUri.trim();
+  if (!normalized.startsWith('data:image/svg')) return null;
+
+  const comma = normalized.indexOf(',');
+  if (comma < 0) return null;
+  const meta = normalized.slice(0, comma);
+  const data = normalized.slice(comma + 1);
+
+  try {
+    if (/;base64/i.test(meta)) {
+      const binary = atob(data);
+      // UTF-8 safe decode
+      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+    return decodeURIComponent(data);
+  } catch {
+    try {
+      return decodeURIComponent(data);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function extrairPathsDoSvg(svg: string): { paths: string[]; vbW: number; vbH: number } {
+  const vbMatch = svg.match(/viewBox=["']0\s+0\s+([\d.]+)\s+([\d.]+)["']/i);
+  const wMatch = svg.match(/\bwidth=["']([\d.]+)["']/i);
+  const hMatch = svg.match(/\bheight=["']([\d.]+)["']/i);
+  const vbW = vbMatch ? parseFloat(vbMatch[1]!) : parseFloat(wMatch?.[1] ?? '420');
+  const vbH = vbMatch ? parseFloat(vbMatch[2]!) : parseFloat(hMatch?.[1] ?? '180');
+
+  const paths: string[] = [];
+  const re = /<path\b[^>]*\bd=["']([^"']+)["'][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(svg)) !== null) {
+    if (m[1]?.trim()) paths.push(m[1].trim());
+  }
+  return {
+    paths,
+    vbW: Number.isFinite(vbW) && vbW > 0 ? vbW : 420,
+    vbH: Number.isFinite(vbH) && vbH > 0 ? vbH : 180,
+  };
+}
+
+/** Desenha path SVG simples (M/L) no canvas — compatível com rúbricas TAF. */
+function strokePathManual(ctx: CanvasRenderingContext2D, d: string): void {
+  const tokens = d.match(/[MLml]|-?\d*\.?\d+(?:e[-+]?\d+)?/g);
+  if (!tokens || tokens.length === 0) return;
+
+  ctx.beginPath();
+  let cmd = 'M';
+  let i = 0;
+  let started = false;
+  while (i < tokens.length) {
+    const t = tokens[i]!;
+    if (t === 'M' || t === 'L' || t === 'm' || t === 'l') {
+      cmd = t;
+      i += 1;
+      continue;
+    }
+    const x = parseFloat(tokens[i]!);
+    const y = parseFloat(tokens[i + 1] ?? '');
+    if (!Number.isFinite(x) || !Number.isFinite(y)) break;
+    i += 2;
+    if (cmd === 'M' || cmd === 'm') {
+      ctx.moveTo(x, y);
+      started = true;
+    } else if (started) {
+      ctx.lineTo(x, y);
+    } else {
+      ctx.moveTo(x, y);
+      started = true;
+    }
+  }
+  ctx.stroke();
+}
+
+/**
+ * Rasteriza a rúbrica SVG → PNG sem usar Image() (quebra no Safari/iPhone).
+ * Desenha os `<path d="...">` direto no canvas.
+ */
+export function renderRubricaSvgToPngDataUrl(
   svgUri: string | undefined | null,
   widthPx: number,
   heightPx: number,
-): Promise<string | null> {
-  if (typeof document === 'undefined' || typeof Image === 'undefined') return null;
-  const normalized = rubricaSvgParaPdf(svgUri);
-  if (!normalized?.startsWith('data:image')) return null;
+): string | null {
+  if (typeof document === 'undefined') return null;
+  if (!svgUri?.trim()) return null;
 
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.decoding = 'sync';
-    const fail = () => resolve(null);
-    img.onerror = fail;
-    img.onload = () => {
-      try {
-        const scale = 2;
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(widthPx * scale));
-        canvas.height = Math.max(1, Math.round(heightPx * scale));
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          fail();
-          return;
-        }
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/png'));
-      } catch {
-        fail();
+  const svg = decodeSvgDataUrl(svgUri);
+  if (!svg) return null;
+
+  const { paths, vbW, vbH } = extrairPathsDoSvg(svg);
+  if (paths.length === 0) return null;
+
+  const scale = 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(widthPx * scale));
+  canvas.height = Math.max(1, Math.round(heightPx * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const sx = canvas.width / vbW;
+  const sy = canvas.height / vbH;
+  ctx.save();
+  ctx.scale(sx, sy);
+  ctx.strokeStyle = '#111827';
+  ctx.lineWidth = Math.max(2.5, 3.5);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (const d of paths) {
+    try {
+      if (typeof Path2D !== 'undefined') {
+        const p = new Path2D(d);
+        ctx.stroke(p);
+      } else {
+        strokePathManual(ctx, d);
       }
-    };
-    img.src = normalized;
-  });
+    } catch {
+      strokePathManual(ctx, d);
+    }
+  }
+  ctx.restore();
+
+  try {
+    return canvas.toDataURL('image/png');
+  } catch {
+    return null;
+  }
+}
+
+/** Traços para desenhar direto no jsPDF (fallback sem PNG). */
+export type RubricaStrokePdf = { points: Array<{ x: number; y: number }> };
+
+export function extrairStrokesRubricaParaPdf(
+  svgUri: string | undefined | null,
+): { strokes: RubricaStrokePdf[]; vbW: number; vbH: number } | null {
+  if (!svgUri?.trim()) return null;
+  const svg = decodeSvgDataUrl(svgUri);
+  if (!svg) return null;
+  const { paths, vbW, vbH } = extrairPathsDoSvg(svg);
+  if (paths.length === 0) return null;
+
+  const strokes: RubricaStrokePdf[] = [];
+  for (const d of paths) {
+    const tokens = d.match(/[MLml]|-?\d*\.?\d+(?:e[-+]?\d+)?/g);
+    if (!tokens) continue;
+    const points: Array<{ x: number; y: number }> = [];
+    let i = 0;
+    let cmd = 'M';
+    while (i < tokens.length) {
+      const t = tokens[i]!;
+      if (t === 'M' || t === 'L' || t === 'm' || t === 'l') {
+        cmd = t;
+        i += 1;
+        continue;
+      }
+      const x = parseFloat(tokens[i]!);
+      const y = parseFloat(tokens[i + 1] ?? '');
+      if (!Number.isFinite(x) || !Number.isFinite(y)) break;
+      i += 2;
+      points.push({ x, y });
+      void cmd;
+    }
+    if (points.length > 0) strokes.push({ points });
+  }
+  return strokes.length > 0 ? { strokes, vbW, vbH } : null;
+}
+
+function desenharRubricaJsPdf(
+  doc: import('jspdf').jsPDF,
+  svgUri: string | undefined | null,
+  boxX: number,
+  boxY: number,
+  boxW: number,
+  boxH: number,
+): boolean {
+  const parsed = extrairStrokesRubricaParaPdf(svgUri);
+  if (!parsed) return false;
+
+  const { strokes, vbW, vbH } = parsed;
+  doc.setDrawColor(17, 24, 39);
+  doc.setLineWidth(1.1);
+  doc.setLineCap('round');
+  doc.setLineJoin('round');
+
+  for (const stroke of strokes) {
+    const pts = stroke.points;
+    if (pts.length === 0) continue;
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      const x1 = boxX + (a.x / vbW) * boxW;
+      const y1 = boxY + (a.y / vbH) * boxH;
+      const x2 = boxX + (b.x / vbW) * boxW;
+      const y2 = boxY + (b.y / vbH) * boxH;
+      doc.line(x1, y1, x2, y2);
+    }
+    if (pts.length === 1) {
+      const p = pts[0]!;
+      const x = boxX + (p.x / vbW) * boxW;
+      const y = boxY + (p.y / vbH) * boxH;
+      doc.line(x, y, x + 0.01, y);
+    }
+  }
+  return true;
 }
 
 /**
  * Gera Blob PDF (A4 paisagem) só com jsPDF — inclui desenhos das rúbricas.
- * Necessário no iPhone/Safari, onde captura HTML costuma sair em branco.
  */
 export async function gerarResumoAplicacaoPdfBlobWeb(
   resultados: ResultadoCorridaItem[],
@@ -94,22 +270,19 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
   const { jsPDF } = await import('jspdf');
 
   const rubricaPngByIndex = new Map<number, string>();
-  await Promise.all(
-    resultados.map(async (r, index) => {
-      const png = await svgRubricaParaPngDataUrl(
-        r.rubricaCandidatoSvg,
-        RUBRICA_PDF_LARGURA,
-        RUBRICA_PDF_ALTURA,
-      );
-      if (png) rubricaPngByIndex.set(index, png);
-    }),
-  );
+  const rubricaSvgByIndex = new Map<number, string>();
+  for (let index = 0; index < resultados.length; index += 1) {
+    const svg = resultados[index]?.rubricaCandidatoSvg?.trim();
+    if (!svg) continue;
+    rubricaSvgByIndex.set(index, svg);
+    const png = renderRubricaSvgToPngDataUrl(svg, RUBRICA_PDF_LARGURA, RUBRICA_PDF_ALTURA);
+    if (png) rubricaPngByIndex.set(index, png);
+  }
 
-  const aplicadorPng = await svgRubricaParaPngDataUrl(
-    aplicadorAssinatura?.rubricaSvg,
-    RUBRICA_PDF_LARGURA * 1.4,
-    RUBRICA_PDF_ALTURA * 1.4,
-  );
+  const aplicadorSvg = aplicadorAssinatura?.rubricaSvg?.trim();
+  const aplicadorPng = aplicadorSvg
+    ? renderRubricaSvgToPngDataUrl(aplicadorSvg, RUBRICA_PDF_LARGURA * 1.4, RUBRICA_PDF_ALTURA * 1.4)
+    : null;
 
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -121,17 +294,17 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
   const pageH = doc.internal.pageSize.getHeight();
   const marginX = 28;
   const marginTop = 28;
-  const marginBottom = aplicadorAssinatura ? 58 : 36;
+  const temAlgumaRubrica = rubricaSvgByIndex.size > 0 || Boolean(aplicadorSvg);
+  const marginBottom = aplicadorAssinatura ? (aplicadorSvg ? 64 : 42) : 36;
   const usableW = pageW - marginX * 2;
 
   const tituloProvaLabel = tituloProva(resultados);
   const colProva = cabecalhoColuna(resultados);
   const geradoEm = new Date().toLocaleString('pt-BR');
 
-  const temRubricas = rubricaPngByIndex.size > 0;
-  const imgW = RUBRICA_PDF_LARGURA * 0.75;
-  const imgH = RUBRICA_PDF_ALTURA * 0.75;
-  const rowH = temRubricas ? Math.max(28, imgH + 10) : 18;
+  const imgW = RUBRICA_PDF_LARGURA * 0.85;
+  const imgH = RUBRICA_PDF_ALTURA * 0.85;
+  const rowH = temAlgumaRubrica ? Math.max(32, imgH + 12) : 18;
   const headerH = 20;
 
   type Col = { title: string; w: number; kind: 'text' | 'rubrica'; get?: (r: ResultadoCorridaItem) => string };
@@ -143,11 +316,11 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
     { title: 'Nota', w: usableW * 0.09, kind: 'text', get: (r) => r.notaTexto || '—' },
     {
       title: 'Situacao',
-      w: usableW * 0.14,
+      w: usableW * 0.12,
       kind: 'text',
       get: (r) => r.reprovacaoTexto || (r.notaTexto === 'REPROVADO' ? 'Reprovado' : 'Aprovado'),
     },
-    { title: 'Rubrica', w: usableW * 0.18, kind: 'rubrica' },
+    { title: 'Rubrica', w: usableW * 0.2, kind: 'rubrica' },
   ];
 
   const sumW = cols.reduce((a, c) => a + c.w, 0);
@@ -190,7 +363,7 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
       doc.text(pdfTexto(col.title), x, y, { maxWidth: col.w - 6 });
       x += col.w;
     }
-    return y + 10;
+    return y + (temAlgumaRubrica ? 14 : 10);
   };
 
   const drawLinha = (r: ResultadoCorridaItem, index: number, y: number) => {
@@ -198,23 +371,33 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
     doc.setFontSize(8);
     doc.setTextColor(17, 24, 39);
     let x = marginX + 4;
-    const textBaseline = y + (temRubricas ? imgH * 0.55 : 0);
+    const textBaseline = y + (temAlgumaRubrica ? imgH * 0.35 : 0);
 
     for (const col of cols) {
       if (col.kind === 'rubrica') {
+        const drawW = Math.min(imgW, col.w - 8);
+        const drawH = imgH * (drawW / imgW);
+        const ix = x + (col.w - 8 - drawW) / 2;
+        const iy = y - drawH * 0.55;
         const png = rubricaPngByIndex.get(index);
+        const svg = rubricaSvgByIndex.get(index);
+        let ok = false;
         if (png) {
-          const drawW = Math.min(imgW, col.w - 8);
-          const drawH = imgH * (drawW / imgW);
-          const ix = x + (col.w - 8 - drawW) / 2;
-          const iy = y - drawH * 0.65;
           try {
             doc.addImage(png, 'PNG', ix, iy, drawW, drawH);
+            ok = true;
           } catch {
-            doc.text(pdfTexto('Assinado'), x, textBaseline, { maxWidth: col.w - 6 });
+            ok = false;
           }
-        } else {
-          doc.text(pdfTexto('—'), x, textBaseline, { maxWidth: col.w - 6 });
+        }
+        if (!ok && svg) {
+          ok = desenharRubricaJsPdf(doc, svg, ix, iy, drawW, drawH);
+        }
+        if (!ok) {
+          // Sem desenho disponível — célula vazia (nunca “Assinado”).
+          doc.setTextColor(156, 163, 175);
+          doc.text('—', x + col.w / 2 - 4, textBaseline);
+          doc.setTextColor(17, 24, 39);
         }
       } else {
         const raw = pdfTexto(col.get?.(r) ?? '—');
@@ -225,30 +408,42 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
 
     doc.setDrawColor(229, 231, 235);
     doc.setLineWidth(0.4);
-    doc.line(marginX, y + (temRubricas ? imgH * 0.45 : 6), pageW - marginX, y + (temRubricas ? imgH * 0.45 : 6));
+    const lineY = y + (temAlgumaRubrica ? imgH * 0.55 : 6);
+    doc.line(marginX, lineY, pageW - marginX, lineY);
   };
 
   const drawRodapeAplicador = () => {
     if (!aplicadorAssinatura?.nome?.trim()) return;
-    const y = pageH - (aplicadorPng ? 18 : 22);
+    const baseY = pageH - 14;
+    const blocoH = aplicadorSvg ? 50 : 28;
     doc.setDrawColor(209, 213, 219);
-    doc.line(marginX, y - (aplicadorPng ? 42 : 16), pageW - marginX, y - (aplicadorPng ? 42 : 16));
+    doc.line(marginX, baseY - blocoH, pageW - marginX, baseY - blocoH);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(55, 65, 81);
     const posto = postoGradExibicaoAssinatura(aplicadorAssinatura);
     const linha = `Aplicador: ${aplicadorAssinatura.nome} · ${posto} · NIP ${aplicadorAssinatura.nip || '—'}`;
-    doc.text(pdfTexto(linha), pageW / 2, y - (aplicadorPng ? 28 : 0), {
+    doc.text(pdfTexto(linha), pageW / 2, baseY - (aplicadorSvg ? 40 : 10), {
       align: 'center',
       maxWidth: usableW,
     });
-    if (aplicadorPng) {
-      const aw = imgW * 1.2;
-      const ah = imgH * 1.2;
-      try {
-        doc.addImage(aplicadorPng, 'PNG', (pageW - aw) / 2, y - ah + 4, aw, ah);
-      } catch {
-        // ignore
+
+    if (aplicadorSvg) {
+      const aw = imgW * 1.35;
+      const ah = imgH * 1.35;
+      const ix = (pageW - aw) / 2;
+      const iy = baseY - ah - 2;
+      let ok = false;
+      if (aplicadorPng) {
+        try {
+          doc.addImage(aplicadorPng, 'PNG', ix, iy, aw, ah);
+          ok = true;
+        } catch {
+          ok = false;
+        }
+      }
+      if (!ok) {
+        desenharRubricaJsPdf(doc, aplicadorSvg, ix, iy, aw, ah);
       }
     }
   };

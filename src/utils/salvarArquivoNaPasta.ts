@@ -62,29 +62,68 @@ export async function baixarHtmlComoPdfWeb(html: string, filename: string): Prom
     import('jspdf'),
   ]);
 
-  const host = document.createElement('div');
-  host.setAttribute('aria-hidden', 'true');
-  host.style.cssText = [
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  // Precisa estar no viewport com opacidade mínima — opacity:0 / offscreen gera PDF em branco.
+  iframe.style.cssText = [
     'position:fixed',
-    'left:-10000px',
+    'left:0',
     'top:0',
     `width:${PDF_A4_LANDSCAPE_WIDTH}px`,
-    'background:#ffffff',
-    'z-index:-1',
+    'height:1200px',
+    'opacity:0.01',
     'pointer-events:none',
-    'opacity:0',
+    'border:0',
+    'z-index:-1',
+    'background:#ffffff',
   ].join(';');
-  host.innerHTML = html;
-  document.body.appendChild(host);
+  document.body.appendChild(iframe);
 
   try {
-    const canvas = await html2canvas(host, {
+    const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+    if (!doc) {
+      throw new Error('Não foi possível preparar o PDF para download.');
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    await new Promise<void>((resolve) => {
+      const finish = () => resolve();
+      const win = iframe.contentWindow;
+      if (win?.document.readyState === 'complete') {
+        window.setTimeout(finish, 350);
+        return;
+      }
+      iframe.onload = () => window.setTimeout(finish, 350);
+      window.setTimeout(finish, 1600);
+    });
+
+    const target = doc.body;
+    if (!target) {
+      throw new Error('Conteúdo do PDF vazio.');
+    }
+
+    // Aguarda layout/paint do conteúdo no iframe
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+    const canvas = await html2canvas(target, {
       scale: 2,
       useCORS: true,
+      allowTaint: true,
       backgroundColor: '#ffffff',
       logging: false,
-      windowWidth: PDF_A4_LANDSCAPE_WIDTH,
+      width: Math.max(target.scrollWidth, PDF_A4_LANDSCAPE_WIDTH),
+      windowWidth: Math.max(target.scrollWidth, PDF_A4_LANDSCAPE_WIDTH),
+      scrollX: 0,
+      scrollY: 0,
+      foreignObjectRendering: false,
     });
+
+    if (canvas.width < 8 || canvas.height < 8 || canvasPareceEmBranco(canvas)) {
+      throw new Error('O PDF gerado ficou em branco. Tente novamente.');
+    }
 
     const pdf = new jsPDF({
       orientation: 'landscape',
@@ -96,7 +135,7 @@ export async function baixarHtmlComoPdfWeb(html: string, filename: string): Prom
 
     const imgW = canvas.width;
     const imgH = canvas.height;
-    const sliceHeightPx = Math.floor((pageH / pageW) * imgW);
+    const sliceHeightPx = Math.max(1, Math.floor((pageH / pageW) * imgW));
 
     let renderedY = 0;
     let pageIndex = 0;
@@ -118,15 +157,30 @@ export async function baixarHtmlComoPdfWeb(html: string, filename: string): Prom
 
       renderedY += sliceH;
       pageIndex += 1;
-      // guarda
       if (pageIndex > 40) break;
     }
 
     const blob = pdf.output('blob');
     return downloadWebBlob(blob, sanitizarNomeArquivo(filename, '.pdf'), 'application/pdf');
   } finally {
-    host.remove();
+    iframe.remove();
   }
+}
+
+function canvasPareceEmBranco(canvas: HTMLCanvasElement): boolean {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return true;
+  const w = Math.min(48, canvas.width);
+  const h = Math.min(48, canvas.height);
+  const sample = ctx.getImageData(0, 0, w, h).data;
+  let naoBranco = 0;
+  for (let i = 0; i < sample.length; i += 4) {
+    if (sample[i] < 248 || sample[i + 1] < 248 || sample[i + 2] < 248) {
+      naoBranco += 1;
+      if (naoBranco > 8) return false;
+    }
+  }
+  return true;
 }
 
 async function obterUriPastaAndroidPersistida(): Promise<string | null> {

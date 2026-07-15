@@ -25,6 +25,7 @@ import {
   sanitizarNomeArquivo,
   SalvamentoCanceladoError,
 } from './salvarArquivoNaPasta';
+import { formatBrDateKey, formatBrTimeKey } from './backupNaming';
 /** Estima quantas folhas A4 paisagem serão necessárias para o resumo da aplicação. */
 export function estimarFolhasA4PdfResumoAplicacao(
   quantidadeLinhas: number,
@@ -114,10 +115,18 @@ export function buildResumoAplicacaoHtml(
   });
 }
 
-function nomeArquivoPdfResumo(resultados: ResultadoCorridaItem[]): string {
-  const prova = sanitizarNomeArquivo(tituloProvaResumoPdf(resultados)).replace(/\s+/g, '_');
-  const data = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
-  return sanitizarNomeArquivo(`Resumo_aplicacao_${prova}_${data}`, '.pdf');
+/**
+ * Nome do arquivo: NomeDoTeste_DataDoTeste_HoraDoSalvamento.pdf
+ * Ex.: Corrida_14-07-2026_21h05m32.pdf
+ */
+export function nomeArquivoPdfResumo(
+  resultados: ResultadoCorridaItem[],
+  momentoSalvamento: Date = new Date(),
+): string {
+  const nomeTeste = sanitizarNomeArquivo(tituloProvaResumoPdf(resultados)).replace(/\s+/g, '_');
+  const dataTeste = formatBrDateKey(momentoSalvamento);
+  const horaSalvamento = formatBrTimeKey(momentoSalvamento);
+  return sanitizarNomeArquivo(`${nomeTeste}_${dataTeste}_${horaSalvamento}`, '.pdf');
 }
 
 /**

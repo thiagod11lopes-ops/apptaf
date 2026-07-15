@@ -15,6 +15,22 @@ export function formatBrDateKey(date = new Date()): string {
   return `${day}-${month}-${year}`;
 }
 
+/** Hora no fuso de Brasília — formato 21h05m32. */
+export function formatBrTimeKey(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: BR_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  const second = parts.find((p) => p.type === 'second')?.value ?? '00';
+  return `${hour}h${minute}m${second}`;
+}
+
 /** Nome do arquivo de backup — ex.: Backup apptaf 03-07-2026.csv */
 export function buildBackupApptafFilename(date = new Date()): string {
   return `Backup apptaf ${formatBrDateKey(date)}.csv`;

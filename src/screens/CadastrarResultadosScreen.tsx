@@ -8,13 +8,13 @@ import {
   SafeAreaView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ChevronLeft, FileDown } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
 import { AplicadorAssinaturaBloco } from '../components/AplicadorAssinaturaBloco';
+import { SalvarPdfFeedbackModal } from '../components/sismav/SalvarPdfFeedbackModal';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import {
@@ -26,6 +26,12 @@ import type { AppTheme } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CadastrarResultados'>;
+
+type FeedbackSalvar = {
+  tipo: 'ok' | 'erro';
+  titulo: string;
+  mensagem: string;
+};
 
 export default function CadastrarResultadosScreen({ navigation, route }: Props) {
   const { theme } = useTheme();
@@ -46,23 +52,36 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
   const returnTo = route.params?.returnTo ?? 'AplicarTAF';
   const aplicadorAssinatura = route.params?.aplicadorAssinatura;
   const [exportandoPdf, setExportandoPdf] = useState(false);
+  const [feedback, setFeedback] = useState<FeedbackSalvar | null>(null);
   const grayBg = 'transparent';
   const cardGlassEnabled = Platform.OS === 'web';
   const inputBorder = theme.border;
 
+  const fecharFeedback = useCallback(() => setFeedback(null), []);
+
   const exportarPdf = useCallback(async () => {
     if (exportandoPdf || resultados.length === 0) return;
     setExportandoPdf(true);
+    setFeedback(null);
     try {
       const msg = await exportResumoAplicacaoPdf(
         resultados,
         textoColunaCadastro,
         aplicadorAssinatura,
       );
-      Alert.alert('Salvar', msg);
+      setFeedback({
+        tipo: 'ok',
+        titulo: 'PDF salvo com sucesso',
+        mensagem: msg || 'O arquivo foi salvo na pasta Downloads.',
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Não foi possível salvar o PDF.';
-      if (!/cancelad/i.test(msg)) Alert.alert('Salvar', msg);
+      if (/cancelad/i.test(msg)) return;
+      setFeedback({
+        tipo: 'erro',
+        titulo: 'Erro ao salvar PDF',
+        mensagem: msg,
+      });
     } finally {
       setExportandoPdf(false);
     }
@@ -170,6 +189,15 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
           </Card>
         </View>
       </ScrollView>
+
+      <SalvarPdfFeedbackModal
+        visible={Boolean(feedback)}
+        tipo={feedback?.tipo ?? 'ok'}
+        titulo={feedback?.titulo ?? ''}
+        mensagem={feedback?.mensagem ?? ''}
+        durationMs={3000}
+        onClose={fecharFeedback}
+      />
     </SafeAreaView>
   );
 }

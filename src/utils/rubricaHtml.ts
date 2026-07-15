@@ -61,7 +61,7 @@ export const PDF_TABELA_COMPACTA_STYLES = `
   table.resultados-taf td {
     border: 1px solid #ccc;
     padding: ${PDF_TABELA_PAD_V}px ${PDF_TABELA_PAD_H}px;
-    text-align: left;
+    text-align: center;
     vertical-align: middle;
     line-height: ${PDF_TABELA_LINE_HEIGHT};
   }
@@ -72,18 +72,17 @@ export const PDF_TABELA_COMPACTA_STYLES = `
     font-size: ${PDF_TABELA_TH_FONT_PX}px;
     line-height: ${PDF_TABELA_LINE_HEIGHT};
   }
-  table.resultados-taf th.col-rubrica,
-  table.resultados-taf td.col-rubrica {
-    text-align: center;
-  }
   table.resultados-taf th.col-nome,
   table.resultados-taf td.col-nome {
     white-space: nowrap;
+    text-align: center;
   }
   table.resultados-taf thead {
     display: table-header-group;
   }
-  table.resultados-taf .nota {
+  table.resultados-taf .nota,
+  table.resultados-taf .tempo,
+  table.resultados-taf .repro {
     font-weight: 700;
     text-align: center;
   }

@@ -62,6 +62,13 @@ export const PDF_PRINT_TABLE_STYLES = `
     page-break-inside: avoid;
     break-inside: avoid-page;
   }
+  .pdf-print-body table th,
+  .pdf-print-body table td,
+  .pdf-print-page-block table th,
+  .pdf-print-page-block table td {
+    text-align: center;
+    vertical-align: middle;
+  }
   .pdf-print-page-block table thead th {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -69,6 +76,7 @@ export const PDF_PRINT_TABLE_STYLES = `
   .pdf-print-page-block th.col-nome,
   .pdf-print-page-block td.col-nome {
     white-space: nowrap;
+    text-align: center;
   }
   .pdf-print-leading {
     page-break-inside: avoid;

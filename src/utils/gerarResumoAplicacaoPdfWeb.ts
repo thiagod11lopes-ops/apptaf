@@ -361,9 +361,12 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(55, 65, 81);
-    let x = marginX + 4;
+    let x = marginX;
     for (const col of cols) {
-      doc.text(pdfTexto(col.title), x, yCab, { maxWidth: col.w - 6 });
+      doc.text(pdfTexto(col.title), x + col.w / 2, yCab, {
+        align: 'center',
+        maxWidth: col.w - 4,
+      });
       x += col.w;
     }
     // Retorna o TOPO da primeira linha de dados
@@ -377,7 +380,7 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(17, 24, 39);
-    let x = marginX + 4;
+    let x = marginX;
     // Baseline do texto no meio vertical da linha
     const textBaseline = yTop + rowH * 0.62;
 
@@ -404,12 +407,15 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
         }
         if (!ok) {
           doc.setTextColor(156, 163, 175);
-          doc.text('—', x + col.w / 2 - 3, textBaseline);
+          doc.text('—', x + col.w / 2, textBaseline, { align: 'center' });
           doc.setTextColor(17, 24, 39);
         }
       } else {
         const raw = pdfTexto(col.get?.(r) ?? '—');
-        doc.text(raw, x, textBaseline, { maxWidth: col.w - 6 });
+        doc.text(raw, x + col.w / 2, textBaseline, {
+          align: 'center',
+          maxWidth: col.w - 4,
+        });
       }
       x += col.w;
     }

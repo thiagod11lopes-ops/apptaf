@@ -20,7 +20,6 @@ type Coluna = {
   key: string;
   label: string;
   width: number;
-  align?: 'left' | 'center';
   get: (r: ResultadoTafLinha) => string;
   rubrica?: (r: ResultadoTafLinha) => string | undefined;
 };
@@ -53,7 +52,7 @@ export async function gerarResultadosTafPdfBlobWeb(
   const colunas: Coluna[] = [
     { key: 'pg', label: 'P/G', width: 36, get: (r) => r.postoGrad },
     { key: 'nip', label: 'NIP', width: 52, get: (r) => r.nip },
-    { key: 'nome', label: 'Nome', width: 90, align: 'left', get: (r) => r.nome },
+    { key: 'nome', label: 'Nome', width: 90, get: (r) => r.nome },
     { key: 'nc', label: 'Nota corr.', width: 38, get: (r) => r.notaCorrida },
     { key: 'sc', label: 'Sit.', width: 42, get: (r) => r.situacaoCorrida },
     {
@@ -146,7 +145,10 @@ export async function gerarResultadosTafPdfBlobWeb(
     for (let i = 0; i < colunas.length; i += 1) {
       const col = colunas[i]!;
       const w = colWs[i]!;
-      doc.text(pdfTexto(col.label), x + 2, y + 11, { maxWidth: w - 4 });
+      doc.text(pdfTexto(col.label), x + w / 2, y + 11, {
+        align: 'center',
+        maxWidth: w - 4,
+      });
       x += w;
     }
     y += headerH;
@@ -236,9 +238,8 @@ export async function gerarResultadosTafPdfBlobWeb(
         }
       } else {
         const text = pdfTexto(col.get(linha) || '—');
-        const tx = col.align === 'left' ? x + 2 : x + w / 2;
-        doc.text(text, tx, y + rowH / 2 + 2, {
-          align: col.align === 'left' ? 'left' : 'center',
+        doc.text(text, x + w / 2, y + rowH / 2 + 2, {
+          align: 'center',
           maxWidth: w - 4,
         });
       }

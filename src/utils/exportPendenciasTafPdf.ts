@@ -39,17 +39,20 @@ const PENDENCIAS_EXTRA_STYLES = `
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 8px 6px;
-    text-align: left;
+    text-align: center;
+    vertical-align: middle;
     border: 1px solid #cbd5e1;
   }
   table.pendencias-taf td {
     padding: 7px 6px;
     border: 1px solid #e2e8f0;
+    text-align: center;
     vertical-align: middle;
   }
   table.pendencias-taf th.col-nome,
   table.pendencias-taf td.col-nome {
     white-space: nowrap;
+    text-align: center;
   }
   table.pendencias-taf tbody tr:nth-child(even) td {
     background: #fafbfc;

@@ -295,7 +295,7 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
   const marginX = 28;
   const marginTop = 28;
   const temAlgumaRubrica = rubricaSvgByIndex.size > 0 || Boolean(aplicadorSvg);
-  const marginBottom = aplicadorAssinatura ? (aplicadorSvg ? 64 : 42) : 36;
+  const marginBottom = aplicadorAssinatura ? (aplicadorSvg ? 78 : 48) : 36;
   const usableW = pageW - marginX * 2;
 
   const tituloProvaLabel = tituloProva(resultados);
@@ -304,7 +304,8 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
 
   const imgW = RUBRICA_PDF_LARGURA * 0.85;
   const imgH = RUBRICA_PDF_ALTURA * 0.85;
-  const rowH = temAlgumaRubrica ? Math.max(32, imgH + 12) : 18;
+  // Altura da linha = espaço para texto + rúbrica alinhados na mesma faixa
+  const rowH = temAlgumaRubrica ? Math.max(36, imgH + 14) : 18;
   const headerH = 20;
 
   type Col = { title: string; w: number; kind: 'text' | 'rubrica'; get?: (r: ResultadoCorridaItem) => string };
@@ -351,34 +352,42 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
     doc.setDrawColor(209, 213, 219);
     doc.setLineWidth(0.6);
     doc.line(marginX, y, pageW - marginX, y);
-    y += 12;
+    y += 10;
 
+    // yCab = baseline do cabeçalho da tabela
+    const yCab = y + 12;
     doc.setFillColor(243, 244, 246);
-    doc.rect(marginX, y - 12, usableW, headerH, 'F');
+    doc.rect(marginX, y, usableW, headerH, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(55, 65, 81);
     let x = marginX + 4;
     for (const col of cols) {
-      doc.text(pdfTexto(col.title), x, y, { maxWidth: col.w - 6 });
+      doc.text(pdfTexto(col.title), x, yCab, { maxWidth: col.w - 6 });
       x += col.w;
     }
-    return y + (temAlgumaRubrica ? 14 : 10);
+    // Retorna o TOPO da primeira linha de dados
+    return y + headerH + 6;
   };
 
-  const drawLinha = (r: ResultadoCorridaItem, index: number, y: number) => {
+  /**
+   * yTop = topo da linha (mesma faixa vertical para Corredor + Rúbrica).
+   */
+  const drawLinha = (r: ResultadoCorridaItem, index: number, yTop: number) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(17, 24, 39);
     let x = marginX + 4;
-    const textBaseline = y + (temAlgumaRubrica ? imgH * 0.35 : 0);
+    // Baseline do texto no meio vertical da linha
+    const textBaseline = yTop + rowH * 0.62;
 
     for (const col of cols) {
       if (col.kind === 'rubrica') {
-        const drawW = Math.min(imgW, col.w - 8);
-        const drawH = imgH * (drawW / imgW);
-        const ix = x + (col.w - 8 - drawW) / 2;
-        const iy = y - drawH * 0.55;
+        const drawW = Math.min(imgW, col.w - 6);
+        const drawH = Math.min(imgH, rowH - 6);
+        // Centraliza a rúbrica na célula da coluna, alinhada à mesma linha do Corredor
+        const ix = x + (col.w - drawW) / 2;
+        const iy = yTop + (rowH - drawH) / 2;
         const png = rubricaPngByIndex.get(index);
         const svg = rubricaSvgByIndex.get(index);
         let ok = false;
@@ -394,9 +403,8 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
           ok = desenharRubricaJsPdf(doc, svg, ix, iy, drawW, drawH);
         }
         if (!ok) {
-          // Sem desenho disponível — célula vazia (nunca “Assinado”).
           doc.setTextColor(156, 163, 175);
-          doc.text('—', x + col.w / 2 - 4, textBaseline);
+          doc.text('—', x + col.w / 2 - 3, textBaseline);
           doc.setTextColor(17, 24, 39);
         }
       } else {
@@ -408,44 +416,61 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
 
     doc.setDrawColor(229, 231, 235);
     doc.setLineWidth(0.4);
-    const lineY = y + (temAlgumaRubrica ? imgH * 0.55 : 6);
-    doc.line(marginX, lineY, pageW - marginX, lineY);
+    doc.line(marginX, yTop + rowH - 2, pageW - marginX, yTop + rowH - 2);
   };
 
+  /**
+   * Rodapé: rúbrica do aplicador ACIMA do nome (igual ao layout HTML do PDF nativo).
+   */
   const drawRodapeAplicador = () => {
     if (!aplicadorAssinatura?.nome?.trim()) return;
-    const baseY = pageH - 14;
-    const blocoH = aplicadorSvg ? 50 : 28;
-    doc.setDrawColor(209, 213, 219);
-    doc.line(marginX, baseY - blocoH, pageW - marginX, baseY - blocoH);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(55, 65, 81);
+
+    const aw = imgW * 1.35;
+    const ah = imgH * 1.35;
     const posto = postoGradExibicaoAssinatura(aplicadorAssinatura);
-    const linha = `Aplicador: ${aplicadorAssinatura.nome} · ${posto} · NIP ${aplicadorAssinatura.nip || '—'}`;
-    doc.text(pdfTexto(linha), pageW / 2, baseY - (aplicadorSvg ? 40 : 10), {
-      align: 'center',
-      maxWidth: usableW,
-    });
+    const linhaNome = `${posto}  ${aplicadorAssinatura.nome}`;
+    const linhaNip = `NIP ${aplicadorAssinatura.nip || '—'}`;
+
+    // De baixo para cima: NIP → nome → linha → rúbrica
+    const nipBaseline = pageH - 12;
+    const nomeBaseline = nipBaseline - 12;
+    const lineY = nomeBaseline - 10;
+    const rubricaTop = aplicadorSvg ? lineY - ah - 4 : lineY - 8;
 
     if (aplicadorSvg) {
-      const aw = imgW * 1.35;
-      const ah = imgH * 1.35;
       const ix = (pageW - aw) / 2;
-      const iy = baseY - ah - 2;
       let ok = false;
       if (aplicadorPng) {
         try {
-          doc.addImage(aplicadorPng, 'PNG', ix, iy, aw, ah);
+          doc.addImage(aplicadorPng, 'PNG', ix, rubricaTop, aw, ah);
           ok = true;
         } catch {
           ok = false;
         }
       }
       if (!ok) {
-        desenharRubricaJsPdf(doc, aplicadorSvg, ix, iy, aw, ah);
+        desenharRubricaJsPdf(doc, aplicadorSvg, ix, rubricaTop, aw, ah);
       }
     }
+
+    doc.setDrawColor(55, 65, 81);
+    doc.setLineWidth(0.7);
+    doc.line(pageW / 2 - 130, lineY, pageW / 2 + 130, lineY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(17, 24, 39);
+    doc.text(pdfTexto(linhaNome), pageW / 2, nomeBaseline, {
+      align: 'center',
+      maxWidth: usableW,
+    });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(107, 114, 128);
+    doc.text(pdfTexto(linhaNip), pageW / 2, nipBaseline, {
+      align: 'center',
+      maxWidth: usableW,
+    });
   };
 
   let pageIndex = 0;

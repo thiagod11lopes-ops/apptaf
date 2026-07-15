@@ -34,12 +34,23 @@ async function downloadWebBlob(
   if (typeof document === 'undefined') {
     throw new Error('Download indisponível neste ambiente.');
   }
+  const ext =
+    mimeType.includes('pdf')
+      ? '.pdf'
+      : mimeType.includes('csv')
+        ? '.csv'
+        : undefined;
+  const safeName = sanitizarNomeArquivo(filename, ext);
   const blob =
-    typeof content === 'string' ? new Blob([content], { type: `${mimeType};charset=utf-8` }) : content;
+    typeof content === 'string'
+      ? new Blob([content], { type: `${mimeType};charset=utf-8` })
+      : content.type
+        ? content
+        : new Blob([await content.arrayBuffer()], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = filename;
+  anchor.setAttribute('download', safeName);
   anchor.rel = 'noopener';
   document.body.appendChild(anchor);
   anchor.click();
@@ -63,16 +74,21 @@ export async function entregarPdfBlobWeb(
   filename: string,
 ): Promise<SalvarArquivoNaPastaResultado> {
   const safeName = sanitizarNomeArquivo(filename, '.pdf');
+  const pdfBlob =
+    blob.type === 'application/pdf'
+      ? blob
+      : new Blob([await blob.arrayBuffer()], { type: 'application/pdf' });
   const file =
     typeof File !== 'undefined'
-      ? new File([blob], safeName, { type: 'application/pdf' })
+      ? new File([pdfBlob], safeName, { type: 'application/pdf' })
       : null;
 
-  const tryShare = async (): Promise<boolean> => {
+  const tryShareFilesOnly = async (): Promise<boolean> => {
     if (!file || typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
       return false;
     }
-    const payload: ShareData = { files: [file], title: safeName };
+    // Só `files` — incluir title/text faz o SO gerar um 2º arquivo chamado "texto".
+    const payload: ShareData = { files: [file] };
     if (typeof navigator.canShare === 'function' && !navigator.canShare(payload)) {
       return false;
     }
@@ -85,14 +101,14 @@ export async function entregarPdfBlobWeb(
     }
   };
 
-  // iPhone: share sheet é o caminho certo (download nativo falha no Safari).
+  // iPhone: share sheet (somente o PDF). Desktop/Android web: download direto.
   if (isIosWeb()) {
-    if (await tryShare()) {
+    if (await tryShareFilesOnly()) {
       return { ok: true, modo: 'compartilhar' };
     }
-    // Fallback se o gesto/await bloquear o share: abre o PDF para Salvar em Arquivos.
+    // Fallback: abre o PDF para Salvar em Arquivos (sem download paralelo).
     if (typeof window !== 'undefined') {
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(pdfBlob);
       const win = window.open(url, '_blank', 'noopener,noreferrer');
       if (!win) {
         window.location.assign(url);
@@ -102,11 +118,7 @@ export async function entregarPdfBlobWeb(
     }
   }
 
-  if (await tryShare()) {
-    return { ok: true, modo: 'compartilhar' };
-  }
-
-  return downloadWebBlob(blob, safeName, 'application/pdf');
+  return downloadWebBlob(pdfBlob, safeName, 'application/pdf');
 }
 
 /**
@@ -467,14 +479,13 @@ export async function baixarTextoParaDownloads(options: {
         ? new File([blob], filename, { type: mimeType })
         : null;
 
-    if (file && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    // iPhone: só o arquivo — title/text gerava um 2º download chamado "texto".
+    if (file && isIosWeb() && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
-        const payload: ShareData = { files: [file], title: filename };
+        const payload: ShareData = { files: [file] };
         if (typeof navigator.canShare !== 'function' || navigator.canShare(payload)) {
-          if (isIosWeb()) {
-            await navigator.share(payload);
-            return { ok: true, modo: 'compartilhar' };
-          }
+          await navigator.share(payload);
+          return { ok: true, modo: 'compartilhar' };
         }
       } catch (e: unknown) {
         if (e instanceof Error && e.name === 'AbortError') {

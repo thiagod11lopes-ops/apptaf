@@ -427,6 +427,108 @@ export async function baixarArquivoParaDownloads(options: {
   return { ok: true, modo: 'compartilhar' };
 }
 
+async function escreverTextoNoDiretorioSaf(
+  directoryUri: string,
+  content: string,
+  filename: string,
+  mimeType: string,
+): Promise<void> {
+  const FileSystem = await import('expo-file-system/legacy');
+  const destUri = await FileSystem.StorageAccessFramework.createFileAsync(
+    directoryUri,
+    filename,
+    mimeType,
+  );
+  await FileSystem.writeAsStringAsync(destUri, content, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+}
+
+/**
+ * Salva texto (CSV etc.) em Downloads — mesmo fluxo do PDF.
+ * Web: download (iPhone: Compartilhar → Arquivos).
+ * Android: SAF Downloads (1ª vez escolhe a pasta).
+ * iOS nativo: Compartilhar → Salvar em Arquivos.
+ */
+export async function baixarTextoParaDownloads(options: {
+  content: string;
+  filename: string;
+  mimeType?: string;
+  uti?: string;
+  dialogTitle?: string;
+}): Promise<SalvarArquivoNaPastaResultado> {
+  const filename = sanitizarNomeArquivo(options.filename);
+  const mimeType = options.mimeType || 'text/csv';
+
+  if (Platform.OS === 'web') {
+    const blob = new Blob([options.content], { type: `${mimeType};charset=utf-8` });
+    const file =
+      typeof File !== 'undefined'
+        ? new File([blob], filename, { type: mimeType })
+        : null;
+
+    if (file && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        const payload: ShareData = { files: [file], title: filename };
+        if (typeof navigator.canShare !== 'function' || navigator.canShare(payload)) {
+          if (isIosWeb()) {
+            await navigator.share(payload);
+            return { ok: true, modo: 'compartilhar' };
+          }
+        }
+      } catch (e: unknown) {
+        if (e instanceof Error && e.name === 'AbortError') {
+          return { ok: true, modo: 'compartilhar' };
+        }
+      }
+    }
+
+    return downloadWebBlob(blob, filename, mimeType);
+  }
+
+  const FileSystem = await import('expo-file-system/legacy');
+  const cacheUri = `${FileSystem.cacheDirectory ?? ''}${filename}`;
+  await FileSystem.writeAsStringAsync(cacheUri, options.content, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+
+  if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+    const cached = await obterUriPastaAndroidPersistida();
+    if (cached) {
+      try {
+        await escreverTextoNoDiretorioSaf(cached, options.content, filename, mimeType);
+        return { ok: true, modo: 'download' };
+      } catch {
+        // URI inválida — pede de novo
+      }
+    }
+
+    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (!permissions.granted) {
+      return { ok: false, cancelado: true };
+    }
+    await gravarUriPastaAndroid(permissions.directoryUri);
+    await escreverTextoNoDiretorioSaf(
+      permissions.directoryUri,
+      options.content,
+      filename,
+      mimeType,
+    );
+    return { ok: true, modo: 'download' };
+  }
+
+  const canShare = await Sharing.isAvailableAsync();
+  if (!canShare) {
+    throw new Error('Não foi possível salvar o CSV neste dispositivo.');
+  }
+  await Sharing.shareAsync(cacheUri, {
+    mimeType,
+    dialogTitle: options.dialogTitle ?? 'Salvar CSV em Downloads',
+    UTI: options.uti ?? 'public.comma-separated-values-text',
+  });
+  return { ok: true, modo: 'compartilhar' };
+}
+
 /**
  * Salva texto (CSV etc.) em pasta escolhida no Android (SAF).
  * No iOS usa o compartilhamento nativo (Salvar em Arquivos…).
@@ -546,7 +648,7 @@ export function mensagemSucessoSalvarNaPasta(
     return 'Arquivo salvo na pasta escolhida.';
   }
   if (resultado.modo === 'download') {
-    return 'PDF baixado para a pasta Downloads.';
+    return 'Arquivo baixado para a pasta Downloads.';
   }
-  return 'Escolha “Salvar em Arquivos” / Downloads no menu do iPhone para guardar o PDF.';
+  return 'Escolha “Salvar em Arquivos” / Downloads no menu do sistema para guardar o arquivo.';
 }

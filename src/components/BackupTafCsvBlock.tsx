@@ -39,10 +39,11 @@ export function BackupTafCsvBlock() {
     try {
       const result = await exportarBackupTafCsv();
       setExportMsg(
-        `Backup salvo (${result.filename}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões de TAF (backup completo v2).`,
+        `${result.mensagem} (${result.filename}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões de TAF (backup completo v2).`,
       );
     } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Falha ao gerar backup CSV.');
+      const msg = e instanceof Error ? e.message : 'Falha ao gerar backup CSV.';
+      if (!/cancelad/i.test(msg)) setErro(msg);
     } finally {
       setExportando(false);
     }
@@ -208,8 +209,8 @@ export function BackupTafCsvBlock() {
 
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
         Exporta e restaura cadastros, resultados, aplicadores, pré-cadastros, e-mails autorizados, fila de
-        sync e metadados em um único arquivo CSV. Em Android, “Salvar backup na pasta…” abre o seletor de
-        pastas do aparelho; no iOS use “Salvar em Arquivos”.
+        sync e metadados em um único arquivo CSV. “Backup em CSV” salva na pasta Downloads; no iPhone use
+        Compartilhar → Salvar em Arquivos. “Salvar backup na pasta…” permite escolher outra pasta.
         {isAuthenticated ? ' Com login ativo, os dados são gravados na nuvem.' : ''}
       </Text>
 

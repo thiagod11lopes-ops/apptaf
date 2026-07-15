@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-import * as Sharing from 'expo-sharing';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { addCadastrosEmLote } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
@@ -666,7 +664,17 @@ function backupFilename(): string {
 }
 
 export async function downloadBackupCsvFile(content: string, filename: string): Promise<void> {
-  await shareOrDownloadCsv(content, filename);
+  const { baixarTextoParaDownloads } = await import('./salvarArquivoNaPasta');
+  const resultado = await baixarTextoParaDownloads({
+    content,
+    filename,
+    mimeType: 'text/csv',
+    uti: 'public.comma-separated-values-text',
+    dialogTitle: 'Salvar backup CSV em Downloads',
+  });
+  if (!resultado.ok) {
+    throw new Error('Seleção de pasta cancelada.');
+  }
 }
 
 export async function exportarBackupTafCsvNaPasta(): Promise<{
@@ -699,50 +707,33 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   };
 }
 
-async function shareOrDownloadCsv(content: string, filename: string): Promise<void> {
-  if (Platform.OS === 'web') {
-    if (typeof document === 'undefined') {
-      throw new Error('Download indisponível neste ambiente.');
-    }
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    return;
-  }
-
-  const FileSystem = await import('expo-file-system/legacy');
-  const uri = `${FileSystem.cacheDirectory}${filename}`;
-  await FileSystem.writeAsStringAsync(uri, content);
-
-  const canShare = await Sharing.isAvailableAsync();
-  if (!canShare) {
-    throw new Error('Compartilhamento indisponível neste dispositivo.');
-  }
-
-  await Sharing.shareAsync(uri, {
-    mimeType: 'text/csv',
-    dialogTitle: 'Backup TAF — CSV',
-    UTI: 'public.comma-separated-values-text',
-  });
-}
-
 export async function exportarBackupTafCsv(): Promise<{
   cadastros: number;
   sessoes: number;
   filename: string;
+  mensagem: string;
 }> {
+  const { baixarTextoParaDownloads, mensagemSucessoSalvarNaPasta } = await import(
+    './salvarArquivoNaPasta'
+  );
   const payload = await gatherSystemBackupData();
   const content = buildBackupCsvContent(payload);
   const filename = backupFilename();
-  await shareOrDownloadCsv(content, filename);
+  const resultado = await baixarTextoParaDownloads({
+    content,
+    filename,
+    mimeType: 'text/csv',
+    uti: 'public.comma-separated-values-text',
+    dialogTitle: 'Salvar backup CSV em Downloads',
+  });
+  if (!resultado.ok) {
+    throw new Error('Seleção de pasta cancelada.');
+  }
   return {
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
     filename,
+    mensagem: mensagemSucessoSalvarNaPasta(resultado),
   };
 }
 

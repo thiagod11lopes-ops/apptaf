@@ -41,6 +41,14 @@ export function isE2ECipherPayload(value: unknown): value is E2ECipherPayload {
   return v.v === 1 && v.alg === 'AES-GCM' && typeof v.iv === 'string' && typeof v.ct === 'string';
 }
 
+export function isCloudDataEncrypted(raw: Record<string, unknown>): boolean {
+  return isE2ECipherPayload((raw as { __e2e?: unknown }).__e2e);
+}
+
+export function cloudRecordNeedsE2eUpgrade(raw: Record<string, unknown>): boolean {
+  return Boolean(getActiveTeamKey()) && !isCloudDataEncrypted(raw);
+}
+
 /** Deriva chave AES-GCM a partir de passphrase (PBKDF2). */
 export async function deriveTeamKeyFromPassphrase(
   passphrase: string,

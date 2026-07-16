@@ -91,12 +91,17 @@ async function restoreE2eForOwner(ownerUid: string): Promise<void> {
   }
 }
 
-async function activateE2eWithPassword(ownerUid: string, password: string): Promise<void> {
+async function activateE2eWithPassword(
+  ownerUid: string,
+  password: string,
+  options?: { strict?: boolean },
+): Promise<void> {
   if (!ownerUid.trim() || !password) return;
   try {
     await activateE2eFromLoginPassword(ownerUid, password);
   } catch (error) {
     console.warn('[e2e] ativação com senha de login falhou:', error);
+    if (options?.strict) throw error;
   }
 }
 
@@ -352,9 +357,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const signedIn = await signInWithEmailPassword(email, password);
       setRecoveryPending(false);
+      const session = await resolveLocalSessionAfterLogin(signedIn.uid, signedIn.email);
+      await activateE2eWithPassword(session.dataOwnerUid, password, { strict: true });
       await finalizeAuthenticatedSession(signedIn);
-      const ownerUid = getCachedDataOwnerUid() ?? signedIn.uid;
-      await activateE2eWithPassword(ownerUid, password);
       await waitForAuthenticatedUid(20_000);
     },
     [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
@@ -370,9 +375,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await signUpWithEmailPassword(email, password);
       if (result.user && !result.needsEmailConfirmation) {
         setRecoveryPending(false);
+        const session = await resolveLocalSessionAfterLogin(result.user.uid, result.user.email);
+        await activateE2eWithPassword(session.dataOwnerUid, password, { strict: true });
         await finalizeAuthenticatedSession(result.user);
-        const ownerUid = getCachedDataOwnerUid() ?? result.user.uid;
-        await activateE2eWithPassword(ownerUid, password);
         await waitForAuthenticatedUid(20_000);
       }
       return { needsEmailConfirmation: result.needsEmailConfirmation };

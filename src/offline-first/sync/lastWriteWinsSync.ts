@@ -84,6 +84,7 @@ import {
   resolveContentDriftAction,
   syncBusinessContentEqual,
 } from './syncBusinessContent';
+import { listPlaintextCloudDocIds } from '../../services/supabase/ownerDocs';
 
 const DOWNLOAD_CONCURRENCY = 8;
 
@@ -210,6 +211,7 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
   localRows: TLocal[],
   remoteRows: TRemote[],
   toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
+  forceUploadIds?: Set<string>,
 ): { plan: PlannedSyncItem[]; ignored: number } {
   const localMap = new Map(localRows.map((r) => [r.id, r]));
   const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
@@ -224,6 +226,17 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
     const decision = decideLastWriteWins(local, remote);
 
     if (decision.action === 'skip') {
+      if (forceUploadIds?.has(id) && local) {
+        plan.push({
+          collection,
+          id,
+          action: 'upload',
+          local,
+          remote,
+          hasRemote: hasRemote,
+        });
+        continue;
+      }
       if (
         local &&
         remote &&
@@ -249,7 +262,8 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       decision.action === 'upload' &&
       local &&
       remote &&
-      syncBusinessContentEqual(collection, local, remote)
+      syncBusinessContentEqual(collection, local, remote) &&
+      !forceUploadIds?.has(id)
     ) {
       ignored += 1;
       continue;
@@ -261,7 +275,8 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       local &&
       remote &&
       !isUnsyncedLocalStatus(local.syncStatus) &&
-      readUpdatedAt(local) <= readUpdatedAt(remote)
+      readUpdatedAt(local) <= readUpdatedAt(remote) &&
+      !forceUploadIds?.has(id)
     ) {
       ignored += 1;
       continue;
@@ -658,6 +673,12 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
   const { remoteCad, remoteSess, remoteApp } = remoteSnapshot;
   const remotePre: PreCadastroRecord[] = [];
 
+  const [plainCadIds, plainSessIds, plainAppIds] = await Promise.all([
+    listPlaintextCloudDocIds('cadastros', ownerUid),
+    listPlaintextCloudDocIds('sessoes', ownerUid),
+    listPlaintextCloudDocIds('aplicadores', ownerUid),
+  ]);
+
   await reconcileIdenticalUnsyncedLocals('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
   await reconcileIdenticalUnsyncedLocals('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
   await reconcileIdenticalUnsyncedLocals('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
@@ -668,9 +689,9 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     listAplicadoresForSync(ownerUid, true),
   ]);
 
-  const cadPlanFresh = buildSyncPlan('cadastros', ownerUid, localCadFresh, remoteCad, remoteToCadastroRecord);
-  const sessPlanFresh = buildSyncPlan('sessoes', ownerUid, localSessFresh, remoteSess, remoteToSessaoRecord);
-  const appPlanFresh = buildSyncPlan('aplicadores', ownerUid, localAppFresh, remoteApp, remoteToAplicadorRecord);
+  const cadPlanFresh = buildSyncPlan('cadastros', ownerUid, localCadFresh, remoteCad, remoteToCadastroRecord, plainCadIds);
+  const sessPlanFresh = buildSyncPlan('sessoes', ownerUid, localSessFresh, remoteSess, remoteToSessaoRecord, plainSessIds);
+  const appPlanFresh = buildSyncPlan('aplicadores', ownerUid, localAppFresh, remoteApp, remoteToAplicadorRecord, plainAppIds);
 
   const fullPlan = [...cadPlanFresh.plan, ...sessPlanFresh.plan, ...appPlanFresh.plan];
   const downloadItems = fullPlan.filter((p) => p.action === 'download');

@@ -144,3 +144,37 @@ export async function activateE2eFromLoginPassword(
   setActiveTeamKey(teamKey);
   await persistSessionKey(ownerUid, teamKey);
 }
+
+export const E2E_KEY_REQUIRED = 'e2e_key_required';
+export const E2E_ENCRYPTION_NOT_ACTIVATED = 'e2e_encryption_not_activated';
+
+export const E2E_KEY_REQUIRED_MESSAGE =
+  'Criptografia da equipe não está ativa nesta sessão. Saia da conta e entre novamente com e-mail e senha para desbloquear antes de sincronizar.';
+
+export const E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE =
+  'A criptografia da equipe ainda não foi ativada. Saia da conta e entre novamente com e-mail e senha (isso cria a chave na primeira vez).';
+
+/**
+ * Garante chave E2E antes de enviar dados à nuvem.
+ * Evita upload em texto plano quando a equipe já usa criptografia.
+ */
+export async function ensureE2eKeyForCloudSync(ownerUid: string): Promise<void> {
+  if (!ownerUid.trim()) return;
+  if (getActiveTeamKey()) return;
+
+  await restoreE2eFromSessionStorage(ownerUid);
+  if (getActiveTeamKey()) return;
+
+  let meta: Awaited<ReturnType<typeof fetchTeamE2eMeta>> = null;
+  try {
+    meta = await fetchTeamE2eMeta(ownerUid);
+  } catch {
+    // Sem acesso à meta — não bloqueia (modo degradado)
+    return;
+  }
+
+  if (meta) {
+    throw new Error(E2E_KEY_REQUIRED_MESSAGE);
+  }
+  throw new Error(E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE);
+}

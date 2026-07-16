@@ -45,6 +45,7 @@ import {
   DEMO_SYNC_BLOCKED_MESSAGE,
 } from './syncAuthMessages';
 import { isCloudOwnerUid, legacyFirebaseUidMessage } from '../../utils/cloudOwnerUid';
+import { ensureE2eKeyForCloudSync } from '../../services/supabase/teamE2eSession';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
@@ -631,6 +632,9 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
       throw new Error(reason);
     }
     completeStep('validate_permissions');
+
+    setUiProgress(0, 'Verificando criptografia da equipe…');
+    await ensureE2eKeyForCloudSync(ownerUid);
 
     setActiveStep('local_backup');
     currentStep = 'local_backup';

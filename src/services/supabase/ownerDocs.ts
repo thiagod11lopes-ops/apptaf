@@ -1,5 +1,5 @@
 import { requireSupabase } from '../../config/supabase';
-import { maybeDecryptFromCloud, maybeEncryptForCloud } from './e2eCrypto';
+import { getActiveTeamKey, isCloudDataEncrypted, maybeDecryptFromCloud, maybeEncryptForCloud } from './e2eCrypto';
 
 export type CloudDocRow = {
   id: string;
@@ -116,6 +116,35 @@ export async function listOwnerDocsSince(
   }
 
   return mapDecryptedRows(all);
+}
+
+/** IDs na nuvem ainda em texto plano (precisam reenvio com E2E ativo). */
+export async function listPlaintextCloudDocIds(
+  table: string,
+  ownerUid: string,
+): Promise<Set<string>> {
+  if (!getActiveTeamKey()) return new Set();
+  const sb = requireSupabase();
+  const plain = new Set<string>();
+  let from = 0;
+
+  for (;;) {
+    const { data, error } = await sb
+      .from(table)
+      .select('id, data')
+      .eq('owner_uid', ownerUid)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const chunk = (data ?? []) as Array<{ id: string; data: Record<string, unknown> }>;
+    for (const row of chunk) {
+      if (!isCloudDataEncrypted(row.data ?? {})) plain.add(row.id);
+    }
+    if (chunk.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return plain;
 }
 
 export async function deleteOwnerDoc(table: string, ownerUid: string, id: string): Promise<void> {

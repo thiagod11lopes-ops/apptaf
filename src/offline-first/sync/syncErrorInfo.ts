@@ -4,6 +4,10 @@ import {
   SYNC_UPDATE_BLOCKED,
   SYNC_UPDATE_BLOCKED_MESSAGE,
 } from './syncAuthMessages';
+import {
+  E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE,
+  E2E_KEY_REQUIRED_MESSAGE,
+} from '../../services/supabase/teamE2eSession';
 
 export type SyncErrorDetail = {
   /** Identificador curto (ex.: network_offline, auth_required). */
@@ -75,6 +79,24 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
 
   if (msg === SYNC_UPDATE_BLOCKED || shouldTreatAsUpdateBlocked(msg)) {
     return updateBlockedDetail(SYNC_UPDATE_BLOCKED_MESSAGE);
+  }
+
+  if (msg === E2E_KEY_REQUIRED_MESSAGE) {
+    return detail(
+      'e2e_key_required',
+      'Criptografia necessária',
+      E2E_KEY_REQUIRED_MESSAGE,
+      'Saia da conta (Conta → Sair) e entre de novo com e-mail e senha; depois sincronize.',
+    );
+  }
+
+  if (msg === E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE) {
+    return detail(
+      'e2e_not_activated',
+      'Criptografia não ativada',
+      E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE,
+      'Saia e entre com e-mail e senha para criar a chave da equipe na primeira vez.',
+    );
   }
 
   if (msg === 'sync_in_progress') {

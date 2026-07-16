@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { hasPendingGoogleOAuthReturn } from '../services/firebase/googleAuth';
+import { hasPendingAuthCallback } from '../services/firebase/googleAuth';
 import { getCurrentRouteName, navigateTab, navigationRef } from '../navigation/navigationRef';
 
-/** Durante OAuth/login mantém Conta; após conectar Google abre a Home. */
+/** Durante callback de recuperação/confirmação mantém Conta; após login abre a Home. */
 export function AuthLoginRouteGate() {
-  const { isAuthenticated, isSessionLoading } = useAuth();
+  const { isAuthenticated, isSessionLoading, passwordRecoveryPending } = useAuth();
   const wasAuthenticatedRef = useRef<boolean | null>(null);
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export function AuthLoginRouteGate() {
       wasAuthenticatedRef.current = isAuthenticated;
     }
 
-    if (hasPendingGoogleOAuthReturn() || isSessionLoading) {
+    if (hasPendingAuthCallback() || isSessionLoading || passwordRecoveryPending) {
       if (getCurrentRouteName() !== 'Login') {
         navigateTab('Login');
       }
@@ -28,7 +28,7 @@ export function AuthLoginRouteGate() {
     if (justSignedIn) {
       navigateTab('Home');
     }
-  }, [isAuthenticated, isSessionLoading]);
+  }, [isAuthenticated, isSessionLoading, passwordRecoveryPending]);
 
   return null;
 }

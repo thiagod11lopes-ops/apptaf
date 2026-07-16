@@ -137,7 +137,11 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
     );
   }
 
-  if (/firestore indispon/i.test(msg) || /n[aã]o foi poss[ií]vel conectar ao firebase/i.test(msg)) {
+  if (
+    /firestore indispon/i.test(msg) ||
+    /n[aã]o foi poss[ií]vel conectar ao (firebase|supabase)/i.test(msg) ||
+    /supabase indispon/i.test(msg)
+  ) {
     return detail(
       'firebase_unavailable',
       'Firebase indisponível',

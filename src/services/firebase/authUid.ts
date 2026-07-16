@@ -1,4 +1,3 @@
-import { getFirebaseAuth } from '../../config/firebase';
 import { getTafDatabase } from '../../offline-first/db/tafDatabase';
 import {
   readAppMetaCache,
@@ -116,7 +115,7 @@ export function resetAuthUidStateForTests(): void {
 }
 
 function resolveUidFromFirebase(): string | null {
-  return getFirebaseAuth()?.currentUser?.uid ?? null;
+  return null;
 }
 
 export function setAuthUidState(

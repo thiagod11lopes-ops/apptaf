@@ -1,11 +1,6 @@
 import './global.css';
 import React, { useEffect, useState } from 'react';
 import { View, Platform, StyleSheet, ActivityIndicator } from 'react-native';
-import { startFirebaseRedirectSignIn } from './src/services/firebase/googleAuth';
-
-if (Platform.OS === 'web') {
-  void startFirebaseRedirectSignIn();
-}
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';

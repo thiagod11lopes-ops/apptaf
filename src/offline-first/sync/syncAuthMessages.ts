@@ -1,10 +1,10 @@
-/** Erro interno quando sync é solicitado sem sessão Google ativa. */
+/** Erro interno quando sync é solicitado sem sessão autenticada. */
 export const SYNC_AUTH_REQUIRED = 'AUTH_REQUIRED';
 
 export const SYNC_AUTH_REQUIRED_MESSAGE =
-  'Faça login com Google antes de ativar sincronização';
+  'Faça login com e-mail e senha antes de ativar a sincronização';
 
-/** Rede local ok, mas a nuvem/Firebase está bloqueada (firewall, proxy, ISP, etc.). */
+/** Rede local ok, mas a nuvem está bloqueada (firewall, proxy, ISP, etc.). */
 export const SYNC_UPDATE_BLOCKED = 'UPDATE_BLOCKED';
 
 export const SYNC_UPDATE_BLOCKED_MESSAGE =

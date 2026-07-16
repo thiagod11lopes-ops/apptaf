@@ -574,7 +574,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
       throw new Error('offline');
     }
 
-    setUiProgress(0, 'Verificando sessão Google…');
+    setUiProgress(0, 'Verificando sessão…');
 
     if (!syncAuthAvailable || !getFirebaseAuth()?.currentUser) {
       throw new Error(SYNC_AUTH_REQUIRED);
@@ -591,9 +591,9 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     }
 
     completeStep('login_google');
-    setUiProgress(0, 'Sessão Google confirmada ✓');
+    setUiProgress(0, 'Sessão confirmada ✓');
     setActiveStep('validate_permissions');
-    setUiProgress(0, 'Confirmando sessão Google…');
+    setUiProgress(0, 'Confirmando sessão…');
     const authUser = getFirebaseAuth()?.currentUser;
     if (!authUser) {
       throw new Error(SYNC_AUTH_REQUIRED);
@@ -610,7 +610,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
 
     const firestoreProbe = await probeFirestoreConnectivityDetailed(ownerUid);
     if (!firestoreProbe.ok) {
-      const reason = firestoreProbe.reason ?? 'Não foi possível conectar ao Firebase.';
+      const reason = firestoreProbe.reason ?? 'Não foi possível conectar ao Supabase.';
       if (shouldTreatAsUpdateBlocked(reason)) {
         throw new Error(SYNC_UPDATE_BLOCKED);
       }

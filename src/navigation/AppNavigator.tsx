@@ -10,7 +10,7 @@ import { AppShell } from '../components/sismav/AppShell';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { navigationRef, getCurrentRouteName, navigateTab } from './navigationRef';
 import { AuthLoginRouteGate } from './AuthLoginRouteGate';
-import { hasPendingGoogleOAuthReturn } from '../services/firebase/googleAuth';
+import { hasPendingAuthCallback } from '../services/firebase/googleAuth';
 import type { RootStackParamList } from './types';
 
 export type { ResultadoCorridaItem, RootStackParamList } from './types';
@@ -58,7 +58,7 @@ export default function AppNavigator() {
 
   const handleNavReady = useCallback(() => {
     syncRoute();
-    if (hasPendingGoogleOAuthReturn()) {
+    if (hasPendingAuthCallback()) {
       navigateTab('Login');
     }
   }, [syncRoute]);

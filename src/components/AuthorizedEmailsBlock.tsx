@@ -13,7 +13,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import type { AuthorizedEmailEntry } from '../offline-first/sync/firebase/FirebaseGateway';
 import { authorizedEmailRepository } from '../offline-first/repositories/AuthorizedEmailRepository';
-import { isValidAuthEmail, normalizeAuthEmail } from '../utils/normalizeAuthEmail';
+import { isAllowedAuthEmail, authEmailDomainErrorMessage, normalizeAuthEmail } from '../utils/normalizeAuthEmail';
 import { PREMIUM } from '../theme/premium';
 
 export function AuthorizedEmailsBlock() {
@@ -51,8 +51,8 @@ export function AuthorizedEmailsBlock() {
   const handleAdd = useCallback(async () => {
     if (!user?.uid) return;
     const email = normalizeAuthEmail(input);
-    if (!isValidAuthEmail(email)) {
-      setErro('Informe um e-mail válido.');
+    if (!isAllowedAuthEmail(email)) {
+      setErro(authEmailDomainErrorMessage());
       return;
     }
     if (user.email && normalizeAuthEmail(user.email) === email) {

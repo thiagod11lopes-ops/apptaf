@@ -18,7 +18,7 @@ import { useCloudSyncHeaderStatus } from '../hooks/useCloudSyncHeaderStatus';
 import { AppHeader } from '../components/sismav/AppHeader';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
-import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
+import { EmailPasswordAuthForm } from '../components/auth/EmailPasswordAuthForm';
 import { AlterarSenhaAplicadorModal } from '../components/aplicador/AlterarSenhaAplicadorModal';
 import { consumeLastRedirectAuthError } from '../services/firebase/googleAuth';
 import { navigateTab } from '../navigation/navigationRef';
@@ -34,20 +34,36 @@ export default function LoginScreen() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const navigation = useNavigation();
-  const { user, isAuthenticated, isAuthorizedMember, isSessionLoading, firebaseEnabled, logout } =
-    useAuth();
+  const {
+    user,
+    isAuthenticated,
+    isAuthorizedMember,
+    isSessionLoading,
+    passwordRecoveryPending,
+    clearPasswordRecovery,
+    firebaseEnabled,
+    logout,
+  } = useAuth();
   const { appMode, pendingCount } = useOfflineSyncState();
   const { statusHint } = useCloudSyncHeaderStatus();
 
   const statusConta = useMemo(() => {
     if (isSessionLoading) return 'Preparando conta…';
+    if (passwordRecoveryPending) return 'Defina uma nova senha para continuar';
     if (!isAuthenticated) return 'Modo offline · dados locais';
     if (appMode !== 'OFFLINE') return statusHint ?? 'Sincronizando com a nuvem…';
     if (pendingCount > 0) {
       return `Conectado · ${pendingCount} alteração(ões) local(is) aguardando sync`;
     }
-    return 'Conectado com Google · use a chave na tela inicial para sincronizar';
-  }, [appMode, isAuthenticated, isSessionLoading, pendingCount, statusHint]);
+    return 'Conectado · use a chave na tela inicial para sincronizar';
+  }, [
+    appMode,
+    isAuthenticated,
+    isSessionLoading,
+    passwordRecoveryPending,
+    pendingCount,
+    statusHint,
+  ]);
 
   const handleLogout = useCallback(async () => {
     setLoading(true);
@@ -61,8 +77,10 @@ export default function LoginScreen() {
 
   const onLoginSuccess = useCallback(() => {
     setErro(null);
-    navigateTab('Home');
-  }, []);
+    if (!passwordRecoveryPending) {
+      navigateTab('Home');
+    }
+  }, [passwordRecoveryPending]);
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -73,7 +91,8 @@ export default function LoginScreen() {
     if (redirectError) setErro(redirectError);
   }, []);
 
-  const aguardandoLogin = isSessionLoading;
+  const aguardandoLogin = isSessionLoading && !passwordRecoveryPending;
+  const showAuthForm = !isAuthenticated || passwordRecoveryPending;
 
   return (
     <KeyboardAvoidingView
@@ -96,7 +115,7 @@ export default function LoginScreen() {
                 <User size={28} color={theme.primary} strokeWidth={2.2} />
               </View>
             )}
-            {isAuthenticated && user ? (
+            {isAuthenticated && user && !passwordRecoveryPending ? (
               <View style={styles.avatarText}>
                 <Text style={ts.h2}>{userLabel(user.displayName, user.email)}</Text>
                 {user.email ? (
@@ -119,12 +138,14 @@ export default function LoginScreen() {
               </View>
             ) : (
               <View style={styles.avatarText}>
-                <Text style={ts.h2}>Entrar</Text>
+                <Text style={ts.h2}>{passwordRecoveryPending ? 'Nova senha' : 'Entrar'}</Text>
                 <Text style={[ts.caption, { color: theme.loss, marginTop: 4, fontWeight: '800' }]}>
-                  Offline
+                  {passwordRecoveryPending ? 'Recuperação' : 'Offline'}
                 </Text>
                 <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
-                  Dados locais no dispositivo · sincronize na tela inicial
+                  {passwordRecoveryPending
+                    ? 'Escolha uma nova senha para a conta'
+                    : 'Dados locais no dispositivo · sincronize na tela inicial'}
                 </Text>
               </View>
             )}
@@ -139,19 +160,24 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
-          {isAuthenticated ? (
-            <Button title="Sair da conta" variant="outline" onPress={handleLogout} loading={loading} />
-          ) : (
+          {showAuthForm ? (
             <>
-              <GoogleSignInButton onSuccess={onLoginSuccess} onError={setErro} />
+              <EmailPasswordAuthForm
+                forceRecovery={passwordRecoveryPending}
+                onSuccess={onLoginSuccess}
+                onError={setErro}
+                onRecoveryDone={clearPasswordRecovery}
+              />
               {erro ? (
                 <Text style={[ts.caption, styles.erro, { color: theme.loss }]}>{erro}</Text>
               ) : null}
             </>
+          ) : (
+            <Button title="Sair da conta" variant="outline" onPress={handleLogout} loading={loading} />
           )}
         </Card>
 
-        {isAuthenticated && isAuthorizedMember ? (
+        {isAuthenticated && isAuthorizedMember && !passwordRecoveryPending ? (
           <Card elevated style={styles.senhaCard}>
             <View style={styles.senhaHeader}>
               <View
@@ -176,8 +202,8 @@ export default function LoginScreen() {
 
         <Text style={[ts.caption, styles.footer]}>
           {firebaseEnabled
-            ? 'Após entrar com Google, sua sessão permanece ativa. A sincronização é feita manualmente na tela inicial.'
-            : 'Adicione as chaves do Firebase em .env para habilitar login Google e banco na nuvem.'}
+            ? 'Após entrar, sua sessão permanece ativa. A sincronização é feita manualmente na tela inicial.'
+            : 'Adicione as chaves do Supabase em .env para habilitar login e nuvem.'}
         </Text>
       </ScrollView>
 

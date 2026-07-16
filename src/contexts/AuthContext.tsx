@@ -8,19 +8,22 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { Platform } from 'react-native';
-import { onAuthStateChanged, type User } from 'firebase/auth';
-import { isFirebaseConfigured, getFirebaseAuth } from '../config/firebase';
+import { isSupabaseConfigured, getSupabase } from '../config/supabase';
+import { setCloudAuthUser } from '../config/firebase';
 import {
-  mapFirebaseUser,
-  signInWithGoogleCredential,
-  signInWithGoogleWeb,
-  startFirebaseRedirectSignIn,
+  mapSupabaseUser,
   isFirebaseAuthRedirectReturn,
+  isPasswordRecoveryCallback,
   clearFirebaseAuthParamsFromWindow,
-  signOutFirebase,
+  parseAuthErrorFromWindow,
+  rememberRedirectAuthError,
+  signInWithEmailPassword,
+  signUpWithEmailPassword,
+  requestPasswordReset as requestPasswordResetCloud,
+  updateAccountPassword,
+  signOutCloud,
   type AppAuthUser,
-} from '../services/firebase/googleAuth';
+} from '../services/supabase/emailAuth';
 import { hydrateAppStorageFromIndexedDb } from '../offline-first/db/appMeta';
 import {
   setAuthUidState,
@@ -47,16 +50,27 @@ type AuthContextType = {
   user: AppAuthUser | null;
   isAuthenticated: boolean;
   authReady: boolean;
-  /** true enquanto resolve acesso, migração local e init da sessão após Google. */
+  /** true enquanto resolve acesso, migração local e init da sessão após login. */
   isSessionLoading: boolean;
+  /** Sessão veio do link de recuperação — pedir nova senha. */
+  passwordRecoveryPending: boolean;
+  /** @deprecated use supabaseEnabled — mantido para compat de UI. */
   firebaseEnabled: boolean;
+  supabaseEnabled: boolean;
   /** UID dono dos dados locais (chefe quando membro autorizado). */
   dataOwnerUid: string | null;
   /** Chefe da conta — pode gerenciar e-mails autorizados e carregar planilha. */
   isBoss: boolean;
   /** Entrou com e-mail autorizado pelo chefe — usa banco do chefe. */
   isAuthorizedMember: boolean;
-  signInWithGoogle: (idToken?: string) => Promise<boolean>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+  ) => Promise<{ needsEmailConfirmation: boolean }>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
+  clearPasswordRecovery: () => void;
   logout: () => Promise<void>;
   /** Atualiza flags chefe/membro a partir do ownerUid persistido localmente. */
   syncLocalSessionFlags: () => void;
@@ -72,16 +86,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppAuthUser | null>(hydrateInitialUser);
   const [authReady, setAuthReady] = useState(false);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
+  const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false);
   const [isAuthorizedMember, setIsAuthorizedMember] = useState(false);
   const [dataOwnerUid, setDataOwnerUid] = useState<string | null>(() => getCachedDataOwnerUid());
-  const firebaseEnabled = isFirebaseConfigured();
+  const supabaseEnabled = isSupabaseConfigured();
+  const firebaseEnabled = supabaseEnabled;
   const authInitializedRef = useRef(false);
+  const passwordRecoveryPendingRef = useRef(false);
+
+  const setRecoveryPending = useCallback((value: boolean) => {
+    passwordRecoveryPendingRef.current = value;
+    setPasswordRecoveryPending(value);
+  }, []);
 
   const applySignedInAppUserFallback = useCallback(async (mapped: AppAuthUser) => {
     await hydrateAppStorageFromIndexedDb();
     const access = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email).catch(() => null);
     const ownerUid = access?.dataOwnerUid ?? getCachedDataOwnerUid() ?? mapped.uid;
     const isMember = access?.isAuthorizedMember ?? ownerUid !== mapped.uid;
+    setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
     setUser(mapped);
     setDataOwnerUid(ownerUid);
     setIsAuthorizedMember(isMember);
@@ -90,12 +113,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearPendingSyncResume();
     setAuthReady(true);
     notifyDataChanged();
-    if (firebaseEnabled && getFirebaseAuth()?.currentUser) {
+    if (supabaseEnabled) {
       await syncManager.bindSession(ownerUid);
       syncManager.setAuthAvailable(true);
       await syncManager.refreshCloudDiff();
     }
-  }, [firebaseEnabled]);
+  }, [supabaseEnabled]);
 
   const finalizeAuthenticatedSession = useCallback(
     async (mapped: AppAuthUser) => {
@@ -103,15 +126,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await hydrateAppStorageFromIndexedDb();
         const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
+        setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
         setUser(mapped);
         setDataOwnerUid(session.dataOwnerUid);
         setIsAuthorizedMember(session.isAuthorizedMember);
+        setAuthUidState(mapped.uid, session.dataOwnerUid, true);
         persistAuthProfile(mapped);
         clearPendingSyncResume();
         setAuthReady(true);
         notifyDataChanged();
 
-        if (firebaseEnabled && getFirebaseAuth()?.currentUser) {
+        if (supabaseEnabled) {
           await syncManager.bindSession(session.dataOwnerUid);
           syncManager.setAuthAvailable(true);
           await syncManager.refreshCloudDiff();
@@ -123,15 +148,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsSessionLoading(false);
       }
     },
-    [applySignedInAppUserFallback, firebaseEnabled],
+    [applySignedInAppUserFallback, supabaseEnabled],
   );
 
   const finalizeAuthenticatedSessionRef = useRef(finalizeAuthenticatedSession);
   finalizeAuthenticatedSessionRef.current = finalizeAuthenticatedSession;
 
   useEffect(() => {
-    const auth = getFirebaseAuth();
-    if (!auth) {
+    const sb = getSupabase();
+    if (!sb) {
       void (async () => {
         await hydrateAppStorageFromIndexedDb();
         const owner = getCachedDataOwnerUid();
@@ -144,8 +169,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
 
-    const applySignedIn = (fbUser: User): void => {
-      void finalizeAuthenticatedSessionRef.current(mapFirebaseUser(fbUser));
+    const applySignedIn = (uid: string, email: string | null, meta?: Record<string, unknown>) => {
+      void finalizeAuthenticatedSessionRef.current(
+        mapSupabaseUser({ id: uid, email, user_metadata: meta }),
+      );
     };
 
     const applyLocalOfflineSession = (): void => {
@@ -162,10 +189,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const confirmSignedOut = (): void => {
       void (async () => {
-        await auth.authStateReady();
-        if (cancelled || auth.currentUser) return;
+        if (cancelled) return;
+        const { data } = await sb.auth.getSession();
+        if (data.session?.user) return;
         if (isFirebaseAuthRedirectReturn()) return;
         setIsSessionLoading(false);
+        setRecoveryPending(false);
 
         const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
         const owner = getCachedDataOwnerUid();
@@ -189,17 +218,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await hydrateAppStorageFromIndexedDb();
       const owner = getCachedDataOwnerUid();
       setDataOwnerUid(owner);
-      const redirectUser =
-        Platform.OS === 'web' ? await startFirebaseRedirectSignIn() : null;
-      await auth.authStateReady();
+
+      const windowError = parseAuthErrorFromWindow();
+      if (windowError) {
+        rememberRedirectAuthError(windowError);
+        clearFirebaseAuthParamsFromWindow();
+      }
+
+      const { data } = await sb.auth.getSession();
       authInitializedRef.current = true;
       if (cancelled) return;
 
-      if (auth.currentUser) {
-        applySignedIn(auth.currentUser);
+      if (data.session?.user) {
+        if (isPasswordRecoveryCallback()) {
+          setRecoveryPending(true);
+          setCloudAuthUser({
+            uid: data.session.user.id,
+            email: data.session.user.email ?? null,
+          });
+          setUser(mapSupabaseUser(data.session.user));
+          setAuthReady(true);
+        } else {
+          applySignedIn(
+            data.session.user.id,
+            data.session.user.email ?? null,
+            data.session.user.user_metadata as Record<string, unknown>,
+          );
+        }
         clearFirebaseAuthParamsFromWindow();
-      } else if (redirectUser) {
-        void finalizeAuthenticatedSessionRef.current(redirectUser);
       } else if (isFirebaseAuthRedirectReturn()) {
         setAuthReady(true);
       } else if (owner) {
@@ -210,57 +256,114 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthUidState(loginUid, owner, true);
         setAuthReady(true);
         await syncManager.bindSession(owner);
-        syncManager.setAuthAvailable(Boolean(auth.currentUser));
+        syncManager.setAuthAvailable(Boolean(data.session?.user));
       } else {
         applyLocalOfflineSession();
       }
     })();
 
-    const unsub = onAuthStateChanged(auth, (fbUser) => {
+    const { data: sub } = sb.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
-
-      if (fbUser) {
-        applySignedIn(fbUser);
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryPending(true);
+        if (session?.user) {
+          setCloudAuthUser({ uid: session.user.id, email: session.user.email ?? null });
+          setUser(mapSupabaseUser(session.user));
+          setAuthReady(true);
+        }
         clearFirebaseAuthParamsFromWindow();
         return;
       }
-
-      if (!authInitializedRef.current || isFirebaseAuthRedirectReturn()) {
+      if (session?.user) {
+        if (passwordRecoveryPendingRef.current && event !== 'USER_UPDATED') {
+          setCloudAuthUser({ uid: session.user.id, email: session.user.email ?? null });
+          clearFirebaseAuthParamsFromWindow();
+          return;
+        }
+        if (event !== 'TOKEN_REFRESHED') {
+          applySignedIn(
+            session.user.id,
+            session.user.email ?? null,
+            session.user.user_metadata as Record<string, unknown>,
+          );
+        } else {
+          setCloudAuthUser({ uid: session.user.id, email: session.user.email ?? null });
+        }
+        clearFirebaseAuthParamsFromWindow();
         return;
       }
-
-      confirmSignedOut();
+      if (!authInitializedRef.current || isFirebaseAuthRedirectReturn()) return;
+      if (event === 'SIGNED_OUT') confirmSignedOut();
     });
 
     return () => {
       cancelled = true;
-      unsub();
+      sub.subscription.unsubscribe();
     };
   }, []);
 
-  const signInWithGoogle = useCallback(async (idToken?: string): Promise<boolean> => {
-    if (!firebaseEnabled) {
-      throw new Error(
-        'Configure o Firebase no arquivo .env (veja .env.example) antes de entrar com Google.',
-      );
-    }
-    if (idToken) {
-      const signedIn = await signInWithGoogleCredential(idToken);
+  const signInWithEmail = useCallback(
+    async (email: string, password: string) => {
+      if (!supabaseEnabled) {
+        throw new Error(
+          'Configure o Supabase no arquivo .env (veja .env.example) antes de entrar.',
+        );
+      }
+      const signedIn = await signInWithEmailPassword(email, password);
+      setRecoveryPending(false);
       await finalizeAuthenticatedSession(signedIn);
       await waitForAuthenticatedUid(20_000);
-      return false;
-    }
-    if (Platform.OS !== 'web') {
-      throw new Error('No dispositivo móvel, use o botão Entrar com Google.');
-    }
-    const result = await signInWithGoogleWeb();
-    if (result.mode === 'redirect') return true;
-    if (result.mode === 'popup') {
-      await finalizeAuthenticatedSession(result.user);
-    }
-    await waitForAuthenticatedUid(20_000);
-    return false;
-  }, [finalizeAuthenticatedSession, firebaseEnabled]);
+    },
+    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
+  );
+
+  const signUpWithEmail = useCallback(
+    async (email: string, password: string) => {
+      if (!supabaseEnabled) {
+        throw new Error(
+          'Configure o Supabase no arquivo .env (veja .env.example) antes de criar conta.',
+        );
+      }
+      const result = await signUpWithEmailPassword(email, password);
+      if (result.user && !result.needsEmailConfirmation) {
+        setRecoveryPending(false);
+        await finalizeAuthenticatedSession(result.user);
+        await waitForAuthenticatedUid(20_000);
+      }
+      return { needsEmailConfirmation: result.needsEmailConfirmation };
+    },
+    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
+  );
+
+  const requestPasswordReset = useCallback(
+    async (email: string) => {
+      if (!supabaseEnabled) {
+        throw new Error('Configure o Supabase no arquivo .env antes de recuperar a senha.');
+      }
+      await requestPasswordResetCloud(email);
+    },
+    [supabaseEnabled],
+  );
+
+  const updatePassword = useCallback(
+    async (newPassword: string) => {
+      if (!supabaseEnabled) {
+        throw new Error('Configure o Supabase no arquivo .env.');
+      }
+      await updateAccountPassword(newPassword);
+      setRecoveryPending(false);
+      const sb = getSupabase();
+      const { data } = await sb!.auth.getSession();
+      if (data.session?.user) {
+        await finalizeAuthenticatedSession(mapSupabaseUser(data.session.user));
+      }
+    },
+    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
+  );
+
+  const clearPasswordRecovery = useCallback(() => {
+    setRecoveryPending(false);
+  }, [setRecoveryPending]);
 
   const syncLocalSessionFlags = useCallback(() => {
     const loginUid = getCachedLoginUid();
@@ -272,8 +375,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     const ownerBeforeLogout = getCachedDataOwnerUid();
-    await signOutFirebase();
+    await signOutCloud();
+    setCloudAuthUser(null);
     setUser(null);
+    setRecoveryPending(false);
     setIsAuthorizedMember(false);
     clearPersistedAuthProfile();
     clearMemoryCloudCache();
@@ -295,11 +400,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: user != null,
       authReady,
       isSessionLoading,
+      passwordRecoveryPending,
       firebaseEnabled,
+      supabaseEnabled,
       dataOwnerUid,
       isBoss,
       isAuthorizedMember,
-      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      requestPasswordReset,
+      updatePassword,
+      clearPasswordRecovery,
       logout,
       syncLocalSessionFlags,
     }),
@@ -307,11 +418,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       authReady,
       isSessionLoading,
+      passwordRecoveryPending,
       firebaseEnabled,
+      supabaseEnabled,
       dataOwnerUid,
       isBoss,
       isAuthorizedMember,
-      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      requestPasswordReset,
+      updatePassword,
+      clearPasswordRecovery,
       logout,
       syncLocalSessionFlags,
     ],

@@ -7,7 +7,7 @@ Aplicativo para gestão do Teste de Aptidão Física: normas, aplicação do TAF
 - **Expo** (React Native)
 - **React Navigation**
 - **TypeScript**
-- **Firebase** (Auth Google + Firestore) — opcional via `.env`
+- **Supabase** (Auth Google + Postgres) — opcional via `.env`
 - **IndexedDB** (dados locais sem login)
 
 ## Pré-requisitos
@@ -26,16 +26,16 @@ cd taf-app
 npm install
 ```
 
-### Firebase (login Google + nuvem)
+### Supabase (login Google + nuvem)
 
-Veja o guia completo em [docs/FIREBASE.md](docs/FIREBASE.md). Resumo:
+Veja o guia completo em [docs/SUPABASE.md](docs/SUPABASE.md). Resumo:
 
-1. Crie projeto no Firebase e ative **Google** em Authentication.
-2. Crie banco **Firestore** e aplique as regras em `docs/firestore.rules`.
+1. Crie projeto no Supabase e execute `supabase/schema.sql`.
+2. Ative **Email** em Authentication → Providers.
 3. Copie `.env.example` → `.env` e preencha as chaves `EXPO_PUBLIC_*`.
 4. Reinicie o Expo (`npm start`).
 
-Com login Google, cadastros e histórico TAF são salvos em `users/{uid}/` no Firestore. Sem login, o app continua usando armazenamento local (IndexedDB).
+Com login (e-mail e senha), cadastros e histórico TAF sincronizam na nuvem (com RLS). Sem login, o app continua usando armazenamento local (IndexedDB).
 
 ## Como executar
 

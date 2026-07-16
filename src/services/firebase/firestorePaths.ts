@@ -1,3 +1,4 @@
+/** Legado Firebase — caminhos não são mais usados (Supabase usa tabelas planas). */
 export const FIRESTORE_COLLECTIONS = {
   cadastros: 'cadastros',
   sessoes: 'sessoes',
@@ -9,7 +10,6 @@ export const FIRESTORE_COLLECTIONS = {
   preCadastros: 'pre_cadastros',
 } as const;
 
-/** Dados do usuário autenticado: users/{uid}/cadastros, users/{uid}/sessoes */
 export function userRootPath(uid: string): string {
   return `users/${uid}`;
 }

@@ -17,7 +17,7 @@ export type SyncStepState = {
 };
 
 const STEP_LABELS: Record<SyncStepId, string> = {
-  login_google: 'Verificando sessão Google',
+  login_google: 'Verificando sessão',
   validate_permissions: 'Validando permissões',
   local_backup: 'Criando backup local',
   comparing: 'Comparando registros',

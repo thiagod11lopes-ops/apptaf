@@ -1,103 +1,81 @@
-import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import {
-  getAuth,
-  initializeAuth,
-  getReactNativePersistence,
-  setPersistence,
-  browserLocalPersistence,
-  type Auth,
-} from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
-import { FIREBASE_PUBLIC_DEFAULTS } from './firebase.public';
+import { getSupabase, isSupabaseConfigured } from './supabase';
 
-export type FirebasePublicConfig = {
-  apiKey: string;
-  authDomain: string;
-  projectId: string;
-  storageBucket: string;
-  messagingSenderId: string;
-  appId: string;
+export type CloudAuthUser = {
+  uid: string;
+  email: string | null;
+  getIdToken: (force?: boolean) => Promise<string>;
+  reload: () => Promise<void>;
 };
 
-function readConfig(): FirebasePublicConfig | null {
-  const apiKey =
-    process.env.EXPO_PUBLIC_FIREBASE_API_KEY?.trim() || FIREBASE_PUBLIC_DEFAULTS.apiKey;
-  const authDomain =
-    process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim() || FIREBASE_PUBLIC_DEFAULTS.authDomain;
-  const projectId =
-    process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID?.trim() || FIREBASE_PUBLIC_DEFAULTS.projectId;
-  const storageBucket =
-    process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() ||
-    FIREBASE_PUBLIC_DEFAULTS.storageBucket;
-  const messagingSenderId =
-    process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim() ||
-    FIREBASE_PUBLIC_DEFAULTS.messagingSenderId;
-  const appId =
-    process.env.EXPO_PUBLIC_FIREBASE_APP_ID?.trim() || FIREBASE_PUBLIC_DEFAULTS.appId;
+/** Espelho síncrono da sessão Supabase — SyncManager/OfflineSync ainda consultam currentUser. */
+let cachedAuthUser: CloudAuthUser | null = null;
 
-  if (!apiKey || !authDomain || !projectId || !appId) {
-    return null;
-  }
-
+function buildCloudAuthUser(uid: string, email: string | null): CloudAuthUser {
   return {
-    apiKey,
-    authDomain,
-    projectId,
-    storageBucket: storageBucket ?? '',
-    messagingSenderId: messagingSenderId ?? '',
-    appId,
+    uid,
+    email,
+    getIdToken: async (force = false) => {
+      const sb = getSupabase();
+      if (!sb) throw new Error('Supabase não configurado.');
+      if (force) {
+        const { data, error } = await sb.auth.refreshSession();
+        if (error) throw new Error(error.message);
+        const token = data.session?.access_token;
+        if (!token) throw new Error('Sessão sem token.');
+        return token;
+      }
+      const { data, error } = await sb.auth.getSession();
+      if (error) throw new Error(error.message);
+      const token = data.session?.access_token;
+      if (!token) throw new Error('Sessão sem token.');
+      return token;
+    },
+    reload: async () => {
+      const sb = getSupabase();
+      if (!sb) return;
+      const { data } = await sb.auth.getSession();
+      const user = data.session?.user;
+      if (user) {
+        cachedAuthUser = buildCloudAuthUser(user.id, user.email ?? null);
+      }
+    },
   };
 }
 
-export const firebaseConfig = readConfig();
+/** Atualiza o espelho síncrono (chame no login/logout / onAuthStateChange). */
+export function setCloudAuthUser(user: { uid: string; email: string | null } | null): void {
+  cachedAuthUser = user ? buildCloudAuthUser(user.uid, user.email) : null;
+}
 
+/** Compat: nomes legados do Firebase agora apontam para Supabase. */
 export function isFirebaseConfigured(): boolean {
-  return firebaseConfig != null;
+  return isSupabaseConfigured();
 }
 
-let app: FirebaseApp | null = null;
-let auth: Auth | null = null;
-let db: Firestore | null = null;
-
-export function getFirebaseApp(): FirebaseApp | null {
-  if (!firebaseConfig) return null;
-  if (!app) {
-    app = getApps().length > 0 ? getApps()[0]! : initializeApp(firebaseConfig);
-  }
-  return app;
+export function getFirebaseAuth(): {
+  currentUser: CloudAuthUser | null;
+} | null {
+  if (!isSupabaseConfigured()) return null;
+  return { currentUser: cachedAuthUser };
 }
 
-function createAuth(firebaseApp: FirebaseApp): Auth {
-  if (Platform.OS === 'web') {
-    const instance = getAuth(firebaseApp);
-    void setPersistence(instance, browserLocalPersistence).catch(() => undefined);
-    return instance;
-  }
-  try {
-    return initializeAuth(firebaseApp, {
-      persistence: getReactNativePersistence(AsyncStorage),
-    });
-  } catch {
-    return getAuth(firebaseApp);
-  }
+export function getFirestoreDb(): null {
+  return null;
 }
 
-export function getFirebaseAuth(): Auth | null {
-  const firebaseApp = getFirebaseApp();
-  if (!firebaseApp) return null;
-  if (!auth) {
-    auth = createAuth(firebaseApp);
+export async function refreshCloudAuthUser(): Promise<{
+  uid: string;
+  email: string | null;
+} | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  const user = data.session?.user;
+  if (!user) {
+    setCloudAuthUser(null);
+    return null;
   }
-  return auth;
-}
-
-export function getFirestoreDb(): Firestore | null {
-  const firebaseApp = getFirebaseApp();
-  if (!firebaseApp) return null;
-  if (!db) {
-    db = getFirestore(firebaseApp);
-  }
-  return db;
+  const mapped = { uid: user.id, email: user.email ?? null };
+  setCloudAuthUser(mapped);
+  return mapped;
 }

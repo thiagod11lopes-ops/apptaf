@@ -16,21 +16,19 @@ O workflow `.github/workflows/deploy-pages.yml` gera essa branch automaticamente
 https://thiagod11lopes-ops.github.io/apptaf/
 ```
 
-## Login Google no site publicado
+## Login no site publicado
 
-O build usa `src/config/firebase.public.ts` quando não há variáveis no CI. Para outro projeto Firebase, altere esse arquivo ou defina secrets em **Settings → Secrets and variables → Actions** (`EXPO_PUBLIC_*`).
+Defina secrets em **Settings → Secrets and variables → Actions**:
 
-**Obrigatório no Firebase Console** — **Authentication → Settings → Authorized domains**:
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 
-- `thiagod11lopes-ops.github.io`
+Detalhes em [docs/SUPABASE.md](SUPABASE.md).
 
-Sem esse domínio, o login Google falha mesmo com a config correta.
+**Supabase** → **Authentication → URL Configuration** — Site URL e Redirect URLs:
 
-**Safari / celular (OAuth direto)** — no [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services → Credentials** → cliente OAuth **Web** do Firebase:
+- `https://thiagod11lopes-ops.github.io/apptaf`
 
-- **Authorized JavaScript origins**: `https://thiagod11lopes-ops.github.io`
-- **Authorized redirect URIs**: `https://thiagod11lopes-ops.github.io/apptaf`
-
-Sem o redirect URI, o Safari volta ao app mas não conclui o login (`redirect_uri_mismatch`).
+Sem a redirect URL, o link de recuperação/confirmação de e-mail não volta ao app corretamente.
 
 Depois de qualquer alteração, rode o deploy de novo (push em `main` ou **Actions → Run workflow**).

@@ -3,14 +3,17 @@ import { View, Text, StyleSheet } from 'react-native';
 import { CloudDownload, CloudUpload } from 'lucide-react-native';
 import { ModernModal } from './ModernModal';
 import { useTheme } from '../../contexts/ThemeContext';
-import type { SyncQueueBreakdown } from '../../offline-first/sync/syncQueueBreakdown';
+import {
+  EMPTY_SYNC_QUEUE_BREAKDOWN,
+  type SyncQueueBreakdown,
+} from '../../offline-first/sync/syncQueueBreakdown';
 
 type Direction = 'download' | 'upload';
 
 type Props = {
   visible: boolean;
   direction: Direction;
-  breakdown: SyncQueueBreakdown;
+  breakdown?: SyncQueueBreakdown | null;
   totalLabel: string | null;
   onClose: () => void;
 };
@@ -29,6 +32,8 @@ export function SyncQueueDetailModal({
   const subtitle = isDownload
     ? 'Tipos de atualização que serão baixados deste dispositivo:'
     : 'Tipos de alteração local que serão enviados para a nuvem:';
+  const safeBreakdown = breakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN;
+  const categories = safeBreakdown.categories ?? [];
 
   return (
     <ModernModal
@@ -55,7 +60,7 @@ export function SyncQueueDetailModal({
           </View>
         ) : null}
 
-        {breakdown.categories.length === 0 ? (
+        {categories.length === 0 ? (
           <Text style={[styles.empty, { color: theme.textMuted }]}>
             {isDownload
               ? 'Nenhuma atualização pendente para baixar da nuvem.'
@@ -63,7 +68,7 @@ export function SyncQueueDetailModal({
           </Text>
         ) : (
           <View style={[styles.listCard, { borderColor: theme.border, backgroundColor: theme.cardBg }]}>
-            {breakdown.categories.map((item, index) => (
+            {categories.map((item, index) => (
               <View
                 key={item.key}
                 style={[

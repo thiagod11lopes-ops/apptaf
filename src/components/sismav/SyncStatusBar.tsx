@@ -13,6 +13,7 @@ import {
   formatRecordsPerSecond,
 } from '../../offline-first/sync/syncFormatters';
 import { SYNC_AUTH_REQUIRED_MESSAGE } from '../../offline-first/sync/SyncManager';
+import { EMPTY_SYNC_QUEUE_BREAKDOWN } from '../../offline-first/sync/syncQueueBreakdown';
 import { stepLabel } from '../../offline-first/sync/syncSteps';
 import type { SyncProgressState, SyncUiState } from '../../offline-first/sync/syncUiState';
 
@@ -91,8 +92,8 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
   const loggedIn = authReady && isAuthenticated;
   const pendingUploads = syncUi.counters.pendingUploads;
   const pendingDownloads = syncUi.counters.pendingDownloads;
-  const uploadBreakdown = syncUi.counters.uploadBreakdown;
-  const downloadBreakdown = syncUi.counters.downloadBreakdown;
+  const uploadBreakdown = syncUi.counters.uploadBreakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN;
+  const downloadBreakdown = syncUi.counters.downloadBreakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN;
 
   const preparing =
     syncUi.isSyncing &&
@@ -209,7 +210,7 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
         {!loggedIn ? (
           <View style={[styles.blockedBanner, { backgroundColor: '#fef3c7', borderColor: '#ca8a04' }]}>
             <Text style={[ts.caption, { color: '#92400e', fontWeight: '700', lineHeight: 18 }]}>
-              ⚠ Faça login com Google para sincronizar
+              ⚠ Faça login para sincronizar
             </Text>
             <Text style={[ts.caption, { color: '#92400e', lineHeight: 18, marginTop: 4 }]}>
               {SYNC_AUTH_REQUIRED_MESSAGE}

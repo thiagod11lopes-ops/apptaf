@@ -30,6 +30,7 @@ import {
   type SyncUiPhase,
   type SyncUiState,
   type SyncDirectionPhase,
+  EMPTY_COUNTERS,
   EMPTY_SYNC_PROGRESS,
 } from './syncUiState';
 import { estimateSyncQueueCounts } from './lastWriteWinsSync';
@@ -99,7 +100,7 @@ let lastSyncResult: SyncResultSummary | null = null;
 let lastSyncAt: number | null = null;
 let syncSteps: SyncStepState[] = createInitialSyncSteps();
 let errorStepId: SyncStepId | null = null;
-let counters: SyncCountersState = { pendingUploads: 0, pendingDownloads: null, syncedTotal: 0 };
+let counters: SyncCountersState = { ...EMPTY_COUNTERS };
 let successTimer: ReturnType<typeof setTimeout> | null = null;
 let etaTimer: ReturnType<typeof setInterval> | null = null;
 let syncStartedAt = 0;

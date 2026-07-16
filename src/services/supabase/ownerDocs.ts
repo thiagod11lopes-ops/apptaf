@@ -9,6 +9,18 @@ export type CloudDocRow = {
   deleted?: boolean;
 };
 
+/** Tabelas com soft-delete (`deleted boolean`). Rubricas/senhas não têm essa coluna. */
+const TABLES_WITH_DELETED = new Set([
+  'cadastros',
+  'sessoes',
+  'aplicadores',
+  'pre_cadastros',
+]);
+
+function tableSupportsDeleted(table: string): boolean {
+  return TABLES_WITH_DELETED.has(table);
+}
+
 /** Upsert genérico de documento JSON por (owner_uid, id). */
 export async function upsertOwnerDoc(
   table: string,
@@ -20,15 +32,23 @@ export async function upsertOwnerDoc(
 ): Promise<void> {
   const sb = requireSupabase();
   const encrypted = await maybeEncryptForCloud({ ...data, id });
-  const payload: CloudDocRow = {
+  const payload: Record<string, unknown> = {
     id,
     owner_uid: ownerUid,
     data: encrypted,
     updated_at: updatedAt || Date.now(),
-    deleted,
   };
+  if (tableSupportsDeleted(table)) {
+    payload.deleted = deleted;
+  }
   const { error } = await sb.from(table).upsert(payload, { onConflict: 'owner_uid,id' });
   if (error) throw new Error(error.message);
+}
+
+function selectColumns(table: string): string {
+  return tableSupportsDeleted(table)
+    ? 'id, owner_uid, data, updated_at, deleted'
+    : 'id, owner_uid, data, updated_at';
 }
 
 export async function listOwnerDocs(
@@ -38,13 +58,14 @@ export async function listOwnerDocs(
   const sb = requireSupabase();
   const { data, error } = await sb
     .from(table)
-    .select('id, owner_uid, data, updated_at, deleted')
+    .select(selectColumns(table))
     .eq('owner_uid', ownerUid);
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as CloudDocRow[];
   return Promise.all(
     rows.map(async (row) => ({
       ...row,
+      deleted: row.deleted ?? false,
       data: await maybeDecryptFromCloud(row.data ?? {}),
     })),
   );
@@ -59,7 +80,7 @@ export async function listOwnerDocsSince(
   const sb = requireSupabase();
   const { data, error } = await sb
     .from(table)
-    .select('id, owner_uid, data, updated_at, deleted')
+    .select(selectColumns(table))
     .eq('owner_uid', ownerUid)
     .gte('updated_at', sinceUpdatedAt);
   if (error) throw new Error(error.message);
@@ -67,6 +88,7 @@ export async function listOwnerDocsSince(
   return Promise.all(
     rows.map(async (row) => ({
       ...row,
+      deleted: row.deleted ?? false,
       data: await maybeDecryptFromCloud(row.data ?? {}),
     })),
   );

@@ -1,5 +1,6 @@
 import { getSupabase, requireSupabase } from '../../config/supabase';
 import { isAllowedAuthEmail, authEmailDomainErrorMessage, normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
+import { isCloudOwnerUid } from '../../utils/cloudOwnerUid';
 import { readAppMetaCache } from '../../offline-first/db/appMeta';
 
 export type AuthorizedEmailEntry = {
@@ -17,12 +18,14 @@ function readPersistedMemberSession(): { loginUid: string; dataOwnerUid: string 
   const loginUid = readAppMetaCache('session:loginUid');
   const dataOwnerUid = readAppMetaCache('session:dataOwnerUid');
   if (!loginUid || !dataOwnerUid || loginUid === dataOwnerUid) return null;
+  // Ignora sessão membro com owner legado (Firebase) — incompatível com uuid do Supabase.
+  if (!isCloudOwnerUid(dataOwnerUid)) return null;
   return { loginUid, dataOwnerUid };
 }
 
 function fallbackMemberAccessFromPersistedSession(loginUid: string): MemberAccess {
   const persisted = readPersistedMemberSession();
-  if (persisted?.loginUid === loginUid) {
+  if (persisted?.loginUid === loginUid && isCloudOwnerUid(persisted.dataOwnerUid)) {
     return { dataOwnerUid: persisted.dataOwnerUid, isAuthorizedMember: true };
   }
   return { dataOwnerUid: loginUid, isAuthorizedMember: false };
@@ -32,6 +35,9 @@ export async function resolveMemberAccess(
   loginUid: string,
   email: string | null | undefined,
 ): Promise<MemberAccess> {
+  if (!isCloudOwnerUid(loginUid)) {
+    return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+  }
   const sb = getSupabase();
   if (!sb) return fallbackMemberAccessFromPersistedSession(loginUid);
   try {
@@ -42,7 +48,12 @@ export async function resolveMemberAccess(
         .select('boss_uid, ativo')
         .eq('email_key', emailKey)
         .maybeSingle();
-      if (data?.ativo === true && data.boss_uid && data.boss_uid !== loginUid) {
+      if (
+        data?.ativo === true &&
+        data.boss_uid &&
+        isCloudOwnerUid(data.boss_uid) &&
+        data.boss_uid !== loginUid
+      ) {
         return { dataOwnerUid: data.boss_uid, isAuthorizedMember: true };
       }
     }
@@ -52,7 +63,13 @@ export async function resolveMemberAccess(
         .select('boss_uid, ativo')
         .eq('member_uid', loginUid)
         .maybeSingle();
-      if (data && data.ativo !== false && data.boss_uid && data.boss_uid !== loginUid) {
+      if (
+        data &&
+        data.ativo !== false &&
+        data.boss_uid &&
+        isCloudOwnerUid(data.boss_uid) &&
+        data.boss_uid !== loginUid
+      ) {
         return { dataOwnerUid: data.boss_uid, isAuthorizedMember: true };
       }
     }

@@ -95,6 +95,15 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
     );
   }
 
+  if (/invalid input syntax for type uuid|UID legado do Firebase|UID inválido na nuvem/i.test(msg)) {
+    return detail(
+      'legacy_firebase_uid',
+      'UID legado do Firebase',
+      msg,
+      'Saia e entre novamente com e-mail/senha. Se persistir, exclua os dados locais e reimporte o CSV.',
+    );
+  }
+
   if (
     msg === SYNC_AUTH_REQUIRED ||
     msg === SYNC_AUTH_REQUIRED_MESSAGE ||

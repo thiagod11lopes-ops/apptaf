@@ -17,6 +17,7 @@ import {
 } from './localDb';
 import { syncLogger } from '../sync/SyncLogger';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
+import { isCloudOwnerUid } from '../../utils/cloudOwnerUid';
 import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
@@ -253,5 +254,36 @@ export async function migrateDeviceDataOnLogin(targetOwnerUid: string): Promise<
   const loginUid = getCachedLoginUid();
   if (loginUid && loginUid !== targetOwnerUid) {
     await migrateDexieOwnerToOwner(loginUid, targetOwnerUid);
+  }
+  // UIDs do Firebase antigo (não-UUID) ainda no IndexedDB → conta Supabase atual.
+  await migrateLegacyFirebaseOwnersToCloudUid(targetOwnerUid);
+}
+
+/** Move owners locais que não são UUID (ex.: Auth Firebase) para o UID Supabase. */
+export async function migrateLegacyFirebaseOwnersToCloudUid(
+  targetOwnerUid: string,
+): Promise<void> {
+  if (!isCloudOwnerUid(targetOwnerUid)) return;
+  const db = getTafDatabase();
+  if (!db) return;
+
+  const owners = new Set<string>();
+  try {
+    const [cadastros, sessoes, aplicadores] = await Promise.all([
+      db.cadastros.toArray(),
+      db.sessoes.toArray(),
+      db.aplicadores.toArray(),
+    ]);
+    for (const row of cadastros) if (row.ownerUid) owners.add(row.ownerUid);
+    for (const row of sessoes) if (row.ownerUid) owners.add(row.ownerUid);
+    for (const row of aplicadores) if (row.ownerUid) owners.add(row.ownerUid);
+  } catch {
+    return;
+  }
+
+  for (const owner of owners) {
+    if (owner === targetOwnerUid || owner === ANONYMOUS_OWNER) continue;
+    if (isCloudOwnerUid(owner)) continue;
+    await migrateDexieOwnerToOwner(owner, targetOwnerUid);
   }
 }

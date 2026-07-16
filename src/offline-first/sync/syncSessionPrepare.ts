@@ -7,6 +7,7 @@ import { migrateDeviceDataOnLogin, migrateLegacyToDexie } from '../db/migration'
 import { migratePreCadastrosFromAppMeta } from '../db/preCadastroLocalDb';
 import { applyTeamWipeIfNeeded } from './syncTeamWipe';
 import { pullAuthorizedEmailsToLocal } from './syncAuthorizedEmails';
+import { isCloudOwnerUid } from '../../utils/cloudOwnerUid';
 
 export type SyncSessionInfo = {
   dataOwnerUid: string;
@@ -22,21 +23,26 @@ export async function resolveLocalSessionAfterLogin(
   email: string | null | undefined,
 ): Promise<SyncSessionInfo> {
   const access = await resolveMemberAccess(loginUid, email);
-  if (access.isAuthorizedMember && email?.trim()) {
-    const registered = await registerAuthorizedMemberLogin(access.dataOwnerUid, email, loginUid);
+  const dataOwnerUid =
+    isCloudOwnerUid(access.dataOwnerUid) ? access.dataOwnerUid : loginUid;
+  const isAuthorizedMember =
+    access.isAuthorizedMember && isCloudOwnerUid(dataOwnerUid) && dataOwnerUid !== loginUid;
+
+  if (isAuthorizedMember && email?.trim()) {
+    const registered = await registerAuthorizedMemberLogin(dataOwnerUid, email, loginUid);
     if (!registered.ok) {
       console.warn('[auth] registerAuthorizedMemberLogin no login:', registered.error);
     }
   }
   try {
-    await migrateDeviceDataOnLogin(access.dataOwnerUid);
-    await migrateLegacyToDexie(access.dataOwnerUid);
-    await migratePreCadastrosFromAppMeta(access.dataOwnerUid);
+    await migrateDeviceDataOnLogin(dataOwnerUid);
+    await migrateLegacyToDexie(dataOwnerUid);
+    await migratePreCadastrosFromAppMeta(dataOwnerUid);
   } catch (error) {
     console.warn('[auth] migrateDeviceDataOnLogin falhou:', error);
   }
-  setAuthUidState(loginUid, access.dataOwnerUid, true);
-  return access;
+  setAuthUidState(loginUid, dataOwnerUid, true);
+  return { dataOwnerUid, isAuthorizedMember };
 }
 
 /** Prepara sessão de sync: permissões, migrações, wipe remoto, e-mails autorizados. */

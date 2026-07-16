@@ -81,7 +81,9 @@ export async function probeFirestoreConnectivityDetailed(
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       lastReason =
-        /permission denied for (table|schema|relation)|must be owner|not granted/i.test(msg)
+        /invalid input syntax for type uuid/i.test(msg)
+          ? `UID inválido na nuvem (${targetUid}). Saia e entre novamente com a conta Supabase; se persistir, limpe os dados locais e reimporte o CSV.`
+          : /permission denied for (table|schema|relation)|must be owner|not granted/i.test(msg)
           ? 'Tabelas sem permissão na API. No SQL Editor, execute os GRANTs do schema (authenticated).'
           : msg.includes('JWT') || /auth/i.test(msg)
             ? 'Token de autenticação expirado. Entre novamente com e-mail e senha.'

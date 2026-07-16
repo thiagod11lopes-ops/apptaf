@@ -1,4 +1,4 @@
-import { getCachedDataOwnerUid, getCachedLoginUid } from '../../services/firebase/authUid';
+import { getCachedDataOwnerUid, getCachedLoginUid, setAuthUidState } from '../../services/firebase/authUid';
 import { getFirebaseAuth } from '../../config/firebase';
 import { connectivityMonitor } from './ConnectivityMonitor';
 import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
@@ -44,6 +44,7 @@ import {
   SYNC_UPDATE_BLOCKED,
   DEMO_SYNC_BLOCKED_MESSAGE,
 } from './syncAuthMessages';
+import { isCloudOwnerUid, legacyFirebaseUidMessage } from '../../utils/cloudOwnerUid';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
@@ -587,26 +588,37 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
       throw new Error(authResult.error ?? SYNC_AUTH_REQUIRED);
     }
 
-    const loginUid = getCachedLoginUid();
-    if (!loginUid) {
-      throw new Error(SYNC_AUTH_REQUIRED);
-    }
-
     completeStep('login_google');
     setUiProgress(0, 'Sessão confirmada ✓');
     setActiveStep('validate_permissions');
     setUiProgress(0, 'Confirmando sessão…');
     const authUser = getFirebaseAuth()?.currentUser;
-    if (!authUser) {
+    if (!authUser?.uid) {
       throw new Error(SYNC_AUTH_REQUIRED);
     }
+
+    // Sempre usar o UID da sessão Supabase (UUID), nunca o loginUid legado do Firebase em cache.
+    const loginUid = authUser.uid;
+    if (!isCloudOwnerUid(loginUid)) {
+      throw new Error(legacyFirebaseUidMessage(loginUid));
+    }
+    const cachedOwner = getCachedDataOwnerUid();
+    setAuthUidState(
+      loginUid,
+      cachedOwner && isCloudOwnerUid(cachedOwner) ? cachedOwner : loginUid,
+      true,
+    );
 
     await systemState.setOnlineMode();
 
     setUiProgress(0, 'Validando permissões…');
     currentStep = 'validate_permissions';
     const session = await prepareSyncSession(loginUid, authUser.email);
-    ownerUid = session.dataOwnerUid;
+    ownerUid = isCloudOwnerUid(session.dataOwnerUid) ? session.dataOwnerUid : loginUid;
+    if (!isCloudOwnerUid(ownerUid)) {
+      throw new Error(legacyFirebaseUidMessage(ownerUid));
+    }
+    setAuthUidState(loginUid, ownerUid, true);
     syncEngine.bindOwner(ownerUid);
     await syncEngine.init(ownerUid, { preserveOnlineMode: true });
 

@@ -739,11 +739,13 @@ export async function applyCsvCadastroLww(
     typeof payload.updatedAt === 'number' && payload.updatedAt > 0 ? payload.updatedAt : 0;
 
   if (!local || local.deleted || local.ownerUid !== ownerUid) {
-    const record = ensureRecordMeta(
+    const deviceId = await getDeviceId();
+    const userId = getCachedLoginUid();
+    const base = ensureRecordMeta(
       { ...payload, ownerUid, updatedAt: remoteAt || Date.now() } as CadastroRecord,
       ownerUid,
     );
-    await db.cadastros.put(markRecordSynced(record, getCachedLoginUid()));
+    await db.cadastros.put(bumpRecordMeta(base, deviceId, userId, 'CREATE'));
     return 'created';
   }
 
@@ -751,8 +753,10 @@ export async function applyCsvCadastroLww(
   const decision = decideLastWriteWins(local, remoteForLww);
   if (decision.action !== 'download') return 'kept_local';
 
+  const deviceId = await getDeviceId();
+  const userId = getCachedLoginUid();
   await db.cadastros.put(
-    markRecordSynced(
+    bumpRecordMeta(
       {
         ...local,
         ...payload,
@@ -760,7 +764,9 @@ export async function applyCsvCadastroLww(
         updatedAt: remoteAt > 0 ? remoteAt : local.updatedAt,
         createdAt: local.createdAt,
       } as CadastroRecord,
-      getCachedLoginUid(),
+      deviceId,
+      userId,
+      'UPDATE',
     ),
   );
   return 'applied';
@@ -781,7 +787,9 @@ export async function applyCsvSessaoLww(
       : readUpdatedAt({ criadoEm: normalized.criadoEm, updatedAt: normalized.updatedAt });
 
   if (!local || local.deleted || local.ownerUid !== ownerUid) {
-    const record = ensureRecordMeta(
+    const deviceId = await getDeviceId();
+    const userId = getCachedLoginUid();
+    const base = ensureRecordMeta(
       {
         ...normalized,
         ownerUid,
@@ -789,7 +797,7 @@ export async function applyCsvSessaoLww(
       } as SessaoRecord,
       ownerUid,
     );
-    await db.sessoes.put(markRecordSynced(record, null));
+    await db.sessoes.put(bumpRecordMeta(base, deviceId, userId, 'CREATE'));
     return 'created';
   }
 
@@ -797,8 +805,10 @@ export async function applyCsvSessaoLww(
   const decision = decideLastWriteWins(local, remoteForLww);
   if (decision.action !== 'download') return 'kept_local';
 
+  const deviceId = await getDeviceId();
+  const userId = getCachedLoginUid();
   await db.sessoes.put(
-    markRecordSynced(
+    bumpRecordMeta(
       {
         ...local,
         ...normalized,
@@ -806,7 +816,9 @@ export async function applyCsvSessaoLww(
         updatedAt: remoteAt > 0 ? remoteAt : local.updatedAt,
         createdAt: local.createdAt,
       } as SessaoRecord,
-      null,
+      deviceId,
+      userId,
+      'UPDATE',
     ),
   );
   return 'applied';
@@ -824,11 +836,13 @@ export async function applyCsvAplicadorLww(
     typeof remote.updatedAt === 'number' && remote.updatedAt > 0 ? remote.updatedAt : 0;
 
   if (!local || local.deleted || local.ownerUid !== ownerUid) {
-    const record = ensureRecordMeta(
+    const deviceId = await getDeviceId();
+    const userId = getCachedLoginUid();
+    const base = ensureRecordMeta(
       { ...remote, ownerUid, updatedAt: remoteAt || Date.now() } as AplicadorRecord,
       ownerUid,
     );
-    await db.aplicadores.put(markRecordSynced(record, null));
+    await db.aplicadores.put(bumpRecordMeta(base, deviceId, userId, 'CREATE'));
     return 'created';
   }
 
@@ -836,8 +850,10 @@ export async function applyCsvAplicadorLww(
   const decision = decideLastWriteWins(local, remoteForLww);
   if (decision.action !== 'download') return 'kept_local';
 
+  const deviceId = await getDeviceId();
+  const userId = getCachedLoginUid();
   await db.aplicadores.put(
-    markRecordSynced(
+    bumpRecordMeta(
       {
         ...local,
         ...remote,
@@ -845,7 +861,9 @@ export async function applyCsvAplicadorLww(
         updatedAt: remoteAt > 0 ? remoteAt : local.updatedAt,
         createdAt: local.createdAt,
       } as AplicadorRecord,
-      null,
+      deviceId,
+      userId,
+      'UPDATE',
     ),
   );
   return 'applied';

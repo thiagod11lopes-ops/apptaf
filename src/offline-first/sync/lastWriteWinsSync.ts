@@ -945,6 +945,17 @@ export async function executeLastWriteWinsSync(
 
   await runPlanPhase(
     ownerUid,
+    uploadItems,
+    'upload',
+    uploadFns,
+    stats,
+    deletionAudits,
+    progressCb,
+    plannedUploads,
+    plannedDownloads,
+  );
+  await runPlanPhase(
+    ownerUid,
     downloadItems,
     'download',
     uploadFns,
@@ -954,17 +965,6 @@ export async function executeLastWriteWinsSync(
     plannedUploads,
     plannedDownloads,
     rubricCaches,
-  );
-  await runPlanPhase(
-    ownerUid,
-    uploadItems,
-    'upload',
-    uploadFns,
-    stats,
-    deletionAudits,
-    progressCb,
-    plannedUploads,
-    plannedDownloads,
   );
 
   if (uploadItems.length > 0) {

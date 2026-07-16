@@ -18,6 +18,7 @@ import {
   resolveOwnerUid,
 } from '../offline-first/db/localDb';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
+import { acknowledgeTeamWipeAfterLocalRestore } from '../offline-first/sync/syncTeamWipe';
 import { resolveStorageOwnerUid } from '../services/firebase/authUid';
 import { readUpdatedAt } from '../offline-first/sync/recordMeta';
 import {
@@ -32,6 +33,13 @@ const BACKUP_VERSION = '2';
 
 /** Não restaurar — evita pular o backup diário após importação. */
 const DAILY_BACKUP_META_KEY = 'backup:lastDailyDateBr';
+
+/** Não restaurar — evita rearmar wipe remoto e apagar o CSV na próxima sync. */
+const TEAM_WIPE_ACK_META_PREFIX = 'teamWipeAck:';
+
+function shouldSkipAppMetaRestore(key: string): boolean {
+  return key === DAILY_BACKUP_META_KEY || key.startsWith(TEAM_WIPE_ACK_META_PREFIX);
+}
 
 type BackupSection =
   | 'CADASTROS'
@@ -858,7 +866,7 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
     for (const row of rows) {
       const item = rowToAppMeta(row);
       if (!item) continue;
-      if (item.key === DAILY_BACKUP_META_KEY) continue;
+      if (shouldSkipAppMetaRestore(item.key)) continue;
       appMetaEntries.push(item);
     }
   }
@@ -945,6 +953,13 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
   for (const meta of appMetaEntries) {
     await writeAppMeta(meta.key, meta.value);
   }
+
+  // Reconhecer wipe remoto sem apagar o local — próxima sync sobe o CSV em vez de limpar IndexedDB.
+  const ownerUid = await resolveStorageOwnerUid();
+  if (ownerUid) {
+    await acknowledgeTeamWipeAfterLocalRestore(ownerUid);
+  }
+  notifyDataChanged();
 
   return {
     cadastrosImportados,

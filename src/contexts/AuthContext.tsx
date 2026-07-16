@@ -115,6 +115,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const firebaseEnabled = supabaseEnabled;
   const authInitializedRef = useRef(false);
   const passwordRecoveryPendingRef = useRef(false);
+  /** UID já finalizado nesta sessão (evita re-finalizar em loop com eventos repetidos do Supabase). */
+  const finalizedUidRef = useRef<string | null>(null);
+  const finalizingRef = useRef(false);
 
   const setRecoveryPending = useCallback((value: boolean) => {
     passwordRecoveryPendingRef.current = value;
@@ -145,7 +148,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabaseEnabled]);
 
   const finalizeAuthenticatedSession = useCallback(
-    async (mapped: AppAuthUser) => {
+    async (mapped: AppAuthUser, { force = false }: { force?: boolean } = {}) => {
+      // Evita loop de finalização: eventos INITIAL_SESSION/SIGNED_IN repetidos para o mesmo usuário.
+      if (finalizingRef.current) return;
+      if (!force && finalizedUidRef.current === mapped.uid) {
+        setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
+        syncManager.setAuthAvailable(true);
+        return;
+      }
+      finalizingRef.current = true;
+      finalizedUidRef.current = mapped.uid;
       setIsSessionLoading(true);
       try {
         await hydrateAppStorageFromIndexedDb();
@@ -171,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('[auth] finalizeAuthenticatedSession falhou:', error);
         await applySignedInAppUserFallback(mapped);
       } finally {
+        finalizingRef.current = false;
         setIsSessionLoading(false);
       }
     },
@@ -219,6 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data } = await sb.auth.getSession();
         if (data.session?.user) return;
         if (isFirebaseAuthRedirectReturn()) return;
+        finalizedUidRef.current = null;
+        finalizingRef.current = false;
         setIsSessionLoading(false);
         setRecoveryPending(false);
 
@@ -385,7 +400,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const sb = getSupabase();
       const { data } = await sb!.auth.getSession();
       if (data.session?.user) {
-        await finalizeAuthenticatedSession(mapSupabaseUser(data.session.user));
+        await finalizeAuthenticatedSession(mapSupabaseUser(data.session.user), { force: true });
       }
     },
     [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
@@ -405,6 +420,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     const ownerBeforeLogout = getCachedDataOwnerUid();
+    finalizedUidRef.current = null;
+    finalizingRef.current = false;
     clearE2eSession();
     await signOutCloud();
     setCloudAuthUser(null);

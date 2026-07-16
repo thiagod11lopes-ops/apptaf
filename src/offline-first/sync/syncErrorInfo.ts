@@ -81,11 +81,14 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
     return updateBlockedDetail(SYNC_UPDATE_BLOCKED_MESSAGE);
   }
 
-  if (msg === E2E_KEY_REQUIRED_MESSAGE) {
+  if (
+    msg === E2E_KEY_REQUIRED_MESSAGE ||
+    msg.startsWith(E2E_KEY_REQUIRED_MESSAGE)
+  ) {
     return detail(
       'e2e_key_required',
       'Criptografia necessária',
-      E2E_KEY_REQUIRED_MESSAGE,
+      msg,
       'Saia da conta (Conta → Sair) e entre de novo com e-mail e senha; depois sincronize.',
     );
   }
@@ -96,6 +99,15 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
       'Criptografia não ativada',
       E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE,
       'Saia e entre com e-mail e senha para criar a chave da equipe na primeira vez.',
+    );
+  }
+
+  if (/Criptografia E2E obrigatória/i.test(msg)) {
+    return detail(
+      'e2e_encrypt_required',
+      'Criptografia necessária',
+      msg,
+      'Saia da conta e entre novamente com e-mail e senha antes de sincronizar.',
     );
   }
 

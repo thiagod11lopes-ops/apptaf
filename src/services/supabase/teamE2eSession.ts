@@ -67,11 +67,12 @@ async function unwrapTeamKeyRaw(
     kek,
     fromBase64(payload.ct) as BufferSource,
   );
+  // extractable: true — preciso exportar JWK para sessionStorage entre reloads
   return crypto.subtle.importKey(
     'raw',
     raw,
     { name: 'AES-GCM', length: 256 },
-    false,
+    true,
     ['encrypt', 'decrypt'],
   );
 }
@@ -103,7 +104,7 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
       'jwk',
       stored.keyJwk,
       { name: 'AES-GCM', length: 256 },
-      false,
+      true,
       ['encrypt', 'decrypt'],
     );
     setActiveTeamKey(key);
@@ -156,10 +157,12 @@ export const E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE =
 
 /**
  * Garante chave E2E antes de enviar dados à nuvem.
- * Evita upload em texto plano quando a equipe já usa criptografia.
+ * Nunca libera sync sem chave — evita texto plano na nuvem.
  */
 export async function ensureE2eKeyForCloudSync(ownerUid: string): Promise<void> {
-  if (!ownerUid.trim()) return;
+  if (!ownerUid.trim()) {
+    throw new Error(E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE);
+  }
   if (getActiveTeamKey()) return;
 
   await restoreE2eFromSessionStorage(ownerUid);
@@ -168,9 +171,11 @@ export async function ensureE2eKeyForCloudSync(ownerUid: string): Promise<void> 
   let meta: Awaited<ReturnType<typeof fetchTeamE2eMeta>> = null;
   try {
     meta = await fetchTeamE2eMeta(ownerUid);
-  } catch {
-    // Sem acesso à meta — não bloqueia (modo degradado)
-    return;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `${E2E_KEY_REQUIRED_MESSAGE} (não foi possível ler team_e2e_meta: ${detail})`,
+    );
   }
 
   if (meta) {

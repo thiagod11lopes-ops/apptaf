@@ -46,6 +46,7 @@ import {
 } from './syncAuthMessages';
 import { isCloudOwnerUid, legacyFirebaseUidMessage } from '../../utils/cloudOwnerUid';
 import { ensureE2eKeyForCloudSync } from '../../services/supabase/teamE2eSession';
+import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
@@ -635,6 +636,11 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
 
     setUiProgress(0, 'Verificando criptografia da equipe…');
     await ensureE2eKeyForCloudSync(ownerUid);
+    if (!getActiveTeamKey()) {
+      throw new Error(
+        'Criptografia da equipe não está ativa nesta sessão. Saia da conta e entre novamente com e-mail e senha para desbloquear antes de sincronizar.',
+      );
+    }
 
     setActiveStep('local_backup');
     currentStep = 'local_backup';

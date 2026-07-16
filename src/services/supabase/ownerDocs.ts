@@ -123,7 +123,11 @@ export async function listPlaintextCloudDocIds(
   table: string,
   ownerUid: string,
 ): Promise<Set<string>> {
-  if (!getActiveTeamKey()) return new Set();
+  if (!getActiveTeamKey()) {
+    throw new Error(
+      'Criptografia E2E obrigatória: chave da equipe não está ativa. Saia e entre novamente com e-mail e senha.',
+    );
+  }
   const sb = requireSupabase();
   const plain = new Set<string>();
   let from = 0;
@@ -136,7 +140,7 @@ export async function listPlaintextCloudDocIds(
       .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(error.message);
-    const chunk = (data ?? []) as Array<{ id: string; data: Record<string, unknown> }>;
+    const chunk = (data ?? []) as Array<{ id: string; data: unknown }>;
     for (const row of chunk) {
       if (!isCloudDataEncrypted(row.data ?? {})) plain.add(row.id);
     }

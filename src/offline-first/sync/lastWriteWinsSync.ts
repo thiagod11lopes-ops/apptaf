@@ -231,7 +231,8 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
           collection,
           id,
           action: 'upload',
-          local,
+          // Bump updatedAt para gravar ciphertext e refletir na coluna updated_at
+          local: { ...local, updatedAt: Date.now() },
           remote,
           hasRemote: hasRemote,
         });
@@ -286,7 +287,10 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       collection,
       id,
       action: decision.action,
-      local,
+      local:
+        forceUploadIds?.has(id) && local && decision.action === 'upload'
+          ? { ...local, updatedAt: Date.now() }
+          : local,
       remote,
       hasRemote,
     });

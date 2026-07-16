@@ -41,8 +41,21 @@ export function isE2ECipherPayload(value: unknown): value is E2ECipherPayload {
   return v.v === 1 && v.alg === 'AES-GCM' && typeof v.iv === 'string' && typeof v.ct === 'string';
 }
 
-export function isCloudDataEncrypted(raw: Record<string, unknown>): boolean {
-  return isE2ECipherPayload((raw as { __e2e?: unknown }).__e2e);
+export function isCloudDataEncrypted(raw: unknown): boolean {
+  const obj =
+    typeof raw === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(raw) as Record<string, unknown>;
+          } catch {
+            return null;
+          }
+        })()
+      : raw && typeof raw === 'object'
+        ? (raw as Record<string, unknown>)
+        : null;
+  if (!obj) return false;
+  return isE2ECipherPayload(obj.__e2e);
 }
 
 export function cloudRecordNeedsE2eUpgrade(raw: Record<string, unknown>): boolean {
@@ -116,10 +129,18 @@ export function getActiveTeamKey(): CryptoKey | null {
   return activeTeamKey;
 }
 
+export const E2E_ENCRYPT_REQUIRED_MESSAGE =
+  'Criptografia E2E obrigatória: chave da equipe não está ativa. Saia e entre novamente com e-mail e senha.';
+
+/**
+ * Cifra payload para a nuvem. Sem chave ativa, falha — nunca envia texto plano.
+ */
 export async function maybeEncryptForCloud(
   plain: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  if (!activeTeamKey) return plain;
+  if (!activeTeamKey) {
+    throw new Error(E2E_ENCRYPT_REQUIRED_MESSAGE);
+  }
   const cipher = await encryptJson(activeTeamKey, plain);
   return { __e2e: cipher };
 }

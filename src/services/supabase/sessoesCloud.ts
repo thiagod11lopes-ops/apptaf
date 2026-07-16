@@ -40,11 +40,21 @@ async function persistSessao(uid: string, sessao: SessaoAplicacaoTaf): Promise<v
   const stamped = stampSessao(sessao, sessao.updatedAt);
   const rubricas = extractSessaoRubricas(stamped);
   const light = toSessaoLight(stamped);
+  const syncVersion =
+    typeof (stamped as { syncVersion?: number }).syncVersion === 'number'
+      ? (stamped as { syncVersion: number }).syncVersion
+      : typeof (stamped as { version?: number }).version === 'number'
+        ? (stamped as { version: number }).version
+        : undefined;
   await upsertOwnerDoc(
     TABLE,
     uid,
     stamped.id,
-    { ...light, updatedAt: stamped.updatedAt } as Record<string, unknown>,
+    {
+      ...light,
+      updatedAt: stamped.updatedAt,
+      ...(syncVersion != null ? { syncVersion, version: syncVersion } : {}),
+    } as Record<string, unknown>,
     stamped.updatedAt ?? Date.now(),
   );
   if (rubricas.length > 0) {

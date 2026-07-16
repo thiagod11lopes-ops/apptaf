@@ -52,7 +52,7 @@ import {
 import { listPreCadastros } from '../db/preCadastroLocalDb';
 import { isCloudSyncCollection } from './preCadastroLocalOnly';
 import { decideLastWriteWins, type LwwAction, type SyncRecord } from './lastWriteWins';
-import { markRecordSynced } from './recordMeta';
+import { markRecordSynced, readUpdatedAt } from './recordMeta';
 import { isUnsyncedLocalStatus } from './syncStatus';
 import { appendSyncAudit, type SyncAuditEntry } from './syncAudit';
 import { syncQueue } from './SyncQueue';
@@ -113,17 +113,17 @@ type PlannedSyncItem = {
   hasRemote: boolean;
 };
 
-function stripForFirestore<T extends Record<string, unknown>>(row: T): T {
+function stripForCloud<T extends Record<string, unknown>>(row: T): T {
   const copy = { ...row } as Record<string, unknown>;
+  // Mantém syncVersion/version/updatedAt no JSON da nuvem — sem isso o LWW
+  // interpreta remoto=1 e local=N e reenvia o banco inteiro a cada sync.
   for (const key of [
     'ownerUid',
     'syncStatus',
-    'syncVersion',
     'lastSync',
     'updatedBy',
     'deviceId',
     'userId',
-    'version',
     'deleted',
     'deletedAt',
     'deletedBy',
@@ -133,6 +133,11 @@ function stripForFirestore<T extends Record<string, unknown>>(row: T): T {
     delete copy[key];
   }
   return copy as T;
+}
+
+/** @deprecated alias — mesmo comportamento de stripForCloud */
+function stripForFirestore<T extends Record<string, unknown>>(row: T): T {
+  return stripForCloud(row);
 }
 
 function remoteToCadastroRecord(remote: CadastroItemPersist, ownerUid: string): CadastroRecord {
@@ -234,6 +239,19 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
         });
         continue;
       }
+      ignored += 1;
+      continue;
+    }
+
+    // Compat: nuvem antiga sem syncVersion (default 1) vs local N>1 com mesmo updatedAt
+    // e conteúdo igual — não reenviar o banco inteiro.
+    if (
+      decision.action === 'upload' &&
+      local &&
+      remote &&
+      readUpdatedAt(local) === readUpdatedAt(remote) &&
+      syncBusinessContentEqual(collection, local, remote)
+    ) {
       ignored += 1;
       continue;
     }

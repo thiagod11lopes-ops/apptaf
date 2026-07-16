@@ -55,6 +55,9 @@ export function toSessaoFromFirestoreDoc(
     return {
       ...light,
       ...(raw.updatedAt != null ? { updatedAt: raw.updatedAt } : {}),
+      ...(raw.syncVersion != null ? { syncVersion: raw.syncVersion } : {}),
+      ...(raw.deviceId != null ? { deviceId: raw.deviceId } : {}),
+      ...(raw.updatedBy != null ? { updatedBy: raw.updatedBy } : {}),
     };
   }
   return {

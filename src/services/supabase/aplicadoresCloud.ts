@@ -36,6 +36,12 @@ export async function getAplicadoresFirestoreSince(
 export async function addAplicadorFirestore(uid: string, item: AplicadorItemPersist): Promise<void> {
   const docId = item.id || `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const payload = toAplicadorCloudPayload(item);
+  const syncVersion =
+    typeof (payload as { syncVersion?: number }).syncVersion === 'number'
+      ? (payload as { syncVersion: number }).syncVersion
+      : typeof (payload as { version?: number }).version === 'number'
+        ? (payload as { version: number }).version
+        : undefined;
   await upsertOwnerDoc(
     TABLE,
     uid,
@@ -50,6 +56,7 @@ export async function addAplicadorFirestore(uid: string, item: AplicadorItemPers
       praca: payload.praca,
       senhaHash: payload.senhaHash,
       updatedAt: payload.updatedAt ?? Date.now(),
+      ...(syncVersion != null ? { syncVersion, version: syncVersion } : {}),
     },
     payload.updatedAt ?? Date.now(),
   );

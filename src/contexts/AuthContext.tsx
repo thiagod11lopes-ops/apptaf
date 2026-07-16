@@ -45,6 +45,11 @@ import { systemState } from '../offline-first/sync/SystemState';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
 import { clearPendingSyncResume } from '../offline-first/sync/syncResume';
+import {
+  activateE2eFromLoginPassword,
+  clearE2eSession,
+  restoreE2eFromSessionStorage,
+} from '../services/supabase/teamE2eSession';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -78,6 +83,23 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+async function restoreE2eForOwner(ownerUid: string): Promise<void> {
+  try {
+    await restoreE2eFromSessionStorage(ownerUid);
+  } catch (error) {
+    console.warn('[e2e] restauração da sessão falhou:', error);
+  }
+}
+
+async function activateE2eWithPassword(ownerUid: string, password: string): Promise<void> {
+  if (!ownerUid.trim() || !password) return;
+  try {
+    await activateE2eFromLoginPassword(ownerUid, password);
+  } catch (error) {
+    console.warn('[e2e] ativação com senha de login falhou:', error);
+  }
+}
+
 function hydrateInitialUser(): AppAuthUser | null {
   return readPersistedAuthProfile();
 }
@@ -101,8 +123,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applySignedInAppUserFallback = useCallback(async (mapped: AppAuthUser) => {
     await hydrateAppStorageFromIndexedDb();
+    confirmCloudDisplayReady();
     const access = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email).catch(() => null);
     const ownerUid = access?.dataOwnerUid ?? getCachedDataOwnerUid() ?? mapped.uid;
+    await restoreE2eForOwner(ownerUid);
     const isMember = access?.isAuthorizedMember ?? ownerUid !== mapped.uid;
     setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
     setUser(mapped);
@@ -125,7 +149,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsSessionLoading(true);
       try {
         await hydrateAppStorageFromIndexedDb();
+        confirmCloudDisplayReady();
         const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
+        await restoreE2eForOwner(session.dataOwnerUid);
         setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
         setUser(mapped);
         setDataOwnerUid(session.dataOwnerUid);
@@ -312,6 +338,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const signedIn = await signInWithEmailPassword(email, password);
       setRecoveryPending(false);
       await finalizeAuthenticatedSession(signedIn);
+      const ownerUid = getCachedDataOwnerUid() ?? signedIn.uid;
+      await activateE2eWithPassword(ownerUid, password);
       await waitForAuthenticatedUid(20_000);
     },
     [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
@@ -328,6 +356,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (result.user && !result.needsEmailConfirmation) {
         setRecoveryPending(false);
         await finalizeAuthenticatedSession(result.user);
+        const ownerUid = getCachedDataOwnerUid() ?? result.user.uid;
+        await activateE2eWithPassword(ownerUid, password);
         await waitForAuthenticatedUid(20_000);
       }
       return { needsEmailConfirmation: result.needsEmailConfirmation };
@@ -375,6 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     const ownerBeforeLogout = getCachedDataOwnerUid();
+    clearE2eSession();
     await signOutCloud();
     setCloudAuthUser(null);
     setUser(null);

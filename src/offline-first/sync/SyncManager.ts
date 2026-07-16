@@ -34,6 +34,7 @@ import {
 } from './syncUiState';
 import { estimateSyncQueueCounts } from './lastWriteWinsSync';
 import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
+import { setRemoteSyncWatermark } from './syncWatermark';
 import { parseSyncError, shouldTreatAsUpdateBlocked, type SyncErrorDetail } from './syncErrorInfo';
 import { isModoDemonstracaoAtivo } from '../db/appMeta';
 import {
@@ -699,6 +700,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     }
 
     lastSyncAt = result.audit.finishedAt;
+    await setRemoteSyncWatermark(ownerUid, result.audit.finishedAt);
     await loadLastSyncFromAudit();
 
     completeStep('finalizing');

@@ -120,6 +120,11 @@ export async function maybeDecryptFromCloud(
   raw: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const e2e = (raw as { __e2e?: unknown }).__e2e;
-  if (!isE2ECipherPayload(e2e) || !activeTeamKey) return raw;
+  if (!isE2ECipherPayload(e2e)) return raw;
+  if (!activeTeamKey) {
+    throw new Error(
+      'Dados cifrados na nuvem. Entre novamente com a senha de criptografia da equipe.',
+    );
+  }
   return decryptJson(activeTeamKey, e2e);
 }

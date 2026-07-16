@@ -2,13 +2,17 @@ import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
 import type { TombstonePayload } from '../../offline-first/sync/tombstone';
 import { extractSessaoRubricas, toSessaoFromFirestoreDoc, toSessaoLight } from '../../utils/sessaoLight';
 import { stampSessao } from '../offline/recordTimestamps';
-import { deleteOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
+import { deleteOwnerDoc, listOwnerDocs, listOwnerDocsSince, rowToDoc, upsertOwnerDoc } from './ownerDocs';
 import { deleteSessaoRubricasCloud, setSessaoRubricasCloud } from './sessaoRubricasCloud';
 
 const TABLE = 'sessoes';
 
 export async function getAllSessoesFirestoreLight(uid: string): Promise<SessaoAplicacaoTaf[]> {
   const rows = await listOwnerDocs(TABLE, uid);
+  return rowsToSessoes(rows);
+}
+
+function rowsToSessoes(rows: Awaited<ReturnType<typeof listOwnerDocs>>): SessaoAplicacaoTaf[] {
   const list: SessaoAplicacaoTaf[] = [];
   for (const row of rows) {
     if (row.deleted) continue;
@@ -18,6 +22,14 @@ export async function getAllSessoesFirestoreLight(uid: string): Promise<SessaoAp
   }
   list.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
   return list;
+}
+
+export async function getSessoesFirestoreSince(
+  uid: string,
+  sinceUpdatedAt: number,
+): Promise<SessaoAplicacaoTaf[]> {
+  const rows = await listOwnerDocsSince(TABLE, uid, sinceUpdatedAt);
+  return rowsToSessoes(rows);
 }
 
 export async function getAllSessoesFirestore(uid: string): Promise<SessaoAplicacaoTaf[]> {

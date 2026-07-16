@@ -80,13 +80,16 @@ export async function probeFirestoreConnectivityDetailed(
       return { ok: true };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      lastReason = msg.includes('JWT') || msg.includes('auth')
-        ? 'Token de autenticação expirado. Entre novamente com Google.'
-        : msg.includes('permission') || msg.includes('RLS') || msg.includes('policy')
-          ? targetUid !== user.id
-            ? 'Permissão negada na nuvem. Confirme que entrou com o e-mail autorizado pelo chefe.'
-            : 'Permissão negada na nuvem. Verifique se sua conta está autorizada e se as policies RLS foram aplicadas.'
-          : msg || lastReason;
+      lastReason =
+        /permission denied for (table|schema|relation)|must be owner|not granted/i.test(msg)
+          ? 'Tabelas sem permissão na API. No SQL Editor, execute os GRANTs do schema (authenticated).'
+          : msg.includes('JWT') || /auth/i.test(msg)
+            ? 'Token de autenticação expirado. Entre novamente com e-mail e senha.'
+            : msg.includes('permission') || msg.includes('RLS') || msg.includes('policy')
+              ? targetUid !== user.id
+                ? 'Permissão negada na nuvem. Confirme que entrou com o e-mail autorizado pelo chefe.'
+                : 'Permissão negada na nuvem. Verifique se as policies RLS do Supabase foram aplicadas.'
+              : msg || lastReason;
       await sleep(300 * (attempt + 1));
     }
   }

@@ -2,12 +2,16 @@ import type { AplicadorItemPersist } from '../aplicadoresIndexedDb';
 import type { TombstonePayload } from '../../offline-first/sync/tombstone';
 import { compareByNomePtBr } from '../../utils/compareNomePtBr';
 import { stripSenhaFromAplicador, toAplicadorFirestorePayload } from '../../utils/aplicadorSyncPolicy';
-import { deleteOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
+import { deleteOwnerDoc, listOwnerDocs, listOwnerDocsSince, rowToDoc, upsertOwnerDoc } from './ownerDocs';
 
 const TABLE = 'aplicadores';
 
 export async function getAllAplicadoresFirestore(uid: string): Promise<AplicadorItemPersist[]> {
   const rows = await listOwnerDocs(TABLE, uid);
+  return rowsToAplicadores(rows);
+}
+
+function rowsToAplicadores(rows: Awaited<ReturnType<typeof listOwnerDocs>>): AplicadorItemPersist[] {
   return rows
     .filter((row) => !row.deleted)
     .map((row) => {
@@ -19,6 +23,14 @@ export async function getAllAplicadoresFirestore(uid: string): Promise<Aplicador
       });
     })
     .sort(compareByNomePtBr);
+}
+
+export async function getAplicadoresFirestoreSince(
+  uid: string,
+  sinceUpdatedAt: number,
+): Promise<AplicadorItemPersist[]> {
+  const rows = await listOwnerDocsSince(TABLE, uid, sinceUpdatedAt);
+  return rowsToAplicadores(rows);
 }
 
 export async function addAplicadorFirestore(uid: string, item: AplicadorItemPersist): Promise<void> {

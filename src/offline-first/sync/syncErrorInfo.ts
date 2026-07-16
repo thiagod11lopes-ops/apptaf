@@ -20,7 +20,7 @@ const GENERIC: SyncErrorDetail = {
   code: 'sync_failed',
   typeLabel: 'Falha na sincronização',
   message: 'Falha ao sincronizar com a nuvem. Tente novamente.',
-  hint: 'Toque em «Tentar novamente». Se persistir, saia e entre com Google.',
+  hint: 'Toque em «Tentar novamente». Se persistir, saia e entre novamente.',
 };
 
 function detail(
@@ -33,7 +33,7 @@ function detail(
 }
 
 const UPDATE_BLOCKED_HINT =
-  'Tente outra rede (ex.: dados móveis), VPN autorizada ou peça liberação do Firebase/Google ao administrador da rede.';
+  'Tente outra rede (ex.: dados móveis) ou VPN. Se persistir, verifique se o Supabase está acessível.';
 
 /** Indica bloqueio de acesso à nuvem (rede/proxy/firewall), não falta de internet local. */
 export function shouldTreatAsUpdateBlocked(raw?: string | null): boolean {
@@ -91,7 +91,7 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
       'auth_session',
       'Sessão inválida',
       'Sessão inválida ou usuário não identificado.',
-      'Saia da conta e entre novamente com Google.',
+      'Saia da conta e entre novamente com e-mail e senha.',
     );
   }
 
@@ -99,22 +99,23 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
     msg === SYNC_AUTH_REQUIRED ||
     msg === SYNC_AUTH_REQUIRED_MESSAGE ||
     msg === 'Faça login com Google para sincronizar.' ||
-    /sess[aã]o google n[aã]o encontrada/i.test(msg)
+    /sess[aã]o google n[aã]o encontrada/i.test(msg) ||
+    /sess[aã]o n[aã]o encontrada/i.test(msg)
   ) {
     return detail(
       'auth_required',
       'Login necessário',
       SYNC_AUTH_REQUIRED_MESSAGE,
-      'Abra Configurações ou Início e faça login com Google.',
+      'Abra Conta e entre com e-mail e senha (@marinha.mil.br).',
     );
   }
 
-  if (/token.*expirad|sess[aã]o expirada|entre novamente com google/i.test(msg)) {
+  if (/token.*expirad|sess[aã]o expirada|entre novamente/i.test(msg)) {
     return detail(
       'auth_expired',
       'Sessão expirada',
       msg,
-      'Saia da conta e entre novamente com Google.',
+      'Saia da conta e entre novamente com e-mail e senha.',
     );
   }
 
@@ -143,23 +144,23 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
     /supabase indispon/i.test(msg)
   ) {
     return detail(
-      'firebase_unavailable',
-      'Firebase indisponível',
+      'cloud_unavailable',
+      'Nuvem indisponível',
       msg,
-      'Verifique a internet e se o Firebase está acessível; tente mais tarde.',
+      'Verifique a internet e se o Supabase está acessível; tente mais tarde.',
     );
   }
 
-  if (/permission|permiss[aã]o|denied|insufficient|negada/i.test(msg)) {
+  if (/permission|permiss[aã]o|denied|insufficient|negada|row-level security|rls|policy/i.test(msg)) {
     const message =
-      /pre_cadastros|Publique as regras|Permissão negada/i.test(msg)
-        ? msg
-        : 'Permissão negada na nuvem (Firestore).';
+      /Permissão negada/i.test(msg)
+        ? msg.replace(/\(Firestore\)/gi, '').replace(/Firebase/gi, 'Supabase').trim()
+        : 'Permissão negada na nuvem (Supabase).';
     return detail(
       'permission_denied',
       'Permissão na nuvem',
       message,
-      'Confirme que sua conta está autorizada e que as regras do Firebase permitem leitura/escrita.',
+      'Confirme que entrou com @marinha.mil.br e que o schema/policies do Supabase foram aplicados.',
     );
   }
 

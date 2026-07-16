@@ -98,6 +98,15 @@ create table if not exists public.team_wipe (
   wiped_at_server timestamptz default now()
 );
 
+-- Metadados da chave de criptografia E2E da equipe (chefe cria; membros leem para desbloquear)
+create table if not exists public.team_e2e_meta (
+  owner_uid uuid primary key,
+  salt_b64 text not null,
+  wrapped_key_b64 text not null,
+  key_version int not null default 1,
+  updated_at timestamptz default now()
+);
+
 -- Índices
 create index if not exists idx_cadastros_owner_updated on public.cadastros (owner_uid, updated_at);
 create index if not exists idx_sessoes_owner_updated on public.sessoes (owner_uid, updated_at);
@@ -144,6 +153,26 @@ as $$
   select public.is_boss(owner) or public.is_active_member_of(owner);
 $$;
 
+-- Privileges for Data API (necessário quando "Automatically expose new tables" está off)
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on
+  public.member_lookup,
+  public.member_uid_lookup,
+  public.authorized_emails,
+  public.cadastros,
+  public.cadastro_rubricas,
+  public.sessoes,
+  public.sessao_rubricas,
+  public.aplicadores,
+  public.aplicador_senhas,
+  public.pre_cadastros,
+  public.team_wipe,
+  public.team_e2e_meta
+to authenticated;
+grant execute on function public.is_boss(uuid) to authenticated;
+grant execute on function public.is_active_member_of(uuid) to authenticated;
+grant execute on function public.can_access_owner(uuid) to authenticated;
+
 -- RLS
 alter table public.member_lookup enable row level security;
 alter table public.member_uid_lookup enable row level security;
@@ -156,6 +185,7 @@ alter table public.aplicadores enable row level security;
 alter table public.aplicador_senhas enable row level security;
 alter table public.pre_cadastros enable row level security;
 alter table public.team_wipe enable row level security;
+alter table public.team_e2e_meta enable row level security;
 
 -- member_lookup
 drop policy if exists member_lookup_select on public.member_lookup;
@@ -273,4 +303,21 @@ drop policy if exists team_wipe_access on public.team_wipe;
 create policy team_wipe_access on public.team_wipe
   for all to authenticated
   using (public.can_access_owner(owner_uid))
+  with check (public.is_boss(owner_uid));
+
+-- team_e2e_meta: chefe grava; chefe e membros leem metadados para desbloquear chave
+drop policy if exists team_e2e_meta_select on public.team_e2e_meta;
+create policy team_e2e_meta_select on public.team_e2e_meta
+  for select to authenticated
+  using (public.can_access_owner(owner_uid));
+
+drop policy if exists team_e2e_meta_insert on public.team_e2e_meta;
+create policy team_e2e_meta_insert on public.team_e2e_meta
+  for insert to authenticated
+  with check (public.is_boss(owner_uid));
+
+drop policy if exists team_e2e_meta_update on public.team_e2e_meta;
+create policy team_e2e_meta_update on public.team_e2e_meta
+  for update to authenticated
+  using (public.is_boss(owner_uid))
   with check (public.is_boss(owner_uid));

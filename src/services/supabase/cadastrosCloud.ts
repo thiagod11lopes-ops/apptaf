@@ -8,7 +8,7 @@ import {
   hasCadastroRubricas,
   toCadastroLight,
 } from '../../utils/cadastroLight';
-import { deleteOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
+import { deleteOwnerDoc, listOwnerDocs, listOwnerDocsSince, rowToDoc, upsertOwnerDoc } from './ownerDocs';
 import {
   deleteCadastroRubricasCloud,
   setCadastroRubricasCloud,
@@ -18,6 +18,14 @@ const TABLE = 'cadastros';
 
 export async function getAllCadastrosFirestoreLight(uid: string): Promise<CadastroItemPersist[]> {
   const rows = await listOwnerDocs(TABLE, uid);
+  return rowsToCadastrosLight(rows);
+}
+
+export async function getAllCadastrosFirestore(uid: string): Promise<CadastroItemPersist[]> {
+  return getAllCadastrosFirestoreLight(uid);
+}
+
+function rowsToCadastrosLight(rows: Awaited<ReturnType<typeof listOwnerDocs>>): CadastroItemPersist[] {
   const items: CadastroItemPersist[] = [];
   for (const row of rows) {
     if (row.deleted) continue;
@@ -36,8 +44,12 @@ export async function getAllCadastrosFirestoreLight(uid: string): Promise<Cadast
   return dedupeCadastrosPorNip(items);
 }
 
-export async function getAllCadastrosFirestore(uid: string): Promise<CadastroItemPersist[]> {
-  return getAllCadastrosFirestoreLight(uid);
+export async function getCadastrosFirestoreSince(
+  uid: string,
+  sinceUpdatedAt: number,
+): Promise<CadastroItemPersist[]> {
+  const rows = await listOwnerDocsSince(TABLE, uid, sinceUpdatedAt);
+  return rowsToCadastrosLight(rows);
 }
 
 async function persistCadastro(uid: string, item: CadastroItemPersist): Promise<void> {

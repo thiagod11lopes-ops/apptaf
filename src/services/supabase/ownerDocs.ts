@@ -50,6 +50,28 @@ export async function listOwnerDocs(
   );
 }
 
+/** Lista documentos alterados desde um timestamp (sync incremental). */
+export async function listOwnerDocsSince(
+  table: string,
+  ownerUid: string,
+  sinceUpdatedAt: number,
+): Promise<CloudDocRow[]> {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from(table)
+    .select('id, owner_uid, data, updated_at, deleted')
+    .eq('owner_uid', ownerUid)
+    .gte('updated_at', sinceUpdatedAt);
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as CloudDocRow[];
+  return Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      data: await maybeDecryptFromCloud(row.data ?? {}),
+    })),
+  );
+}
+
 export async function deleteOwnerDoc(table: string, ownerUid: string, id: string): Promise<void> {
   const sb = requireSupabase();
   const { error } = await sb.from(table).delete().eq('owner_uid', ownerUid).eq('id', id);

@@ -243,14 +243,25 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       continue;
     }
 
-    // Compat: nuvem antiga sem syncVersion (default 1) vs local N>1 com mesmo updatedAt
-    // e conteúdo igual — não reenviar o banco inteiro.
+    // Já existe na nuvem com o mesmo conteúdo de negócio → não reenviar
+    // (evita tempestade de ~1200 uploads por syncVersion/updatedAt fantasma).
     if (
       decision.action === 'upload' &&
       local &&
       remote &&
-      readUpdatedAt(local) === readUpdatedAt(remote) &&
       syncBusinessContentEqual(collection, local, remote)
+    ) {
+      ignored += 1;
+      continue;
+    }
+
+    // Local já marcado synced e não é mais novo que o remoto → não reenviar.
+    if (
+      decision.action === 'upload' &&
+      local &&
+      remote &&
+      !isUnsyncedLocalStatus(local.syncStatus) &&
+      readUpdatedAt(local) <= readUpdatedAt(remote)
     ) {
       ignored += 1;
       continue;

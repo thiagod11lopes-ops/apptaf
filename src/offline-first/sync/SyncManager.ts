@@ -47,6 +47,11 @@ import {
 import { isCloudOwnerUid, legacyFirebaseUidMessage } from '../../utils/cloudOwnerUid';
 import { ensureE2eKeyForCloudSync } from '../../services/supabase/teamE2eSession';
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
+import {
+  attachRealConflictsToSyncAudit,
+  scanAndAuditRealConflicts,
+  type AuditedRealConflict,
+} from './auditRealConflicts';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
@@ -657,6 +662,20 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     currentStep = 'comparing';
     recordSyncStartedAt = Date.now();
 
+    // Auditoria de conflitos reais (não altera LWW nem o plano de sync).
+    let auditedConflicts: AuditedRealConflict[] = [];
+    try {
+      setUiProgress(0, 'Auditando conflitos…', 0, 0, undefined, 'preparing');
+      auditedConflicts = await scanAndAuditRealConflicts(ownerUid);
+    } catch (auditError) {
+      await syncLogger.warn(
+        'audit',
+        `Falha na auditoria de conflitos (sync segue com LWW): ${
+          auditError instanceof Error ? auditError.message : String(auditError)
+        }`,
+      );
+    }
+
     let lastProgressPhase: string | undefined;
 
     const result = await syncEngine.runLastWriteWinsSync({
@@ -696,6 +715,18 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     });
 
     lastAudit = result.audit;
+    if (auditedConflicts.length > 0) {
+      try {
+        lastAudit = await attachRealConflictsToSyncAudit(result.audit, auditedConflicts);
+      } catch (attachError) {
+        await syncLogger.warn(
+          'audit',
+          `Não foi possível anexar conflitos ao audit da sync: ${
+            attachError instanceof Error ? attachError.message : String(attachError)
+          }`,
+        );
+      }
+    }
 
     await refreshPendingSummary();
     if (pendingSummary.total > 0) {

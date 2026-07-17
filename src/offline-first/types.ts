@@ -130,6 +130,9 @@ export interface SyncAuditEntry {
     pre_cadastros?: { local: number; remote: number };
   };
   deletions?: import('./tombstone').DeletionAuditEntry[];
+  /** Auditoria de conflitos reais (detecção only; LWW continua decidindo). */
+  realConflictCount?: number;
+  realConflicts?: Array<Record<string, unknown>>;
 }
 
 export interface LocalBackupSnapshot {

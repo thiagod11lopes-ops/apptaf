@@ -1,11 +1,16 @@
 /**
  * Varredura e auditoria local de conflitos reais (sem alterar LWW).
+ * Persiste somente metadados e hashes SHA-256, nunca conteúdo de negócio.
  */
 
 import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
-import type { CollectionName, SyncAuditEntry } from '../types';
+import type {
+  CollectionName,
+  RealConflictAuditEntry,
+  SyncAuditEntry,
+} from '../types';
 import {
   listAplicadoresForSync,
   listCadastrosForSync,
@@ -18,22 +23,30 @@ import { fetchRemoteCollectionsSnapshot } from './remoteSnapshotCache';
 import { syncQueue } from './SyncQueue';
 import { syncLogger } from './SyncLogger';
 import { getDeviceId } from '../deviceId';
-import { APP_VERSION } from '../appVersion';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import {
   detectRealConflict,
   type DetectRealConflictResult,
 } from './detectRealConflict';
+import { hashConflictContent, sha256Text } from './conflictAuditHash';
 
-export type AuditedRealConflict = DetectRealConflictResult & {
-  collection: CollectionName;
-  recordId: string;
-  detectedAt: number;
-  /** Vencedor segundo LWW (somente auditoria — não altera sync). */
-  lwwWinner: 'local' | 'remote' | 'equal' | 'skip';
-  lwwAction: 'upload' | 'download' | 'skip';
-  lwwReason: string;
+export type AuditedRealConflict = RealConflictAuditEntry & {
+  /** Evita duplicar changeLog/SyncLogger em retries do mesmo conflito. */
+  isNewAudit: boolean;
 };
+
+function randomConflictId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `conflict-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function readUserId(record: Partial<SyncRecord>): string | null {
+  const value = record.updatedBy ?? record.userId;
+  if (!value || value === 'legacy' || value === 'remote') return null;
+  return value;
+}
 
 function remoteToCadastro(remote: CadastroItemPersist, ownerUid: string): SyncRecord {
   return remoteDocToSyncRecord(remote as Record<string, unknown> & { id: string }, ownerUid);
@@ -47,9 +60,7 @@ function remoteToAplicador(remote: AplicadorItemPersist, ownerUid: string): Sync
   return remoteDocToSyncRecord(remote as Record<string, unknown> & { id: string }, ownerUid);
 }
 
-async function localOperationIdMap(
-  ownerUid: string,
-): Promise<Map<string, string>> {
+async function localOperationIdMap(ownerUid: string): Promise<Map<string, string>> {
   const pending = await syncQueue.listPending(ownerUid, 2000);
   const map = new Map<string, string>();
   for (const item of pending) {
@@ -58,44 +69,162 @@ async function localOperationIdMap(
   return map;
 }
 
-function lwwAuditWinner(
+function decideAuditResult(
   local: SyncRecord,
   remote: SyncRecord,
-): Pick<AuditedRealConflict, 'lwwWinner' | 'lwwAction' | 'lwwReason'> {
+): RealConflictAuditEntry['result'] {
   const decision = decideLastWriteWins(local, remote);
   if (decision.action === 'upload') {
-    return { lwwWinner: 'local', lwwAction: 'upload', lwwReason: decision.reason };
+    return {
+      winner: 'local',
+      loser: 'remote',
+      action: 'upload',
+      reason: decision.reason,
+    };
   }
   if (decision.action === 'download') {
-    return { lwwWinner: 'remote', lwwAction: 'download', lwwReason: decision.reason };
+    return {
+      winner: 'remote',
+      loser: 'local',
+      action: 'download',
+      reason: decision.reason,
+    };
   }
-  return { lwwWinner: 'skip', lwwAction: 'skip', lwwReason: decision.reason };
+
+  // detectRealConflict não classifica empate completo como conflito.
+  // Fallback defensivo mantém a mesma preferência efetiva do LWW.
+  return {
+    winner: 'local',
+    loser: 'remote',
+    action: 'upload',
+    reason: decision.reason,
+  };
 }
 
-async function appendConflictChangeLog(entry: AuditedRealConflict): Promise<void> {
+export async function buildRealConflictAuditEntry(params: {
+  collection: CollectionName;
+  recordId: string;
+  detected: DetectRealConflictResult;
+  local: SyncRecord;
+  remote: SyncRecord;
+  detectedAt?: number;
+}): Promise<RealConflictAuditEntry> {
+  const { collection, recordId, detected, local, remote } = params;
+  const detectedAt = params.detectedAt ?? Date.now();
+  const [localHash, remoteHash] = await Promise.all([
+    hashConflictContent(local),
+    hashConflictContent(remote),
+  ]);
+  const result = decideAuditResult(local, remote);
+  const conflictKey = await sha256Text(
+    JSON.stringify({
+      collection,
+      recordId,
+      localVersion: detected.localVersion,
+      remoteVersion: detected.remoteVersion,
+      localUpdatedAt: detected.localUpdatedAt,
+      remoteUpdatedAt: detected.remoteUpdatedAt,
+      localHash,
+      remoteHash,
+      result,
+    }),
+  );
+
+  return {
+    conflictId: randomConflictId(),
+    conflictKey,
+    collection,
+    recordId,
+    detectedAt,
+    conflictType: detected.conflictType,
+    local: {
+      version: detected.localVersion,
+      updatedAt: detected.localUpdatedAt,
+      deviceId: detected.localDeviceId,
+      operationId: detected.localOperationId,
+      userId: readUserId(local),
+      contentHash: localHash,
+    },
+    remote: {
+      version: detected.remoteVersion,
+      updatedAt: detected.remoteUpdatedAt,
+      deviceId: detected.remoteDeviceId,
+      operationId: detected.remoteOperationId,
+      userId: readUserId(remote),
+      contentHash: remoteHash,
+    },
+    result,
+  };
+}
+
+type StoredConflictDetails = {
+  kind?: string;
+  conflictId?: string;
+  conflictKey?: string;
+};
+
+async function findExistingConflictId(
+  entry: RealConflictAuditEntry,
+): Promise<string | null> {
+  const db = getTafDatabase();
+  if (!db) return null;
+  const rows = await db.changeLog.where('documentId').equals(entry.recordId).toArray();
+  for (const row of rows) {
+    if (row.collection !== entry.collection || !row.details) continue;
+    try {
+      const details = JSON.parse(row.details) as StoredConflictDetails;
+      if (
+        details.kind === 'real_conflict_audit' &&
+        details.conflictKey === entry.conflictKey &&
+        details.conflictId
+      ) {
+        return details.conflictId;
+      }
+    } catch {
+      // ChangeLog legado ou details não JSON.
+    }
+  }
+  return null;
+}
+
+async function appendConflictChangeLog(entry: RealConflictAuditEntry): Promise<void> {
   await syncLogger.appendChangeLog({
     documentId: entry.recordId,
     collection: entry.collection,
     action: 'UPDATE',
-    deviceId: entry.localDeviceId ?? (await getDeviceId()),
-    userId: getCachedLoginUid(),
-    previousVersion: entry.localVersion ?? 0,
-    newVersion: entry.remoteVersion ?? 0,
+    deviceId: entry.local.deviceId ?? (await getDeviceId()),
+    userId: entry.local.userId ?? getCachedLoginUid(),
+    previousVersion: entry.local.version ?? 0,
+    newVersion: entry.remote.version ?? 0,
     timestamp: entry.detectedAt,
-    resolution: `lww_${entry.lwwWinner}`,
+    resolution: `lww_${entry.result.winner}`,
     details: JSON.stringify({
       kind: 'real_conflict_audit',
-      conflictType: entry.conflictType,
-      localUpdatedAt: entry.localUpdatedAt,
-      remoteUpdatedAt: entry.remoteUpdatedAt,
-      localDeviceId: entry.localDeviceId,
-      remoteDeviceId: entry.remoteDeviceId,
-      localOperationId: entry.localOperationId,
-      remoteOperationId: entry.remoteOperationId,
-      lwwAction: entry.lwwAction,
-      lwwReason: entry.lwwReason,
+      ...entry,
     }),
   });
+}
+
+async function persistConflictAudit(
+  entry: RealConflictAuditEntry,
+): Promise<AuditedRealConflict> {
+  const existingId = await findExistingConflictId(entry);
+  if (existingId) {
+    return { ...entry, conflictId: existingId, isNewAudit: false };
+  }
+
+  await appendConflictChangeLog(entry);
+  await syncLogger.warn('audit', `Conflito real detectado (${entry.conflictType})`, {
+    conflictId: entry.conflictId,
+    conflictKey: entry.conflictKey,
+    collection: entry.collection,
+    recordId: entry.recordId,
+    detectedAt: entry.detectedAt,
+    local: entry.local,
+    remote: entry.remote,
+    result: entry.result,
+  });
+  return { ...entry, isNewAudit: true };
 }
 
 /**
@@ -113,7 +242,7 @@ export async function scanAndAuditRealConflicts(ownerUid: string): Promise<Audit
     localOperationIdMap(ownerUid),
   ]);
 
-  const found: AuditedRealConflict[] = [];
+  const candidates: Array<Promise<RealConflictAuditEntry>> = [];
   const now = Date.now();
 
   const scanCollection = <TRemote extends { id: string }>(
@@ -122,7 +251,7 @@ export async function scanAndAuditRealConflicts(ownerUid: string): Promise<Audit
     remoteRows: TRemote[],
     toRemote: (remote: TRemote, ownerUid: string) => SyncRecord,
   ) => {
-    const remoteMap = new Map(remoteRows.map((r) => [r.id, toRemote(r, ownerUid)]));
+    const remoteMap = new Map(remoteRows.map((row) => [row.id, toRemote(row, ownerUid)]));
     for (const local of localRows) {
       const remote = remoteMap.get(local.id);
       if (!remote) continue;
@@ -134,14 +263,16 @@ export async function scanAndAuditRealConflicts(ownerUid: string): Promise<Audit
         remoteOperationId: null,
       });
       if (!detected.hasConflict) continue;
-      const lww = lwwAuditWinner(local, remote);
-      found.push({
-        ...detected,
-        collection,
-        recordId: local.id,
-        detectedAt: now,
-        ...lww,
-      });
+      candidates.push(
+        buildRealConflictAuditEntry({
+          collection,
+          recordId: local.id,
+          detected,
+          local,
+          remote,
+          detectedAt: now,
+        }),
+      );
     }
   };
 
@@ -149,29 +280,18 @@ export async function scanAndAuditRealConflicts(ownerUid: string): Promise<Audit
   scanCollection('sessoes', localSess, remoteSnap.remoteSess, remoteToSessao);
   scanCollection('aplicadores', localApp, remoteSnap.remoteApp, remoteToAplicador);
 
-  for (const conflict of found) {
-    await appendConflictChangeLog(conflict);
-    await syncLogger.warn('audit', `Conflito real detectado (${conflict.conflictType})`, {
-      collection: conflict.collection,
-      recordId: conflict.recordId,
-      localVersion: conflict.localVersion,
-      remoteVersion: conflict.remoteVersion,
-      localUpdatedAt: conflict.localUpdatedAt,
-      remoteUpdatedAt: conflict.remoteUpdatedAt,
-      localDeviceId: conflict.localDeviceId,
-      remoteDeviceId: conflict.remoteDeviceId,
-      localOperationId: conflict.localOperationId,
-      lwwWinner: conflict.lwwWinner,
-      lwwAction: conflict.lwwAction,
-      lwwReason: conflict.lwwReason,
-    });
+  const entries = await Promise.all(candidates);
+  const found: AuditedRealConflict[] = [];
+  for (const entry of entries) {
+    found.push(await persistConflictAudit(entry));
   }
 
-  if (found.length > 0) {
+  const newCount = found.filter((entry) => entry.isNewAudit).length;
+  if (newCount > 0) {
     await syncLogger.info(
       'audit',
-      `${found.length} conflito(s) real(is) auditado(s); LWW segue decidindo o vencedor.`,
-      { ownerUid, count: found.length },
+      `${newCount} novo(s) conflito(s) real(is) auditado(s); LWW segue decidindo o vencedor.`,
+      { ownerUid, newCount, totalDetected: found.length },
     );
   }
 
@@ -187,31 +307,13 @@ export async function attachRealConflictsToSyncAudit(
   conflicts: AuditedRealConflict[],
 ): Promise<SyncAuditEntry> {
   if (!conflicts.length) return audit;
-
-  const enriched: SyncAuditEntry & {
-    realConflictCount?: number;
-    realConflicts?: Array<Record<string, unknown>>;
-  } = {
+  const realConflicts: RealConflictAuditEntry[] = conflicts.map(
+    ({ isNewAudit: _isNewAudit, ...entry }) => entry,
+  );
+  const enriched: SyncAuditEntry = {
     ...audit,
-    realConflictCount: conflicts.length,
-    realConflicts: conflicts.map((c) => ({
-      collection: c.collection,
-      recordId: c.recordId,
-      detectedAt: c.detectedAt,
-      conflictType: c.conflictType,
-      localVersion: c.localVersion,
-      remoteVersion: c.remoteVersion,
-      localUpdatedAt: c.localUpdatedAt,
-      remoteUpdatedAt: c.remoteUpdatedAt,
-      localDeviceId: c.localDeviceId,
-      remoteDeviceId: c.remoteDeviceId,
-      localOperationId: c.localOperationId,
-      remoteOperationId: c.remoteOperationId,
-      lwwWinner: c.lwwWinner,
-      lwwAction: c.lwwAction,
-      lwwReason: c.lwwReason,
-      appVersion: APP_VERSION,
-    })),
+    realConflictCount: realConflicts.length,
+    realConflicts,
   };
 
   const db = getTafDatabase();
@@ -219,8 +321,8 @@ export async function attachRealConflictsToSyncAudit(
     await db.syncAuditHistory.update(audit.id, {
       realConflictCount: enriched.realConflictCount,
       realConflicts: enriched.realConflicts,
-    } as Partial<SyncAuditEntry>);
+    });
   }
 
-  return enriched as SyncAuditEntry;
+  return enriched;
 }

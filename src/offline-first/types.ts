@@ -100,6 +100,34 @@ export interface SyncLogEntry {
   meta?: Record<string, unknown>;
 }
 
+export type ConflictAuditSide = {
+  version: number | null;
+  updatedAt: number | null;
+  deviceId: string | null;
+  operationId: string | null;
+  userId: string | null;
+  /** SHA-256 do conteúdo; nenhum dado de negócio em texto puro. */
+  contentHash: string;
+};
+
+export type RealConflictAuditEntry = {
+  conflictId: string;
+  /** Hash estável usado apenas para deduplicação local. */
+  conflictKey: string;
+  collection: CollectionName;
+  recordId: string;
+  detectedAt: number;
+  conflictType: string;
+  local: ConflictAuditSide;
+  remote: ConflictAuditSide;
+  result: {
+    winner: 'local' | 'remote';
+    loser: 'local' | 'remote';
+    action: 'upload' | 'download';
+    reason: string;
+  };
+};
+
 export interface SyncAuditEntry {
   id?: number;
   ownerUid: string;
@@ -132,7 +160,7 @@ export interface SyncAuditEntry {
   deletions?: import('./tombstone').DeletionAuditEntry[];
   /** Auditoria de conflitos reais (detecção only; LWW continua decidindo). */
   realConflictCount?: number;
-  realConflicts?: Array<Record<string, unknown>>;
+  realConflicts?: RealConflictAuditEntry[];
 }
 
 export interface LocalBackupSnapshot {

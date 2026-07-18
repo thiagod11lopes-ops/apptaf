@@ -176,14 +176,14 @@ export function TopActionIcons({
     syncSaveIconState === 'success'
       ? 'Sincronizado'
       : syncPendingBadge > 0
-        ? 'Sincronizar agora'
-        : 'Sincronizar';
+        ? 'Atualizações pendentes'
+        : 'Status da nuvem';
   const syncTooltipDescription =
     syncSaveIconState === 'success'
-      ? 'Dados atualizados com a nuvem'
+      ? 'Dados atualizados com a nuvem. Toque para ver o status.'
       : syncPendingBadge > 0
-        ? `${syncPendingBadge} alteração(ões) para enviar ou receber`
-        : 'Enviar e receber dados com a nuvem';
+        ? `${syncPendingBadge} pendência(s) — sync automática online. Toque para acompanhar.`
+        : 'Sync automática com internet. Toque para ver o status.';
 
   const e2eColor = e2eActive ? theme.gain : theme.loss;
   const e2eTooltipTitle = e2eActive ? 'Criptografia ativa' : 'Criptografia inativa';
@@ -204,10 +204,10 @@ export function TopActionIcons({
               style={[btnStyle, { borderColor: syncBorderColor }]}
               accessibilityLabel={
                 syncSaveIconState === 'success'
-                  ? 'Sincronização concluída com sucesso'
+                  ? 'Nuvem sincronizada. Abrir status.'
                   : syncPendingBadge > 0
-                    ? `Sincronizar com a nuvem, ${syncPendingBadge} alteração(ões) pendente(s) (enviar e receber)`
-                    : 'Sincronizar com a nuvem'
+                    ? `${syncPendingBadge} pendência(s). Abrir status da sincronização automática.`
+                    : 'Abrir status da sincronização com a nuvem'
               }
             >
               <Save size={iconSize} color={syncIconColor} strokeWidth={strokeWidth} />

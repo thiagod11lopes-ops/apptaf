@@ -89,6 +89,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         await syncManager.bindSession(ownerUid);
         if (hasFirebaseUser && isAuthenticated) {
           await syncManager.refreshCloudDiff();
+          syncManager.scheduleBackgroundSync(2_500);
         }
       } else {
         await syncManager.refreshPending();
@@ -144,7 +145,8 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return subscribeDataChanged(() => {
-      void syncManager.refreshPending();
+      // Atualiza badge e agenda auto-sync (debounce) quando houver internet.
+      syncManager.scheduleOnlineWriteFlush();
     });
   }, []);
 
@@ -165,6 +167,8 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState !== 'visible') return;
       if (!getFirebaseAuth()?.currentUser) return;
       void syncManager.refreshCloudDiff();
+      // Voltou ao app online → tenta sync automática em segundo plano.
+      syncManager.scheduleBackgroundSync(2_000);
     };
 
     document.addEventListener('visibilitychange', onVisibilityChange);

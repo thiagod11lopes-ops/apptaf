@@ -5,9 +5,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
-import { SyncQuickOverlay } from '../components/sismav/SyncQuickOverlay';
+import { SyncLiveStatusModal } from '../components/sismav/SyncLiveStatusModal';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
-import { useSyncQuickOverlay } from '../hooks/useSyncQuickOverlay';
 import { StatCard } from '../components/sismav/StatCard';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
@@ -33,8 +32,8 @@ export default function HomeScreen() {
   const { isNarrowPhone } = useAplicarTafLayout();
   const { user, authReady, isAuthenticated, firebaseEnabled, dataOwnerUid } = useAuth();
   const { syncUi, pendingCount, startSyncFromToggle } = useOfflineSyncState();
-  const { overlayVisible, showOverlay } = useSyncQuickOverlay();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
+  const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
 
   const syncPendingTotal = useMemo(() => {
     const uploads = syncUi.counters.pendingUploads ?? pendingCount;
@@ -42,16 +41,19 @@ export default function HomeScreen() {
     return uploads + downloads;
   }, [pendingCount, syncUi.counters.pendingDownloads, syncUi.counters.pendingUploads]);
 
+  /** Abre modal de status; se houver pendência e não estiver syncando, dispara sync em background. */
   const handleSyncPress = useCallback(() => {
-    if (syncUi.isSyncing) return;
-    if (syncPendingTotal > 0) showOverlay();
-    void startSyncFromToggle();
-  }, [startSyncFromToggle, syncUi.isSyncing, showOverlay, syncPendingTotal]);
+    setSyncStatusModalVisible(true);
+    if (!syncUi.isSyncing && syncPendingTotal > 0) {
+      void startSyncFromToggle();
+    }
+  }, [startSyncFromToggle, syncUi.isSyncing, syncPendingTotal]);
 
   const syncSaveIconState = useMemo((): 'idle' | 'pending' | 'success' => {
-    if (syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date') return 'success';
-    if (syncUi.isSyncing) return 'idle';
-    if (syncPendingTotal > 0) return 'pending';
+    if (syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date') {
+      return syncPendingTotal > 0 ? 'pending' : 'success';
+    }
+    if (syncPendingTotal > 0 || syncUi.isSyncing) return 'pending';
     return 'idle';
   }, [syncUi.phase, syncUi.isSyncing, syncPendingTotal]);
 
@@ -98,7 +100,7 @@ export default function HomeScreen() {
           inline
           centered
           onSyncPress={firebaseEnabled ? handleSyncPress : undefined}
-          syncPendingBadge={syncSaveIconState === 'pending' ? syncPendingTotal : 0}
+          syncPendingBadge={syncPendingTotal > 0 ? syncPendingTotal : 0}
           syncSaveIconState={syncSaveIconState}
         />
       </View>
@@ -147,7 +149,10 @@ export default function HomeScreen() {
         </View>
       </TafGlassPanel>
 
-      <SyncQuickOverlay visible={overlayVisible} />
+      <SyncLiveStatusModal
+        visible={syncStatusModalVisible}
+        onClose={() => setSyncStatusModalVisible(false)}
+      />
     </MobileScreenScaffold>
   );
 }

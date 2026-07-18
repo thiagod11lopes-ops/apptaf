@@ -1,6 +1,6 @@
 import { getCachedDataOwnerUid, getCachedLoginUid, setAuthUidState } from '../../services/firebase/authUid';
 import { getFirebaseAuth } from '../../config/firebase';
-import { connectivityMonitor } from './ConnectivityMonitor';
+import { connectivityMonitor, getConnectivityState } from './ConnectivityMonitor';
 import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
 import { syncEngine, notifyDataChanged } from './SyncEngine';
 import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip } from '../db/localDb';
@@ -48,7 +48,10 @@ import {
   DEMO_SYNC_BLOCKED_MESSAGE,
 } from './syncAuthMessages';
 import { isCloudOwnerUid, legacyFirebaseUidMessage } from '../../utils/cloudOwnerUid';
-import { ensureE2eKeyForCloudSync } from '../../services/supabase/teamE2eSession';
+import {
+  ensureE2eKeyForCloudSync,
+  restoreE2eFromSessionStorage,
+} from '../../services/supabase/teamE2eSession';
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 import {
   attachRealConflictsToSyncAudit,
@@ -89,6 +92,10 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
 
 const SUCCESS_DISPLAY_MS = 3000;
 const ALREADY_UP_TO_DATE_MS = 2000;
+/** Debounce após edições locais — sync automática em segundo plano. */
+export const AUTO_SYNC_DEBOUNCE_MS = 15_000;
+/** Ao voltar a internet / foco. */
+export const AUTO_SYNC_RECONNECT_MS = 2_000;
 
 type Listener = (state: SyncManagerState) => void;
 
@@ -118,6 +125,8 @@ let etaTimer: ReturnType<typeof setInterval> | null = null;
 let syncStartedAt = 0;
 let recordSyncStartedAt = 0;
 let storedEnsureAuth: EnsureAuthenticatedFn | null = null;
+let backgroundSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let backgroundSyncRunning = false;
 let syncAuthAvailable = false;
 let queueEstimateInFlight = false;
 let queueEstimateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -927,6 +936,87 @@ export const syncManager = {
     await refreshPendingSummary();
     await refreshCloudQueueEstimate(true);
     notifyListeners();
+    this.scheduleBackgroundSync(AUTO_SYNC_RECONNECT_MS);
+  },
+
+  /**
+   * Agenda sync automática em segundo plano (debounce).
+   * Só dispara com internet, login, chave E2E e pendências.
+   */
+  scheduleBackgroundSync(delayMs = AUTO_SYNC_DEBOUNCE_MS): void {
+    if (backgroundSyncTimer) {
+      clearTimeout(backgroundSyncTimer);
+      backgroundSyncTimer = null;
+    }
+    backgroundSyncTimer = setTimeout(() => {
+      backgroundSyncTimer = null;
+      void this.tryBackgroundSync();
+    }, Math.max(0, delayMs));
+  },
+
+  cancelScheduledBackgroundSync(): void {
+    if (backgroundSyncTimer) {
+      clearTimeout(backgroundSyncTimer);
+      backgroundSyncTimer = null;
+    }
+  },
+
+  /** Sync silenciosa — sem modal; erros de E2E/offline são ignorados (não atrapalham UI). */
+  async tryBackgroundSync(): Promise<{ ok: boolean; skipped?: string }> {
+    if (backgroundSyncRunning || syncInFlight) {
+      return { ok: false, skipped: 'busy' };
+    }
+    if (isModoDemonstracaoAtivo()) {
+      return { ok: false, skipped: 'demo' };
+    }
+    if (!syncAuthAvailable || !getFirebaseAuth()?.currentUser) {
+      return { ok: false, skipped: 'auth' };
+    }
+    if (getConnectivityState() !== 'ONLINE') {
+      return { ok: false, skipped: 'offline' };
+    }
+
+    const authFn = storedEnsureAuth;
+    if (!authFn) {
+      return { ok: false, skipped: 'auth_handler' };
+    }
+
+    backgroundSyncRunning = true;
+    try {
+      await refreshPendingSummary();
+      await refreshCloudQueueEstimate(true);
+      const pendingUploads = pendingSummary.total;
+      const pendingDownloads = counters.pendingDownloads ?? 0;
+      if (pendingUploads <= 0 && pendingDownloads <= 0) {
+        notifyListeners();
+        return { ok: false, skipped: 'nothing_pending' };
+      }
+
+      const uid = ownerUid ?? getCachedDataOwnerUid();
+      if (uid && !getActiveTeamKey()) {
+        try {
+          await restoreE2eFromSessionStorage(uid);
+        } catch {
+          // ignore
+        }
+      }
+      if (!getActiveTeamKey()) {
+        await syncLogger.info(
+          'sync',
+          'Auto-sync adiada: criptografia da equipe não está ativa nesta sessão.',
+        );
+        return { ok: false, skipped: 'e2e' };
+      }
+
+      await syncLogger.info('sync', 'Auto-sync em segundo plano', {
+        pendingUploads,
+        pendingDownloads,
+      });
+      const result = await runSyncPipeline(authFn);
+      return { ok: result.ok, skipped: result.ok ? undefined : result.error };
+    } finally {
+      backgroundSyncRunning = false;
+    }
   },
 
   /** Revalida diferenças locais × nuvem (ex.: PWA voltou ao foco). */
@@ -997,7 +1087,14 @@ export const syncManager = {
 
   openSyncModal(): void {},
 
-  scheduleOnlineWriteFlush(): void {},
+  /** Após escrita local: atualiza badge e agenda auto-sync se online. */
+  scheduleOnlineWriteFlush(): void {
+    void this.refreshPending().then(() => {
+      if (getConnectivityState() === 'ONLINE' && syncAuthAvailable) {
+        this.scheduleBackgroundSync(AUTO_SYNC_DEBOUNCE_MS);
+      }
+    });
+  },
 
   async refreshPending(): Promise<PendingSyncSummary> {
     const summary = await refreshPendingSummary();
@@ -1033,6 +1130,7 @@ export const syncManager = {
   },
 
   async shutdown(): Promise<void> {
+    this.cancelScheduledBackgroundSync();
     stopCloudDiffWatch();
     await returnToOfflineMode();
     ownerUid = null;

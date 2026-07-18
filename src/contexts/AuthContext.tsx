@@ -45,6 +45,7 @@ import { resolveMemberAccess } from '../offline-first/sync/firebase/FirebaseGate
 import {
   hasAcceptedNewDatabaseTerms,
   markAcceptedNewDatabaseTerms,
+  consumeDatabaseTermsPreAccepted,
 } from '../offline-first/auth/databaseTerms';
 import { isCloudOwnerUid } from '../utils/cloudOwnerUid';
 import { TermosCriacaoBancoModal } from '../components/auth/TermosCriacaoBancoModal';
@@ -174,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         access.dataOwnerUid !== loginUid;
       if (isMember) return true;
       if (await hasAcceptedNewDatabaseTerms(loginUid)) return true;
+      if (await consumeDatabaseTermsPreAccepted(loginUid, email)) return true;
       const accepted = await requestNewDatabaseTermsAcceptance(email?.trim() || null);
       if (!accepted) return false;
       await markAcceptedNewDatabaseTerms(loginUid);

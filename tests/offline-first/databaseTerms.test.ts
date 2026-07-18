@@ -30,4 +30,18 @@ describe('databaseTerms — aceite de criação de banco', () => {
     expect(databaseTermsMetaKey('abc')).toBe('terms:newDatabaseAccepted:abc');
     expect(databaseTermsMetaKey('  abc  ')).toBe('terms:newDatabaseAccepted:abc');
   });
+
+  it('aceite prévio por e-mail é consumido no UID após cadastro', async () => {
+    const { setDatabaseTermsPreAcceptedForEmail, consumeDatabaseTermsPreAccepted, hasAcceptedNewDatabaseTerms, clearDatabaseTermsPreAccepted } =
+      await import('../../src/offline-first/auth/databaseTerms');
+    clearDatabaseTermsPreAccepted();
+    setDatabaseTermsPreAcceptedForEmail('novo.chefe@marinha.mil.br');
+    expect(
+      await consumeDatabaseTermsPreAccepted('uid-new', 'novo.chefe@marinha.mil.br'),
+    ).toBe(true);
+    expect(await hasAcceptedNewDatabaseTerms('uid-new')).toBe(true);
+    // Já consumido — não reaproveita
+    setDatabaseTermsPreAcceptedForEmail('outro@marinha.mil.br');
+    expect(await consumeDatabaseTermsPreAccepted('uid-new', 'novo.chefe@marinha.mil.br')).toBe(false);
+  });
 });

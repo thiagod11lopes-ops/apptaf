@@ -1,11 +1,21 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../Button';
+import { TermosCriacaoBancoModal } from './TermosCriacaoBancoModal';
 import { canUseEmailAuth } from '../../services/firebase/googleAuth';
+import { readPersistedAuthProfile } from '../../services/firebase/authProfile';
 import { PREMIUM } from '../../theme/premium';
-import { isAllowedAuthEmail, authEmailDomainErrorMessage } from '../../utils/normalizeAuthEmail';
+import {
+  isAllowedAuthEmail,
+  authEmailDomainErrorMessage,
+  normalizeAuthEmail,
+} from '../../utils/normalizeAuthEmail';
+import {
+  clearDatabaseTermsPreAccepted,
+  setDatabaseTermsPreAcceptedForEmail,
+} from '../../offline-first/auth/databaseTerms';
 
 type Mode = 'login' | 'register' | 'forgot' | 'recovery';
 
@@ -16,6 +26,12 @@ type Props = {
   forceRecovery?: boolean;
   onRecoveryDone?: () => void;
 };
+
+function isReturningLocalEmail(email: string): boolean {
+  const profile = readPersistedAuthProfile();
+  if (!profile?.email?.trim()) return false;
+  return normalizeAuthEmail(profile.email) === normalizeAuthEmail(email);
+}
 
 export function EmailPasswordAuthForm({
   onSuccess,
@@ -33,6 +49,9 @@ export function EmailPasswordAuthForm({
   const [password2, setPassword2] = useState('');
   const [loading, setLoading] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsModalVisible, setTermsModalVisible] = useState(false);
+  const emailWasAllowedRef = useRef(false);
 
   React.useEffect(() => {
     if (forceRecovery) setMode('recovery');
@@ -47,9 +66,68 @@ export function EmailPasswordAuthForm({
     },
   ];
 
-  const switchMode = useCallback((next: Mode) => {
-    setMode(next);
-    setInfo(null);
+  const resetTermsState = useCallback(() => {
+    setTermsAccepted(false);
+    setTermsModalVisible(false);
+    clearDatabaseTermsPreAccepted();
+  }, []);
+
+  const switchMode = useCallback(
+    (next: Mode) => {
+      setMode(next);
+      setInfo(null);
+      setPassword('');
+      setPassword2('');
+      if (next === 'register') {
+        if (!termsAccepted) setTermsModalVisible(true);
+      } else {
+        resetTermsState();
+      }
+    },
+    [resetTermsState, termsAccepted],
+  );
+
+  const handleEmailChange = useCallback(
+    (text: string) => {
+      setEmail(text);
+      if (forceRecovery || mode === 'recovery' || mode === 'forgot') {
+        emailWasAllowedRef.current = isAllowedAuthEmail(text);
+        return;
+      }
+
+      const allowed = isAllowedAuthEmail(text);
+      const becameComplete = allowed && !emailWasAllowedRef.current;
+      emailWasAllowedRef.current = allowed;
+
+      if (becameComplete && !isReturningLocalEmail(text)) {
+        // E-mail @marinha.mil.br completo e não é a conta local já conhecida → cadastro + termos.
+        setMode('register');
+        setInfo(null);
+        setTermsAccepted(false);
+        clearDatabaseTermsPreAccepted();
+        setTermsModalVisible(true);
+        return;
+      }
+
+      if (!allowed && mode === 'register') {
+        setMode('login');
+        resetTermsState();
+      }
+    },
+    [forceRecovery, mode, resetTermsState],
+  );
+
+  const handleAcceptTerms = useCallback(() => {
+    setTermsAccepted(true);
+    setTermsModalVisible(false);
+    setDatabaseTermsPreAcceptedForEmail(email);
+  }, [email]);
+
+  const handleDeclineTerms = useCallback(() => {
+    setTermsModalVisible(false);
+    setTermsAccepted(false);
+    clearDatabaseTermsPreAccepted();
+    setMode('login');
     setPassword('');
     setPassword2('');
   }, []);
@@ -72,6 +150,12 @@ export function EmailPasswordAuthForm({
       return;
     }
 
+    if (mode === 'register' && !termsAccepted) {
+      setTermsModalVisible(true);
+      onError?.('Aceite os termos de criação do banco de dados para continuar.');
+      return;
+    }
+
     setLoading(true);
     try {
       if (mode === 'login') {
@@ -80,12 +164,14 @@ export function EmailPasswordAuthForm({
         return;
       }
       if (mode === 'register') {
+        setDatabaseTermsPreAcceptedForEmail(email);
         const result = await signUpWithEmail(email, password);
         if (result.needsEmailConfirmation) {
           setInfo('Conta criada. Confirme o e-mail pelo link enviado e depois faça login.');
           setMode('login');
           setPassword('');
           setPassword2('');
+          resetTermsState();
           return;
         }
         onSuccess?.();
@@ -116,8 +202,10 @@ export function EmailPasswordAuthForm({
     password,
     password2,
     requestPasswordReset,
+    resetTermsState,
     signInWithEmail,
     signUpWithEmail,
+    termsAccepted,
     updatePassword,
   ]);
 
@@ -135,7 +223,7 @@ export function EmailPasswordAuthForm({
     mode === 'login'
       ? 'Entrar'
       : mode === 'register'
-        ? 'Criar conta'
+        ? 'Cadastrar'
         : mode === 'forgot'
           ? 'Recuperar senha'
           : 'Nova senha';
@@ -145,7 +233,7 @@ export function EmailPasswordAuthForm({
       {mode !== 'recovery' ? (
         <TextInput
           value={email}
-          onChangeText={setEmail}
+          onChangeText={handleEmailChange}
           placeholder="E-mail @marinha.mil.br"
           placeholderTextColor={theme.textMuted}
           style={inputStyle}
@@ -187,7 +275,33 @@ export function EmailPasswordAuthForm({
         />
       ) : null}
 
-      <Button title={title} onPress={() => void submit()} loading={loading} style={styles.btn} />
+      {mode === 'register' ? (
+        <Pressable
+          onPress={() => setTermsModalVisible(true)}
+          accessibilityRole="button"
+          style={[
+            styles.termsChip,
+            {
+              borderColor: termsAccepted ? theme.gain : theme.border,
+              backgroundColor: termsAccepted ? theme.gainMuted : theme.backgroundSecondary,
+            },
+          ]}
+        >
+          <Text style={[ts.caption, { color: termsAccepted ? theme.gain : theme.textSecondary, fontWeight: '700' }]}>
+            {termsAccepted
+              ? 'Termos de criação do banco aceitos'
+              : 'Toque para ler e aceitar os termos do banco'}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <Button
+        title={title}
+        onPress={() => void submit()}
+        loading={loading}
+        disabled={mode === 'register' && !termsAccepted}
+        style={styles.btn}
+      />
 
       {info ? (
         <Text style={[ts.caption, styles.info, { color: theme.gain }]}>{info}</Text>
@@ -209,12 +323,23 @@ export function EmailPasswordAuthForm({
       ) : null}
 
       {mode === 'register' || mode === 'forgot' ? (
-        <Pressable onPress={() => switchMode('login')} accessibilityRole="button" style={styles.backLink}>
+        <Pressable
+          onPress={() => switchMode('login')}
+          accessibilityRole="button"
+          style={styles.backLink}
+        >
           <Text style={[ts.caption, { color: theme.primary, fontWeight: '700', textAlign: 'center' }]}>
-            Voltar ao login
+            Já tenho conta — Entrar
           </Text>
         </Pressable>
       ) : null}
+
+      <TermosCriacaoBancoModal
+        visible={termsModalVisible}
+        email={email}
+        onAccept={handleAcceptTerms}
+        onDecline={handleDeclineTerms}
+      />
     </View>
   );
 }
@@ -229,6 +354,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   btn: { marginTop: 4 },
+  termsChip: {
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   links: {
     flexDirection: 'row',
     justifyContent: 'space-between',

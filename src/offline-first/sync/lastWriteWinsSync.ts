@@ -743,11 +743,17 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
   } = remoteSnapshot;
   const remotePre: PreCadastroRecord[] = [];
 
-  const [plainCadIds, plainSessIds, plainAppIds] = await Promise.all([
-    listPlaintextCloudDocIds('cadastros', ownerUid),
-    listPlaintextCloudDocIds('sessoes', ownerUid),
-    listPlaintextCloudDocIds('aplicadores', ownerUid),
-  ]);
+  // A varredura de docs em texto plano lê as tabelas inteiras — só vale a pena
+  // no full fetch (primeira sync ou resync periódico). No incremental, a
+  // re-criptografia pendente é tratada na próxima sync completa.
+  const [plainCadIds, plainSessIds, plainAppIds] =
+    remoteSnapshot.fetchMode === 'full'
+      ? await Promise.all([
+          listPlaintextCloudDocIds('cadastros', ownerUid),
+          listPlaintextCloudDocIds('sessoes', ownerUid),
+          listPlaintextCloudDocIds('aplicadores', ownerUid),
+        ])
+      : [new Set<string>(), new Set<string>(), new Set<string>()];
 
   await reconcileIdenticalUnsyncedLocals(
     'cadastros',

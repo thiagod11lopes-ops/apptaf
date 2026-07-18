@@ -6,6 +6,7 @@ import { SYNC_UPDATE_BLOCKED } from '../syncAuthMessages';
 
 export {
   getAllCadastrosFirestoreLight,
+  getCadastrosFirestoreSince,
   addCadastroFirestore,
   addCadastrosEmLoteFirestore,
   deleteCadastroFirestore,
@@ -14,6 +15,7 @@ export {
 
 export {
   getAllSessoesFirestoreLight,
+  getSessoesFirestoreSince,
   addSessaoFirestore,
   updateSessaoFirestore,
   deleteSessaoFirestore,
@@ -22,6 +24,7 @@ export {
 
 export {
   getAllAplicadoresFirestore,
+  getAplicadoresFirestoreSince,
   addAplicadorFirestore,
   deleteAplicadorFirestore,
   purgeAplicadorFirestore,

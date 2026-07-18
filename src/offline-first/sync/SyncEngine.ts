@@ -6,12 +6,15 @@ import {
   addCadastrosEmLoteFirestore,
   deleteCadastroFirestore,
   getAllCadastrosFirestoreLight,
+  getCadastrosFirestoreSince,
   addAplicadorFirestore,
   deleteAplicadorFirestore,
   getAllAplicadoresFirestore,
+  getAplicadoresFirestoreSince,
   addSessaoFirestore,
   deleteSessaoFirestore,
   getAllSessoesFirestoreLight,
+  getSessoesFirestoreSince,
   updateSessaoFirestore,
   wipeAllCloudDataForOwner,
 } from './firebase/FirebaseGateway';
@@ -19,6 +22,8 @@ import { getCachedLoginUid, getCachedDataOwnerUid, waitForAuthenticatedUid } fro
 import type { WipeCloudProgressCallback } from '../../services/firebase/wipeCloudDataFirestore';
 import { applyTeamWipeIfNeeded } from './syncTeamWipe';
 import { pushPendingAuthorizedEmails } from './syncAuthorizedEmails';
+import { getRemoteSyncWatermark } from './syncWatermark';
+import { INCREMENTAL_SINCE_MARGIN_MS } from './remoteSnapshotCache';
 import type { AplicadorRecord, CadastroRecord, SessaoRecord, SyncQueueEntry } from '../types';
 import {
   applyRemoteAplicador,
@@ -565,11 +570,27 @@ export class SyncEngine {
 
     await applyTeamWipeIfNeeded(ownerUid, getCachedLoginUid());
 
-    const [remoteCadastros, remoteSessoes, remoteAplicadores] = await Promise.all([
-      getAllCadastrosFirestoreLight(ownerUid),
-      getAllSessoesFirestoreLight(ownerUid),
-      getAllAplicadoresFirestore(ownerUid),
-    ]);
+    // Incremental: baixa só o que mudou desde a última sync conhecida.
+    // Full apenas na primeira vez (sem watermark) — o LWW manual cobre o resto.
+    const watermark = await getRemoteSyncWatermark(ownerUid);
+    const since =
+      watermark != null && watermark > 0
+        ? Math.max(0, watermark - INCREMENTAL_SINCE_MARGIN_MS)
+        : null;
+
+    const [remoteCadastros, remoteSessoes, remoteAplicadores] = await Promise.all(
+      since != null
+        ? [
+            getCadastrosFirestoreSince(ownerUid, since),
+            getSessoesFirestoreSince(ownerUid, since),
+            getAplicadoresFirestoreSince(ownerUid, since),
+          ]
+        : [
+            getAllCadastrosFirestoreLight(ownerUid),
+            getAllSessoesFirestoreLight(ownerUid),
+            getAllAplicadoresFirestore(ownerUid),
+          ],
+    );
 
     for (const cad of remoteCadastros) {
       await applyRemoteCadastro(
@@ -629,7 +650,7 @@ export class SyncEngine {
     setCloudSyncResult(true);
     await syncLogger.info(
       'sync',
-      `Pull concluído: ${remoteCadastros.length} cadastros, ${remoteSessoes.length} sessões, ${remoteAplicadores.length} aplicadores`,
+      `Pull ${since != null ? 'incremental' : 'completo'}: ${remoteCadastros.length} cadastros, ${remoteSessoes.length} sessões, ${remoteAplicadores.length} aplicadores`,
     );
     notify();
     void this.scheduleProcess(true);

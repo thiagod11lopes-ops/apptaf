@@ -13,7 +13,7 @@ import {
   listAplicadoresForSync,
 } from '../db/localDb';
 import { isUnsyncedLocalStatus } from './syncStatus';
-import { getRemoteSyncWatermark } from './syncWatermark';
+import { getRemoteSyncWatermark, isFullFetchDue, markFullFetchDone } from './syncWatermark';
 import {
   getAllAplicadoresFirestore,
   getAplicadoresFirestoreSince,
@@ -40,6 +40,8 @@ export type RemoteTombstoneCollection = 'cadastros' | 'sessoes' | 'aplicadores';
 export type RemoteCollectionsSnapshot = {
   ownerUid: string;
   fetchedAt: number;
+  /** 'full' = todas as linhas baixadas; 'incremental' = baseline local + deltas desde o watermark. */
+  fetchMode: 'full' | 'incremental';
   /** Registros ativos na nuvem (deleted filtrado — inalterado para UI/LWW atual). */
   remoteCad: CadastroItemPersist[];
   remoteSess: SessaoAplicacaoTaf[];
@@ -222,6 +224,15 @@ async function buildTombstoneBaselineFromLocal(ownerUid: string): Promise<{
   return { remoteCadTombstones, remoteSessTombstones, remoteAppTombstones };
 }
 
+/** Margem de segurança do fetch incremental — cobre skew de relógio entre dispositivos. */
+export const INCREMENTAL_SINCE_MARGIN_MS = 10 * 60_000;
+
+/**
+ * Busca o estado remoto para o sync.
+ * `force` invalida apenas o cache em memória (TTL); o fetch continua incremental
+ * quando existe watermark de sync anterior. Full fetch acontece só na primeira
+ * sincronização ou periodicamente (FULL_FETCH_INTERVAL_MS) para autocorreção.
+ */
 export async function fetchRemoteCollectionsSnapshot(
   ownerUid: string,
   force = false,
@@ -229,10 +240,11 @@ export async function fetchRemoteCollectionsSnapshot(
   const fresh = peekRemoteSnapshotCache(ownerUid);
   if (!force && fresh) return fresh;
 
-  const watermark = force ? null : await getRemoteSyncWatermark(ownerUid);
+  const watermark = await getRemoteSyncWatermark(ownerUid);
+  const canIncremental = watermark != null && watermark > 0 && !(await isFullFetchDue(ownerUid));
 
-  if (watermark != null && watermark > 0) {
-    const since = Math.max(0, watermark - 15_000);
+  if (canIncremental) {
+    const since = Math.max(0, watermark - INCREMENTAL_SINCE_MARGIN_MS);
     const [
       deltaCad,
       deltaSess,
@@ -264,23 +276,21 @@ export async function fetchRemoteCollectionsSnapshot(
       remoteAppTombstones: mergeById(tombBaseline.remoteAppTombstones, deltaAppTombstones),
     };
 
-    if (deltaCad.length + deltaSess.length + deltaApp.length === 0) {
-      cached = {
-        ownerUid,
-        fetchedAt: Date.now(),
-        ...baseline,
-        ...tombstones,
-        remotePre: [],
-      };
-      return cached;
-    }
+    // Registro excluído na nuvem chega só como tombstone delta; remove do
+    // baseline ativo para o LWW enxergar a exclusão em vez de um ativo antigo.
+    const deltaTombIds = {
+      cad: new Set(deltaCadTombstones.map((t) => t.id)),
+      sess: new Set(deltaSessTombstones.map((t) => t.id)),
+      app: new Set(deltaAppTombstones.map((t) => t.id)),
+    };
 
     cached = {
       ownerUid,
       fetchedAt: Date.now(),
-      remoteCad: mergeById(baseline.remoteCad, deltaCad),
-      remoteSess: mergeById(baseline.remoteSess, deltaSess),
-      remoteApp: mergeById(baseline.remoteApp, deltaApp),
+      fetchMode: 'incremental',
+      remoteCad: mergeById(baseline.remoteCad, deltaCad).filter((r) => !deltaTombIds.cad.has(r.id)),
+      remoteSess: mergeById(baseline.remoteSess, deltaSess).filter((r) => !deltaTombIds.sess.has(r.id)),
+      remoteApp: mergeById(baseline.remoteApp, deltaApp).filter((r) => !deltaTombIds.app.has(r.id)),
       ...tombstones,
       remotePre: [],
     };
@@ -303,9 +313,12 @@ export async function fetchRemoteCollectionsSnapshot(
     fetchRemoteCollection('aplicadores', ownerUid, () => listAplicadoresTombstonesForSync(ownerUid)),
   ]);
 
+  await markFullFetchDone(ownerUid);
+
   cached = {
     ownerUid,
     fetchedAt: Date.now(),
+    fetchMode: 'full',
     remoteCad,
     remoteSess,
     remoteApp,
@@ -323,6 +336,7 @@ export function withTombstoneDefaults(
 ): RemoteCollectionsSnapshot {
   return {
     ...EMPTY_TOMBSTONES,
+    fetchMode: 'full',
     ...snapshot,
     remoteCadTombstones: snapshot.remoteCadTombstones ?? [],
     remoteSessTombstones: snapshot.remoteSessTombstones ?? [],

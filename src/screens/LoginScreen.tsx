@@ -86,11 +86,18 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [senhaModalVisible, setSenhaModalVisible] = useState(false);
+  const [trocarSenhaContaAberto, setTrocarSenhaContaAberto] = useState(false);
 
   useEffect(() => {
     const redirectError = consumeLastRedirectAuthError();
     if (redirectError) setErro(redirectError);
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || passwordRecoveryPending) {
+      setTrocarSenhaContaAberto(false);
+    }
+  }, [isAuthenticated, passwordRecoveryPending]);
 
   const aguardandoLogin = isSessionLoading && !passwordRecoveryPending;
   const showAuthForm = !isAuthenticated || passwordRecoveryPending;
@@ -174,34 +181,36 @@ export default function LoginScreen() {
               ) : null}
             </>
           ) : (
-            <Button title="Sair da conta" variant="outline" onPress={handleLogout} loading={loading} />
+            <View style={styles.contaActions}>
+              <Button title="Sair da conta" variant="outline" onPress={handleLogout} loading={loading} />
+              <Button
+                title={trocarSenhaContaAberto ? 'Ocultar trocar senha' : 'Trocar senha'}
+                variant="secondary"
+                onPress={() => {
+                  setErro(null);
+                  setTrocarSenhaContaAberto((open) => !open);
+                }}
+              />
+              {trocarSenhaContaAberto ? (
+                <View style={styles.trocarSenhaBox}>
+                  <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 18 }]}>
+                    Senha de login da conta (chefe ou autorizado). Não é a senha de aplicador do TAF.
+                  </Text>
+                  <AlterarSenhaContaForm
+                    onSuccess={() => {
+                      setErro(null);
+                      setTrocarSenhaContaAberto(false);
+                    }}
+                    onError={setErro}
+                  />
+                  {erro ? (
+                    <Text style={[ts.caption, styles.erro, { color: theme.loss }]}>{erro}</Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
           )}
         </Card>
-
-        {isAuthenticated && !passwordRecoveryPending ? (
-          <Card elevated style={styles.senhaCard}>
-            <View style={styles.senhaHeader}>
-              <View
-                style={[styles.senhaIcon, { backgroundColor: theme.accentMuted, borderColor: theme.border }]}
-              >
-                <KeyRound size={20} color={theme.primary} strokeWidth={2.2} />
-              </View>
-              <View style={styles.senhaHeaderText}>
-                <Text style={ts.h2}>Trocar senha</Text>
-                <Text style={[ts.caption, { color: theme.textMuted, marginTop: 2 }]}>
-                  Use quando lembrar a senha atual. Diferente da recuperação por e-mail.
-                </Text>
-              </View>
-            </View>
-            <AlterarSenhaContaForm
-              onSuccess={() => setErro(null)}
-              onError={setErro}
-            />
-            {erro && !showAuthForm ? (
-              <Text style={[ts.caption, styles.erro, { color: theme.loss }]}>{erro}</Text>
-            ) : null}
-          </Card>
-        ) : null}
 
         {isAuthenticated && isAuthorizedMember && !passwordRecoveryPending ? (
           <Card elevated style={styles.senhaCard}>
@@ -273,6 +282,8 @@ const styles = StyleSheet.create({
   },
   erro: { marginTop: 10, textAlign: 'center' },
   footer: { textAlign: 'center', marginTop: 16, lineHeight: 20, paddingHorizontal: 8 },
+  contaActions: { gap: 10 },
+  trocarSenhaBox: { gap: 10, marginTop: 4 },
   senhaCard: { marginTop: 16 },
   senhaHeader: {
     flexDirection: 'row',

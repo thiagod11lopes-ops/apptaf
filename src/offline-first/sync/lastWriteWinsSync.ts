@@ -86,6 +86,7 @@ import {
   syncBusinessContentEqual,
 } from './syncBusinessContent';
 import { listPlaintextCloudDocIds } from '../../services/supabase/ownerDocs';
+import { alignRedundantDownloads } from './redundantDownloadGuard';
 
 const DOWNLOAD_CONCURRENCY = 8;
 
@@ -808,7 +809,13 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
   );
 
   const fullPlan = [...cadPlanFresh.plan, ...sessPlanFresh.plan, ...appPlanFresh.plan];
-  const downloadItems = fullPlan.filter((p) => p.action === 'download');
+  const plannedDownloadItems = fullPlan.filter((p) => p.action === 'download');
+  // Downloads redundantes (conteúdo idêntico ao local, só metadados de sync
+  // divergentes — ex.: reupload de re-criptografia) viram alinhamento local.
+  const { remaining: downloadItems, aligned: alignedDownloads } = await alignRedundantDownloads(
+    ownerUid,
+    plannedDownloadItems,
+  );
   const uploadItems = fullPlan
     .filter((p) => p.action === 'upload')
     .filter(
@@ -830,7 +837,7 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     uploadItems,
     plannedUploads: uploadItems.length,
     plannedDownloads: downloadItems.length,
-    totalIgnored: cadPlanFresh.ignored + sessPlanFresh.ignored + appPlanFresh.ignored,
+    totalIgnored: cadPlanFresh.ignored + sessPlanFresh.ignored + appPlanFresh.ignored + alignedDownloads,
     localCad,
     localSess,
     localApp,

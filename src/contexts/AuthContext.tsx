@@ -41,6 +41,13 @@ import { clearMemoryCloudCache } from '../services/cloudDataCache';
 import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { syncManager } from '../offline-first/sync/SyncManager';
 import { resolveLocalSessionAfterLogin } from '../offline-first/sync/syncSessionPrepare';
+import { resolveMemberAccess } from '../offline-first/sync/firebase/FirebaseGateway';
+import {
+  hasAcceptedNewDatabaseTerms,
+  markAcceptedNewDatabaseTerms,
+} from '../offline-first/auth/databaseTerms';
+import { isCloudOwnerUid } from '../utils/cloudOwnerUid';
+import { TermosCriacaoBancoModal } from '../components/auth/TermosCriacaoBancoModal';
 import { systemState } from '../offline-first/sync/SystemState';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
@@ -116,6 +123,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false);
   const [isAuthorizedMember, setIsAuthorizedMember] = useState(false);
   const [dataOwnerUid, setDataOwnerUid] = useState<string | null>(() => getCachedDataOwnerUid());
+  const [termsGate, setTermsGate] = useState<{
+    email: string | null;
+    resolve: (accepted: boolean) => void;
+  } | null>(null);
+  const [termsBusy, setTermsBusy] = useState(false);
   const supabaseEnabled = isSupabaseConfigured();
   const firebaseEnabled = supabaseEnabled;
   const authInitializedRef = useRef(false);
@@ -123,10 +135,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /** UID já finalizado nesta sessão (evita re-finalizar em loop com eventos repetidos do Supabase). */
   const finalizedUidRef = useRef<string | null>(null);
   const finalizingRef = useRef(false);
+  const termsGateRef = useRef(termsGate);
+  termsGateRef.current = termsGate;
 
   const setRecoveryPending = useCallback((value: boolean) => {
     passwordRecoveryPendingRef.current = value;
     setPasswordRecoveryPending(value);
+  }, []);
+
+  const requestNewDatabaseTermsAcceptance = useCallback((email: string | null): Promise<boolean> => {
+    if (termsGateRef.current) {
+      return new Promise((resolve) => {
+        const previous = termsGateRef.current!;
+        setTermsGate({
+          email: email ?? previous.email,
+          resolve: (accepted) => {
+            previous.resolve(accepted);
+            resolve(accepted);
+          },
+        });
+      });
+    }
+    return new Promise((resolve) => {
+      setTermsGate({ email, resolve });
+    });
+  }, []);
+
+  /**
+   * Membros autorizados pelo chefe seguem direto.
+   * Quem cria/assume o próprio banco precisa aceitar os termos (uma vez por UID).
+   */
+  const ensureNewDatabaseTermsAccepted = useCallback(
+    async (loginUid: string, email: string | null | undefined): Promise<boolean> => {
+      const access = await resolveMemberAccess(loginUid, email);
+      const isMember =
+        access.isAuthorizedMember &&
+        isCloudOwnerUid(access.dataOwnerUid) &&
+        access.dataOwnerUid !== loginUid;
+      if (isMember) return true;
+      if (await hasAcceptedNewDatabaseTerms(loginUid)) return true;
+      const accepted = await requestNewDatabaseTermsAcceptance(email?.trim() || null);
+      if (!accepted) return false;
+      await markAcceptedNewDatabaseTerms(loginUid);
+      return true;
+    },
+    [requestNewDatabaseTermsAcceptance],
+  );
+
+  const abortSessionWithoutTerms = useCallback(async () => {
+    finalizedUidRef.current = null;
+    finalizingRef.current = false;
+    setTermsBusy(false);
+    setTermsGate(null);
+    setCloudAuthUser(null);
+    setUser(null);
+    setIsAuthorizedMember(false);
+    setIsSessionLoading(false);
+    clearE2eSession();
+    try {
+      await signOutCloud();
+    } catch {
+      // silencioso — o importante é não concluir a sessão local
+    }
+  }, []);
+
+  const handleAcceptDatabaseTerms = useCallback(() => {
+    const gate = termsGateRef.current;
+    if (!gate) return;
+    setTermsBusy(true);
+    gate.resolve(true);
+    setTermsGate(null);
+    setTermsBusy(false);
+  }, []);
+
+  const handleDeclineDatabaseTerms = useCallback(() => {
+    const gate = termsGateRef.current;
+    if (!gate) return;
+    setTermsBusy(true);
+    gate.resolve(false);
+    setTermsGate(null);
+    setTermsBusy(false);
   }, []);
 
   const applySignedInAppUserFallback = useCallback(async (mapped: AppAuthUser) => {
@@ -165,6 +253,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       finalizedUidRef.current = mapped.uid;
       setIsSessionLoading(true);
       try {
+        const termsOk = await ensureNewDatabaseTermsAccepted(mapped.uid, mapped.email);
+        if (!termsOk) {
+          await abortSessionWithoutTerms();
+          return;
+        }
+
         await hydrateAppStorageFromIndexedDb();
         confirmCloudDisplayReady();
         const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
@@ -192,7 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsSessionLoading(false);
       }
     },
-    [applySignedInAppUserFallback, supabaseEnabled],
+    [abortSessionWithoutTerms, applySignedInAppUserFallback, ensureNewDatabaseTermsAccepted, supabaseEnabled],
   );
 
   const finalizeAuthenticatedSessionRef = useRef(finalizeAuthenticatedSession);
@@ -357,12 +451,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const signedIn = await signInWithEmailPassword(email, password);
       setRecoveryPending(false);
+      const termsOk = await ensureNewDatabaseTermsAccepted(signedIn.uid, signedIn.email);
+      if (!termsOk) {
+        await abortSessionWithoutTerms();
+        throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
+      }
       const session = await resolveLocalSessionAfterLogin(signedIn.uid, signedIn.email);
       await activateE2eWithPassword(session.dataOwnerUid, password, { strict: true });
       await finalizeAuthenticatedSession(signedIn);
       await waitForAuthenticatedUid(20_000);
     },
-    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
+    [
+      abortSessionWithoutTerms,
+      ensureNewDatabaseTermsAccepted,
+      finalizeAuthenticatedSession,
+      setRecoveryPending,
+      supabaseEnabled,
+    ],
   );
 
   const signUpWithEmail = useCallback(
@@ -375,6 +480,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await signUpWithEmailPassword(email, password);
       if (result.user && !result.needsEmailConfirmation) {
         setRecoveryPending(false);
+        const termsOk = await ensureNewDatabaseTermsAccepted(result.user.uid, result.user.email);
+        if (!termsOk) {
+          await abortSessionWithoutTerms();
+          throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
+        }
         const session = await resolveLocalSessionAfterLogin(result.user.uid, result.user.email);
         await activateE2eWithPassword(session.dataOwnerUid, password, { strict: true });
         await finalizeAuthenticatedSession(result.user);
@@ -382,7 +492,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { needsEmailConfirmation: result.needsEmailConfirmation };
     },
-    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
+    [
+      abortSessionWithoutTerms,
+      ensureNewDatabaseTermsAccepted,
+      finalizeAuthenticatedSession,
+      setRecoveryPending,
+      supabaseEnabled,
+    ],
   );
 
   const requestPasswordReset = useCallback(
@@ -487,7 +603,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <TermosCriacaoBancoModal
+        visible={termsGate != null}
+        email={termsGate?.email}
+        loading={termsBusy}
+        onAccept={handleAcceptDatabaseTerms}
+        onDecline={handleDeclineDatabaseTerms}
+      />
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

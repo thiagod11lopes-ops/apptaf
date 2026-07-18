@@ -16,6 +16,7 @@ import {
   clearDatabaseTermsPreAccepted,
   setDatabaseTermsPreAcceptedForEmail,
 } from '../../offline-first/auth/databaseTerms';
+import { isKnownAuthEmailOnDevice } from '../../offline-first/auth/knownAuthEmails';
 
 type Mode = 'login' | 'register' | 'forgot' | 'recovery';
 
@@ -100,12 +101,15 @@ export function EmailPasswordAuthForm({
       emailWasAllowedRef.current = allowed;
 
       if (becameComplete && !isReturningLocalEmail(text)) {
-        // E-mail @marinha.mil.br completo e não é a conta local já conhecida → cadastro + termos.
-        setMode('register');
-        setInfo(null);
-        setTermsAccepted(false);
-        clearDatabaseTermsPreAccepted();
-        setTermsModalVisible(true);
+        // Só trata como novo banco se o e-mail nunca autenticou neste dispositivo.
+        void (async () => {
+          if (await isKnownAuthEmailOnDevice(text)) return;
+          setMode('register');
+          setInfo(null);
+          setTermsAccepted(false);
+          clearDatabaseTermsPreAccepted();
+          setTermsModalVisible(true);
+        })();
         return;
       }
 

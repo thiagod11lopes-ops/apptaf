@@ -44,4 +44,17 @@ describe('databaseTerms — aceite de criação de banco', () => {
     setDatabaseTermsPreAcceptedForEmail('outro@marinha.mil.br');
     expect(await consumeDatabaseTermsPreAccepted('uid-new', 'novo.chefe@marinha.mil.br')).toBe(false);
   });
+
+  it('e-mails conhecidos no dispositivo persistem e são normalizados', async () => {
+    const { isKnownAuthEmailOnDevice, rememberKnownAuthEmailOnDevice } = await import(
+      '../../src/offline-first/auth/knownAuthEmails'
+    );
+    expect(await isKnownAuthEmailOnDevice('chefe.existente@marinha.mil.br')).toBe(false);
+    await rememberKnownAuthEmailOnDevice('  Chefe.Existente@MARINHA.MIL.BR ');
+    expect(await isKnownAuthEmailOnDevice('chefe.existente@marinha.mil.br')).toBe(true);
+    expect(await isKnownAuthEmailOnDevice('desconhecido@marinha.mil.br')).toBe(false);
+    // inválido nunca é registrado
+    await rememberKnownAuthEmailOnDevice('nao-e-email');
+    expect(await isKnownAuthEmailOnDevice('nao-e-email')).toBe(false);
+  });
 });

@@ -47,6 +47,8 @@ import {
   markAcceptedNewDatabaseTerms,
   consumeDatabaseTermsPreAccepted,
 } from '../offline-first/auth/databaseTerms';
+import { rememberKnownAuthEmailOnDevice } from '../offline-first/auth/knownAuthEmails';
+import { ownerHasExistingCloudData } from '../services/supabase/ownerCloudPresence';
 import { isCloudOwnerUid } from '../utils/cloudOwnerUid';
 import { TermosCriacaoBancoModal } from '../components/auth/TermosCriacaoBancoModal';
 import { systemState } from '../offline-first/sync/SystemState';
@@ -176,6 +178,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isMember) return true;
       if (await hasAcceptedNewDatabaseTerms(loginUid)) return true;
       if (await consumeDatabaseTermsPreAccepted(loginUid, email)) return true;
+      // Conta que já possui banco na nuvem não é criação — não exibe termos.
+      if (await ownerHasExistingCloudData(loginUid)) {
+        await markAcceptedNewDatabaseTerms(loginUid);
+        return true;
+      }
       const accepted = await requestNewDatabaseTermsAcceptance(email?.trim() || null);
       if (!accepted) return false;
       await markAcceptedNewDatabaseTerms(loginUid);
@@ -232,6 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthorizedMember(isMember);
     setAuthUidState(mapped.uid, ownerUid, true);
     persistAuthProfile(mapped);
+    void rememberKnownAuthEmailOnDevice(mapped.email);
     clearPendingSyncResume();
     setAuthReady(true);
     notifyDataChanged();
@@ -271,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthorizedMember(session.isAuthorizedMember);
         setAuthUidState(mapped.uid, session.dataOwnerUid, true);
         persistAuthProfile(mapped);
+        void rememberKnownAuthEmailOnDevice(mapped.email);
         clearPendingSyncResume();
         setAuthReady(true);
         notifyDataChanged();

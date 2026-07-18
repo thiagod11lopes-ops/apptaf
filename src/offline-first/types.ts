@@ -77,6 +77,16 @@ export interface SyncQueueEntry {
   status: QueueStatus;
   ownerUid: string;
   error?: string;
+  /** Início do lease `processing` (crash recovery). */
+  processingStartedAt?: number;
+  /** Última tentativa de processamento. */
+  lastAttemptAt?: number;
+  /** Próxima tentativa elegível (backoff persistido). */
+  nextAttemptAt?: number;
+  /** Token do claim atômico — só o worker dono pode concluir. */
+  attemptId?: string;
+  /** syncVersion capturada no envio (Safe Sync Commit / 7.3). */
+  sentSyncVersion?: number;
 }
 
 export interface ChangeLogEntry {

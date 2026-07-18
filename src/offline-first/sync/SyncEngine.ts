@@ -47,7 +47,7 @@ import { connectivityMonitor } from './ConnectivityMonitor';
 import { systemState } from './SystemState';
 import { getPendingSyncItems } from './pendingSyncItems';
 import { isUnsyncedLocalStatus } from './syncStatus';
-import { markRecordSynced } from './recordMeta';
+import { markRecordSynced, readSyncVersion } from './recordMeta';
 import { isQueuePayloadStillCurrent } from './queueSyncGuard';
 import { buildFirestoreTombstone } from './tombstone';
 import {
@@ -65,11 +65,13 @@ import {
 } from '../../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from './cloudDisplayGate';
 import { migrateAnonymousDexieToOwner, migrateDexieOwnerToOwner } from '../db/migration';
+import {
+  isAuthorizedMemberSession,
+  isMemberAplicadorSenhaChange,
+  toAplicadorFirestorePayload,
+} from '../../utils/aplicadorSyncPolicy';
 
 type StoreListener = () => void;
-
-const BACKOFF_BASE_MS = 1500;
-const BACKOFF_MAX_MS = 60_000;
 
 let ownerUid: string | null = null;
 let onlineModeUid: string | null = null;
@@ -94,10 +96,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 function notify(): void {
   listeners.forEach((fn) => fn());
-}
-
-function backoffDelay(retries: number): number {
-  return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, retries));
 }
 
 /** UID usado nas escritas Firestore — sempre a conta de dados da sessão autenticada. */
@@ -186,109 +184,141 @@ async function logStaleQueueConfirm(entry: SyncQueueEntry, id: string): Promise<
   );
 }
 
+/**
+ * Executor unificado (7.2/7.3): Dexie fresh é a fonte do payload.
+ * `entry.payload` é apenas hint (ex.: batch legado). Version guard antes/depois do write.
+ */
 async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
   const uid = resolveFirestoreWriteUid(entry.ownerUid);
-  const payload = JSON.parse(entry.payload) as Record<string, unknown>;
+
+  // Batch legado: reenvia cada ID a partir do Dexie atual (não do JSON congelado).
+  if (entry.collection === 'cadastros') {
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = JSON.parse(entry.payload) as Record<string, unknown>;
+    } catch {
+      parsed = {};
+    }
+    if (parsed.kind === 'cadastrosBatch' && Array.isArray(parsed.items)) {
+      const ids = (parsed.items as Array<{ id?: string }>)
+        .map((i) => i.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      for (const id of ids) {
+        await executeQueueItem({
+          ...entry,
+          operationId: entry.operationId,
+          documentId: id,
+          operationType: 'UPDATE',
+          payload: '{}',
+        });
+      }
+      return;
+    }
+  }
 
   if (entry.collection === 'cadastros') {
-    if (payload.kind === 'cadastrosBatch' && Array.isArray(payload.items)) {
-      const items = payload.items as CadastroItemPersist[];
-      const cloudItems = items.map(
-        (item) => stripForCloud(item as unknown as Record<string, unknown>) as unknown as CadastroItemPersist,
-      );
-      for (let i = 0; i < cloudItems.length; i += 500) {
-        await addCadastrosEmLoteFirestore(uid, cloudItems.slice(i, i + 500));
-      }
-      for (const item of items) {
-        const row = item as CadastroRecord;
-        if (!(await isQueuePayloadStillCurrent('cadastros', row.id, row))) {
-          await logStaleQueueConfirm(entry, row.id);
-          continue;
-        }
-        await putCadastroRecord(markRecordSynced({ ...row, ownerUid: uid } as CadastroRecord, getCachedLoginUid()));
-      }
-      return;
-    }
-    if (entry.operationType === 'DELETE') {
-      const row = await getCadastroRaw(entry.documentId);
-      if (row && row.deleted) {
-        await deleteCadastroFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
-      }
-      if (row && (await isQueuePayloadStillCurrent('cadastros', entry.documentId, row))) {
-        await putCadastroRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
-      } else if (row) {
+    const row = await getCadastroRaw(entry.documentId);
+    if (!row) return;
+    const sentVersion = readSyncVersion(row);
+
+    if (row.deleted) {
+      await deleteCadastroFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
+    } else {
+      // Abort pré-write se a versão mudou entre claim e leitura (raro).
+      const still = await getCadastroRaw(entry.documentId);
+      if (!still || readSyncVersion(still) !== sentVersion) {
         await logStaleQueueConfirm(entry, entry.documentId);
+        return;
       }
+      await addCadastroFirestore(
+        uid,
+        stripForCloud({ ...still, ownerUid: uid } as unknown as Record<string, unknown>) as unknown as CadastroItemPersist,
+      );
+    }
+
+    if (!(await isQueuePayloadStillCurrent('cadastros', entry.documentId, { syncVersion: sentVersion }))) {
+      await logStaleQueueConfirm(entry, entry.documentId);
       return;
     }
-    await addCadastroFirestore(uid, stripForCloud(payload) as CadastroItemPersist);
-    const saved = payload as CadastroRecord;
-    if (!(await isQueuePayloadStillCurrent('cadastros', saved.id ?? entry.documentId, saved))) {
-      await logStaleQueueConfirm(entry, saved.id ?? entry.documentId);
-      return;
+    const fresh = await getCadastroRaw(entry.documentId);
+    if (fresh) {
+      await putCadastroRecord(markRecordSynced({ ...fresh, ownerUid: uid }, getCachedLoginUid()));
     }
-    await putCadastroRecord(markRecordSynced({ ...saved, ownerUid: uid }, getCachedLoginUid()));
     return;
   }
 
   if (entry.collection === 'aplicadores') {
-    if (entry.operationType === 'DELETE') {
-      const row = await getAplicadorRaw(entry.documentId);
-      if (row && row.deleted) {
-        await deleteAplicadorFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
+    const row = await getAplicadorRaw(entry.documentId);
+    if (!row) return;
+
+    if (isAuthorizedMemberSession() && !row.deleted) {
+      // Membros só sobem troca de senha — alinhado ao LWW.
+      if (!isMemberAplicadorSenhaChange(row, undefined)) {
+        await syncLogger.info('queue', 'aplicador_upload_ignorado_membro', {
+          operationId: entry.operationId,
+          collection: 'aplicadores',
+        });
+        return;
       }
-      if (row && (await isQueuePayloadStillCurrent('aplicadores', entry.documentId, row))) {
-        await putAplicadorRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
-      } else if (row) {
+    }
+
+    const sentVersion = readSyncVersion(row);
+    if (row.deleted) {
+      await deleteAplicadorFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
+    } else {
+      const still = await getAplicadorRaw(entry.documentId);
+      if (!still || readSyncVersion(still) !== sentVersion) {
         await logStaleQueueConfirm(entry, entry.documentId);
+        return;
       }
-      return;
-    }
-    
-    const appPayload = payload as AplicadorItemPersist;
-    if (!appPayload.id) {
-      appPayload.id = entry.documentId || `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      await addAplicadorFirestore(
+        uid,
+        toAplicadorFirestorePayload(
+          stripForCloud({ ...still, ownerUid: uid } as unknown as Record<string, unknown>) as unknown as AplicadorItemPersist,
+        ),
+      );
     }
 
-    await addAplicadorFirestore(
-      uid,
-      stripForCloud(appPayload as unknown as Record<string, unknown>) as unknown as AplicadorItemPersist,
-    );
-    const savedApp = payload as AplicadorRecord;
-    if (!(await isQueuePayloadStillCurrent('aplicadores', appPayload.id, savedApp))) {
-      await logStaleQueueConfirm(entry, appPayload.id);
-      return;
-    }
-    await putAplicadorRecord(markRecordSynced({ ...savedApp, ownerUid: uid }, getCachedLoginUid()));
-    return;
-  }
-
-  if (entry.operationType === 'DELETE') {
-    const row = await getSessaoRaw(entry.documentId);
-    if (row && row.deleted) {
-      await deleteSessaoFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
-    }
-    if (row && (await isQueuePayloadStillCurrent('sessoes', entry.documentId, row))) {
-      await putSessaoRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
-    } else if (row) {
+    if (!(await isQueuePayloadStillCurrent('aplicadores', entry.documentId, { syncVersion: sentVersion }))) {
       await logStaleQueueConfirm(entry, entry.documentId);
+      return;
+    }
+    const fresh = await getAplicadorRaw(entry.documentId);
+    if (fresh) {
+      await putAplicadorRecord(markRecordSynced({ ...fresh, ownerUid: uid }, getCachedLoginUid()));
     }
     return;
   }
 
-  const sessao = stripForCloud(payload) as unknown as SessaoAplicacaoTaf;
-  if (entry.operationType === 'CREATE') {
-    await addSessaoFirestore(uid, sessao);
+  // sessoes
+  const row = await getSessaoRaw(entry.documentId);
+  if (!row) return;
+  const sentVersion = readSyncVersion(row);
+
+  if (row.deleted) {
+    await deleteSessaoFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
   } else {
-    await updateSessaoFirestore(uid, sessao);
+    const still = await getSessaoRaw(entry.documentId);
+    if (!still || readSyncVersion(still) !== sentVersion) {
+      await logStaleQueueConfirm(entry, entry.documentId);
+      return;
+    }
+    const sessao = stripForCloud({ ...still, ownerUid: uid } as unknown as Record<string, unknown>) as unknown as SessaoAplicacaoTaf;
+    if (entry.operationType === 'CREATE') {
+      await addSessaoFirestore(uid, sessao);
+    } else {
+      await updateSessaoFirestore(uid, sessao);
+    }
   }
-  const savedSess = payload as SessaoRecord;
-  const sessId = savedSess.id ?? entry.documentId;
-  if (!(await isQueuePayloadStillCurrent('sessoes', sessId, savedSess))) {
-    await logStaleQueueConfirm(entry, sessId);
+
+  if (!(await isQueuePayloadStillCurrent('sessoes', entry.documentId, { syncVersion: sentVersion }))) {
+    await logStaleQueueConfirm(entry, entry.documentId);
     return;
   }
-  await putSessaoRecord(markRecordSynced({ ...savedSess, ownerUid: uid }, getCachedLoginUid()));
+  const fresh = await getSessaoRaw(entry.documentId);
+  if (fresh) {
+    await putSessaoRecord(markRecordSynced({ ...fresh, ownerUid: uid }, getCachedLoginUid()));
+  }
 }
 
 export class SyncEngine {
@@ -312,6 +342,8 @@ export class SyncEngine {
       await systemState.hydrate();
     }
     await getMeta(`migrated:${dataOwnerUid}`);
+    // Crash recovery: processing órfão volta a pending após lease.
+    await syncQueue.recoverStaleProcessing(dataOwnerUid);
     connectivityMonitor.start();
     onlineModeUid = dataOwnerUid;
 
@@ -388,6 +420,7 @@ export class SyncEngine {
 
     lastProcessFinishedAt = 0;
     await reconcileSessionPendingOwner(ownerUid);
+    await syncQueue.recoverStaleProcessing(ownerUid);
     await syncQueue.resetFailedToPending(ownerUid);
 
     // E-mails autorizados pendentes não passam pela SyncQueue — envia antes
@@ -396,7 +429,7 @@ export class SyncEngine {
 
     for (let round = 0; round < 4; round++) {
       await enqueueDexiePendingIntoQueue(ownerUid);
-      const queuePending = await syncQueue.listPending(ownerUid);
+      const queuePending = await syncQueue.listReady(ownerUid);
       if (queuePending.length === 0) {
         const stillEmpty = await getPendingSyncItems(ownerUid);
         if (stillEmpty.total === 0) {
@@ -503,7 +536,8 @@ export class SyncEngine {
       setSyncProgress(10);
 
       try {
-        const pending = await syncQueue.listPending(ownerUid!);
+        // Recovery + só itens com backoff vencido.
+        const pending = await syncQueue.listReady(ownerUid!);
         setSyncProgress(25);
 
         let succeeded = 0;
@@ -511,30 +545,35 @@ export class SyncEngine {
 
         for (let i = 0; i < pending.length; i++) {
           const item = pending[i]!;
-          await syncQueue.markProcessing(item.operationId);
+          const claimed = await syncQueue.claimForProcessing(item.operationId);
+          if (!claimed) continue;
           try {
-            await withCloudUpload(() => executeQueueItem(item));
-            await syncQueue.markDone(item.operationId);
+            await withCloudUpload(() => executeQueueItem(claimed));
+            await syncQueue.markDone(claimed.operationId, claimed.attemptId);
             succeeded += 1;
             setSyncProgress(25 + Math.round(((i + 1) / Math.max(pending.length, 1)) * 40));
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
-            await syncQueue.markFailed(item.operationId, msg, item.retries + 1);
+            await syncQueue.markFailed(
+              claimed.operationId,
+              msg,
+              claimed.retries + 1,
+              claimed.attemptId,
+            );
             failed += 1;
-            await syncLogger.error('queue', msg, { operationId: item.operationId });
-            // Pequeno delay para não travar a CPU em caso de loop de erros, mas sem fazer o usuário esperar minutos
-            await new Promise((r) => setTimeout(r, 500));
+            await syncLogger.error('queue', msg, {
+              operationId: claimed.operationId,
+              collection: claimed.collection,
+              retries: claimed.retries + 1,
+            });
           }
         }
 
         setSyncProgress(70);
         if (!options?.uploadOnly && systemState.canUseFirebase()) {
           await pushPendingAuthorizedEmails(ownerUid!);
-          const stillPending = await getPendingSyncItems(ownerUid!);
-          const queueLeft = await syncQueue.listPending(ownerUid!);
-          if (stillPending.total === 0 && queueLeft.length === 0) {
-            await this.pullFromRemote(false);
-          }
+          // Pull legado desabilitado aqui — o LWW (SyncManager) é a fonte da verdade
+          // para download/tombstones. Evita ressurreição com deleted:false forçado.
         }
         setSyncProgress(100);
         const queueOk = failed === 0 && (succeeded > 0 || pending.length === 0);
@@ -564,14 +603,17 @@ export class SyncEngine {
     await setMeta(`lastPull:${dataOwnerUid}`, String(lastPullAt));
   }
 
+  /**
+   * Pull legado — aplica apenas registros ativos via LWW local (`applyRemote*`).
+   * Não força `deleted: false` sobre dados que já expressam exclusão.
+   * Tombstones completos ficam a cargo do LWW em `executeLastWriteWinsSync`.
+   */
   async pullFromRemote(force = false): Promise<void> {
     if (!ownerUid || !connectivityMonitor.canSync() || !systemState.canUseFirebase()) return;
     if (!force && Date.now() - lastPullAt < MIN_PULL_MS) return;
 
     await applyTeamWipeIfNeeded(ownerUid, getCachedLoginUid());
 
-    // Incremental: baixa só o que mudou desde a última sync conhecida.
-    // Full apenas na primeira vez (sem watermark) — o LWW manual cobre o resto.
     const watermark = await getRemoteSyncWatermark(ownerUid);
     const since =
       watermark != null && watermark > 0
@@ -593,13 +635,14 @@ export class SyncEngine {
     );
 
     for (const cad of remoteCadastros) {
+      const remoteDeleted = (cad as { deleted?: boolean }).deleted === true;
       await applyRemoteCadastro(
         {
           ...cad,
           ownerUid,
-          version: cad.updatedAt ? 1 : 1,
+          version: 1,
           syncStatus: 'synced',
-          deleted: false,
+          deleted: remoteDeleted,
           deviceId: 'remote',
           userId: getCachedLoginUid(),
           createdAt: cad.updatedAt ?? Date.now(),
@@ -610,13 +653,14 @@ export class SyncEngine {
     }
 
     for (const sess of remoteSessoes) {
+      const remoteDeleted = (sess as { deleted?: boolean }).deleted === true;
       await applyRemoteSessao(
         {
           ...sess,
           ownerUid,
           version: 1,
           syncStatus: 'synced',
-          deleted: false,
+          deleted: remoteDeleted,
           deviceId: 'remote',
           userId: getCachedLoginUid(),
           createdAt: Date.parse(sess.criadoEm) || Date.now(),
@@ -627,13 +671,14 @@ export class SyncEngine {
     }
 
     for (const app of remoteAplicadores) {
+      const remoteDeleted = (app as { deleted?: boolean }).deleted === true;
       await applyRemoteAplicador(
         {
           ...app,
           ownerUid,
           version: 1,
           syncStatus: 'synced',
-          deleted: false,
+          deleted: remoteDeleted,
           deviceId: 'remote',
           userId: getCachedLoginUid(),
           createdAt: app.updatedAt ?? Date.now(),
@@ -660,6 +705,7 @@ export class SyncEngine {
     if (!ownerUid) return;
     lastPullAt = 0;
     lastProcessFinishedAt = 0;
+    await syncQueue.recoverStaleProcessing(ownerUid);
     await syncQueue.resetFailedToPending(ownerUid);
     await this.processQueue({ bypassGap: true });
   }

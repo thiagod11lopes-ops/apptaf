@@ -35,7 +35,10 @@ import {
 } from './syncUiState';
 import { estimateSyncQueueCounts } from './lastWriteWinsSync';
 import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
-import { setRemoteSyncWatermark } from './syncWatermark';
+import { markFullFetchDone, setRemoteSyncWatermark } from './syncWatermark';
+import { commitAllCollectionCheckpoints } from './syncCheckpoint';
+import { syncQueue } from './SyncQueue';
+import { peekRemoteSnapshotCache } from './remoteSnapshotCache';
 import { parseSyncError, shouldTreatAsUpdateBlocked, type SyncErrorDetail } from './syncErrorInfo';
 import { isModoDemonstracaoAtivo } from '../db/appMeta';
 import {
@@ -756,6 +759,22 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
 
     lastSyncAt = result.audit.finishedAt;
     await setRemoteSyncWatermark(ownerUid, result.audit.finishedAt);
+    // Checkpoint por coleção + full-fetch só após LWW íntegro (7.1).
+    const snap = peekRemoteSnapshotCache(ownerUid);
+    const upperBound = result.audit.finishedAt;
+    await commitAllCollectionCheckpoints(
+      ownerUid,
+      {
+        cadastros: null,
+        sessoes: null,
+        aplicadores: null,
+      },
+      upperBound,
+      snap?.fetchMode === 'incremental' ? 'incremental' : 'full',
+    );
+    if (snap?.fetchMode === 'full' || !snap) {
+      await markFullFetchDone(ownerUid);
+    }
     await loadLastSyncFromAudit();
 
     completeStep('finalizing');
@@ -883,6 +902,8 @@ export const syncManager = {
     syncEngine.deactivateOnlineMode();
     mode = 'OFFLINE';
     uiPhase = 'offline';
+    // Crash recovery da fila (7.4) — processing órfão volta a pending.
+    await syncQueue.recoverStaleProcessing(dataOwnerUid);
     await syncEngine.preparePendingOwner(dataOwnerUid);
     await compactCadastrosIfNeeded(dataOwnerUid);
     await loadLastSyncFromAudit();

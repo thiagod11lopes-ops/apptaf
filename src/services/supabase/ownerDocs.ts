@@ -96,26 +96,97 @@ export async function listOwnerDocsSince(
   ownerUid: string,
   sinceUpdatedAt: number,
 ): Promise<CloudDocRow[]> {
+  return listOwnerDocsAfterCursor(table, ownerUid, { updated_at: sinceUpdatedAt, id: '' }, Number.MAX_SAFE_INTEGER);
+}
+
+export type OwnerDocCursor = { updated_at: number; id: string };
+
+/**
+ * Paginação keyset estável: (updated_at, id) > cursor AND updated_at <= upperBound.
+ * Inclui tombstones (coluna deleted) — não filtra deleted=false.
+ */
+export async function listOwnerDocsAfterCursor(
+  table: string,
+  ownerUid: string,
+  cursor: OwnerDocCursor,
+  upperBound: number,
+): Promise<CloudDocRow[]> {
   const sb = requireSupabase();
   const all: CloudDocRow[] = [];
+  let pageCursor: OwnerDocCursor = { ...cursor };
+
+  for (;;) {
+    let query = sb
+      .from(table)
+      .select(selectColumns(table))
+      .eq('owner_uid', ownerUid)
+      .lte('updated_at', upperBound)
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(PAGE_SIZE);
+
+    // Primeira página após watermark: updated_at >= cursor (overlap seguro).
+    // Páginas seguintes: keyset estrito (updated_at, id) > pageCursor.
+    if (!pageCursor.id) {
+      query = query.gte('updated_at', pageCursor.updated_at);
+    } else {
+      query = query.or(
+        `and(updated_at.gt.${pageCursor.updated_at}),and(updated_at.eq.${pageCursor.updated_at},id.gt.${pageCursor.id})`,
+      );
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const chunk = (data ?? []) as CloudDocRow[];
+    if (chunk.length === 0) break;
+    all.push(...chunk);
+    const last = chunk[chunk.length - 1]!;
+    pageCursor = { updated_at: last.updated_at, id: last.id };
+    if (chunk.length < PAGE_SIZE) break;
+  }
+
+  return mapDecryptedRows(all);
+}
+
+/** Metadados públicos sem decrypt — id/owner_uid/updated_at/deleted. */
+export async function listOwnerDocMetadata(
+  table: string,
+  ownerUid: string,
+): Promise<Array<{ id: string; owner_uid: string; updated_at: number; deleted: boolean }>> {
+  const sb = requireSupabase();
+  const all: Array<{ id: string; owner_uid: string; updated_at: number; deleted: boolean }> = [];
   let from = 0;
+  const cols = tableSupportsDeleted(table)
+    ? 'id, owner_uid, updated_at, deleted'
+    : 'id, owner_uid, updated_at';
 
   for (;;) {
     const { data, error } = await sb
       .from(table)
-      .select(selectColumns(table))
+      .select(cols)
       .eq('owner_uid', ownerUid)
-      .gte('updated_at', sinceUpdatedAt)
       .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(error.message);
-    const chunk = (data ?? []) as CloudDocRow[];
-    all.push(...chunk);
+    const chunk = (data ?? []) as Array<{
+      id: string;
+      owner_uid: string;
+      updated_at: number;
+      deleted?: boolean;
+    }>;
+    for (const row of chunk) {
+      all.push({
+        id: row.id,
+        owner_uid: row.owner_uid,
+        updated_at: row.updated_at,
+        deleted: row.deleted === true,
+      });
+    }
     if (chunk.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
   }
 
-  return mapDecryptedRows(all);
+  return all;
 }
 
 /** IDs na nuvem ainda em texto plano (precisam reenvio com E2E ativo). */

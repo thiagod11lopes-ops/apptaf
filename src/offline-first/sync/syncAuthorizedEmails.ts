@@ -6,7 +6,13 @@ import {
 import { authorizedEmailRepository } from '../repositories/AuthorizedEmailRepository';
 import { getTafDatabase } from '../db/tafDatabase';
 
+/**
+ * Espelha e-mails autorizados da nuvem no Dexie.
+ * Sempre envia pendências locais antes do pull — evita apagar e-mails
+ * acabados de cadastrar quando a nuvem ainda não os conhece.
+ */
 export async function pullAuthorizedEmailsToLocal(ownerUid: string): Promise<void> {
+  await pushPendingAuthorizedEmails(ownerUid);
   const remote = await listAuthorizedEmails(ownerUid);
   await authorizedEmailRepository.replaceFromRemote(ownerUid, remote);
 }

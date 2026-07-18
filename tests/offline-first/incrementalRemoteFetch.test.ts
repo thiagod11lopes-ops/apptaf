@@ -72,13 +72,13 @@ describe('fetch remoto incremental — não baixar tudo a cada sync', () => {
     await closeTafDatabaseForTests();
   });
 
-  it('sem watermark: full fetch é usado e registrado', async () => {
+  it('sem watermark: full fetch é usado (markFullFetchDone só após LWW íntegro)', async () => {
     const snapshot = await fetchRemoteCollectionsSnapshot('owner-sem-watermark', true);
     expect(snapshot.fetchMode).toBe('full');
     expect(getAllCadastrosFirestoreLight).toHaveBeenCalled();
     expect(getCadastrosFirestoreSince).not.toHaveBeenCalled();
-    // Full fetch registrado — próximo ciclo dentro do intervalo não é "due".
-    expect(await isFullFetchDue('owner-sem-watermark')).toBe(false);
+    // Full fetch NÃO marca done no download — SyncManager faz após sucesso.
+    expect(await isFullFetchDue('owner-sem-watermark')).toBe(true);
   });
 
   it('com watermark: força só invalida cache, fetch continua incremental', async () => {

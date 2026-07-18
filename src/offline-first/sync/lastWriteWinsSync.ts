@@ -42,6 +42,8 @@ import {
   listCadastrosForSync,
   listSessoesForSync,
   getAplicadorRaw,
+  getCadastroRaw,
+  getSessaoRaw,
   putAplicadorRecord,
   putCadastroRecord,
   putSessaoRecord,
@@ -552,13 +554,27 @@ async function persistSyncedLocal<T extends SyncRecord>(
   local: T,
   collection: CollectionName,
 ): Promise<void> {
+  // Safe Sync Commit (7.3): só marca synced se a versão local ainda for a enviada.
+  const { isQueuePayloadStillCurrent } = await import('./queueSyncGuard');
+  const coll =
+    collection === 'cadastros' || collection === 'sessoes' || collection === 'aplicadores'
+      ? collection
+      : null;
+  if (coll) {
+    const still = await isQueuePayloadStillCurrent(coll, local.id, local);
+    if (!still) return;
+  }
   const synced = markRecordSynced({ ...local, ownerUid }, getCachedLoginUid());
   if (collection === 'cadastros') {
     await putCadastroRecord(synced as CadastroRecord);
   } else if (collection === 'sessoes') {
     await putSessaoRecord(synced as SessaoRecord);
-  } else {
+  } else if (collection === 'aplicadores') {
     await putAplicadorRecord(synced as AplicadorRecord);
+  }
+  // Limpa fila órfã do documento após sync bem-sucedido.
+  if (coll) {
+    await syncQueue.clearPendingForDocument(ownerUid, coll, local.id);
   }
 }
 
@@ -616,6 +632,22 @@ async function downloadRecord(
   ownerUid: string,
   rubricCaches?: DownloadRubricCaches,
 ): Promise<void> {
+  // 7.3: relê Dexie fresh e re-decide LWW — download antigo não sobrescreve edição local.
+  const localFresh =
+    collection === 'cadastros'
+      ? await getCadastroRaw(remote.id)
+      : collection === 'sessoes'
+        ? await getSessaoRaw(remote.id)
+        : collection === 'aplicadores'
+          ? await getAplicadorRaw(remote.id)
+          : null;
+  if (localFresh) {
+    const decision = decideLastWriteWins(localFresh as SyncRecord, remote);
+    if (decision.action !== 'download') {
+      return;
+    }
+  }
+
   let payload: SyncRecord = remote;
   if (collection === 'cadastros' && remote.deleted !== true) {
     const rubricas =
@@ -647,10 +679,13 @@ async function downloadRecord(
   );
   if (collection === 'cadastros') {
     await putCadastroRecord(merged as CadastroRecord);
+    await syncQueue.clearPendingForDocument(ownerUid, 'cadastros', remote.id);
   } else if (collection === 'sessoes') {
     await putSessaoRecord(merged as SessaoRecord);
+    await syncQueue.clearPendingForDocument(ownerUid, 'sessoes', remote.id);
   } else {
     await putAplicadorRecord(merged as AplicadorRecord);
+    await syncQueue.clearPendingForDocument(ownerUid, 'aplicadores', remote.id);
   }
 }
 

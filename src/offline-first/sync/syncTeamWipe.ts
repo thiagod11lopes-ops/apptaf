@@ -46,21 +46,22 @@ async function wipeLocalOwnerBundle(ownerUid: string): Promise<void> {
   }
 }
 
-/** Dados locais posteriores ao wipe (ex.: CSV restaurado) — não devem ser apagados. */
-async function hasLocalDataToPreserve(ownerUid: string, wipedAt: number): Promise<boolean> {
+/**
+ * Dados locais a preservar no bootstrap/sync.
+ * Offline-first: qualquer registro ativo (ou pendente) impede wipe automático.
+ * Soft-deletes locais também contam — o LWW precisa enxergar o tombstone.
+ */
+async function hasLocalDataToPreserve(ownerUid: string, _wipedAt: number): Promise<boolean> {
   const db = getTafDatabase();
   if (!db || !ownerUid.trim()) return false;
 
-  const newerThanWipe = (row: {
+  const shouldPreserve = (row: {
     deleted?: boolean;
-    updatedAt?: number;
-    createdAt?: number;
     syncStatus?: string;
   }): boolean => {
-    if (row.deleted === true) return false;
     if (isUnsyncedLocalStatus(row.syncStatus)) return true;
-    const at = Math.max(row.updatedAt ?? 0, row.createdAt ?? 0);
-    return at > wipedAt;
+    // Qualquer dado local (ativo ou tombstone) no bootstrap → não apagar IndexedDB.
+    return true;
   };
 
   try {
@@ -70,9 +71,9 @@ async function hasLocalDataToPreserve(ownerUid: string, wipedAt: number): Promis
       db.aplicadores.where('ownerUid').equals(ownerUid).toArray(),
     ]);
     return (
-      cadastros.some(newerThanWipe) ||
-      sessoes.some(newerThanWipe) ||
-      aplicadores.some(newerThanWipe)
+      cadastros.some(shouldPreserve) ||
+      sessoes.some(shouldPreserve) ||
+      aplicadores.some(shouldPreserve)
     );
   } catch {
     return false;

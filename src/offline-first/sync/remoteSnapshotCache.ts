@@ -13,7 +13,7 @@ import {
   listAplicadoresForSync,
 } from '../db/localDb';
 import { isUnsyncedLocalStatus } from './syncStatus';
-import { getRemoteSyncWatermark, isFullFetchDue, markFullFetchDone } from './syncWatermark';
+import { getRemoteSyncWatermark, isFullFetchDue } from './syncWatermark';
 import {
   getAllAplicadoresFirestore,
   getAplicadoresFirestoreSince,
@@ -313,7 +313,8 @@ export async function fetchRemoteCollectionsSnapshot(
     fetchRemoteCollection('aplicadores', ownerUid, () => listAplicadoresTombstonesForSync(ownerUid)),
   ]);
 
-  await markFullFetchDone(ownerUid);
+  // markFullFetchDone só após LWW íntegro (SyncManager) — evita consumir
+  // o orçamento de 24h quando o download ok mas a aplicação falha.
 
   cached = {
     ownerUid,

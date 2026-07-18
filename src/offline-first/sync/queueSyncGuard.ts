@@ -42,3 +42,21 @@ export async function isQueuePayloadStillCurrent(
         : await getSessaoRaw(documentId);
   return canConfirmSyncedVersion(current, sentPayload);
 }
+
+/**
+ * Safe Sync Commit: confirma synced só se a versão local atual == versão enviada.
+ * Retorna true quando a confirmação foi aplicada.
+ */
+export async function confirmAfterAction(
+  collection: QueueSyncCollection,
+  documentId: string,
+  sentPayload: VersionedRecord,
+  applySynced: () => Promise<void>,
+): Promise<boolean> {
+  if (!(await isQueuePayloadStillCurrent(collection, documentId, sentPayload))) {
+    return false;
+  }
+  await applySynced();
+  // Relê — se o usuário editou entre o check e o put, a próxima sync corrige.
+  return isQueuePayloadStillCurrent(collection, documentId, sentPayload);
+}

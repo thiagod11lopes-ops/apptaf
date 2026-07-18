@@ -4,8 +4,6 @@ import { authorizedEmailRepository } from '../../src/offline-first/repositories/
 import { getPendingSyncItems } from '../../src/offline-first/sync/pendingSyncItems';
 import { buildUploadBreakdown } from '../../src/offline-first/sync/syncQueueBreakdown';
 
-const OWNER = 'owner-emails-1';
-
 describe('pendências de e-mails autorizados — badge do botão de sincronização', () => {
   afterAll(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -13,6 +11,7 @@ describe('pendências de e-mails autorizados — badge do botão de sincronizaç
   });
 
   it('adicionar e-mail cria pendência de envio contada no total', async () => {
+    const OWNER = 'owner-emails-add-1';
     const before = await getPendingSyncItems(OWNER);
     expect(before.authorizedEmails).toBe(0);
 
@@ -29,6 +28,7 @@ describe('pendências de e-mails autorizados — badge do botão de sincronizaç
   });
 
   it('após sincronizado, a pendência some; remoção volta a contar', async () => {
+    const OWNER = 'owner-emails-sync-1';
     await authorizedEmailRepository.replaceFromRemote(OWNER, [
       { email: 'colega@marinha.mil.br', ativo: true },
     ]);

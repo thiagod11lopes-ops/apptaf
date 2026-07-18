@@ -120,13 +120,43 @@ export async function decryptJson(
 
 /** Flag de feature — ligada quando a chave de equipe estiver disponível na sessão. */
 let activeTeamKey: CryptoKey | null = null;
+const activeTeamKeyListeners = new Set<(active: boolean) => void>();
+
+function notifyActiveTeamKeyListeners(): void {
+  const active = activeTeamKey != null;
+  for (const listener of activeTeamKeyListeners) {
+    try {
+      listener(active);
+    } catch {
+      // listener de UI — não quebra a sessão crypto
+    }
+  }
+}
 
 export function setActiveTeamKey(key: CryptoKey | null): void {
+  const prev = activeTeamKey;
   activeTeamKey = key;
+  if ((prev != null) !== (key != null)) {
+    notifyActiveTeamKeyListeners();
+  }
 }
 
 export function getActiveTeamKey(): CryptoKey | null {
   return activeTeamKey;
+}
+
+/** true quando a chave E2E da equipe está carregada nesta sessão. */
+export function isE2eKeyActive(): boolean {
+  return activeTeamKey != null;
+}
+
+/** Observa ativação/desativação da chave E2E (login, logout, restore). */
+export function subscribeActiveTeamKey(listener: (active: boolean) => void): () => void {
+  activeTeamKeyListeners.add(listener);
+  listener(activeTeamKey != null);
+  return () => {
+    activeTeamKeyListeners.delete(listener);
+  };
 }
 
 export const E2E_ENCRYPT_REQUIRED_MESSAGE =

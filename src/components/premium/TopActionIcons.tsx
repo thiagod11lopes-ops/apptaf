@@ -1,12 +1,24 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Platform, StyleSheet, View, Text, ActivityIndicator } from 'react-native';
-import { BookOpen, Check, ClipboardList, Save, Settings, User, UserRoundCheck, Sparkles } from 'lucide-react-native';
+import {
+  BookOpen,
+  Check,
+  ClipboardList,
+  Save,
+  Settings,
+  Shield,
+  User,
+  UserRoundCheck,
+  Sparkles,
+} from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { navigateTab } from '../../navigation/navigationRef';
 import type { RootStackParamList } from '../../navigation/types';
+import { useE2eEncryptionStatus } from '../../hooks/useE2eEncryptionStatus';
 import { ActionIconTooltip } from './ActionIconTooltip';
 import { PressableScale } from './PressableScale';
+import { E2eEncryptionStatusModal } from './E2eEncryptionStatusModal';
 import { PREMIUM } from '../../theme/premium';
 import {
   isModoDemonstracaoAtivo,
@@ -88,6 +100,8 @@ export function TopActionIcons({
 }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss } = useAuth();
+  const { e2eActive } = useE2eEncryptionStatus();
+  const [e2eModalVisible, setE2eModalVisible] = useState(false);
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [demoCarregando, setDemoCarregando] = useState(false);
   const [demoModal, setDemoModal] = useState<{
@@ -171,6 +185,12 @@ export function TopActionIcons({
         ? `${syncPendingBadge} alteração(ões) para enviar ou receber`
         : 'Enviar e receber dados com a nuvem';
 
+  const e2eColor = e2eActive ? theme.gain : theme.loss;
+  const e2eTooltipTitle = e2eActive ? 'Criptografia ativa' : 'Criptografia inativa';
+  const e2eTooltipDescription = e2eActive
+    ? 'NIP e nome vão cifrados para a nuvem. Toque para detalhes.'
+    : 'Chave inativa nesta sessão. Toque para ver como ativar.';
+
   return (
     <>
     <View style={[styles.row, inline && styles.rowInline, centered && styles.rowCentered]}>
@@ -225,6 +245,30 @@ export function TopActionIcons({
                   </Text>
                 </View>
               ) : null}
+            </PressableScale>,
+          )
+        : null}
+      {onSyncPress
+        ? wrapTooltip(
+            inline,
+            e2eTooltipTitle,
+            e2eTooltipDescription,
+            <PressableScale
+              onPress={() => setE2eModalVisible(true)}
+              style={[
+                btnStyle,
+                {
+                  borderColor: e2eColor,
+                  backgroundColor: e2eActive ? theme.gainMuted : 'rgba(220, 38, 38, 0.1)',
+                },
+              ]}
+              accessibilityLabel={
+                e2eActive
+                  ? 'Criptografia ativa: NIP e nome protegidos na nuvem. Abrir detalhes.'
+                  : 'Criptografia inativa. Abrir detalhes para ativar.'
+              }
+            >
+              <Shield size={iconSize} color={e2eColor} strokeWidth={strokeWidth} />
             </PressableScale>,
           )
         : null}
@@ -329,6 +373,11 @@ export function TopActionIcons({
       errorMessage={demoModal?.errorMessage}
       onClose={fecharModalDemonstracao}
       onConfirm={confirmarDemonstracao}
+    />
+    <E2eEncryptionStatusModal
+      visible={e2eModalVisible}
+      e2eActive={e2eActive}
+      onClose={() => setE2eModalVisible(false)}
     />
     </>
   );

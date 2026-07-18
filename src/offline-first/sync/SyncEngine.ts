@@ -42,6 +42,7 @@ import { systemState } from './SystemState';
 import { getPendingSyncItems } from './pendingSyncItems';
 import { isUnsyncedLocalStatus } from './syncStatus';
 import { markRecordSynced } from './recordMeta';
+import { isQueuePayloadStillCurrent } from './queueSyncGuard';
 import { buildFirestoreTombstone } from './tombstone';
 import {
   executeLastWriteWinsSync,
@@ -170,6 +171,15 @@ async function enqueueDexiePendingIntoQueue(ownerUid: string): Promise<void> {
   }
 }
 
+/** Loga confirmação ignorada por edição concorrente (registro segue pendente). */
+async function logStaleQueueConfirm(entry: SyncQueueEntry, id: string): Promise<void> {
+  await syncLogger.info(
+    'queue',
+    `Confirmação ignorada: ${entry.collection}/${id} foi editado durante o upload — permanece pendente`,
+    { operationId: entry.operationId },
+  );
+}
+
 async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
   const uid = resolveFirestoreWriteUid(entry.ownerUid);
   const payload = JSON.parse(entry.payload) as Record<string, unknown>;
@@ -185,6 +195,10 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       }
       for (const item of items) {
         const row = item as CadastroRecord;
+        if (!(await isQueuePayloadStillCurrent('cadastros', row.id, row))) {
+          await logStaleQueueConfirm(entry, row.id);
+          continue;
+        }
         await putCadastroRecord(markRecordSynced({ ...row, ownerUid: uid } as CadastroRecord, getCachedLoginUid()));
       }
       return;
@@ -194,11 +208,19 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       if (row && row.deleted) {
         await deleteCadastroFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
       }
-      if (row) await putCadastroRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
+      if (row && (await isQueuePayloadStillCurrent('cadastros', entry.documentId, row))) {
+        await putCadastroRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
+      } else if (row) {
+        await logStaleQueueConfirm(entry, entry.documentId);
+      }
       return;
     }
     await addCadastroFirestore(uid, stripForCloud(payload) as CadastroItemPersist);
     const saved = payload as CadastroRecord;
+    if (!(await isQueuePayloadStillCurrent('cadastros', saved.id ?? entry.documentId, saved))) {
+      await logStaleQueueConfirm(entry, saved.id ?? entry.documentId);
+      return;
+    }
     await putCadastroRecord(markRecordSynced({ ...saved, ownerUid: uid }, getCachedLoginUid()));
     return;
   }
@@ -209,7 +231,11 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       if (row && row.deleted) {
         await deleteAplicadorFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
       }
-      if (row) await putAplicadorRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
+      if (row && (await isQueuePayloadStillCurrent('aplicadores', entry.documentId, row))) {
+        await putAplicadorRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
+      } else if (row) {
+        await logStaleQueueConfirm(entry, entry.documentId);
+      }
       return;
     }
     
@@ -223,6 +249,10 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       stripForCloud(appPayload as unknown as Record<string, unknown>) as unknown as AplicadorItemPersist,
     );
     const savedApp = payload as AplicadorRecord;
+    if (!(await isQueuePayloadStillCurrent('aplicadores', appPayload.id, savedApp))) {
+      await logStaleQueueConfirm(entry, appPayload.id);
+      return;
+    }
     await putAplicadorRecord(markRecordSynced({ ...savedApp, ownerUid: uid }, getCachedLoginUid()));
     return;
   }
@@ -232,7 +262,11 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
     if (row && row.deleted) {
       await deleteSessaoFirestore(uid, entry.documentId, buildFirestoreTombstone(row));
     }
-    if (row) await putSessaoRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
+    if (row && (await isQueuePayloadStillCurrent('sessoes', entry.documentId, row))) {
+      await putSessaoRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
+    } else if (row) {
+      await logStaleQueueConfirm(entry, entry.documentId);
+    }
     return;
   }
 
@@ -242,7 +276,13 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
   } else {
     await updateSessaoFirestore(uid, sessao);
   }
-  await putSessaoRecord(markRecordSynced({ ...(payload as SessaoRecord), ownerUid: uid }, getCachedLoginUid()));
+  const savedSess = payload as SessaoRecord;
+  const sessId = savedSess.id ?? entry.documentId;
+  if (!(await isQueuePayloadStillCurrent('sessoes', sessId, savedSess))) {
+    await logStaleQueueConfirm(entry, sessId);
+    return;
+  }
+  await putSessaoRecord(markRecordSynced({ ...savedSess, ownerUid: uid }, getCachedLoginUid()));
 }
 
 export class SyncEngine {

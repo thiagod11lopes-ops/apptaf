@@ -3,29 +3,50 @@ import { useAuth } from '../contexts/AuthContext';
 import { hasPendingAuthCallback } from '../services/firebase/googleAuth';
 import { getCurrentRouteName, navigateTab, navigationRef } from '../navigation/navigationRef';
 
-/** Durante callback de recuperação/confirmação mantém Conta; após login abre a Home. */
+/**
+ * Após login confirmado (sessão pronta), vai automaticamente para a Home.
+ * Recuperação de senha / callback de e-mail mantém a tela Conta.
+ */
 export function AuthLoginRouteGate() {
   const { isAuthenticated, isSessionLoading, passwordRecoveryPending } = useAuth();
   const wasAuthenticatedRef = useRef<boolean | null>(null);
+  const goHomeWhenSessionReadyRef = useRef(false);
 
   useEffect(() => {
     if (!navigationRef.isReady()) return;
 
-    if (wasAuthenticatedRef.current === null) {
-      wasAuthenticatedRef.current = isAuthenticated;
-    }
-
-    if (hasPendingAuthCallback() || isSessionLoading || passwordRecoveryPending) {
+    // Recuperação / link de e-mail: fica em Conta.
+    if (passwordRecoveryPending || hasPendingAuthCallback()) {
+      goHomeWhenSessionReadyRef.current = false;
       if (getCurrentRouteName() !== 'Login') {
         navigateTab('Login');
       }
+      wasAuthenticatedRef.current = isAuthenticated;
       return;
     }
 
-    const justSignedIn = isAuthenticated && wasAuthenticatedRef.current === false;
-    wasAuthenticatedRef.current = isAuthenticated;
+    if (wasAuthenticatedRef.current === null) {
+      wasAuthenticatedRef.current = isAuthenticated;
+      return;
+    }
 
-    if (justSignedIn) {
+    const wasAuthenticated = wasAuthenticatedRef.current;
+
+    // Login acabou de confirmar — espera a sessão preparar e então vai à Home.
+    if (isAuthenticated && !wasAuthenticated) {
+      goHomeWhenSessionReadyRef.current = true;
+    }
+
+    if (!isAuthenticated) {
+      goHomeWhenSessionReadyRef.current = false;
+      wasAuthenticatedRef.current = false;
+      return;
+    }
+
+    wasAuthenticatedRef.current = true;
+
+    if (goHomeWhenSessionReadyRef.current && !isSessionLoading) {
+      goHomeWhenSessionReadyRef.current = false;
       navigateTab('Home');
     }
   }, [isAuthenticated, isSessionLoading, passwordRecoveryPending]);

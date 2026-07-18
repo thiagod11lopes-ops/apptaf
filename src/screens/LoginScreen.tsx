@@ -22,7 +22,6 @@ import { EmailPasswordAuthForm } from '../components/auth/EmailPasswordAuthForm'
 import { AlterarSenhaContaForm } from '../components/auth/AlterarSenhaContaForm';
 import { AlterarSenhaAplicadorModal } from '../components/aplicador/AlterarSenhaAplicadorModal';
 import { consumeLastRedirectAuthError } from '../services/firebase/googleAuth';
-import { navigateTab } from '../navigation/navigationRef';
 import { PREMIUM } from '../theme/premium';
 
 function userLabel(name: string | null, email: string | null): string {
@@ -78,10 +77,9 @@ export default function LoginScreen() {
 
   const onLoginSuccess = useCallback(() => {
     setErro(null);
-    if (!passwordRecoveryPending) {
-      navigateTab('Home');
-    }
-  }, [passwordRecoveryPending]);
+    // Home definitiva: AuthLoginRouteGate (quando isSessionLoading terminar).
+    // Aqui só limpa erro; evita ir à Home e ser puxado de volta durante o prepare.
+  }, []);
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);

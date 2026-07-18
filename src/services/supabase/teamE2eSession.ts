@@ -148,12 +148,56 @@ export async function activateE2eFromLoginPassword(
 
 export const E2E_KEY_REQUIRED = 'e2e_key_required';
 export const E2E_ENCRYPTION_NOT_ACTIVATED = 'e2e_encryption_not_activated';
+export const E2E_REWRAP_NEEDS_ACTIVE_KEY = 'e2e_rewrap_needs_active_key';
 
 export const E2E_KEY_REQUIRED_MESSAGE =
   'Criptografia da equipe não está ativa nesta sessão. Saia da conta e entre novamente com e-mail e senha para desbloquear antes de sincronizar.';
 
 export const E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE =
   'A criptografia da equipe ainda não foi ativada. Saia da conta e entre novamente com e-mail e senha (isso cria a chave na primeira vez).';
+
+export const E2E_REWRAP_NEEDS_ACTIVE_KEY_MESSAGE =
+  'Para trocar a senha sem perder a criptografia, a chave da equipe precisa estar desbloqueada nesta sessão. Entre com e-mail e senha atual (ícone de escudo verde), depois altere a senha. Se veio só do link de recuperação neste aparelho sem a chave ativa, entre primeiro no aparelho onde a criptografia já estava verde.';
+
+/** Garante DEK em memória (ou restaura do sessionStorage). Não grava nada na nuvem. */
+export async function ensureTeamKeyUnlocked(ownerUid: string): Promise<CryptoKey> {
+  if (!ownerUid.trim()) {
+    throw new Error(E2E_REWRAP_NEEDS_ACTIVE_KEY_MESSAGE);
+  }
+  let teamKey = getActiveTeamKey();
+  if (!teamKey) {
+    await restoreE2eFromSessionStorage(ownerUid);
+    teamKey = getActiveTeamKey();
+  }
+  if (!teamKey) {
+    throw new Error(E2E_REWRAP_NEEDS_ACTIVE_KEY_MESSAGE);
+  }
+  return teamKey;
+}
+
+/**
+ * Reembrulha a mesma chave de equipe (DEK) com a nova senha do chefe.
+ * Não gera chave nova — os dados já cifrados na nuvem continuam legíveis.
+ * Exige DEK ativa (memória ou sessionStorage).
+ */
+export async function rewrapTeamKeyWithNewPassword(
+  ownerUid: string,
+  newPassword: string,
+): Promise<void> {
+  if (!ownerUid.trim() || !newPassword) {
+    throw new Error('Owner e nova senha são obrigatórios para reproteger a criptografia.');
+  }
+
+  const teamKey = await ensureTeamKeyUnlocked(ownerUid);
+  const meta = await fetchTeamE2eMeta(ownerUid);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const saltB64 = toBase64(salt);
+  const wrapped = await wrapTeamKeyRaw(teamKey, newPassword, saltB64);
+  const nextVersion = Math.max(1, (meta?.key_version ?? 0) + 1);
+  await upsertTeamE2eMeta(ownerUid, saltB64, wrapped, nextVersion);
+  setActiveTeamKey(teamKey);
+  await persistSessionKey(ownerUid, teamKey);
+}
 
 /**
  * Garante chave E2E antes de enviar dados à nuvem.

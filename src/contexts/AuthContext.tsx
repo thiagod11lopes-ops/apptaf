@@ -58,8 +58,11 @@ import { clearPendingSyncResume } from '../offline-first/sync/syncResume';
 import {
   activateE2eFromLoginPassword,
   clearE2eSession,
+  ensureTeamKeyUnlocked,
   restoreE2eFromSessionStorage,
+  rewrapTeamKeyWithNewPassword,
 } from '../services/supabase/teamE2eSession';
+import { fetchTeamE2eMeta } from '../services/supabase/teamE2eCloud';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -527,7 +530,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabaseEnabled) {
         throw new Error('Configure o Supabase no arquivo .env.');
       }
+
+      const loginUid = getCachedLoginUid() ?? user?.uid ?? null;
+      const ownerUid = getCachedDataOwnerUid() ?? dataOwnerUid;
+      const isBossAccount = Boolean(loginUid && ownerUid && loginUid === ownerUid);
+
+      // Chefe com E2E: exige DEK desbloqueada → troca senha Auth → reembrulha meta.
+      // Não grava wrap antes do Auth (evita meta na senha nova com login ainda na antiga).
+      let mustRewrapE2e = false;
+      if (isBossAccount && ownerUid) {
+        let meta: Awaited<ReturnType<typeof fetchTeamE2eMeta>> = null;
+        try {
+          meta = await fetchTeamE2eMeta(ownerUid);
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `Não foi possível verificar a criptografia da equipe antes de trocar a senha: ${detail}`,
+          );
+        }
+        if (meta) {
+          await ensureTeamKeyUnlocked(ownerUid);
+          mustRewrapE2e = true;
+        }
+      }
+
       await updateAccountPassword(newPassword);
+
+      if (mustRewrapE2e && ownerUid) {
+        try {
+          await rewrapTeamKeyWithNewPassword(ownerUid, newPassword);
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `Senha da conta atualizada, mas falhou ao reproteger a criptografia: ${detail}. ` +
+              'Permaneça logado (escudo verde) e tente definir a senha novamente.',
+          );
+        }
+      }
+
       setRecoveryPending(false);
       const sb = getSupabase();
       const { data } = await sb!.auth.getSession();
@@ -535,7 +575,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await finalizeAuthenticatedSession(mapSupabaseUser(data.session.user), { force: true });
       }
     },
-    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
+    [dataOwnerUid, finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled, user?.uid],
   );
 
   const clearPasswordRecovery = useCallback(() => {

@@ -22,13 +22,14 @@ export async function upsertTeamE2eMeta(
   ownerUid: string,
   saltB64: string,
   wrappedKeyB64: string,
+  keyVersion = 1,
 ): Promise<void> {
   const sb = requireSupabase();
   const { error } = await sb.from('team_e2e_meta').upsert({
     owner_uid: ownerUid,
     salt_b64: saltB64,
     wrapped_key_b64: wrappedKeyB64,
-    key_version: 1,
+    key_version: keyVersion,
     updated_at: new Date().toISOString(),
   });
   if (error) throw new Error(error.message);

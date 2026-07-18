@@ -650,6 +650,8 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
         'Criptografia da equipe não está ativa nesta sessão. Saia da conta e entre novamente com e-mail e senha para desbloquear antes de sincronizar.',
       );
     }
+    // Etapa 2: a sync seguinte audita plaintext e reprotege (LWW + tabelas diretas).
+    setUiProgress(0, 'Criptografia ativa — registros antigos serão protegidos na sync…');
 
     setActiveStep('local_backup');
     currentStep = 'local_backup';

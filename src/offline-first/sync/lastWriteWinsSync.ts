@@ -87,8 +87,14 @@ import {
   resolveContentDriftAction,
   syncBusinessContentEqual,
 } from './syncBusinessContent';
-import { listPlaintextCloudDocIds } from '../../services/supabase/ownerDocs';
+import {
+  formatPlaintextAuditSummary,
+  listLwwPlaintextForceUploadIds,
+  reencryptDirectPlaintextTables,
+} from '../../services/supabase/e2ePlaintextAudit';
+import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 import { alignRedundantDownloads } from './redundantDownloadGuard';
+import { syncLogger } from './SyncLogger';
 
 const DOWNLOAD_CONCURRENCY = 8;
 
@@ -741,6 +747,38 @@ async function ensureNoPendingRemain(ownerUid: string, stats: LwwSyncStats): Pro
   }
 }
 
+/** Reprotege tabelas owner_docs fora do plano LWW (rubricas, senhas, pré-cadastros). */
+async function protectDirectPlaintextCloudDocs(
+  ownerUid: string,
+  stats: LwwSyncStats,
+  progressCb?: SyncProgressCallback,
+): Promise<void> {
+  if (!getActiveTeamKey()) return;
+  try {
+    progressCb?.({
+      processed: 0,
+      total: 1,
+      message: 'Protegendo registros antigos na nuvem…',
+      stepId: 'finalizing',
+      phase: 'finalize',
+    });
+    const summary = await reencryptDirectPlaintextTables(ownerUid, (message, processed, total) => {
+      progressCb?.({
+        processed,
+        total: Math.max(total, 1),
+        message,
+        stepId: 'finalizing',
+        phase: 'finalize',
+      });
+    });
+    await syncLogger.info('e2e', `Reproteção direta: ${formatPlaintextAuditSummary(summary)}`);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    stats.errors.push(`e2e_plaintext_reencrypt:${detail}`);
+    await syncLogger.warn('e2e', `Falha ao reproteger docs plaintext: ${detail}`);
+  }
+}
+
 export type SyncPlanSnapshot = {
   downloadItems: PlannedSyncItem[];
   uploadItems: PlannedSyncItem[];
@@ -778,17 +816,19 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
   } = remoteSnapshot;
   const remotePre: PreCadastroRecord[] = [];
 
-  // A varredura de docs em texto plano lê as tabelas inteiras — só vale a pena
-  // no full fetch (primeira sync ou resync periódico). No incremental, a
-  // re-criptografia pendente é tratada na próxima sync completa.
-  const [plainCadIds, plainSessIds, plainAppIds] =
-    remoteSnapshot.fetchMode === 'full'
-      ? await Promise.all([
-          listPlaintextCloudDocIds('cadastros', ownerUid),
-          listPlaintextCloudDocIds('sessoes', ownerUid),
-          listPlaintextCloudDocIds('aplicadores', ownerUid),
-        ])
-      : [new Set<string>(), new Set<string>(), new Set<string>()];
+  // Etapa 2: em toda sync com chave E2E ativa, forçar reenvio dos docs ainda
+  // em texto plano (cadastros/sessões/aplicadores) — não só no full fetch.
+  const plainIds = await listLwwPlaintextForceUploadIds(ownerUid);
+  const plainCadIds = plainIds.cadastros;
+  const plainSessIds = plainIds.sessoes;
+  const plainAppIds = plainIds.aplicadores;
+  const plainTotal = plainCadIds.size + plainSessIds.size + plainAppIds.size;
+  if (plainTotal > 0) {
+    await syncLogger.info(
+      'e2e',
+      `Reproteção LWW: ${plainTotal} doc(s) em texto plano (cad:${plainCadIds.size} sess:${plainSessIds.size} app:${plainAppIds.size})`,
+    );
+  }
 
   await reconcileIdenticalUnsyncedLocals(
     'cadastros',
@@ -1123,6 +1163,7 @@ export async function executeLastWriteWinsSync(
     const emailErrors = await pushPendingAuthorizedEmails(ownerUid);
     stats.errors.push(...emailErrors);
     await syncQueue.clearDone(ownerUid);
+    await protectDirectPlaintextCloudDocs(ownerUid, stats, progressCb);
 
     await ensureNoPendingRemain(ownerUid, stats);
 
@@ -1236,6 +1277,8 @@ export async function executeLastWriteWinsSync(
     remoteSessTombstones,
     remoteAppTombstones,
   );
+
+  await protectDirectPlaintextCloudDocs(ownerUid, stats, progressCb);
 
   if (stats.errors.length === 0) {
     await runDeletionGarbageCollection(ownerUid, {

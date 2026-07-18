@@ -106,7 +106,7 @@ export interface ChangeLogEntry {
 export interface SyncLogEntry {
   id?: number;
   level: 'info' | 'warn' | 'error';
-  category: 'sync' | 'connectivity' | 'queue' | 'audit';
+  category: 'sync' | 'connectivity' | 'queue' | 'audit' | 'e2e';
   message: string;
   timestamp: number;
   meta?: Record<string, unknown>;

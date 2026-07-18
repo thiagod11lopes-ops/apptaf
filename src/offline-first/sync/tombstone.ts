@@ -53,6 +53,23 @@ export function remoteDocToSyncRecord<T extends SyncRecord>(
   );
 }
 
+/**
+ * Contrato único do documento de tombstone enviado à nuvem.
+ * Todas as coleções (cadastros, sessões, aplicadores) devem usar exatamente estes campos.
+ */
+export function tombstoneToCloudDoc(tombstone: TombstonePayload): TombstonePayload {
+  return {
+    id: tombstone.id,
+    updatedAt: tombstone.updatedAt,
+    deleted: true,
+    deletedAt: tombstone.deletedAt ?? tombstone.updatedAt,
+    deletedBy: tombstone.deletedBy,
+    syncVersion: tombstone.syncVersion,
+    updatedBy: tombstone.updatedBy,
+    deviceId: tombstone.deviceId,
+  };
+}
+
 /** Payload mínimo para marcar exclusão na nuvem (tombstone). */
 export function buildFirestoreTombstone(record: SyncRecord): TombstonePayload {
   return {

@@ -39,9 +39,30 @@ export function ensureRecordMeta<T extends SyncRecord>(record: T, ownerUid: stri
   };
 }
 
+/** Registro já alinhado com a nuvem (ou com lastSync) — candidado a congelar baseVersion. */
+function hasKnownSyncedVersion(record: SyncRecord): boolean {
+  return record.syncStatus === STATUS_SYNCED || typeof record.lastSync === 'number';
+}
+
+/**
+ * Congela a versão ancestral na primeira edição local após sync.
+ * Não sobrescreve baseVersion já definida; CREATE não define o campo.
+ */
+function resolveBaseVersionOnLocalBump(
+  record: SyncRecord,
+  operation: 'CREATE' | 'UPDATE' | 'DELETE',
+  currentSyncVersion: number,
+): number | undefined {
+  if (operation === 'CREATE') return undefined;
+  if (typeof record.baseVersion === 'number') return record.baseVersion;
+  if (hasKnownSyncedVersion(record)) return currentSyncVersion;
+  return record.baseVersion;
+}
+
 /**
  * Atualiza metadados em toda gravação local.
  * updatedAt = UTC atual; syncVersion incrementado; syncStatus conforme operação.
+ * Em UPDATE/DELETE de registro sincronizado, preserva baseVersion = syncVersion anterior.
  */
 export function bumpRecordMeta<T extends SyncRecord>(
   record: T,
@@ -50,7 +71,9 @@ export function bumpRecordMeta<T extends SyncRecord>(
   operation: 'CREATE' | 'UPDATE' | 'DELETE',
 ): T {
   const now = Date.now();
-  const nextSyncVersion = operation === 'CREATE' ? 1 : readSyncVersion(record) + 1;
+  const currentSyncVersion = readSyncVersion(record);
+  const nextSyncVersion = operation === 'CREATE' ? 1 : currentSyncVersion + 1;
+  const baseVersion = resolveBaseVersionOnLocalBump(record, operation, currentSyncVersion);
 
   if (operation === 'DELETE') {
     return {
@@ -61,6 +84,7 @@ export function bumpRecordMeta<T extends SyncRecord>(
       updatedAt: now,
       syncVersion: nextSyncVersion,
       version: nextSyncVersion,
+      ...(baseVersion !== undefined ? { baseVersion } : {}),
       deviceId,
       userId,
       updatedBy: userId ?? deviceId,
@@ -78,6 +102,7 @@ export function bumpRecordMeta<T extends SyncRecord>(
     updatedAt: now,
     syncVersion: nextSyncVersion,
     version: nextSyncVersion,
+    ...(baseVersion !== undefined ? { baseVersion } : {}),
     deviceId,
     userId,
     updatedBy: userId ?? deviceId,
@@ -86,13 +111,19 @@ export function bumpRecordMeta<T extends SyncRecord>(
   };
 }
 
-/** Marca registro como sincronizado após upload/download bem-sucedido. */
+/** Marca registro como sincronizado após upload/download bem-sucedido.
+ * Alinha baseVersion à syncVersion atual (versão conhecida como sincronizada).
+ */
 export function markRecordSynced<T extends SyncRecord>(record: T, userId?: string | null): T {
   const now = Date.now();
+  const syncVersion = readSyncVersion(record);
   return {
     ...record,
     syncStatus: STATUS_SYNCED,
     lastSync: now,
+    syncVersion,
+    version: record.version ?? syncVersion,
+    baseVersion: syncVersion,
     updatedBy: userId ?? record.updatedBy ?? record.userId ?? record.lastModifiedBy,
   };
 }

@@ -12,8 +12,10 @@ function randomId(): string {
 }
 
 let cachedDeviceId: string | null = null;
+/** Promise compartilhada — evita geração concorrente na primeira execução. */
+let inFlightDeviceId: Promise<string> | null = null;
 
-export async function getDeviceId(): Promise<string> {
+async function resolveDeviceIdOnce(): Promise<string> {
   if (cachedDeviceId) return cachedDeviceId;
 
   const fromMeta = readAppMetaCache(DEVICE_ID_META_KEY);
@@ -43,6 +45,24 @@ export async function getDeviceId(): Promise<string> {
   return cachedDeviceId;
 }
 
+export async function getDeviceId(): Promise<string> {
+  if (cachedDeviceId) return cachedDeviceId;
+
+  if (!inFlightDeviceId) {
+    inFlightDeviceId = resolveDeviceIdOnce().finally(() => {
+      inFlightDeviceId = null;
+    });
+  }
+
+  return inFlightDeviceId;
+}
+
 export function peekDeviceId(): string | null {
   return cachedDeviceId;
+}
+
+/** Limpa cache e promise em voo — apenas testes. */
+export function resetDeviceIdCacheForTests(): void {
+  cachedDeviceId = null;
+  inFlightDeviceId = null;
 }

@@ -1,5 +1,5 @@
 import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
-import type { TombstonePayload } from '../../offline-first/sync/tombstone';
+import { tombstoneToCloudDoc, type TombstonePayload } from '../../offline-first/sync/tombstone';
 import { extractSessaoRubricas, toSessaoFromFirestoreDoc, toSessaoLight } from '../../utils/sessaoLight';
 import { stampSessao } from '../offline/recordTimestamps';
 import { deleteOwnerDoc, listOwnerDocs, listOwnerDocsSince, rowToDoc, upsertOwnerDoc } from './ownerDocs';
@@ -82,13 +82,7 @@ export async function deleteSessaoFirestore(
       TABLE,
       uid,
       id,
-      {
-        id,
-        updatedAt: tombstone.updatedAt,
-        deleted: true,
-        deletedAt: tombstone.deletedAt,
-        deletedBy: tombstone.deletedBy,
-      },
+      tombstoneToCloudDoc({ ...tombstone, id }),
       tombstone.updatedAt,
       true,
     );

@@ -63,6 +63,7 @@ import {
   buildFirestoreTombstone,
   remoteDocToSyncRecord,
   type DeletionAuditEntry,
+  type TombstonePayload,
 } from './tombstone';
 import {
   buildDeletionAuditEntry,
@@ -114,7 +115,8 @@ type PlannedSyncItem = {
   hasRemote: boolean;
 };
 
-function stripForCloud<T extends Record<string, unknown>>(row: T): T {
+/** Sanitização única de payload ativo para a nuvem — usada pelo LWW e pela SyncQueue. */
+export function stripForCloud<T extends Record<string, unknown>>(row: T): T {
   const copy = { ...row } as Record<string, unknown>;
   // Mantém syncVersion/version/updatedAt no JSON da nuvem — sem isso o LWW
   // interpreta remoto=1 e local=N e reenvia o banco inteiro a cada sync.
@@ -155,6 +157,54 @@ function remoteToAplicadorRecord(remote: AplicadorItemPersist, ownerUid: string)
 
 function remoteToPreCadastroRecord(remote: PreCadastroRecord, ownerUid: string): PreCadastroRecord {
   return remoteDocToSyncRecord<PreCadastroRecord>(remote as Record<string, unknown> & { id: string }, ownerUid);
+}
+
+/** Converte tombstone remoto em SyncRecord deleted=true para o LWW. */
+export function tombstonePayloadToSyncRecord(
+  tombstone: TombstonePayload,
+  ownerUid: string,
+): SyncRecord {
+  return remoteDocToSyncRecord(
+    {
+      id: tombstone.id,
+      updatedAt: tombstone.updatedAt,
+      deleted: true,
+      deletedAt: tombstone.deletedAt ?? tombstone.updatedAt,
+      deletedBy: tombstone.deletedBy,
+      syncVersion: tombstone.syncVersion,
+      version: tombstone.syncVersion,
+      updatedBy: tombstone.updatedBy,
+      deviceId: tombstone.deviceId ?? 'remote',
+    },
+    ownerUid,
+  );
+}
+
+/**
+ * Preenche o mapa remoto: ativos primeiro; se id só existe como tombstone, entra como deleted.
+ * Não sobrescreve registro ativo. Não altera decideLastWriteWins.
+ */
+export function mergeRemoteMapWithTombstones(
+  remoteMap: Map<string, SyncRecord>,
+  tombstones: TombstonePayload[] | undefined,
+  ownerUid: string,
+): Map<string, SyncRecord> {
+  if (!tombstones?.length) return remoteMap;
+  for (const tombstone of tombstones) {
+    if (remoteMap.has(tombstone.id)) continue;
+    remoteMap.set(tombstone.id, tombstonePayloadToSyncRecord(tombstone, ownerUid));
+  }
+  return remoteMap;
+}
+
+function buildRemoteMapForLww<TRemote extends { id: string }>(
+  ownerUid: string,
+  remoteRows: TRemote[],
+  toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
+  tombstones?: TombstonePayload[],
+): Map<string, SyncRecord> {
+  const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
+  return mergeRemoteMapWithTombstones(remoteMap, tombstones, ownerUid);
 }
 
 function applySessaoRubricasFromRemote(
@@ -212,9 +262,10 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
   remoteRows: TRemote[],
   toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
   forceUploadIds?: Set<string>,
+  remoteTombstones?: TombstonePayload[],
 ): { plan: PlannedSyncItem[]; ignored: number } {
   const localMap = new Map(localRows.map((r) => [r.id, r]));
-  const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
+  const remoteMap = buildRemoteMapForLww(ownerUid, remoteRows, toRecord, remoteTombstones);
   const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
   const plan: PlannedSyncItem[] = [];
   let ignored = 0;
@@ -306,9 +357,10 @@ async function reconcileIdenticalUnsyncedLocals<TLocal extends SyncRecord, TRemo
   localRows: TLocal[],
   remoteRows: TRemote[],
   toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
+  remoteTombstones?: TombstonePayload[],
 ): Promise<number> {
   if (!isCloudSyncCollection(collection)) return 0;
-  const remoteMap = new Map(remoteRows.map((r) => [r.id, toRecord(r, ownerUid)]));
+  const remoteMap = buildRemoteMapForLww(ownerUid, remoteRows, toRecord, remoteTombstones);
   const loginUid = getCachedLoginUid();
   let reconciled = 0;
 
@@ -343,6 +395,9 @@ async function flushRemainingPendingRecords(
   stats: LwwSyncStats,
   deletionAudits: DeletionAuditEntry[],
   progressCb?: SyncProgressCallback,
+  remoteCadTombstones: TombstonePayload[] = [],
+  remoteSessTombstones: TombstonePayload[] = [],
+  remoteAppTombstones: TombstonePayload[] = [],
 ): Promise<void> {
   const pending = await getPendingSyncItems(ownerUid);
   if (pending.total === 0) return;
@@ -356,10 +411,10 @@ async function flushRemainingPendingRecords(
   });
 
   const remoteMaps = {
-    cadastros: new Map(remoteCad.map((r) => [r.id, remoteToCadastroRecord(r, ownerUid)])),
-    sessoes: new Map(remoteSess.map((r) => [r.id, remoteToSessaoRecord(r, ownerUid)])),
-    aplicadores: new Map(remoteApp.map((r) => [r.id, remoteToAplicadorRecord(r, ownerUid)])),
-    pre_cadastros: new Map(remotePre.map((r) => [r.id, remoteToPreCadastroRecord(r, ownerUid)])),
+    cadastros: buildRemoteMapForLww(ownerUid, remoteCad, remoteToCadastroRecord, remoteCadTombstones),
+    sessoes: buildRemoteMapForLww(ownerUid, remoteSess, remoteToSessaoRecord, remoteSessTombstones),
+    aplicadores: buildRemoteMapForLww(ownerUid, remoteApp, remoteToAplicadorRecord, remoteAppTombstones),
+    pre_cadastros: buildRemoteMapForLww(ownerUid, remotePre, remoteToPreCadastroRecord),
   };
 
   let processed = 0;
@@ -664,6 +719,9 @@ export type SyncPlanSnapshot = {
   remoteSess: SessaoAplicacaoTaf[];
   remoteApp: AplicadorItemPersist[];
   remotePre: PreCadastroRecord[];
+  remoteCadTombstones: TombstonePayload[];
+  remoteSessTombstones: TombstonePayload[];
+  remoteAppTombstones: TombstonePayload[];
 };
 
 async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Promise<SyncPlanSnapshot> {
@@ -674,7 +732,14 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
   ]);
 
   const remoteSnapshot = await fetchRemoteCollectionsSnapshot(ownerUid, forceRemote);
-  const { remoteCad, remoteSess, remoteApp } = remoteSnapshot;
+  const {
+    remoteCad,
+    remoteSess,
+    remoteApp,
+    remoteCadTombstones = [],
+    remoteSessTombstones = [],
+    remoteAppTombstones = [],
+  } = remoteSnapshot;
   const remotePre: PreCadastroRecord[] = [];
 
   const [plainCadIds, plainSessIds, plainAppIds] = await Promise.all([
@@ -683,9 +748,30 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     listPlaintextCloudDocIds('aplicadores', ownerUid),
   ]);
 
-  await reconcileIdenticalUnsyncedLocals('cadastros', ownerUid, localCad, remoteCad, remoteToCadastroRecord);
-  await reconcileIdenticalUnsyncedLocals('sessoes', ownerUid, localSess, remoteSess, remoteToSessaoRecord);
-  await reconcileIdenticalUnsyncedLocals('aplicadores', ownerUid, localApp, remoteApp, remoteToAplicadorRecord);
+  await reconcileIdenticalUnsyncedLocals(
+    'cadastros',
+    ownerUid,
+    localCad,
+    remoteCad,
+    remoteToCadastroRecord,
+    remoteCadTombstones,
+  );
+  await reconcileIdenticalUnsyncedLocals(
+    'sessoes',
+    ownerUid,
+    localSess,
+    remoteSess,
+    remoteToSessaoRecord,
+    remoteSessTombstones,
+  );
+  await reconcileIdenticalUnsyncedLocals(
+    'aplicadores',
+    ownerUid,
+    localApp,
+    remoteApp,
+    remoteToAplicadorRecord,
+    remoteAppTombstones,
+  );
 
   const [localCadFresh, localSessFresh, localAppFresh] = await Promise.all([
     listCadastrosForSync(ownerUid, true),
@@ -693,9 +779,33 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     listAplicadoresForSync(ownerUid, true),
   ]);
 
-  const cadPlanFresh = buildSyncPlan('cadastros', ownerUid, localCadFresh, remoteCad, remoteToCadastroRecord, plainCadIds);
-  const sessPlanFresh = buildSyncPlan('sessoes', ownerUid, localSessFresh, remoteSess, remoteToSessaoRecord, plainSessIds);
-  const appPlanFresh = buildSyncPlan('aplicadores', ownerUid, localAppFresh, remoteApp, remoteToAplicadorRecord, plainAppIds);
+  const cadPlanFresh = buildSyncPlan(
+    'cadastros',
+    ownerUid,
+    localCadFresh,
+    remoteCad,
+    remoteToCadastroRecord,
+    plainCadIds,
+    remoteCadTombstones,
+  );
+  const sessPlanFresh = buildSyncPlan(
+    'sessoes',
+    ownerUid,
+    localSessFresh,
+    remoteSess,
+    remoteToSessaoRecord,
+    plainSessIds,
+    remoteSessTombstones,
+  );
+  const appPlanFresh = buildSyncPlan(
+    'aplicadores',
+    ownerUid,
+    localAppFresh,
+    remoteApp,
+    remoteToAplicadorRecord,
+    plainAppIds,
+    remoteAppTombstones,
+  );
 
   const fullPlan = [...cadPlanFresh.plan, ...sessPlanFresh.plan, ...appPlanFresh.plan];
   const downloadItems = fullPlan.filter((p) => p.action === 'download');
@@ -729,6 +839,9 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     remoteSess,
     remoteApp,
     remotePre,
+    remoteCadTombstones,
+    remoteSessTombstones,
+    remoteAppTombstones,
   };
 }
 
@@ -745,12 +858,25 @@ export async function estimateSyncQueueCounts(
   let pendingUploads = plan.plannedUploads;
   let pendingDownloads = plan.plannedDownloads;
 
+  const remoteCadForLww = [
+    ...plan.remoteCad,
+    ...plan.remoteCadTombstones.map((t) => tombstonePayloadToSyncRecord(t, ownerUid) as CadastroItemPersist),
+  ];
+  const remoteSessForLww = [
+    ...plan.remoteSess,
+    ...plan.remoteSessTombstones.map((t) => tombstonePayloadToSyncRecord(t, ownerUid) as SessaoAplicacaoTaf),
+  ];
+  const remoteAppForLww = [
+    ...plan.remoteApp,
+    ...plan.remoteAppTombstones.map((t) => tombstonePayloadToSyncRecord(t, ownerUid) as AplicadorItemPersist),
+  ];
+
   const drifts = [
-    countActivePresenceDrift(plan.localCad, plan.remoteCad, remoteToCadastroRecord, ownerUid),
-    countActivePresenceDrift(plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),
+    countActivePresenceDrift(plan.localCad, remoteCadForLww, remoteToCadastroRecord, ownerUid),
+    countActivePresenceDrift(plan.localSess, remoteSessForLww, remoteToSessaoRecord, ownerUid),
     ...(isAuthorizedMemberSession()
       ? [{ extraDownloads: 0, extraUploads: 0 }]
-      : [countActivePresenceDrift(plan.localApp, plan.remoteApp, remoteToAplicadorRecord, ownerUid)]),
+      : [countActivePresenceDrift(plan.localApp, remoteAppForLww, remoteToAplicadorRecord, ownerUid)]),
     countBusinessContentDrift('cadastros', plan.localCad, plan.remoteCad, remoteToCadastroRecord, ownerUid),
     countBusinessContentDrift('sessoes', plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),
   ];
@@ -896,6 +1022,9 @@ export async function executeLastWriteWinsSync(
     remoteSess,
     remoteApp,
     remotePre,
+    remoteCadTombstones,
+    remoteSessTombstones,
+    remoteAppTombstones,
   } = plan;
   const workTotal = plannedUploads + plannedDownloads;
 
@@ -939,6 +1068,9 @@ export async function executeLastWriteWinsSync(
       stats,
       deletionAudits,
       progressCb,
+      remoteCadTombstones,
+      remoteSessTombstones,
+      remoteAppTombstones,
     );
     const emailErrors = await pushPendingAuthorizedEmails(ownerUid);
     stats.errors.push(...emailErrors);
@@ -1052,6 +1184,9 @@ export async function executeLastWriteWinsSync(
     stats,
     deletionAudits,
     progressCb,
+    remoteCadTombstones,
+    remoteSessTombstones,
+    remoteAppTombstones,
   );
 
   if (stats.errors.length === 0) {

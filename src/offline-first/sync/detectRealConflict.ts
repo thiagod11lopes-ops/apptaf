@@ -1,6 +1,8 @@
 /**
  * Detecção de conflitos reais (somente auditoria).
  * Não altera LWW nem o plano de sincronização.
+ *
+ * Prioridade causal: baseVersion (quando presente) → fallback lastSync/updatedAt.
  */
 
 import type { CollectionName } from '../types';
@@ -52,14 +54,29 @@ function readDeviceId(record: Partial<SyncRecord> | null | undefined): string | 
   return id;
 }
 
+/** baseVersion ancestral conhecida; null se registro legado sem o campo. */
+export function readBaseVersion(record: Partial<SyncRecord> | null | undefined): number | null {
+  if (typeof record?.baseVersion === 'number' && Number.isFinite(record.baseVersion) && record.baseVersion >= 0) {
+    return record.baseVersion;
+  }
+  return null;
+}
+
 /**
- * Indica se o remoto parece ter avançado após a última sync conhecida do local.
- * Sem `lastSync`, usa divergência de updatedAt/syncVersion (não trata local-ahead puro).
+ * Indica se o remoto divergiu da base conhecida pelo dispositivo.
+ *
+ * Com `baseVersion`: remoto avançou (ou divergiu) se syncVersion remota ≠ base.
+ * Sem `baseVersion` (legado): usa lastSync / updatedAt / syncVersion.
  */
 export function remoteAdvancedSinceLastKnownSync(
   local: SyncRecord,
   remote: SyncRecord,
 ): boolean {
+  const baseVersion = readBaseVersion(local);
+  if (baseVersion != null) {
+    return readSyncVersion(remote) !== baseVersion;
+  }
+
   const remoteAt = readUpdatedAt(remote);
   const localAt = readUpdatedAt(local);
   const lastSync = typeof local.lastSync === 'number' && local.lastSync > 0 ? local.lastSync : null;
@@ -89,6 +106,9 @@ function versionsRepresentDifferentState(local: SyncRecord, remote: SyncRecord):
 /**
  * Detecta edição concorrente local×remoto.
  * Puro: sem I/O, sem efeito colateral, sem alterar decisão LWW.
+ *
+ * Com baseVersion: conflito quando local pendente, remoto ≠ base, conteúdo diferente.
+ * Sem baseVersion: mantém heurística lastSync/updatedAt.
  */
 export function detectRealConflict(input: DetectRealConflictInput): DetectRealConflictResult {
   const { collection, local, remote } = input;
@@ -123,7 +143,7 @@ export function detectRealConflict(input: DetectRealConflictInput): DetectRealCo
     return { ...base, conflictType: 'same_business_content' };
   }
 
-  // 2) Remoto avançou após última sync conhecida
+  // 2) Remoto avançou / divergiu da base conhecida (baseVersion) ou lastSync (legado)
   if (!remoteAdvancedSinceLastKnownSync(local, remote)) {
     return { ...base, conflictType: 'remote_not_advanced' };
   }

@@ -43,7 +43,12 @@ import { getPendingSyncItems } from './pendingSyncItems';
 import { isUnsyncedLocalStatus } from './syncStatus';
 import { markRecordSynced } from './recordMeta';
 import { buildFirestoreTombstone } from './tombstone';
-import { executeLastWriteWinsSync, type LwwSyncStats, type SyncProgressCallback } from './lastWriteWinsSync';
+import {
+  executeLastWriteWinsSync,
+  stripForCloud,
+  type LwwSyncStats,
+  type SyncProgressCallback,
+} from './lastWriteWinsSync';
 import {
   beginCloudSync,
   endCloudSync,
@@ -172,8 +177,11 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
   if (entry.collection === 'cadastros') {
     if (payload.kind === 'cadastrosBatch' && Array.isArray(payload.items)) {
       const items = payload.items as CadastroItemPersist[];
-      for (let i = 0; i < items.length; i += 500) {
-        await addCadastrosEmLoteFirestore(uid, items.slice(i, i + 500));
+      const cloudItems = items.map(
+        (item) => stripForCloud(item as unknown as Record<string, unknown>) as unknown as CadastroItemPersist,
+      );
+      for (let i = 0; i < cloudItems.length; i += 500) {
+        await addCadastrosEmLoteFirestore(uid, cloudItems.slice(i, i + 500));
       }
       for (const item of items) {
         const row = item as CadastroRecord;
@@ -189,7 +197,7 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       if (row) await putCadastroRecord(markRecordSynced({ ...row, ownerUid: uid }, getCachedLoginUid()));
       return;
     }
-    await addCadastroFirestore(uid, payload as CadastroItemPersist);
+    await addCadastroFirestore(uid, stripForCloud(payload) as CadastroItemPersist);
     const saved = payload as CadastroRecord;
     await putCadastroRecord(markRecordSynced({ ...saved, ownerUid: uid }, getCachedLoginUid()));
     return;
@@ -210,7 +218,10 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
       appPayload.id = entry.documentId || `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     }
 
-    await addAplicadorFirestore(uid, appPayload);
+    await addAplicadorFirestore(
+      uid,
+      stripForCloud(appPayload as unknown as Record<string, unknown>) as unknown as AplicadorItemPersist,
+    );
     const savedApp = payload as AplicadorRecord;
     await putAplicadorRecord(markRecordSynced({ ...savedApp, ownerUid: uid }, getCachedLoginUid()));
     return;
@@ -225,7 +236,7 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
     return;
   }
 
-  const sessao = payload as SessaoAplicacaoTaf;
+  const sessao = stripForCloud(payload) as unknown as SessaoAplicacaoTaf;
   if (entry.operationType === 'CREATE') {
     await addSessaoFirestore(uid, sessao);
   } else {

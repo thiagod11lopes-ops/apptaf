@@ -25,6 +25,8 @@ export interface SyncableMeta {
   userId: string | null;
   syncStatus: SyncStatus;
   syncVersion?: number;
+  /** Versão de sincronização conhecida pelo dispositivo antes da alteração local. Usada futuramente para detecção causal de conflitos. */
+  baseVersion?: number;
   deleted: boolean;
   deletedAt?: number;
   deletedBy?: string;

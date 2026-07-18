@@ -29,7 +29,86 @@ function cad(partial: Partial<CadastroRecord>): CadastroRecord {
 }
 
 describe('detectRealConflict', () => {
-  it('detecta edição concorrente quando local pendente, remoto avançou e conteúdo difere', () => {
+  it('com baseVersion: detecta concorrência quando remoto ≠ base e conteúdo difere', () => {
+    const local = cad({
+      nome: 'Editado Local',
+      updatedAt: 8000,
+      syncVersion: 4,
+      baseVersion: 3,
+      syncStatus: 'updated',
+      lastSync: 4000,
+      tempoCorrida: '12:00',
+    });
+    const remote = cad({
+      nome: 'Editado Remoto',
+      updatedAt: 9000,
+      syncVersion: 5,
+      syncStatus: 'synced',
+      deviceId: 'device-remote',
+      tempoCorrida: '11:30',
+    });
+
+    const result = detectRealConflict({
+      collection: 'cadastros',
+      local,
+      remote,
+      localOperationId: 'op-local-1',
+    });
+
+    expect(result.hasConflict).toBe(true);
+    expect(result.conflictType).toBe('concurrent_edit');
+    expect(result.localVersion).toBe(4);
+    expect(result.remoteVersion).toBe(5);
+    expect(remoteAdvancedSinceLastKnownSync(local, remote)).toBe(true);
+  });
+
+  it('com baseVersion: não marca conflito quando remoto ainda está na base (só upload pendente)', () => {
+    const local = cad({
+      syncStatus: 'updated',
+      baseVersion: 3,
+      lastSync: 7000,
+      updatedAt: 8000,
+      syncVersion: 4,
+      nome: 'Local Novo',
+      tempoCorrida: '12:00',
+    });
+    const remote = cad({
+      syncStatus: 'synced',
+      updatedAt: 7000,
+      syncVersion: 3,
+      nome: 'Base',
+      tempoCorrida: '11:00',
+    });
+    const result = detectRealConflict({ collection: 'cadastros', local, remote });
+    expect(result.hasConflict).toBe(false);
+    expect(result.conflictType).toBe('remote_not_advanced');
+    expect(remoteAdvancedSinceLastKnownSync(local, remote)).toBe(false);
+  });
+
+  it('com baseVersion: ignora lastSync enganoso e usa a versão ancestral', () => {
+    // lastSync antigo faria remoteAt > lastSync, mas remoto ainda está na base → sem conflito.
+    const local = cad({
+      syncStatus: 'updated',
+      baseVersion: 4,
+      lastSync: 1000,
+      updatedAt: 8000,
+      syncVersion: 5,
+      nome: 'Local',
+      tempoCorrida: '12:00',
+    });
+    const remote = cad({
+      syncStatus: 'synced',
+      updatedAt: 9000,
+      syncVersion: 4,
+      nome: 'Ainda na base',
+      tempoCorrida: '11:00',
+    });
+    const result = detectRealConflict({ collection: 'cadastros', local, remote });
+    expect(result.hasConflict).toBe(false);
+    expect(result.conflictType).toBe('remote_not_advanced');
+  });
+
+  it('legado sem baseVersion: detecta edição concorrente via lastSync', () => {
     const local = cad({
       nome: 'Editado Local',
       updatedAt: 8000,
@@ -37,6 +116,7 @@ describe('detectRealConflict', () => {
       syncStatus: 'updated',
       lastSync: 4000,
       tempoCorrida: '12:00',
+      baseVersion: undefined,
     });
     const remote = cad({
       nome: 'Editado Remoto',
@@ -67,7 +147,7 @@ describe('detectRealConflict', () => {
   });
 
   it('não marca conflito quando local já está synced', () => {
-    const local = cad({ syncStatus: 'synced', nome: 'A' });
+    const local = cad({ syncStatus: 'synced', nome: 'A', baseVersion: 3 });
     const remote = cad({
       syncStatus: 'synced',
       nome: 'B',
@@ -79,7 +159,7 @@ describe('detectRealConflict', () => {
     ).toBe(false);
   });
 
-  it('não marca conflito quando remoto não avançou após lastSync (só upload pendente)', () => {
+  it('legado sem baseVersion: não marca conflito quando remoto não avançou após lastSync', () => {
     const local = cad({
       syncStatus: 'updated',
       lastSync: 7000,
@@ -87,6 +167,7 @@ describe('detectRealConflict', () => {
       syncVersion: 4,
       nome: 'Local Novo',
       tempoCorrida: '12:00',
+      baseVersion: undefined,
     });
     const remote = cad({
       syncStatus: 'synced',
@@ -104,6 +185,7 @@ describe('detectRealConflict', () => {
   it('não marca conflito quando conteúdo de negócio é igual', () => {
     const local = cad({
       syncStatus: 'updated',
+      baseVersion: 3,
       lastSync: 4000,
       updatedAt: 8000,
       syncVersion: 4,
@@ -128,6 +210,7 @@ describe('detectRealConflict', () => {
   it('marca concurrent_edit_with_delete quando um lado excluiu', () => {
     const local = cad({
       syncStatus: 'updated',
+      baseVersion: 3,
       lastSync: 4000,
       updatedAt: 8000,
       syncVersion: 4,

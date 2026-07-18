@@ -1,5 +1,5 @@
 import type { AplicadorItemPersist } from '../aplicadoresIndexedDb';
-import type { TombstonePayload } from '../../offline-first/sync/tombstone';
+import { tombstoneToCloudDoc, type TombstonePayload } from '../../offline-first/sync/tombstone';
 import { compareByNomePtBr } from '../../utils/compareNomePtBr';
 import { stripSenhaFromAplicador, toAplicadorFirestorePayload } from '../../utils/aplicadorSyncPolicy';
 import { deleteOwnerDoc, listOwnerDocs, listOwnerDocsSince, rowToDoc, upsertOwnerDoc } from './ownerDocs';
@@ -77,16 +77,7 @@ export async function deleteAplicadorFirestore(
       TABLE,
       uid,
       id,
-      {
-        id,
-        updatedAt: tombstone.updatedAt,
-        deleted: true,
-        deletedAt: tombstone.deletedAt ?? tombstone.updatedAt,
-        deletedBy: tombstone.deletedBy,
-        syncVersion: tombstone.syncVersion,
-        updatedBy: tombstone.updatedBy,
-        deviceId: tombstone.deviceId,
-      },
+      tombstoneToCloudDoc({ ...tombstone, id }),
       tombstone.updatedAt,
       true,
     );

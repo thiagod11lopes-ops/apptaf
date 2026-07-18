@@ -1,5 +1,5 @@
 import type { CadastroItemPersist } from '../cadastrosIndexedDb';
-import type { TombstonePayload } from '../../offline-first/sync/tombstone';
+import { tombstoneToCloudDoc, type TombstonePayload } from '../../offline-first/sync/tombstone';
 import { dedupeCadastrosPorNip } from '../../utils/dedupeCadastrosPorNip';
 import { formatNipInput, nipChaveCadastro } from '../../utils/nipFormat';
 import { stampCadastro } from '../offline/recordTimestamps';
@@ -87,13 +87,7 @@ export async function deleteCadastroFirestore(
       TABLE,
       uid,
       id,
-      {
-        id,
-        updatedAt: tombstone.updatedAt,
-        deleted: true,
-        deletedAt: tombstone.deletedAt,
-        deletedBy: tombstone.deletedBy,
-      },
+      tombstoneToCloudDoc({ ...tombstone, id }),
       tombstone.updatedAt,
       true,
     );

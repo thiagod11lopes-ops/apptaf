@@ -87,7 +87,11 @@ type AuthContextType = {
     password: string,
   ) => Promise<{ needsEmailConfirmation: boolean }>;
   requestPasswordReset: (email: string) => Promise<void>;
-  updatePassword: (newPassword: string) => Promise<void>;
+  /** Na recuperação, passe `currentPasswordForE2e` (senha antiga) se o escudo não estiver verde. */
+  updatePassword: (
+    newPassword: string,
+    options?: { currentPasswordForE2e?: string },
+  ) => Promise<void>;
   clearPasswordRecovery: () => void;
   logout: () => Promise<void>;
   /** Atualiza flags chefe/membro a partir do ownerUid persistido localmente. */
@@ -424,6 +428,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setCloudAuthUser({ uid: session.user.id, email: session.user.email ?? null });
           setUser(mapSupabaseUser(session.user));
           setAuthReady(true);
+          const owner =
+            getCachedDataOwnerUid() ?? session.user.id;
+          void restoreE2eForOwner(owner);
         }
         clearFirebaseAuthParamsFromWindow();
         return;
@@ -526,17 +533,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const updatePassword = useCallback(
-    async (newPassword: string) => {
+    async (newPassword: string, options?: { currentPasswordForE2e?: string }) => {
       if (!supabaseEnabled) {
         throw new Error('Configure o Supabase no arquivo .env.');
       }
 
       const loginUid = getCachedLoginUid() ?? user?.uid ?? null;
-      const ownerUid = getCachedDataOwnerUid() ?? dataOwnerUid;
+      // Na recuperação o cache pode estar parcial — chefe = loginUid dono dos dados.
+      const ownerUid = getCachedDataOwnerUid() ?? dataOwnerUid ?? loginUid;
       const isBossAccount = Boolean(loginUid && ownerUid && loginUid === ownerUid);
+      const currentPasswordForE2e = options?.currentPasswordForE2e?.trim() ?? '';
 
       // Chefe com E2E: exige DEK desbloqueada → troca senha Auth → reembrulha meta.
-      // Não grava wrap antes do Auth (evita meta na senha nova com login ainda na antiga).
       let mustRewrapE2e = false;
       if (isBossAccount && ownerUid) {
         let meta: Awaited<ReturnType<typeof fetchTeamE2eMeta>> = null;
@@ -549,7 +557,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         }
         if (meta) {
-          await ensureTeamKeyUnlocked(ownerUid);
+          try {
+            await ensureTeamKeyUnlocked(ownerUid);
+          } catch {
+            if (!currentPasswordForE2e) {
+              throw new Error(
+                'Para trocar a senha sem perder a criptografia, informe também a senha atual no campo indicado (a mesma que desbloqueava o escudo verde).',
+              );
+            }
+            try {
+              await activateE2eFromLoginPassword(ownerUid, currentPasswordForE2e);
+            } catch {
+              throw new Error(
+                'Não foi possível desbloquear a criptografia com a senha atual informada. Confira se é a senha antiga da conta (antes desta redefinição).',
+              );
+            }
+            await ensureTeamKeyUnlocked(ownerUid);
+          }
           mustRewrapE2e = true;
         }
       }

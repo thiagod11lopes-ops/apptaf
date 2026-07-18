@@ -87,7 +87,15 @@ export function buildUploadBreakdown(summary: PendingSyncSummary): SyncQueueBrea
   for (const item of summary.items) {
     addItemToMap(map, item.collection, item.record as BreakdownRecord);
   }
-  return finalizeBreakdown(Array.from(map.values()), summary.total);
+  const categories = Array.from(map.values());
+  if (summary.authorizedEmails > 0) {
+    categories.push({
+      key: 'authorizedEmails',
+      label: 'E-mail autorizado',
+      count: summary.authorizedEmails,
+    });
+  }
+  return finalizeBreakdown(categories, summary.total);
 }
 
 /** Detalha o que será baixado da nuvem (plano LWW). */

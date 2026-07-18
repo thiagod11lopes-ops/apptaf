@@ -19,6 +19,7 @@ describe('syncQueueBreakdown', () => {
       sessoes: 2,
       aplicadores: 0,
       pre_cadastros: 0,
+      authorizedEmails: 0,
       items: [
         {
           collection: 'cadastros',
@@ -81,9 +82,26 @@ describe('syncQueueBreakdown', () => {
       sessoes: 0,
       aplicadores: 0,
       pre_cadastros: 0,
+      authorizedEmails: 0,
       items: [],
     };
     const breakdown = buildUploadBreakdown(summary);
     expect(breakdown.categories.some((c) => c.label.includes('Pré-cadastro'))).toBe(false);
+  });
+
+  it('inclui e-mails autorizados pendentes no breakdown de envio', () => {
+    const summary: PendingSyncSummary = {
+      total: 2,
+      cadastros: 0,
+      sessoes: 0,
+      aplicadores: 0,
+      pre_cadastros: 0,
+      authorizedEmails: 2,
+      items: [],
+    };
+    const breakdown = buildUploadBreakdown(summary);
+    expect(breakdown.total).toBe(2);
+    expect(breakdown.categories.find((c) => c.key === 'authorizedEmails')?.count).toBe(2);
+    expect(breakdown.categories.some((c) => c.label === 'Outras alterações')).toBe(false);
   });
 });

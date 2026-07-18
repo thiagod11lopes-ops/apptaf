@@ -18,6 +18,7 @@ import {
 import { getCachedLoginUid, getCachedDataOwnerUid, waitForAuthenticatedUid } from '../../services/firebase/authUid';
 import type { WipeCloudProgressCallback } from '../../services/firebase/wipeCloudDataFirestore';
 import { applyTeamWipeIfNeeded } from './syncTeamWipe';
+import { pushPendingAuthorizedEmails } from './syncAuthorizedEmails';
 import type { AplicadorRecord, CadastroRecord, SessaoRecord, SyncQueueEntry } from '../types';
 import {
   applyRemoteAplicador,
@@ -384,6 +385,10 @@ export class SyncEngine {
     await reconcileSessionPendingOwner(ownerUid);
     await syncQueue.resetFailedToPending(ownerUid);
 
+    // E-mails autorizados pendentes não passam pela SyncQueue — envia antes
+    // para que o total de pendências possa zerar.
+    await pushPendingAuthorizedEmails(ownerUid);
+
     for (let round = 0; round < 4; round++) {
       await enqueueDexiePendingIntoQueue(ownerUid);
       const queuePending = await syncQueue.listPending(ownerUid);
@@ -519,6 +524,7 @@ export class SyncEngine {
 
         setSyncProgress(70);
         if (!options?.uploadOnly && systemState.canUseFirebase()) {
+          await pushPendingAuthorizedEmails(ownerUid!);
           const stillPending = await getPendingSyncItems(ownerUid!);
           const queueLeft = await syncQueue.listPending(ownerUid!);
           if (stillPending.total === 0 && queueLeft.length === 0) {

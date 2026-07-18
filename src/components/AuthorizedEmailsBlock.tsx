@@ -13,6 +13,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import type { AuthorizedEmailEntry } from '../offline-first/sync/firebase/FirebaseGateway';
 import { authorizedEmailRepository } from '../offline-first/repositories/AuthorizedEmailRepository';
+import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { isAllowedAuthEmail, authEmailDomainErrorMessage, normalizeAuthEmail } from '../utils/normalizeAuthEmail';
 import { PREMIUM } from '../theme/premium';
 
@@ -67,6 +68,7 @@ export function AuthorizedEmailsBlock() {
       setInput('');
       setMsg(`E-mail ${email} autorizado localmente. Será enviado na próxima sincronização.`);
       await recarregar();
+      notifyDataChanged();
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível autorizar o e-mail.');
     } finally {
@@ -84,6 +86,7 @@ export function AuthorizedEmailsBlock() {
         await authorizedEmailRepository.removeLocal(user.uid, email);
         setMsg(`Acesso de ${email} removido localmente. Será aplicado na próxima sincronização.`);
         await recarregar();
+        notifyDataChanged();
       } catch (e) {
         setErro(e instanceof Error ? e.message : 'Não foi possível remover o e-mail.');
       } finally {

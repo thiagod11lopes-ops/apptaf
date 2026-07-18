@@ -28,6 +28,8 @@ export type PendingSyncSummary = {
   sessoes: number;
   aplicadores: number;
   pre_cadastros: number;
+  /** E-mails autorizados aguardando envio à nuvem (não entram em items/SyncQueue). */
+  authorizedEmails: number;
 };
 
 function toPendingItem(
@@ -57,7 +59,15 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
   const db = getTafDatabase();
   const owners = ownerUidsForQuery(ownerUid);
   if (!db || owners.length === 0) {
-    return { items: [], total: 0, cadastros: 0, sessoes: 0, aplicadores: 0, pre_cadastros: 0 };
+    return {
+      items: [],
+      total: 0,
+      cadastros: 0,
+      sessoes: 0,
+      aplicadores: 0,
+      pre_cadastros: 0,
+      authorizedEmails: 0,
+    };
   }
 
   const seen = new Set<string>();
@@ -99,12 +109,23 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
 
   items.sort((a, b) => a.updatedAt - b.updatedAt);
 
+  // E-mails autorizados pendentes contam como pendência de envio, mas não vão
+  // para items — são enviados por pushPendingAuthorizedEmails, não pela SyncQueue.
+  let authorizedEmails = 0;
+  for (const uid of owners) {
+    const emailRows = await db.authorizedEmails.where('ownerUid').equals(uid).toArray();
+    authorizedEmails += emailRows.filter(
+      (r) => r.syncStatus === 'local' || r.syncStatus === 'deleted',
+    ).length;
+  }
+
   return {
     items,
-    total: items.length,
+    total: items.length + authorizedEmails,
     cadastros,
     sessoes,
     aplicadores,
     pre_cadastros,
+    authorizedEmails,
   };
 }

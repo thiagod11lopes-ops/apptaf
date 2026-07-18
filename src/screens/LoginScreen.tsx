@@ -19,6 +19,7 @@ import { AppHeader } from '../components/sismav/AppHeader';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { EmailPasswordAuthForm } from '../components/auth/EmailPasswordAuthForm';
+import { AlterarSenhaContaForm } from '../components/auth/AlterarSenhaContaForm';
 import { AlterarSenhaAplicadorModal } from '../components/aplicador/AlterarSenhaAplicadorModal';
 import { consumeLastRedirectAuthError } from '../services/firebase/googleAuth';
 import { navigateTab } from '../navigation/navigationRef';
@@ -176,6 +177,31 @@ export default function LoginScreen() {
             <Button title="Sair da conta" variant="outline" onPress={handleLogout} loading={loading} />
           )}
         </Card>
+
+        {isAuthenticated && !passwordRecoveryPending ? (
+          <Card elevated style={styles.senhaCard}>
+            <View style={styles.senhaHeader}>
+              <View
+                style={[styles.senhaIcon, { backgroundColor: theme.accentMuted, borderColor: theme.border }]}
+              >
+                <KeyRound size={20} color={theme.primary} strokeWidth={2.2} />
+              </View>
+              <View style={styles.senhaHeaderText}>
+                <Text style={ts.h2}>Trocar senha</Text>
+                <Text style={[ts.caption, { color: theme.textMuted, marginTop: 2 }]}>
+                  Use quando lembrar a senha atual. Diferente da recuperação por e-mail.
+                </Text>
+              </View>
+            </View>
+            <AlterarSenhaContaForm
+              onSuccess={() => setErro(null)}
+              onError={setErro}
+            />
+            {erro && !showAuthForm ? (
+              <Text style={[ts.caption, styles.erro, { color: theme.loss }]}>{erro}</Text>
+            ) : null}
+          </Card>
+        ) : null}
 
         {isAuthenticated && isAuthorizedMember && !passwordRecoveryPending ? (
           <Card elevated style={styles.senhaCard}>

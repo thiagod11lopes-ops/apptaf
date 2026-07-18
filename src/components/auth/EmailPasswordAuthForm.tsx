@@ -48,8 +48,6 @@ export function EmailPasswordAuthForm({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
-  /** Senha antiga — desbloqueia E2E no fluxo do link de recuperação. */
-  const [currentPasswordForE2e, setCurrentPasswordForE2e] = useState('');
   const [loading, setLoading] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -81,7 +79,6 @@ export function EmailPasswordAuthForm({
       setInfo(null);
       setPassword('');
       setPassword2('');
-      setCurrentPasswordForE2e('');
       if (next === 'register') {
         if (!termsAccepted) setTermsModalVisible(true);
       } else {
@@ -190,9 +187,7 @@ export function EmailPasswordAuthForm({
         return;
       }
       if (mode === 'recovery') {
-        await updatePassword(password, {
-          currentPasswordForE2e: currentPasswordForE2e || undefined,
-        });
+        await updatePassword(password, { mode: 'recovery' });
         setInfo('Senha atualizada. Você já está conectado.');
         onRecoveryDone?.();
         onSuccess?.();
@@ -203,7 +198,6 @@ export function EmailPasswordAuthForm({
       setLoading(false);
     }
   }, [
-    currentPasswordForE2e,
     email,
     mode,
     onError,
@@ -256,24 +250,11 @@ export function EmailPasswordAuthForm({
       ) : null}
 
       {mode === 'recovery' ? (
-        <>
-          <Text style={[ts.caption, { color: theme.textSecondary, lineHeight: 18 }]}>
-            Para manter NIP e nomes criptografados, informe a senha atual (a de antes desta
-            redefinição). Depois escolha a nova senha.
-          </Text>
-          <TextInput
-            value={currentPasswordForE2e}
-            onChangeText={setCurrentPasswordForE2e}
-            placeholder="Senha atual (criptografia)"
-            placeholderTextColor={theme.textMuted}
-            style={inputStyle}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="password"
-            textContentType="password"
-          />
-        </>
+        <Text style={[ts.caption, { color: theme.textSecondary, lineHeight: 18 }]}>
+          Recuperação pelo link do e-mail. Para manter a criptografia, use o mesmo aparelho/navegador
+          onde o escudo já estava verde. Se lembrar da senha, entre normalmente e use Conta → Trocar
+          senha.
+        </Text>
       ) : null}
 
       {mode === 'login' || mode === 'register' || mode === 'recovery' ? (

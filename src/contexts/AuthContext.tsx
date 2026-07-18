@@ -59,6 +59,7 @@ import {
   activateE2eFromLoginPassword,
   clearE2eSession,
   ensureTeamKeyUnlocked,
+  E2E_RECOVERY_NEEDS_UNLOCKED_SESSION_MESSAGE,
   restoreE2eFromSessionStorage,
   rewrapTeamKeyWithNewPassword,
 } from '../services/supabase/teamE2eSession';
@@ -87,10 +88,13 @@ type AuthContextType = {
     password: string,
   ) => Promise<{ needsEmailConfirmation: boolean }>;
   requestPasswordReset: (email: string) => Promise<void>;
-  /** Na recuperação, passe `currentPasswordForE2e` (senha antiga) se o escudo não estiver verde. */
+  /**
+   * `change` = Conta → Trocar senha (pede senha atual).
+   * `recovery` = link do e-mail (não pede senha atual; exige sessão com chave já desbloqueada).
+   */
   updatePassword: (
     newPassword: string,
-    options?: { currentPasswordForE2e?: string },
+    options?: { mode?: 'change' | 'recovery'; currentPasswordForE2e?: string },
   ) => Promise<void>;
   clearPasswordRecovery: () => void;
   logout: () => Promise<void>;
@@ -533,11 +537,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const updatePassword = useCallback(
-    async (newPassword: string, options?: { currentPasswordForE2e?: string }) => {
+    async (
+      newPassword: string,
+      options?: { mode?: 'change' | 'recovery'; currentPasswordForE2e?: string },
+    ) => {
       if (!supabaseEnabled) {
         throw new Error('Configure o Supabase no arquivo .env.');
       }
 
+      const mode = options?.mode ?? (passwordRecoveryPendingRef.current ? 'recovery' : 'change');
       const loginUid = getCachedLoginUid() ?? user?.uid ?? null;
       // Na recuperação o cache pode estar parcial — chefe = loginUid dono dos dados.
       const ownerUid = getCachedDataOwnerUid() ?? dataOwnerUid ?? loginUid;
@@ -557,23 +565,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         }
         if (meta) {
-          try {
-            await ensureTeamKeyUnlocked(ownerUid);
-          } catch {
+          if (mode === 'change') {
             if (!currentPasswordForE2e) {
-              throw new Error(
-                'Para trocar a senha sem perder a criptografia, informe também a senha atual no campo indicado (a mesma que desbloqueava o escudo verde).',
-              );
+              throw new Error('Informe a senha atual para trocar a senha com criptografia ativa.');
             }
             try {
               await activateE2eFromLoginPassword(ownerUid, currentPasswordForE2e);
             } catch {
               throw new Error(
-                'Não foi possível desbloquear a criptografia com a senha atual informada. Confira se é a senha antiga da conta (antes desta redefinição).',
+                'Senha atual incorreta ou não desbloqueia a criptografia. Confira e tente de novo.',
               );
             }
-            await ensureTeamKeyUnlocked(ownerUid);
+          } else {
+            // Recuperação: só segue se a chave já estiver na sessão (mesmo aparelho / escudo verde).
+            try {
+              await ensureTeamKeyUnlocked(ownerUid);
+            } catch {
+              throw new Error(E2E_RECOVERY_NEEDS_UNLOCKED_SESSION_MESSAGE);
+            }
           }
+          await ensureTeamKeyUnlocked(ownerUid);
           mustRewrapE2e = true;
         }
       }
@@ -587,7 +598,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const detail = error instanceof Error ? error.message : String(error);
           throw new Error(
             `Senha da conta atualizada, mas falhou ao reproteger a criptografia: ${detail}. ` +
-              'Permaneça logado (escudo verde) e tente definir a senha novamente.',
+              'Permaneça logado (escudo verde) e tente Conta → Trocar senha.',
           );
         }
       }

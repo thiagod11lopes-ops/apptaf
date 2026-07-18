@@ -157,7 +157,11 @@ export const E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE =
   'A criptografia da equipe ainda não foi ativada. Saia da conta e entre novamente com e-mail e senha (isso cria a chave na primeira vez).';
 
 export const E2E_REWRAP_NEEDS_ACTIVE_KEY_MESSAGE =
-  'Para trocar a senha sem perder a criptografia, a chave da equipe precisa estar desbloqueada nesta sessão. Entre com e-mail e senha atual (ícone de escudo verde), depois altere a senha. Se veio só do link de recuperação neste aparelho sem a chave ativa, entre primeiro no aparelho onde a criptografia já estava verde.';
+  'Para trocar a senha sem perder a criptografia, a chave da equipe precisa estar desbloqueada (escudo verde). Use Conta → Trocar senha com a senha atual.';
+
+/** Recuperação por e-mail sem DEK na sessão — não pede senha atual (fluxo diferente de trocar senha). */
+export const E2E_RECOVERY_NEEDS_UNLOCKED_SESSION_MESSAGE =
+  'Recuperação de senha: neste aparelho a criptografia não está desbloqueada. Abra o mesmo link no navegador/aparelho onde o escudo já estava verde (mesma sessão). Se lembrar da senha, entre normalmente e use Conta → Trocar senha.';
 
 /** Garante DEK em memória (ou restaura do sessionStorage). Não grava nada na nuvem. */
 export async function ensureTeamKeyUnlocked(ownerUid: string): Promise<CryptoKey> {

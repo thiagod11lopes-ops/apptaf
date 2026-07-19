@@ -73,6 +73,13 @@ fs.writeFileSync(
 // Evita Jekyll no GitHub Pages (senão o README vira a página inicial)
 fs.writeFileSync(path.join(distDir, '.nojekyll'), '');
 
+// SPA no GitHub Pages: rotas profundas (ex. /admin/historico) precisam de HTML.
+const spaIndex = fs.readFileSync(indexPath);
+fs.writeFileSync(path.join(distDir, '404.html'), spaIndex);
+const adminHistoricoDir = path.join(distDir, 'admin', 'historico');
+fs.mkdirSync(adminHistoricoDir, { recursive: true });
+fs.writeFileSync(path.join(adminHistoricoDir, 'index.html'), spaIndex);
+
 function walkDistFiles(dir, relBase = '') {
   const out = [];
   if (!fs.existsSync(dir)) return out;
@@ -156,14 +163,15 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response && response.status === 200) {
+          if (response && response.ok) {
             const clone = response.clone();
             caches.open(CACHE).then((cache) => {
               cache.put(BASE + '/index.html', clone);
               cache.put(request, response.clone());
             });
+            return response;
           }
-          return response;
+          return shellFallback();
         })
         .catch(() => shellFallback()),
     );

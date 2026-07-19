@@ -62,3 +62,12 @@ Defina secrets `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` no r
 
 ## 8. Vercel (`apptaf.vercel.app`)
 O `.env` local **não** vai para a Vercel. Em **Project → Settings → Environment Variables**, adicione as mesmas chaves `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Production + Preview) e faça **Redeploy**. Sem isso, o painel Admin e o login na nuvem ficam desabilitados no deploy.
+
+## 9. Painel Admin (e-mails chefe / autorizados)
+URLs que abrem o painel (após o deploy do GitHub Pages):
+
+- `https://thiagod11lopes-ops.github.io/apptaf/admin/historico`
+- `https://thiagod11lopes-ops.github.io/apptaf/?admin=historico`
+- `https://thiagod11lopes-ops.github.io/apptaf/#/admin/historico`
+
+No SQL Editor do Supabase, execute também `supabase/admin_directory.sql`.

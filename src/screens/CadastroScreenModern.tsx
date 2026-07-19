@@ -132,7 +132,11 @@ export default function CadastroScreenModern() {
     const faltantesAgora: string[] = [];
     if (!nip.trim()) faltantesAgora.push('NIP');
     if (!nome.trim()) faltantesAgora.push('Nome');
-    if (!dataNascimento.trim()) faltantesAgora.push('Data de Nascimento');
+    // Data de nascimento é opcional; se preenchida, exige DD/MM/AAAA válido.
+    const dataNascInformada = dataNascimento.trim();
+    if (dataNascInformada && !/^\d{2}\/\d{2}\/\d{4}$/.test(dataNascInformada)) {
+      faltantesAgora.push('Data de Nascimento (use DD/MM/AAAA)');
+    }
     if (categoria === 'Oficiais' && !oficialSelecionado.trim()) faltantesAgora.push('Oficial');
     if (categoria === 'Praças' && !pracaSelecionada.trim()) faltantesAgora.push('Graduação');
 
@@ -516,7 +520,7 @@ export default function CadastroScreenModern() {
               </View>
 
               <View style={styles.section}>
-                <FieldLabel>Data de nascimento</FieldLabel>
+                <FieldLabel>Data de nascimento (opcional)</FieldLabel>
                 <TextInput
                   value={dataNascimento}
                   onChangeText={(t) => setDataNascimento(formatDateInput(t))}

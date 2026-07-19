@@ -15,6 +15,7 @@ import {
   saveAplicador,
   updateAplicadorSenhaHash,
   updateAplicadorRubricaSvgIfEmpty,
+  replaceAplicadorRubricaSvg,
   clearAplicadorRubricaSvg,
   saveCadastrosBatch,
   saveSessao,
@@ -103,6 +104,21 @@ export class DataStore {
     ownerUid: string | null,
   ): Promise<boolean> {
     const record = await updateAplicadorRubricaSvgIfEmpty(
+      id,
+      rubricaSvg,
+      resolveOwnerUid(ownerUid),
+      getCachedLoginUid(),
+    );
+    if (record) notifyDataChanged();
+    return record != null;
+  }
+
+  async replaceAplicadorRubrica(
+    id: string,
+    rubricaSvg: string,
+    ownerUid: string | null,
+  ): Promise<boolean> {
+    const record = await replaceAplicadorRubricaSvg(
       id,
       rubricaSvg,
       resolveOwnerUid(ownerUid),

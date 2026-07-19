@@ -565,6 +565,47 @@ export async function clearAplicadorRubricaSvg(
 }
 
 /**
+ * Substitui a rúbrica salva do aplicador (sempre sobrescreve).
+ * Permitido também para membros autorizados — identidade permanece inalterada.
+ */
+export async function replaceAplicadorRubricaSvg(
+  id: string,
+  rubricaSvg: string,
+  ownerUid: string,
+  userId: string | null,
+): Promise<AplicadorRecord | null> {
+  const svg = rubricaSvg.trim();
+  if (!svg) return null;
+
+  const existing = await getAplicadorRaw(id);
+  if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return null;
+
+  const base: AplicadorRecord = {
+    ...existing,
+    rubricaSvg: svg,
+  };
+  const record = bumpRecordMeta(base, await getDeviceId(), userId, 'UPDATE');
+  await putAplicadorRecord(record);
+  await enqueueIfAllowed({
+    operationType: 'UPDATE',
+    collection: 'aplicadores',
+    documentId: id,
+    payload: record,
+    ownerUid,
+  });
+  await syncLogger.appendChangeLog({
+    documentId: id,
+    collection: 'aplicadores',
+    action: 'UPDATE',
+    deviceId: record.deviceId,
+    userId,
+    previousVersion: existing.version,
+    newVersion: record.version,
+  });
+  return record;
+}
+
+/**
  * Grava a rúbrica do aplicador na primeira assinatura (não sobrescreve).
  * Permitido também para membros autorizados — identidade permanece inalterada.
  */

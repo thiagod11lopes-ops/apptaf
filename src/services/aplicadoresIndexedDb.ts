@@ -191,6 +191,51 @@ export async function salvarRubricaAplicadorSeVazia(
   }
 }
 
+/** Substitui a rúbrica salva do aplicador (sempre sobrescreve). */
+export async function substituirRubricaAplicador(
+  id: string,
+  rubricaSvg: string,
+): Promise<boolean> {
+  const svg = rubricaSvg.trim();
+  if (!id.trim() || !svg) return false;
+
+  if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
+    return dataStore.replaceAplicadorRubrica(id, svg, uid);
+  }
+  const uid = await waitForAuthenticatedUid();
+  if (uid) {
+    return dataStore.replaceAplicadorRubrica(id, svg, uid);
+  }
+
+  try {
+    const db = await openDb();
+    return await new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const existing = getReq.result as AplicadorItemPersist | undefined;
+        if (!existing) {
+          resolve(false);
+          return;
+        }
+        const merged: AplicadorItemPersist = {
+          ...existing,
+          rubricaSvg: svg,
+          updatedAt: Date.now(),
+        };
+        const putReq = store.put(merged);
+        putReq.onsuccess = () => resolve(true);
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  } catch {
+    return false;
+  }
+}
+
 /** Remove a rúbrica salva do aplicador (planilha — e-mail chefe). */
 export async function excluirRubricaAplicador(id: string): Promise<boolean> {
   if (!id.trim()) return false;

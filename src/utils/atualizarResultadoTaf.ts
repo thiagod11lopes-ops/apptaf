@@ -4,6 +4,7 @@ import {
   addSessaoAplicacao,
   type TipoProvaAplicada,
 } from '../services/resultadosAplicadosIndexedDb';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import {
   notaCorridaParaPersistencia,
   textoNotaCorridaFromCadastro,
@@ -44,8 +45,9 @@ export function validarEdicaoResultadoTaf(input: EdicaoResultadoTafInput): strin
 export function aplicarEdicaoNoCadastro(
   base: CadastroItemPersist,
   input: EdicaoResultadoTafInput,
+  dataAplicacaoBr: string = dataHojeBr(),
 ): CadastroItemPersist {
-  const hoje = dataHojeBr();
+  const data = dataAplicacaoBr.trim() || dataHojeBr();
   const tc = input.tempoCorrida.trim();
   const tn = input.tempoNatacao.trim();
 
@@ -53,8 +55,8 @@ export function aplicarEdicaoNoCadastro(
     ...base,
     tempoCorrida: tc || undefined,
     tempoNatacao: tn || undefined,
-    dataTafCorrida: tc ? hoje : undefined,
-    dataTafNatacao: tn ? hoje : undefined,
+    dataTafCorrida: tc ? data : undefined,
+    dataTafNatacao: tn ? data : undefined,
     notaCorrida: tc
       ? notaCorridaParaPersistencia(
           textoNotaCorridaFromCadastro({
@@ -74,7 +76,7 @@ export function aplicarEdicaoNoCadastro(
         )
       : undefined,
     resultadoPermanencia: input.permanencia ?? undefined,
-    dataTafPermanencia: input.permanencia ? hoje : undefined,
+    dataTafPermanencia: input.permanencia ? data : undefined,
     tempoPermanencia: input.permanencia ? (base.tempoPermanencia ?? '10:00') : undefined,
     resultadoNatacao: undefined,
   };
@@ -101,11 +103,12 @@ export function aplicarEdicaoNoCadastro(
 export async function salvarResultadosTafEditados(
   base: CadastroItemPersist,
   input: EdicaoResultadoTafInput,
+  dataAplicacaoBr?: string,
 ): Promise<CadastroItemPersist> {
   const erro = validarEdicaoResultadoTaf(input);
   if (erro) throw new Error(erro);
 
-  const atualizado = aplicarEdicaoNoCadastro(base, input);
+  const atualizado = aplicarEdicaoNoCadastro(base, input, dataAplicacaoBr);
   await addCadastro(atualizado);
 
   const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia', 'caminhada'];
@@ -113,6 +116,43 @@ export async function salvarResultadosTafEditados(
     await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado);
   }
   await persistirSessoesRegistradorFromCadastro(atualizado, addSessaoAplicacao);
+
+  return atualizado;
+}
+
+export type CadastrarResultadosManualOpts = {
+  cadastro: CadastroItemPersist;
+  input: EdicaoResultadoTafInput;
+  dataAplicacaoBr: string;
+  rubricaMilitarSvg: string;
+  aplicadorAssinatura: AplicadorAssinaturaResumo;
+};
+
+/** Cadastro manual: resultados + rúbrica do militar + assinatura do aplicador. */
+export async function cadastrarResultadosManual(
+  opts: CadastrarResultadosManualOpts,
+): Promise<CadastroItemPersist> {
+  const erro = validarEdicaoResultadoTaf(opts.input);
+  if (erro) throw new Error(erro);
+  const svg = opts.rubricaMilitarSvg.trim();
+  if (!svg) throw new Error('Desenhe a rúbrica do militar para continuar.');
+
+  const atualizado = aplicarEdicaoNoCadastro(opts.cadastro, opts.input, opts.dataAplicacaoBr);
+  if (atualizado.tempoCorrida?.trim()) atualizado.rubricaCorridaSvg = svg;
+  if (atualizado.tempoNatacao?.trim()) atualizado.rubricaNatacaoSvg = svg;
+  if (atualizado.resultadoPermanencia) atualizado.rubricaPermanenciaSvg = svg;
+
+  await addCadastro(atualizado);
+
+  const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia', 'caminhada'];
+  for (const tipo of tipos) {
+    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado);
+  }
+  await persistirSessoesRegistradorFromCadastro(
+    atualizado,
+    addSessaoAplicacao,
+    opts.aplicadorAssinatura,
+  );
 
   return atualizado;
 }

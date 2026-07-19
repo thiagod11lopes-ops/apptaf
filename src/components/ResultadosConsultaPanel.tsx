@@ -404,6 +404,9 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
         sessoes={sessoesHistorico}
         cadastros={todosCadastros}
         onAviso={setAviso}
+        onResultadosCadastrados={() => {
+          void carregarBase();
+        }}
       />
 
       <Card elevated style={styles.formCard}>

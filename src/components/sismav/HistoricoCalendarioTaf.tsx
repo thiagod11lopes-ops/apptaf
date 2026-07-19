@@ -7,10 +7,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft, ChevronRight, CalendarDays, Download, FlaskConical } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CalendarDays, ClipboardPlus, Download, FlaskConical } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SectionCard } from './SectionCard';
 import { PressableScale } from '../premium/PressableScale';
+import { CadastrarResultadosManualModal } from './CadastrarResultadosManualModal';
 import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import {
   tituloTipoProva,
@@ -44,6 +45,7 @@ type Props = {
   sessoes: SessaoAplicacaoTaf[];
   cadastros: CadastroItemPersist[];
   onAviso?: (msg: string | null) => void;
+  onResultadosCadastrados?: () => void;
 };
 
 function tempoParticipante(tipo: SessaoAplicacaoTaf['tipoProva'], r: ResultadoCorridaItem): string {
@@ -93,7 +95,12 @@ function rubricaSvgParticipante(
   return c.rubricaCorridaSvg;
 }
 
-export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
+export function HistoricoCalendarioTaf({
+  sessoes,
+  cadastros,
+  onAviso,
+  onResultadosCadastrados,
+}: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const hoje = isoHojeLocal();
@@ -102,6 +109,7 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
   const [mes, setMes] = useState(hojeDate.getMonth());
   const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [modalCadastrar, setModalCadastrar] = useState(false);
 
   const diasComTeste = useMemo(() => diasComTestesIso(sessoes), [sessoes]);
   const grade = useMemo(() => gradeCalendarioMes(ano, mes), [ano, mes]);
@@ -259,22 +267,6 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
                 </>
               );
 
-              if (!temTeste) {
-                return (
-                  <View key={cel.iso} style={styles.cellWrap}>
-                    <View
-                      style={[
-                        styles.cell,
-                        styles.cellInativo,
-                        ehHoje ? { borderColor: theme.border, borderWidth: 1 } : null,
-                      ]}
-                    >
-                      {inner}
-                    </View>
-                  </View>
-                );
-              }
-
               if (selecionado) {
                 return (
                   <PressableScale
@@ -309,9 +301,9 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
                   <View
                     style={[
                       styles.cell,
-                      styles.cellComTeste,
+                      temTeste ? styles.cellComTeste : styles.cellInativo,
                       {
-                        backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                        backgroundColor: temTeste ? 'rgba(37, 99, 235, 0.08)' : 'transparent',
                         borderColor: ehHoje ? theme.primary : theme.border,
                       },
                       ehHoje ? { borderWidth: 2 } : { borderWidth: 1 },
@@ -327,10 +319,11 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
       </View>
 
       <Text style={[ts.caption, styles.legenda, { color: theme.textMuted }]}>
-        Dias marcados tiveram testes aplicados. Toque para ver a relação.
+        Dias marcados tiveram testes aplicados. Toque em qualquer dia para ver ou cadastrar
+        resultados.
       </Text>
 
-      {diaSelecionado && sessoesDoDia.length > 0 ? (
+      {diaSelecionado ? (
         <View
           style={[
             styles.diaPainel,
@@ -383,6 +376,30 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
               )}
             </LinearGradient>
           </PressableScale>
+
+          <PressableScale
+            onPress={() => setModalCadastrar(true)}
+            style={styles.btnCadastrarOuter}
+            accessibilityLabel="Cadastrar resultados manualmente pelo NIP"
+          >
+            <View
+              style={[
+                styles.btnCadastrar,
+                { borderColor: theme.primary, backgroundColor: theme.surface },
+              ]}
+            >
+              <ClipboardPlus size={18} color={theme.primary} strokeWidth={2.4} />
+              <Text style={[styles.btnCadastrarText, { color: theme.primary }]}>
+                Cadastrar Resultados
+              </Text>
+            </View>
+          </PressableScale>
+
+          {sessoesDoDia.length === 0 ? (
+            <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 8 }]}>
+              Nenhum teste registrado neste dia. Use Cadastrar Resultados para lançar manualmente.
+            </Text>
+          ) : null}
 
           {sessoesDoDia.map((sessao) => (
             <View
@@ -447,6 +464,18 @@ export function HistoricoCalendarioTaf({ sessoes, cadastros, onAviso }: Props) {
 
         </View>
       ) : null}
+
+      <CadastrarResultadosManualModal
+        visible={modalCadastrar}
+        cadastros={cadastros}
+        dataAplicacaoBr={dataBrSelecionada || dataBrDoDiaIso(hoje)}
+        onClose={() => setModalCadastrar(false)}
+        onSalvo={() => {
+          setModalCadastrar(false);
+          onAviso?.('Resultados cadastrados com sucesso.');
+          onResultadosCadastrados?.();
+        }}
+      />
     </SectionCard>
   );
 }
@@ -546,7 +575,7 @@ const styles = StyleSheet.create({
     minWidth: 120,
     maxWidth: 130,
   },
-  btnPdfOuter: { borderRadius: 12, overflow: 'hidden', marginBottom: 14 },
+  btnPdfOuter: { borderRadius: 12, overflow: 'hidden', marginBottom: 10 },
   btnPdf: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -558,6 +587,23 @@ const styles = StyleSheet.create({
   },
   btnPdfText: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  btnCadastrarOuter: { borderRadius: 12, overflow: 'hidden', marginBottom: 14 },
+  btnCadastrar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  btnCadastrarText: {
     fontSize: 14,
     fontWeight: '800',
     textAlign: 'center',

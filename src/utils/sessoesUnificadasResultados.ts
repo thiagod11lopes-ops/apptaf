@@ -1,6 +1,7 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { tempoStringParaMsProva } from './calcularIdade';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { nipDigitos } from './nipFormat';
@@ -220,7 +221,10 @@ export function unificarSessoesComCadastroRegistrador(
 /** Cria sessões persistidas a partir de um cadastro recém-atualizado no Registrador. */
 export async function persistirSessoesRegistradorFromCadastro(
   c: CadastroItemPersist,
-  addSessao: (input: Omit<SessaoAplicacaoTaf, 'id' | 'criadoEm'>) => Promise<string>,
+  addSessao: (
+    input: Omit<SessaoAplicacaoTaf, 'id' | 'criadoEm'> & { id?: string },
+  ) => Promise<string>,
+  aplicadorAssinatura?: AplicadorAssinaturaResumo,
 ): Promise<void> {
   const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia', 'caminhada'];
   for (const tipo of tipos) {
@@ -234,6 +238,7 @@ export async function persistirSessoesRegistradorFromCadastro(
       dataAplicacao: data,
       tipoProva: tipo,
       resultados: [resultado],
+      aplicadorAssinatura,
     });
   }
 }

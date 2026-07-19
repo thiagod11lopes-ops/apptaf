@@ -7,15 +7,25 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft, ChevronRight, CalendarDays, ClipboardPlus, Download, FlaskConical } from 'lucide-react-native';
+import {
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  ClipboardPlus,
+  Download,
+  FlaskConical,
+  Trash2,
+} from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SectionCard } from './SectionCard';
 import { PressableScale } from '../premium/PressableScale';
 import { CadastrarResultadosManualModal } from './CadastrarResultadosManualModal';
-import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
+import { ConfirmacaoExcluirResultadoModal } from './ConfirmacaoExcluirResultadoModal';
+import { addCadastro, type CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import {
   tituloTipoProva,
   type SessaoAplicacaoTaf,
+  type TipoProvaAplicada,
 } from '../../services/resultadosAplicadosIndexedDb';
 import type { ResultadoCorridaItem } from '../../navigation/types';
 import { formatMsByModality } from '../../taf/tafTimeFormat';
@@ -36,8 +46,20 @@ import {
 } from '../../utils/exportResultadosTafPdf';
 import { coletarAssinaturasAplicadorParaPdf } from '../../utils/assinaturaAplicadorDasSessoes';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
+import {
+  limparResultadoModalidadeCadastro,
+  type ModalidadeResultadoTaf,
+} from '../../utils/limparResultadoModalidade';
+import { removerParticipanteModalidadeDoHistorico } from '../../utils/registroModalidadeHistorico';
 import { RubricaCell } from '../RubricaThumb';
 import { PREMIUM } from '../../theme/premium';
+
+function modalidadeExcluivel(tipo: TipoProvaAplicada): ModalidadeResultadoTaf | null {
+  if (tipo === 'corrida' || tipo === 'natacao' || tipo === 'permanencia' || tipo === 'caminhada') {
+    return tipo;
+  }
+  return null;
+}
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as const;
 
@@ -110,6 +132,12 @@ export function HistoricoCalendarioTaf({
   const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [modalCadastrar, setModalCadastrar] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const [confirmarExclusao, setConfirmarExclusao] = useState<{
+    nome: string;
+    nip: string;
+    modalidade: ModalidadeResultadoTaf;
+  } | null>(null);
 
   const diasComTeste = useMemo(() => diasComTestesIso(sessoes), [sessoes]);
   const grade = useMemo(() => gradeCalendarioMes(ano, mes), [ano, mes]);
@@ -205,6 +233,39 @@ export function HistoricoCalendarioTaf({
     () => sessoesDoDia.reduce((acc, s) => acc + s.resultados.length, 0),
     [sessoesDoDia],
   );
+
+  const executarExclusao = useCallback(async () => {
+    if (!confirmarExclusao || excluindo) return;
+    setExcluindo(true);
+    onAviso?.(null);
+    try {
+      const busca = buscarCadastroPorNomeOuNip(cadastros, confirmarExclusao.nip);
+      if (busca.kind === 'found') {
+        const atualizado = limparResultadoModalidadeCadastro(
+          busca.cadastro,
+          confirmarExclusao.modalidade,
+        );
+        await addCadastro(atualizado);
+        await removerParticipanteModalidadeDoHistorico(
+          atualizado.nip,
+          confirmarExclusao.modalidade,
+          atualizado,
+        );
+      } else {
+        await removerParticipanteModalidadeDoHistorico(
+          confirmarExclusao.nip,
+          confirmarExclusao.modalidade,
+        );
+      }
+      setConfirmarExclusao(null);
+      onAviso?.('Resultado excluído do histórico.');
+      onResultadosCadastrados?.();
+    } catch (e) {
+      onAviso?.(e instanceof Error ? e.message : 'Não foi possível excluir o resultado.');
+    } finally {
+      setExcluindo(false);
+    }
+  }, [confirmarExclusao, excluindo, cadastros, onAviso, onResultadosCadastrados]);
 
   return (
     <SectionCard title="Calendário de aplicações" style={styles.section}>
@@ -443,53 +504,76 @@ export function HistoricoCalendarioTaf({
               <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 8 }]}>
                 {sessao.resultados.length} participante{sessao.resultados.length !== 1 ? 's' : ''}
               </Text>
-              {sessao.resultados.map((r) => (
-                <View key={`${sessao.id}-${r.corredor}`} style={[styles.partRow, { borderTopColor: theme.border }]}>
-                  <View style={styles.partMain}>
-                    <Text style={[ts.body, { color: theme.text, fontWeight: '700' }]} numberOfLines={1}>
-                      {r.nome?.trim() || '—'}
-                    </Text>
-                    <Text style={[ts.caption, { color: theme.textMuted }]}>
-                      NIP {r.nip?.trim() || '—'}
-                    </Text>
+              {sessao.resultados.map((r) => {
+                const modalidade = modalidadeExcluivel(sessao.tipoProva);
+                return (
+                  <View
+                    key={`${sessao.id}-${r.corredor}`}
+                    style={[styles.partRow, { borderTopColor: theme.border }]}
+                  >
+                    <View style={styles.partMain}>
+                      <Text style={[ts.body, { color: theme.text, fontWeight: '700' }]} numberOfLines={1}>
+                        {r.nome?.trim() || '—'}
+                      </Text>
+                      <Text style={[ts.caption, { color: theme.textMuted }]}>
+                        NIP {r.nip?.trim() || '—'}
+                      </Text>
+                    </View>
+                    <View style={styles.partMeta}>
+                      <Text style={[ts.caption, { color: theme.textMuted }]}>Tempo</Text>
+                      <Text style={[ts.caption, { color: theme.text, fontWeight: '700' }]}>
+                        {tempoParticipante(sessao.tipoProva, r)}
+                      </Text>
+                      <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>Nota</Text>
+                      <Text style={[ts.caption, { color: theme.text, fontWeight: '700' }]}>
+                        {notaParticipante(r)}
+                      </Text>
+                      <Text
+                        style={[
+                          ts.caption,
+                          {
+                            marginTop: 2,
+                            fontWeight: '700',
+                            color:
+                              situacaoParticipante(r) === 'Reprovado'
+                                ? theme.loss
+                                : situacaoParticipante(r) === 'Aprovado'
+                                  ? theme.gain
+                                  : theme.textMuted,
+                          },
+                        ]}
+                      >
+                        {situacaoParticipante(r)}
+                      </Text>
+                    </View>
+                    <View style={styles.partRubrica}>
+                      <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 4 }]}>
+                        Rúbrica
+                      </Text>
+                      <RubricaCell
+                        svgUri={rubricaSvgParticipante(sessao.tipoProva, r, cadastros)}
+                        maxWidth={120}
+                        maxHeight={52}
+                      />
+                    </View>
+                    {modalidade ? (
+                      <PressableScale
+                        onPress={() =>
+                          setConfirmarExclusao({
+                            nome: (r.nome ?? '').trim() || 'Militar',
+                            nip: (r.nip ?? '').trim(),
+                            modalidade,
+                          })
+                        }
+                        style={[styles.trashBtn, { borderColor: theme.border }]}
+                        accessibilityLabel={`Excluir resultado de ${tituloTipoProva(sessao.tipoProva)}`}
+                      >
+                        <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                      </PressableScale>
+                    ) : null}
                   </View>
-                  <View style={styles.partMeta}>
-                    <Text style={[ts.caption, { color: theme.textMuted }]}>Tempo</Text>
-                    <Text style={[ts.caption, { color: theme.text, fontWeight: '700' }]}>
-                      {tempoParticipante(sessao.tipoProva, r)}
-                    </Text>
-                    <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>Nota</Text>
-                    <Text style={[ts.caption, { color: theme.text, fontWeight: '700' }]}>
-                      {notaParticipante(r)}
-                    </Text>
-                    <Text
-                      style={[
-                        ts.caption,
-                        {
-                          marginTop: 2,
-                          fontWeight: '700',
-                          color:
-                            situacaoParticipante(r) === 'Reprovado'
-                              ? theme.loss
-                              : situacaoParticipante(r) === 'Aprovado'
-                                ? theme.gain
-                                : theme.textMuted,
-                        },
-                      ]}
-                    >
-                      {situacaoParticipante(r)}
-                    </Text>
-                  </View>
-                  <View style={styles.partRubrica}>
-                    <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 4 }]}>Rúbrica</Text>
-                    <RubricaCell
-                      svgUri={rubricaSvgParticipante(sessao.tipoProva, r, cadastros)}
-                      maxWidth={120}
-                      maxHeight={52}
-                    />
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           ))}
 
@@ -506,6 +590,18 @@ export function HistoricoCalendarioTaf({
           onAviso?.('Resultados cadastrados com sucesso.');
           onResultadosCadastrados?.();
         }}
+      />
+
+      <ConfirmacaoExcluirResultadoModal
+        visible={!!confirmarExclusao}
+        nome={confirmarExclusao?.nome ?? ''}
+        nip={confirmarExclusao?.nip ?? ''}
+        modalidade={confirmarExclusao?.modalidade ?? null}
+        loading={excluindo}
+        onClose={() => {
+          if (!excluindo) setConfirmarExclusao(null);
+        }}
+        onConfirm={() => void executarExclusao()}
       />
     </SectionCard>
   );
@@ -605,6 +701,15 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     minWidth: 120,
     maxWidth: 130,
+  },
+  trashBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
   btnPdfOuter: { borderRadius: 12, overflow: 'hidden', marginBottom: 10 },
   btnPdf: {

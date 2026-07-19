@@ -325,9 +325,17 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     setAviso(null);
     try {
       const lista = todosCadastros.length ? todosCadastros : await carregarBase();
-      const cadastro = lista.find((c) => c.id === confirmarExclusao.cadastroId);
+      const porId = lista.find((c) => c.id === confirmarExclusao.cadastroId);
+      const porNip = buscarCadastroPorNomeOuNip(lista, confirmarExclusao.nip);
+      const cadastro = porId ?? (porNip.kind === 'found' ? porNip.cadastro : undefined);
       if (!cadastro) {
-        setAviso('Cadastro não encontrado.');
+        await removerParticipanteModalidadeDoHistorico(
+          confirmarExclusao.nip,
+          confirmarExclusao.modalidade,
+        );
+        await carregarBase();
+        setConfirmarExclusao(null);
+        setAviso('Resultado removido do histórico.');
         return;
       }
       const atualizado = limparResultadoModalidadeCadastro(cadastro, confirmarExclusao.modalidade);
@@ -491,19 +499,23 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       ) : null}
 
       {linhas.map((r) => {
-        const cadastro = todosCadastros.find((c) => c.id === r.id);
-        const podeExcluirCorrida = cadastro ? temAvaliacaoCorrida(cadastro) : r.notaCorrida !== '—';
-        const podeExcluirCaminhada = cadastro
-          ? temAvaliacaoCaminhada(cadastro)
-          : r.notaCaminhada !== '—';
-        const podeExcluirNatacao = cadastro ? temAvaliacaoNatacao(cadastro) : r.notaNatacao !== '—';
-        const podeExcluirPermanencia = cadastro
-          ? temAvaliacaoPermanencia(cadastro)
-          : r.permanenciaTempo !== '—';
+        const porId = todosCadastros.find((c) => c.id === r.id);
+        const porNip = buscarCadastroPorNomeOuNip(todosCadastros, r.nip);
+        const cadastro = porId ?? (porNip.kind === 'found' ? porNip.cadastro : undefined);
+        // Exibe lixeira se houver resultado no cadastro OU na linha (histórico / lançamento manual).
+        const podeExcluirCorrida =
+          (cadastro ? temAvaliacaoCorrida(cadastro) : false) || r.notaCorrida !== '—';
+        const podeExcluirCaminhada =
+          (cadastro ? temAvaliacaoCaminhada(cadastro) : false) || r.notaCaminhada !== '—';
+        const podeExcluirNatacao =
+          (cadastro ? temAvaliacaoNatacao(cadastro) : false) || r.notaNatacao !== '—';
+        const podeExcluirPermanencia =
+          (cadastro ? temAvaliacaoPermanencia(cadastro) : false) ||
+          (r.situacaoPermanencia !== '—' && r.situacaoPermanencia !== '');
 
         const abrirExclusao = (modalidade: ModalidadeResultadoTaf) => {
           setConfirmarExclusao({
-            cadastroId: r.id,
+            cadastroId: cadastro?.id ?? r.id,
             nome: r.nome,
             nip: r.nip,
             modalidade,

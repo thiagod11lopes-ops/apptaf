@@ -47,6 +47,7 @@ type Props = {
   isBoss: boolean;
   onEditar?: (item: AplicadorItemPersist) => void;
   onExcluir?: (item: AplicadorItemPersist) => void;
+  onExcluirRubrica?: (item: AplicadorItemPersist) => void;
 };
 
 export function AplicadoresCadastradosTable({
@@ -54,6 +55,7 @@ export function AplicadoresCadastradosTable({
   isBoss,
   onEditar,
   onExcluir,
+  onExcluirRubrica,
 }: Props) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -130,7 +132,19 @@ export function AplicadoresCadastradosTable({
             </View>
 
             <View style={styles.rubricaBlock}>
-              <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>RÚBRICA</Text>
+              <View style={styles.rubricaHeader}>
+                <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>RÚBRICA</Text>
+                {isBoss && item.rubricaSvg?.trim() && onExcluirRubrica ? (
+                  <TouchableOpacity
+                    accessibilityLabel={`Excluir rúbrica de ${item.nome}`}
+                    accessibilityRole="button"
+                    onPress={() => onExcluirRubrica(item)}
+                    style={[styles.rubricaTrashBtn, styles.modernIconBtnDanger]}
+                  >
+                    <Trash2 size={16} color={theme.loss} strokeWidth={2.4} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
               {item.rubricaSvg?.trim() ? (
                 <View
                   style={[
@@ -241,6 +255,20 @@ const styles = StyleSheet.create({
   rubricaBlock: {
     marginTop: 14,
     gap: 8,
+  },
+  rubricaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  rubricaTrashBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rubricaPreview: {
     alignItems: 'center',

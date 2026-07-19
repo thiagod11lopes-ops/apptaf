@@ -18,13 +18,11 @@ import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
 import {
   getAllAplicadores,
-  salvarRubricaAplicadorSeVazia,
+  excluirRubricaAplicador,
   type AplicadorItemPersist,
 } from '../services/aplicadoresIndexedDb';
-import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { aplicadorRepository } from '../offline-first/repositories/AplicadorRepository';
 import { hashAplicadorSenha, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../utils/aplicadorSenha';
-import { assinaturasUnicasDasSessoes } from '../utils/assinaturaAplicadorDasSessoes';
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
 import { AplicadoresCadastradosTable } from '../components/AplicadoresCadastradosTable';
@@ -68,6 +66,7 @@ export default function CadastroAplicadorScreen() {
   const [mostrarTabela, setMostrarTabela] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [excluirId, setExcluirId] = useState<string | null>(null);
+  const [excluirRubricaId, setExcluirRubricaId] = useState<string | null>(null);
   const [modalNipDuplicado, setModalNipDuplicado] = useState(false);
   const [modalCadastroSucesso, setModalCadastroSucesso] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -231,38 +230,35 @@ export default function CadastroAplicadorScreen() {
     }
   }
 
+  async function handleConfirmarExcluirRubrica() {
+    if (!excluirRubricaId) return;
+    const id = excluirRubricaId;
+    setExcluirRubricaId(null);
+    setSalvando(true);
+    setErroNuvem(null);
+    try {
+      await excluirRubricaAplicador(id);
+      setAplicadores((prev) =>
+        prev.map((a) => {
+          if (a.id !== id) return a;
+          const next = { ...a };
+          delete next.rubricaSvg;
+          return next;
+        }),
+      );
+    } catch (err) {
+      recarregarAplicadores();
+      setErroNuvem(err instanceof Error ? err.message : 'Falha ao excluir rúbrica.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
   const recarregarAplicadores = useCallback(() => {
     getAllAplicadores()
       .then(async (lista) => {
-        // Recupera rúbricas já usadas em sessões e grava no card do aplicador.
-        let comRubrica = lista;
-        try {
-          const semRubrica = lista.filter((a) => !a.rubricaSvg?.trim());
-          if (semRubrica.length > 0) {
-            const assinaturas = assinaturasUnicasDasSessoes(await getAllSessoesAplicacao());
-            const porId = new Map(
-              assinaturas
-                .filter((a) => a.aplicadorId?.trim() && a.rubricaSvg?.trim())
-                .map((a) => [a.aplicadorId, a.rubricaSvg!.trim()] as const),
-            );
-            await Promise.all(
-              semRubrica.map(async (a) => {
-                const svg = porId.get(a.id);
-                if (svg) await salvarRubricaAplicadorSeVazia(a.id, svg);
-              }),
-            );
-            comRubrica = lista.map((a) => {
-              if (a.rubricaSvg?.trim()) return a;
-              const svg = porId.get(a.id);
-              return svg ? { ...a, rubricaSvg: svg } : a;
-            });
-          }
-        } catch {
-          comRubrica = lista;
-        }
-
         if (!isBoss) {
-          setAplicadores(comRubrica);
+          setAplicadores(lista);
           return;
         }
         try {
@@ -278,7 +274,7 @@ export default function CadastroAplicadorScreen() {
           const ownerUid = await resolveStorageOwnerUid();
           const cloudMap = await getAplicadorSenhasMapFirestore(ownerUid);
           const resolvido = await Promise.all(
-            comRubrica.map(async (a) => {
+            lista.map(async (a) => {
               const cloud = cloudMap[a.id];
               // 1) Senha da nuvem que corresponde ao hash atual (mais confiável).
               if (cloud && a.senhaHash && cloud.senhaHash === a.senhaHash) {
@@ -302,7 +298,7 @@ export default function CadastroAplicadorScreen() {
           );
           setAplicadores(resolvido);
         } catch {
-          setAplicadores(comRubrica);
+          setAplicadores(lista);
         }
       })
       .catch(() => undefined);
@@ -633,6 +629,7 @@ export default function CadastroAplicadorScreen() {
                   isBoss={isBoss}
                   onEditar={handleEditar}
                   onExcluir={(item) => setExcluirId(item.id)}
+                  onExcluirRubrica={(item) => setExcluirRubricaId(item.id)}
                 />
               )}
             </>
@@ -677,6 +674,48 @@ export default function CadastroAplicadorScreen() {
                 ]}
               >
                 <Text style={[ts.caption, { color: dangerColor }]}>Excluir</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {excluirRubricaId ? (
+        <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)' }]}>
+          <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[ts.h2, { color: theme.text }]}>Excluir rúbrica?</Text>
+              <TouchableOpacity
+                accessibilityLabel="Fechar modal"
+                onPress={() => setExcluirRubricaId(null)}
+                style={[styles.modalCloseBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
+              >
+                <X size={18} color={theme.textSecondary} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[ts.bodySecondary, styles.modalSubtitle, { color: theme.textSecondary }]}>
+              A rúbrica salva será removida. Na próxima assinatura o aplicador precisará desenhar novamente.
+            </Text>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                onPress={() => setExcluirRubricaId(null)}
+                style={[styles.modalBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
+              >
+                <Text style={[ts.caption, { color: theme.textSecondary }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void handleConfirmarExcluirRubrica()}
+                disabled={salvando}
+                style={[
+                  styles.modalBtn,
+                  {
+                    borderColor: dangerColor,
+                    backgroundColor: theme.lossMuted,
+                    opacity: salvando ? 0.55 : 1,
+                  },
+                ]}
+              >
+                <Text style={[ts.caption, { color: dangerColor }]}>Excluir rúbrica</Text>
               </TouchableOpacity>
             </View>
           </View>

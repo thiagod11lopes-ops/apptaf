@@ -525,6 +525,46 @@ export async function saveAplicador(
 }
 
 /**
+ * Remove a rúbrica salva do aplicador (apenas e-mail chefe).
+ * Na próxima assinatura o aplicador desenha novamente.
+ */
+export async function clearAplicadorRubricaSvg(
+  id: string,
+  ownerUid: string,
+  userId: string | null,
+): Promise<AplicadorRecord | null> {
+  if (isAuthorizedMemberSession()) {
+    throw new Error('Exclusão de rúbrica disponível apenas para o e-mail chefe.');
+  }
+
+  const existing = await getAplicadorRaw(id);
+  if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return null;
+  if (!existing.rubricaSvg?.trim()) return existing;
+
+  const base: AplicadorRecord = { ...existing };
+  delete base.rubricaSvg;
+  const record = bumpRecordMeta(base, await getDeviceId(), userId, 'UPDATE');
+  await putAplicadorRecord(record);
+  await enqueueIfAllowed({
+    operationType: 'UPDATE',
+    collection: 'aplicadores',
+    documentId: id,
+    payload: record,
+    ownerUid,
+  });
+  await syncLogger.appendChangeLog({
+    documentId: id,
+    collection: 'aplicadores',
+    action: 'UPDATE',
+    deviceId: record.deviceId,
+    userId,
+    previousVersion: existing.version,
+    newVersion: record.version,
+  });
+  return record;
+}
+
+/**
  * Grava a rúbrica do aplicador na primeira assinatura (não sobrescreve).
  * Permitido também para membros autorizados — identidade permanece inalterada.
  */

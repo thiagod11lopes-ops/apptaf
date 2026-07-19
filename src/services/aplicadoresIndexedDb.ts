@@ -139,11 +139,6 @@ async function pushAplicadorSenhaCloud(
 }
 
 /**
- * Altera apenas a senha de um aplicador já cadastrado.
- * Disponível para o chefe e para e-mails autorizados (membros).
- * A senha em texto é enviada à nuvem em coleção que apenas o chefe pode ler.
- */
-/**
  * Grava a rúbrica do aplicador na primeira assinatura (first-write-wins).
  * Disponível para o chefe e para e-mails autorizados.
  * Retorna true se gravou; false se já existia rúbrica ou o aplicador não foi encontrado.
@@ -238,6 +233,10 @@ export async function excluirRubricaAplicador(id: string): Promise<boolean> {
   }
 }
 
+/**
+ * Altera apenas a senha de um aplicador já cadastrado.
+ * Disponível para o chefe e para e-mails autorizados (membros).
+ */
 export async function alterarSenhaAplicador(id: string, novaSenha: string): Promise<boolean> {
   const { hashAplicadorSenha, formatSenhaAplicadorInput } = await import('../utils/aplicadorSenha');
   const senhaFmt = formatSenhaAplicadorInput(novaSenha);

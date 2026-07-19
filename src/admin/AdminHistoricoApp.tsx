@@ -35,7 +35,9 @@ export function AdminHistoricoApp() {
 
   const carregarBosses = useCallback(async () => {
     if (!isSupabaseConfigured()) {
-      setErro('Configure o Supabase (.env) para listar os e-mails chefe.');
+      setErro(
+        'Supabase não está configurado neste deploy. No Vercel: Project → Settings → Environment Variables → adicione EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY (iguais ao .env local) → Redeploy. No GitHub Pages: configure os mesmos nomes em Settings → Secrets and variables → Actions.',
+      );
       setBosses([]);
       setCarregando(false);
       return;

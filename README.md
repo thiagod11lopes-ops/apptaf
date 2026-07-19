@@ -85,7 +85,7 @@ Escolha um dos serviços abaixo (todos têm plano gratuito):
 
 | Serviço   | Site        | O que fazer |
 |-----------|-------------|-------------|
-| **Vercel** | vercel.com  | Login com GitHub → "Add New Project" → selecione o repositório `apptaf` → **Root Directory** deixe vazio ou `taf-app` se o repositório tiver essa pasta na raiz. Em **Build Command** use `npm run build:web`. Em **Output Directory** use `dist`. Deploy. |
+| **Vercel** | vercel.com  | Login com GitHub → "Add New Project" → selecione o repositório `apptaf` → **Root Directory** deixe vazio ou `taf-app` se o repositório tiver essa pasta na raiz. Em **Build Command** use `npm run build:web`. Em **Output Directory** use `dist`. Em **Settings → Environment Variables**, adicione `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` (iguais ao `.env` local) e faça Redeploy. |
 | **Netlify** | netlify.com | Login com GitHub → "Add new site" → "Import from Git" → escolha o repo. **Build command:** `npm run build:web`. **Publish directory:** `dist`. Deploy. |
 
 ### 3. Resultado

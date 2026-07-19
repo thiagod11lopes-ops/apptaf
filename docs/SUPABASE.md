@@ -59,3 +59,6 @@ grant select, insert, update on public.team_e2e_meta to authenticated;
 
 ## 7. CI / GitHub Pages
 Defina secrets `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` no repositório Actions. Sem isso o login na PWA publicada fica desabilitado.
+
+## 8. Vercel (`apptaf.vercel.app`)
+O `.env` local **não** vai para a Vercel. Em **Project → Settings → Environment Variables**, adicione as mesmas chaves `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Production + Preview) e faça **Redeploy**. Sem isso, o painel Admin e o login na nuvem ficam desabilitados no deploy.

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,6 @@ import {
   type AdminAuthorizedRow,
   type AdminBossRow,
 } from '../services/supabase/adminDirectoryCloud';
-import { ADMIN_HISTORICO_PATH, adminHistoricoEntryUrls } from '../utils/adminHistoricoAccess';
 import { isSupabaseConfigured } from '../config/supabase';
 import { PREMIUM } from '../theme/premium';
 
@@ -30,8 +29,6 @@ export function AdminHistoricoApp() {
   const [members, setMembers] = useState<AdminAuthorizedRow[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-
-  const entryUrls = useMemo(() => adminHistoricoEntryUrls(), []);
 
   const carregarBosses = useCallback(async () => {
     if (!isSupabaseConfigured()) {
@@ -119,13 +116,6 @@ export function AdminHistoricoApp() {
             <ExternalLink size={16} color={theme.primary} strokeWidth={2.2} />
             <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>App TAF</Text>
           </TouchableOpacity>
-        </View>
-
-        <View style={[styles.urlBox, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-          <Text style={[styles.urlTitle, { color: theme.textMuted }]}>Endereço deste painel</Text>
-          <Text style={[styles.urlPath, { color: theme.primary }]} selectable>
-            {entryUrls[0] || ADMIN_HISTORICO_PATH}
-          </Text>
         </View>
 
         <View style={styles.toolbar}>
@@ -257,14 +247,6 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
   },
-  urlBox: {
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusLg,
-    padding: 14,
-    marginBottom: 16,
-  },
-  urlTitle: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6 },
-  urlPath: { fontSize: 14, fontWeight: '700' },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',

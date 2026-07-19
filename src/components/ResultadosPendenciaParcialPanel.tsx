@@ -21,6 +21,7 @@ import {
 } from '../utils/pendenciasTafCfnHistorico';
 import { prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
 import { exportPendenciasTafPdf } from '../utils/exportPendenciasTafPdf';
+import { coletarAssinaturasAplicadorParaPdf } from '../utils/assinaturaAplicadorDasSessoes';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
@@ -104,7 +105,8 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
     }
     setGerandoPdf(true);
     try {
-      await exportPendenciasTafPdf(lista, 'total');
+      const assinaturas = await coletarAssinaturasAplicadorParaPdf();
+      await exportPendenciasTafPdf(lista, 'total', assinaturas);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Não foi possível gerar o PDF.';
       Alert.alert('Erro ao gerar PDF', msg);

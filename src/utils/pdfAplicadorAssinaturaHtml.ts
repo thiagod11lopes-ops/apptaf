@@ -12,9 +12,10 @@ function escapeHtml(s: string): string {
 export function blocoAplicadorAssinaturaHtml(assinatura?: AplicadorAssinaturaResumo): string {
   if (!assinatura?.nome?.trim()) return '';
   const postoGrad = escapeHtml(postoGradExibicaoAssinatura(assinatura));
-  const rubricaHtml = assinatura.rubricaSvg
-    ? `<div class="aplicador-rubrica">${celulaRubricaHtml(assinatura.rubricaSvg)}</div>`
-    : '';
+  const svg = assinatura.rubricaSvg?.trim();
+  const rubricaHtml = svg
+    ? `<div class="aplicador-rubrica">${celulaRubricaHtml(svg)}</div>`
+    : `<div class="aplicador-rubrica aplicador-rubrica-vazia" aria-hidden="true"></div>`;
   return `<div class="aplicador-assinatura">
     ${rubricaHtml}
     <hr class="aplicador-linha"/>
@@ -42,7 +43,17 @@ export const PDF_APLICADOR_ASSINATURA_STYLES = `
   .aplicador-rubrica {
     display: flex;
     justify-content: center;
+    align-items: center;
+    min-height: 28px;
     margin-bottom: 2px;
+  }
+  .aplicador-rubrica-vazia {
+    min-height: 28px;
+  }
+  .aplicador-rubrica img,
+  .aplicador-rubrica svg {
+    max-height: 36px;
+    width: auto;
   }
   .aplicador-linha {
     width: 72%;

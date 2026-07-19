@@ -34,7 +34,7 @@ import {
   PERMANENCIA_TEMPO_PDF_PADRAO,
   salvarResultadosTafPdfEmDownloads,
 } from '../../utils/exportResultadosTafPdf';
-import { assinaturasUnicasDasSessoes } from '../../utils/assinaturaAplicadorDasSessoes';
+import { coletarAssinaturasAplicadorParaPdf } from '../../utils/assinaturaAplicadorDasSessoes';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
 import { RubricaCell } from '../RubricaThumb';
 import { PREMIUM } from '../../theme/premium';
@@ -165,7 +165,12 @@ export function HistoricoCalendarioTaf({
     }
     const rubSessoes = await carregarRubricasDasSessoesPorNip();
     const linhas = enriquecerLinhasComRubricas(linhasBase, cadastros, rubSessoes);
-    const assinaturas = assinaturasUnicasDasSessoes(sessoesDoDia);
+    let assinaturas = await coletarAssinaturasAplicadorParaPdf(sessoesDoDia);
+    // Se o dia não trouxe rúbrica (sessões antigas), usa assinaturas do histórico geral.
+    if (!assinaturas.some((a) => a.rubricaSvg?.trim())) {
+      const gerais = await coletarAssinaturasAplicadorParaPdf();
+      if (gerais.length > 0) assinaturas = gerais;
+    }
     return { linhas, assinaturas };
   }, [sessoesDoDia, cadastros]);
 

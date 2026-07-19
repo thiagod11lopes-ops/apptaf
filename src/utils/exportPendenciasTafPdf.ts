@@ -6,12 +6,18 @@ import {
   type FiltroPendenciaTaf,
   type PendenciaTafItem,
 } from './pendenciasTafHistorico';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import {
+  blocosAplicadorAssinaturaHtml,
+  PDF_APLICADOR_ASSINATURA_STYLES,
+} from './pdfAplicadorAssinaturaHtml';
 import {
   buildPdfLandscapeDocument,
   buildPdfTableHtml,
   escapeHtmlPdf,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
+  PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
 
 function chipHtml(label: string, ok: boolean): string {
@@ -108,9 +114,11 @@ const PENDENCIAS_EXTRA_STYLES = `
 export function buildPendenciasTafHtml(
   itens: PendenciaTafItem[],
   filtro: FiltroPendenciaTaf,
+  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
   const tituloFiltro = FILTRO_PENDENCIA_LABEL[filtro];
+  const comAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));
 
   const rows = itens.map(
       (r) => `<tr>
@@ -141,8 +149,6 @@ export function buildPendenciasTafHtml(
           <th>Pendências</th>
         </tr>`;
 
-  const metaHtml = `Relatório de pendências do Teste de Aptidão Física · Gerado em ${escapeHtmlPdf(dataStr)}`;
-
   const conteudoHtml = buildPdfTableHtml({
     tableClass: 'pendencias-taf',
     theadHtml,
@@ -150,6 +156,7 @@ export function buildPendenciasTafHtml(
     emptyColspan: 7,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
+    rowsPerPage: comAssinatura ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
   });
 
   return buildPdfLandscapeDocument({
@@ -157,19 +164,21 @@ export function buildPendenciasTafHtml(
     titulo: tituloFiltro,
     metaHtml: `Relatório de pendências do Teste de Aptidão Física · Gerado em ${escapeHtmlPdf(dataStr)}`,
     conteudoHtml,
-    extraStyles: PENDENCIAS_EXTRA_STYLES,
+    aplicadorHtml: blocosAplicadorAssinaturaHtml(aplicadorAssinaturas),
+    extraStyles: `${PENDENCIAS_EXTRA_STYLES}${PDF_APLICADOR_ASSINATURA_STYLES}`,
   });
 }
 
 export async function exportPendenciasTafPdf(
   itens: PendenciaTafItem[],
   filtro: FiltroPendenciaTaf,
+  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): Promise<void> {
   if (itens.length === 0) {
     throw new Error('Não há militares com pendência para exportar.');
   }
 
-  const html = buildPendenciasTafHtml(itens, filtro);
+  const html = buildPendenciasTafHtml(itens, filtro, aplicadorAssinaturas);
   const titulo = FILTRO_PENDENCIA_LABEL[filtro];
 
   if (Platform.OS === 'web') {

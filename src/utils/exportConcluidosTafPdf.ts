@@ -2,12 +2,18 @@ import { Platform, Alert } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ConcluidoTafItem } from './pendenciasTafHistorico';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import {
+  blocosAplicadorAssinaturaHtml,
+  PDF_APLICADOR_ASSINATURA_STYLES,
+} from './pdfAplicadorAssinaturaHtml';
 import {
   buildPdfLandscapeDocument,
   buildPdfTableHtml,
   escapeHtmlPdf,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
+  PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
 
 function chipHtml(label: string): string {
@@ -99,8 +105,12 @@ const CONCLUIDOS_EXTRA_STYLES = `
   }
 `;
 
-export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
+export function buildConcluidosTafHtml(
+  itens: ConcluidoTafItem[],
+  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
+): string {
   const dataStr = new Date().toLocaleString('pt-BR');
+  const comAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));
 
   const rows = itens.map(
       (r) => `<tr>
@@ -127,8 +137,6 @@ export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
           <th>Modalidades</th>
         </tr>`;
 
-  const metaHtml = `Relatório de militares que concluíram todas as modalidades do TAF · Gerado em ${escapeHtmlPdf(dataStr)}`;
-
   const conteudoHtml = buildPdfTableHtml({
     tableClass: 'concluidos-taf',
     theadHtml,
@@ -136,6 +144,7 @@ export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
     emptyColspan: 6,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
+    rowsPerPage: comAssinatura ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
   });
 
   return buildPdfLandscapeDocument({
@@ -143,16 +152,20 @@ export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
     titulo: 'Militares com TAF concluído',
     metaHtml: `Relatório de militares que concluíram todas as modalidades do TAF · Gerado em ${escapeHtmlPdf(dataStr)}`,
     conteudoHtml,
-    extraStyles: CONCLUIDOS_EXTRA_STYLES,
+    aplicadorHtml: blocosAplicadorAssinaturaHtml(aplicadorAssinaturas),
+    extraStyles: `${CONCLUIDOS_EXTRA_STYLES}${PDF_APLICADOR_ASSINATURA_STYLES}`,
   });
 }
 
-export async function exportConcluidosTafPdf(itens: ConcluidoTafItem[]): Promise<void> {
+export async function exportConcluidosTafPdf(
+  itens: ConcluidoTafItem[],
+  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
+): Promise<void> {
   if (itens.length === 0) {
     throw new Error('Não há militares com TAF concluído para exportar.');
   }
 
-  const html = buildConcluidosTafHtml(itens);
+  const html = buildConcluidosTafHtml(itens, aplicadorAssinaturas);
 
   if (Platform.OS === 'web') {
     const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;

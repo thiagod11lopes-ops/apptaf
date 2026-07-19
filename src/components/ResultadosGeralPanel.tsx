@@ -27,7 +27,7 @@ import { ConfirmacaoExcluirResultadoGeralModal } from './sismav/ConfirmacaoExclu
 import { excluirTodosResultadosTafMilitar } from '../utils/atualizarResultadoTaf';
 import { nipDigitos } from '../utils/nipFormat';
 import { carregarRubricasDasSessoesPorNip } from '../utils/rubricasDasSessoes';
-import { assinaturasUnicasDasSessoes } from '../utils/assinaturaAplicadorDasSessoes';
+import { coletarAssinaturasAplicadorParaPdf } from '../utils/assinaturaAplicadorDasSessoes';
 import { salvarResultadosTafPdfEmDownloads } from '../utils/exportResultadosTafPdf';
 import { formatBrDateKey } from '../utils/backupNaming';
 import { PREMIUM } from '../theme/premium';
@@ -127,7 +127,7 @@ export function ResultadosGeralPanel({
     try {
       const rubSessoes = await carregarRubricasDasSessoesPorNip();
       const linhas = enriquecerLinhasComRubricas(lista, cadastros, rubSessoes);
-      const assinaturas = assinaturasUnicasDasSessoes(sessoes);
+      const assinaturas = await coletarAssinaturasAplicadorParaPdf(sessoes);
       const normaLabel = normaTaf === 'cfn' ? 'CFN' : 'Armada';
       const subtitulo = `Resultado Geral completo — ${normaLabel} — ${formatBrDateKey(new Date())}`;
       const msg = await salvarResultadosTafPdfEmDownloads(linhas, subtitulo, assinaturas);

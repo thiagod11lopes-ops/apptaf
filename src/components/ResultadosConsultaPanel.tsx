@@ -50,6 +50,8 @@ import {
   exportResultadosTafPdf,
   estimarFolhasA4PdfResultadosTaf,
 } from '../utils/exportResultadosTafPdf';
+import { coletarAssinaturasAplicadorParaPdf } from '../utils/assinaturaAplicadorDasSessoes';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { listarResultadosCompletosFromHistorico, enriquecerLinhasDistanciaMetaFromHistorico } from '../utils/resultadoGeralHistorico';
 import { cadastroComResultadoNorma, prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
 import { modalidadeCorridaCaminhadaDispensavel } from '../utils/corridaCaminhadaExcludente';
@@ -136,7 +138,10 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
   const [aviso, setAviso] = useState<string | null>(null);
   const [carregandoPdf, setCarregandoPdf] = useState(false);
   const [modalGerarPdf, setModalGerarPdf] = useState<
-    (ConfirmacaoGerarResultadosPdfInfo & { linhas: ResultadoTafLinha[] }) | null
+    (ConfirmacaoGerarResultadosPdfInfo & {
+      linhas: ResultadoTafLinha[];
+      assinaturas: AplicadorAssinaturaResumo[];
+    }) | null
   >(null);
   const [todosCadastros, setTodosCadastros] = useState<Awaited<ReturnType<typeof getAllCadastros>>>([]);
   const [sessoesHistorico, setSessoesHistorico] = useState<SessaoAplicacaoTaf[]>([]);
@@ -278,11 +283,13 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       return;
     }
 
+    const assinaturas = await coletarAssinaturasAplicadorParaPdf(sessoes);
     setModalGerarPdf({
       linhas: linhasPdf,
       subtitulo,
       qtdMilitares: linhasPdf.length,
-      folhasA4: estimarFolhasA4PdfResultadosTaf(linhasPdf.length),
+      folhasA4: estimarFolhasA4PdfResultadosTaf(linhasPdf.length, assinaturas.length > 0),
+      assinaturas,
     });
   }, [
     nip,
@@ -299,7 +306,11 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     if (!modalGerarPdf) return;
     setCarregandoPdf(true);
     try {
-      await exportResultadosTafPdf(modalGerarPdf.linhas, modalGerarPdf.subtitulo);
+      await exportResultadosTafPdf(
+        modalGerarPdf.linhas,
+        modalGerarPdf.subtitulo,
+        modalGerarPdf.assinaturas,
+      );
       setModalGerarPdf(null);
     } catch (e) {
       setAviso(e instanceof Error ? e.message : 'Falha ao gerar PDF.');

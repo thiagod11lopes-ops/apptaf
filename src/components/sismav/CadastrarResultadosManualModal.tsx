@@ -93,31 +93,71 @@ export function CadastrarResultadosManualModal({
     onClose();
   }, [salvando, onClose]);
 
-  const buscarMilitar = useCallback(() => {
-    setErro('');
-    const q = nip.trim();
-    if (!nipDigitos(q)) {
+  const aplicarCadastroEncontrado = useCallback((encontrado: CadastroItemPersist) => {
+    setCadastro(encontrado);
+    setTempoCorrida(tempoParaExibicao(encontrado.tempoCorrida));
+    setTempoNatacao(tempoParaExibicao(encontrado.tempoNatacao));
+    setPermanencia(permanenciaInicial(encontrado));
+    setAvisoBusca('');
+  }, []);
+
+  const resolverMilitarPorNip = useCallback(
+    (nipRaw: string, opts?: { formatarNip?: boolean; exigirCompleto?: boolean }) => {
+      setErro('');
+      const digits = nipDigitos(nipRaw);
+      if (!digits) {
+        setCadastro(null);
+        setAvisoBusca('');
+        return;
+      }
+
+      const res = buscarCadastroPorNomeOuNip(cadastros, nipRaw);
+      if (res.kind === 'found') {
+        aplicarCadastroEncontrado(res.cadastro);
+        if (opts?.formatarNip) setNip(formatNipInput(res.cadastro.nip));
+        return;
+      }
+
+      // Enquanto digita: se só um cadastro começa com os dígitos, já mostra o nome.
+      if (digits.length >= 4 && digits.length < 8) {
+        const prefixos = cadastros.filter((c) => nipDigitos(c.nip).startsWith(digits));
+        if (prefixos.length === 1) {
+          aplicarCadastroEncontrado(prefixos[0]);
+          return;
+        }
+        if (prefixos.length > 1) {
+          setCadastro(null);
+          setAvisoBusca('');
+          return;
+        }
+      }
+
       setCadastro(null);
-      setAvisoBusca('Informe o NIP do militar.');
-      return;
-    }
-    const res = buscarCadastroPorNomeOuNip(cadastros, q);
-    if (res.kind === 'found') {
-      setCadastro(res.cadastro);
-      setNip(formatNipInput(res.cadastro.nip));
-      setTempoCorrida(tempoParaExibicao(res.cadastro.tempoCorrida));
-      setTempoNatacao(tempoParaExibicao(res.cadastro.tempoNatacao));
-      setPermanencia(permanenciaInicial(res.cadastro));
-      setAvisoBusca('');
-      return;
-    }
-    setCadastro(null);
-    setAvisoBusca(
-      res.kind === 'ambiguous'
-        ? 'Mais de um cadastro corresponde a este NIP.'
-        : 'Militar não encontrado. Cadastre-o antes de lançar resultados.',
-    );
-  }, [cadastros, nip]);
+      if (opts?.exigirCompleto || digits.length >= 8) {
+        setAvisoBusca(
+          res.kind === 'ambiguous'
+            ? 'Mais de um cadastro corresponde a este NIP.'
+            : 'Militar não encontrado. Cadastre-o antes de lançar resultados.',
+        );
+      } else {
+        setAvisoBusca('');
+      }
+    },
+    [aplicarCadastroEncontrado, cadastros],
+  );
+
+  const onChangeNip = useCallback(
+    (t: string) => {
+      const formatado = formatNipInput(t);
+      setNip(formatado);
+      resolverMilitarPorNip(formatado);
+    },
+    [resolverMilitarPorNip],
+  );
+
+  const buscarMilitar = useCallback(() => {
+    resolverMilitarPorNip(nip, { formatarNip: true, exigirCompleto: true });
+  }, [nip, resolverMilitarPorNip]);
 
   const inputResultados = useMemo(
     (): EdicaoResultadoTafInput => ({
@@ -236,11 +276,7 @@ export function CadastrarResultadosManualModal({
               <View style={styles.nipRow}>
                 <TextInput
                   value={nip}
-                  onChangeText={(t) => {
-                    setAvisoBusca('');
-                    setErro('');
-                    setNip(formatNipInput(t));
-                  }}
+                  onChangeText={onChangeNip}
                   placeholder="00.0000.00"
                   placeholderTextColor={ui.placeholder}
                   style={[
@@ -262,20 +298,29 @@ export function CadastrarResultadosManualModal({
                   <Search size={18} color={theme.tokens.textOnPrimary} strokeWidth={2.4} />
                 </TouchableOpacity>
               </View>
+
+              <Text style={[theme.textStyles.label, styles.fieldLabel, { color: ui.text }]}>
+                Nome
+              </Text>
+              <TextInput
+                value={cadastro?.nome?.trim() ?? ''}
+                placeholder="Nome do militar (preenchido pelo NIP)"
+                placeholderTextColor={ui.placeholder}
+                style={[
+                  styles.input,
+                  {
+                    borderColor: theme.border,
+                    color: ui.text,
+                    backgroundColor: theme.cardBg,
+                    opacity: cadastro ? 1 : 0.75,
+                  },
+                ]}
+                editable={false}
+                selectTextOnFocus={false}
+              />
               {avisoBusca ? (
                 <Text style={[theme.textStyles.caption, { color: theme.loss, marginBottom: 8 }]}>
                   {avisoBusca}
-                </Text>
-              ) : null}
-              {cadastro ? (
-                <Text
-                  style={[
-                    theme.textStyles.caption,
-                    styles.militarOk,
-                    { color: theme.gain, borderColor: theme.border },
-                  ]}
-                >
-                  {cadastro.nome} · NIP {cadastro.nip}
                 </Text>
               ) : null}
 
@@ -471,14 +516,6 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  militarOk: {
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusMd,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 10,
-    fontWeight: '700',
   },
   input: {
     borderWidth: 1,

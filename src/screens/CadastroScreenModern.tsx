@@ -117,6 +117,7 @@ export default function CadastroScreenModern() {
   const [excluirId, setExcluirId] = useState<string | null>(null);
   const [modalNipDuplicado, setModalNipDuplicado] = useState(false);
   const [modalCadastroSucesso, setModalCadastroSucesso] = useState(false);
+  const [modalCadastroAtualizado, setModalCadastroAtualizado] = useState(false);
 
   const datePlaceholder = useMemo(() => '00/00/0000', []);
 
@@ -162,44 +163,75 @@ export default function CadastroScreenModern() {
 
     const id = editandoId ?? `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const anterior = editandoId ? cadastros.find((c) => c.id === editandoId) : undefined;
+    if (isEdicao && !anterior) {
+      setFaltantes(['Cadastro original não encontrado']);
+      return;
+    }
+
     const legacyTempo = anterior ? (anterior as CadastroItem & { tempo?: string }).tempo : undefined;
     const tempoCorridaSalvo = (anterior?.tempoCorrida ?? legacyTempo ?? '').trim();
     const tempoNatacaoSalvo = (anterior?.tempoNatacao ?? '').trim();
     const dataNasc = dataNascimento.trim();
-    const novoCadastro: CadastroItem = {
+
+    // Em edição: preserva resultados TAF, rúbricas e demais campos; só atualiza identidade.
+    const camposFormulario: CadastroItem = {
       id,
-      // Reaplica a máscara/filtragem numérica para evitar que o corretor
-      // injete texto (ex.: "Beliscar") no valor salvo.
       nip: nipFinal,
       nome: nome.trim(),
       dataNascimento: dataNasc,
       sexo,
       categoria,
-      // Se ainda não selecionou o oficial, mantém vazio (mostra '-' na tabela).
       oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
       praca: categoria === 'Praças' ? pracaSelecionada : undefined,
-      tempoCorrida: tempoCorridaSalvo || undefined,
-      tempoNatacao: tempoNatacaoSalvo || undefined,
-      notaCorrida: tempoCorridaSalvo
-        ? notaCorridaParaPersistencia(
-            textoNotaCorridaFromCadastro({
-              tempoCorrida: tempoCorridaSalvo,
-              dataNascimento: dataNasc,
-              sexo,
-            }),
-          )
-        : undefined,
-      notaNatacao: tempoNatacaoSalvo
-        ? notaNatacaoParaPersistencia(
-            textoNotaNatacaoFromCadastro({
-              tempoNatacao: tempoNatacaoSalvo,
-              dataNascimento: dataNasc,
-              sexo,
-            }),
-          )
-        : undefined,
-      resultadoNatacao: anterior?.resultadoNatacao,
     };
+
+    const novoCadastro: CadastroItem = isEdicao && anterior
+      ? {
+          ...anterior,
+          ...camposFormulario,
+          // Recalcula notas de tempo se idade/sexo mudaram e já havia resultado.
+          notaCorrida: tempoCorridaSalvo
+            ? notaCorridaParaPersistencia(
+                textoNotaCorridaFromCadastro({
+                  tempoCorrida: tempoCorridaSalvo,
+                  dataNascimento: dataNasc,
+                  sexo,
+                }),
+              )
+            : anterior.notaCorrida,
+          notaNatacao: tempoNatacaoSalvo
+            ? notaNatacaoParaPersistencia(
+                textoNotaNatacaoFromCadastro({
+                  tempoNatacao: tempoNatacaoSalvo,
+                  dataNascimento: dataNasc,
+                  sexo,
+                }),
+              )
+            : anterior.notaNatacao,
+        }
+      : {
+          ...camposFormulario,
+          tempoCorrida: tempoCorridaSalvo || undefined,
+          tempoNatacao: tempoNatacaoSalvo || undefined,
+          notaCorrida: tempoCorridaSalvo
+            ? notaCorridaParaPersistencia(
+                textoNotaCorridaFromCadastro({
+                  tempoCorrida: tempoCorridaSalvo,
+                  dataNascimento: dataNasc,
+                  sexo,
+                }),
+              )
+            : undefined,
+          notaNatacao: tempoNatacaoSalvo
+            ? notaNatacaoParaPersistencia(
+                textoNotaNatacaoFromCadastro({
+                  tempoNatacao: tempoNatacaoSalvo,
+                  dataNascimento: dataNasc,
+                  sexo,
+                }),
+              )
+            : undefined,
+        };
 
     setCadastros((prev) => {
       if (editandoId) return prev.map((c) => (c.id === id ? novoCadastro : c));
@@ -209,17 +241,20 @@ export default function CadastroScreenModern() {
     addCadastro(novoCadastro).catch(() => undefined);
 
     setEditandoId(null);
-
-    if (!isEdicao) {
+    setNip('');
+    setNome('');
+    setDataNascimento('');
+    setSexo('M');
+    setOficialSelecionado('');
+    setPracaSelecionada('');
+    setCategoria('');
+    setFaltantes([]);
+    setMostrarFormulario(false);
+    if (isEdicao) {
+      setMostrarTabela(true);
+      setModalCadastroAtualizado(true);
+    } else {
       setModalCadastroSucesso(true);
-      setNip('');
-      setNome('');
-      setDataNascimento('');
-      setSexo('M');
-      setOficialSelecionado('');
-      setPracaSelecionada('');
-      setCategoria('');
-      setFaltantes([]);
     }
   }
 
@@ -272,6 +307,12 @@ export default function CadastroScreenModern() {
     const t = setTimeout(() => setModalCadastroSucesso(false), 2000);
     return () => clearTimeout(t);
   }, [modalCadastroSucesso]);
+
+  useEffect(() => {
+    if (!modalCadastroAtualizado) return;
+    const t = setTimeout(() => setModalCadastroAtualizado(false), 2000);
+    return () => clearTimeout(t);
+  }, [modalCadastroAtualizado]);
 
   const selectedBgColor = theme.primary;
   const unselectedBgColor = theme.backgroundSecondary;
@@ -580,11 +621,13 @@ export default function CadastroScreenModern() {
 
               <View style={styles.btnRow}>
                 <TouchableOpacity
-                  accessibilityLabel="cadastrar"
+                  accessibilityLabel={editandoId ? 'Atualizar cadastro' : 'Cadastrar'}
                   onPress={handleCadastrar}
                   style={[styles.btn, { backgroundColor: theme.primary }]}
                 >
-                  <Text style={[ts.body, styles.btnText]}>Cadastrar</Text>
+                  <Text style={[ts.body, styles.btnText]}>
+                    {editandoId ? 'Atualizar Cadastro' : 'Cadastrar'}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
@@ -694,6 +737,16 @@ export default function CadastroScreenModern() {
           <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <Text style={[ts.h2, styles.modalTitleSuccess, { color: successColor }]}>
               Militar Cadastrado com Sucesso
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      {modalCadastroAtualizado ? (
+        <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)' }]} pointerEvents="box-none">
+          <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+            <Text style={[ts.h2, styles.modalTitleSuccess, { color: successColor }]}>
+              Cadastro Atualizado com Sucesso
             </Text>
           </View>
         </View>

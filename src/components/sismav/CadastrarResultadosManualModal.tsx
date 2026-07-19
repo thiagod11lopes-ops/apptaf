@@ -17,7 +17,10 @@ import { FluxoAssinaturaAplicadorModal } from './FluxoAssinaturaAplicadorModal';
 import { LabelNip } from '../LabelNip';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
-import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
+import {
+  getAllCadastros,
+  type CadastroItemPersist,
+} from '../../services/cadastrosIndexedDb';
 import type { ResultadoCorridaItem } from '../../navigation/types';
 import type { AplicadorAssinaturaResumo } from '../../types/aplicadorAssinatura';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
@@ -37,6 +40,7 @@ type Etapa = 'form' | 'rubricaMilitar' | 'aplicador';
 
 type Props = {
   visible: boolean;
+  /** Fallback; o modal também recarrega getAllCadastros ao abrir. */
   cadastros: CadastroItemPersist[];
   dataAplicacaoBr: string;
   onClose: () => void;
@@ -69,6 +73,7 @@ export function CadastrarResultadosManualModal({
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [rubricaMilitarSvg, setRubricaMilitarSvg] = useState('');
+  const [cadastrosBusca, setCadastrosBusca] = useState<CadastroItemPersist[]>(cadastros);
 
   const reset = useCallback(() => {
     setEtapa('form');
@@ -86,7 +91,19 @@ export function CadastrarResultadosManualModal({
   useEffect(() => {
     if (!visible) return;
     reset();
-  }, [visible, reset]);
+    setCadastrosBusca(cadastros);
+    let cancelled = false;
+    void getAllCadastros()
+      .then((lista) => {
+        if (!cancelled && lista.length > 0) setCadastrosBusca(lista);
+      })
+      .catch(() => {
+        /* mantém props */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, reset, cadastros]);
 
   const fechar = useCallback(() => {
     if (salvando) return;
@@ -111,7 +128,7 @@ export function CadastrarResultadosManualModal({
         return;
       }
 
-      const res = buscarCadastroPorNomeOuNip(cadastros, nipRaw);
+      const res = buscarCadastroPorNomeOuNip(cadastrosBusca, nipRaw);
       if (res.kind === 'found') {
         aplicarCadastroEncontrado(res.cadastro);
         if (opts?.formatarNip) setNip(formatNipInput(res.cadastro.nip));
@@ -120,7 +137,7 @@ export function CadastrarResultadosManualModal({
 
       // Enquanto digita: se só um cadastro começa com os dígitos, já mostra o nome.
       if (digits.length >= 4 && digits.length < 8) {
-        const prefixos = cadastros.filter((c) => nipDigitos(c.nip).startsWith(digits));
+        const prefixos = cadastrosBusca.filter((c) => nipDigitos(c.nip).startsWith(digits));
         if (prefixos.length === 1) {
           aplicarCadastroEncontrado(prefixos[0]);
           return;
@@ -143,7 +160,7 @@ export function CadastrarResultadosManualModal({
         setAvisoBusca('');
       }
     },
-    [aplicarCadastroEncontrado, cadastros],
+    [aplicarCadastroEncontrado, cadastrosBusca],
   );
 
   const onChangeNip = useCallback(
@@ -158,6 +175,13 @@ export function CadastrarResultadosManualModal({
   const buscarMilitar = useCallback(() => {
     resolverMilitarPorNip(nip, { formatarNip: true, exigirCompleto: true });
   }, [nip, resolverMilitarPorNip]);
+
+  // Se o NIP já foi digitado antes da lista completa carregar, resolve de novo.
+  useEffect(() => {
+    if (!visible) return;
+    if (nipDigitos(nip).length < 4) return;
+    resolverMilitarPorNip(nip);
+  }, [cadastrosBusca, visible, nip, resolverMilitarPorNip]);
 
   const inputResultados = useMemo(
     (): EdicaoResultadoTafInput => ({

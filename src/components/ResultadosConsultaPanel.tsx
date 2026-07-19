@@ -155,10 +155,12 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       getAllCadastros(),
       getAllSessoesAplicacao(),
     ]);
-    const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(sessoes, lista, normaTaf);
-    setTodosCadastros(cadastrosNorma);
+    // Lista completa para busca por NIP / Cadastrar Resultados (inclui quem ainda não tem TAF).
+    // O filtro por norma vale só para o histórico de sessões exibido.
+    const { sessoesNorma } = prepararDadosResultadosNorma(sessoes, lista, normaTaf);
+    setTodosCadastros(lista);
     setSessoesHistorico(sessoesNorma);
-    return cadastrosNorma;
+    return lista;
   }, [normaTaf]);
 
   useFocusEffect(

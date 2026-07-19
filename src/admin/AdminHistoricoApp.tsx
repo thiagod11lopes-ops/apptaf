@@ -8,137 +8,105 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Plus, Pencil, Trash2, ExternalLink, RefreshCw } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, ExternalLink, Mail, RefreshCw, Users } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoExcluirSessaoModal';
-import { SessaoHistoricoEditor, type SessaoDraft } from './SessaoHistoricoEditor';
-import { deleteSessaoFromHistorico } from '../services/deleteSessaoHistorico';
 import {
-  addSessaoAplicacao,
-  getAllSessoesAplicacao,
-  tituloTipoProva,
-  updateSessaoAplicacao,
-  type SessaoAplicacaoTaf,
-} from '../services/resultadosAplicadosIndexedDb';
+  adminListAuthorizedEmails,
+  adminListBossEmails,
+  type AdminAuthorizedRow,
+  type AdminBossRow,
+} from '../services/supabase/adminDirectoryCloud';
 import { ADMIN_HISTORICO_PATH, adminHistoricoEntryUrls } from '../utils/adminHistoricoAccess';
-import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
+import { isSupabaseConfigured } from '../config/supabase';
 import { PREMIUM } from '../theme/premium';
-import { getUiColors } from '../theme/uiColors';
 
-type Modo = 'lista' | 'editar' | 'criar';
+type Page = 'bosses' | 'members';
 
 export function AdminHistoricoApp() {
   const { theme } = useTheme();
-  const ui = useMemo(() => getUiColors(theme), [theme]);
-  const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>([]);
+  const [page, setPage] = useState<Page>('bosses');
+  const [bosses, setBosses] = useState<AdminBossRow[]>([]);
+  const [selectedBoss, setSelectedBoss] = useState<AdminBossRow | null>(null);
+  const [members, setMembers] = useState<AdminAuthorizedRow[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [modo, setModo] = useState<Modo>('lista');
-  const [sessaoAtual, setSessaoAtual] = useState<SessaoAplicacaoTaf | null>(null);
-  const [sessaoParaExcluir, setSessaoParaExcluir] = useState<SessaoAplicacaoTaf | null>(null);
-  const [excluindo, setExcluindo] = useState(false);
-  const [erroExclusao, setErroExclusao] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
   const entryUrls = useMemo(() => adminHistoricoEntryUrls(), []);
 
-  const carregar = useCallback(async () => {
+  const carregarBosses = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setErro('Configure o Supabase (.env) para listar os e-mails chefe.');
+      setBosses([]);
+      setCarregando(false);
+      return;
+    }
     setCarregando(true);
+    setErro(null);
     try {
-      const lista = await getAllSessoesAplicacao();
-      setSessoes(lista);
+      const lista = await adminListBossEmails();
+      setBosses(lista.filter((b) => b.email.includes('@')));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Falha ao carregar chefes.';
+      setErro(
+        `${msg} Se a função ainda não existe, execute supabase/admin_directory.sql no SQL Editor do Supabase.`,
+      );
+      setBosses([]);
     } finally {
       setCarregando(false);
     }
   }, []);
 
+  const abrirBoss = useCallback(async (boss: AdminBossRow) => {
+    setSelectedBoss(boss);
+    setPage('members');
+    setCarregando(true);
+    setErro(null);
+    try {
+      const lista = await adminListAuthorizedEmails(boss.ownerUid);
+      setMembers(lista);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao carregar autorizados.');
+      setMembers([]);
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
+
+  const voltarBosses = useCallback(() => {
+    setPage('bosses');
+    setSelectedBoss(null);
+    setMembers([]);
+    setErro(null);
+    void carregarBosses();
+  }, [carregarBosses]);
+
   useEffect(() => {
-    void carregar();
-  }, [carregar]);
+    void carregarBosses();
+  }, [carregarBosses]);
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      document.title = 'Admin — Histórico TAF';
+      document.title = 'Admin — E-mails TAF';
     }
   }, []);
-
-  const voltarLista = useCallback(() => {
-    setModo('lista');
-    setSessaoAtual(null);
-  }, []);
-
-  const executarExclusao = useCallback(async () => {
-    if (!sessaoParaExcluir) return;
-    setExcluindo(true);
-    setErroExclusao(null);
-    try {
-      await deleteSessaoFromHistorico(sessaoParaExcluir);
-      setSessaoParaExcluir(null);
-      await carregar();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Não foi possível excluir a sessão.';
-      setErroExclusao(msg);
-    } finally {
-      setExcluindo(false);
-    }
-  }, [sessaoParaExcluir, carregar]);
-
-  const salvarDraft = useCallback(
-    async (draft: SessaoDraft) => {
-      if (draft.id && draft.criadoEm) {
-        const sessao: SessaoAplicacaoTaf = {
-          id: draft.id,
-          criadoEm: draft.criadoEm,
-          dataAplicacao: draft.dataAplicacao,
-          tipoProva: draft.tipoProva,
-          resultados: draft.resultados,
-        };
-        await updateSessaoAplicacao(sessao);
-      } else {
-        await addSessaoAplicacao({
-          dataAplicacao: draft.dataAplicacao,
-          tipoProva: draft.tipoProva,
-          resultados: draft.resultados,
-        });
-      }
-      await persistirRubricasNoCadastro(
-        draft.resultados.map((r) => ({ ...r, prova: r.prova ?? draft.tipoProva })),
-      );
-      await carregar();
-      voltarLista();
-    },
-    [carregar, voltarLista],
-  );
 
   const abrirAppPrincipal = useCallback(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const root = `${window.location.origin}/`;
-    if (window.location.pathname !== '/') {
-      window.location.href = root;
-    } else {
-      window.location.search = '';
-      window.location.hash = '';
-    }
+    const path = window.location.pathname;
+    const base = path.startsWith('/apptaf') ? '/apptaf/' : '/';
+    window.location.href = `${window.location.origin}${base}`;
   }, []);
-
-  if (modo === 'editar' || modo === 'criar') {
-    return (
-      <View style={[styles.root, { backgroundColor: theme.background }]}>
-        <SessaoHistoricoEditor
-          initial={modo === 'editar' ? sessaoAtual : null}
-          onSave={salvarDraft}
-          onCancel={voltarLista}
-        />
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.topBar}>
           <View style={styles.topBarText}>
-            <Text style={[styles.heading, { color: theme.text }]}>Admin — Histórico TAF</Text>
+            <Text style={[styles.heading, { color: theme.text }]}>Admin — E-mails TAF</Text>
             <Text style={[styles.sub, { color: theme.textMuted }]}>
-              Gerencie os cards exibidos em Resultados → Histórico (mesmo banco IndexedDB do app).
+              {page === 'bosses'
+                ? 'E-mails chefe cadastrados no sistema. Toque para ver os autorizados.'
+                : `Autorizados do chefe ${selectedBoss?.email ?? ''}.`}
             </Text>
           </View>
           <TouchableOpacity
@@ -152,114 +120,115 @@ export function AdminHistoricoApp() {
         </View>
 
         <View style={[styles.urlBox, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-          <Text style={[styles.urlTitle, { color: theme.textMuted }]}>Endereço deste painel (web)</Text>
+          <Text style={[styles.urlTitle, { color: theme.textMuted }]}>Endereço deste painel</Text>
           <Text style={[styles.urlPath, { color: theme.primary }]} selectable>
             {entryUrls[0] || ADMIN_HISTORICO_PATH}
-          </Text>
-          <Text style={[styles.urlHint, { color: theme.textMuted }]}>
-            Alternativas: <Text selectable>{entryUrls[2]}</Text> ou <Text selectable>{entryUrls[1]}</Text>
           </Text>
         </View>
 
         <View style={styles.toolbar}>
-          <TouchableOpacity
-            onPress={() => void carregar()}
-            style={[styles.toolBtn, { borderColor: theme.border }]}
-            accessibilityLabel="Atualizar lista"
-          >
-            <RefreshCw size={18} color={ui.icon} strokeWidth={2.2} />
-          </TouchableOpacity>
+          {page === 'members' ? (
+            <TouchableOpacity
+              onPress={voltarBosses}
+              style={[styles.toolBtn, { borderColor: theme.border }]}
+              accessibilityLabel="Voltar aos chefes"
+            >
+              <ArrowLeft size={18} color={theme.text} strokeWidth={2.2} />
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             onPress={() => {
-              setSessaoAtual(null);
-              setModo('criar');
+              if (page === 'bosses') void carregarBosses();
+              else if (selectedBoss) void abrirBoss(selectedBoss);
             }}
-            style={[styles.toolBtnPrimary, { backgroundColor: theme.primary }]}
+            style={[styles.toolBtn, { borderColor: theme.border }]}
+            accessibilityLabel="Atualizar"
           >
-            <Plus size={18} color="#fff" strokeWidth={2.5} />
-            <Text style={styles.toolBtnPrimaryText}>Nova sessão</Text>
+            <RefreshCw size={18} color={theme.text} strokeWidth={2.2} />
           </TouchableOpacity>
+          <View style={[styles.countChip, { backgroundColor: theme.accentMuted, borderColor: theme.border }]}>
+            {page === 'bosses' ? (
+              <Mail size={16} color={theme.primary} strokeWidth={2.2} />
+            ) : (
+              <Users size={16} color={theme.primary} strokeWidth={2.2} />
+            )}
+            <Text style={[styles.countText, { color: theme.text }]}>
+              {page === 'bosses'
+                ? `${bosses.length} chefe${bosses.length !== 1 ? 's' : ''}`
+                : `${members.length} autorizado${members.length !== 1 ? 's' : ''}`}
+            </Text>
+          </View>
         </View>
+
+        {erro ? (
+          <Text style={[styles.erroBox, { color: theme.loss, borderColor: theme.loss }]}>{erro}</Text>
+        ) : null}
 
         {carregando ? <ActivityIndicator color={theme.primary} style={styles.loader} /> : null}
 
-        {!carregando && sessoes.length === 0 ? (
+        {!carregando && page === 'bosses' && bosses.length === 0 && !erro ? (
           <Text style={[styles.empty, { color: theme.textMuted }]}>
-            Nenhuma sessão no histórico. Crie uma nova ou aplique TAF no app principal.
+            Nenhum e-mail chefe encontrado. Chefes aparecem após criarem banco / autorizarem e-mails e
+            sincronizarem.
           </Text>
         ) : null}
 
-        {erroExclusao ? (
-          <Text style={[styles.erroBox, { color: theme.loss, borderColor: theme.loss }]}>{erroExclusao}</Text>
+        {!carregando && page === 'bosses'
+          ? bosses.map((boss) => (
+              <TouchableOpacity
+                key={boss.ownerUid}
+                onPress={() => void abrirBoss(boss)}
+                style={[styles.card, { borderColor: theme.border, backgroundColor: theme.surface }]}
+                accessibilityLabel={`Chefe ${boss.email}`}
+              >
+                <View style={styles.cardBody}>
+                  <Text style={[styles.cardEmail, { color: theme.text }]}>{boss.email}</Text>
+                  <Text style={[styles.cardMeta, { color: theme.textMuted }]}>
+                    {boss.authorizedCount} autorizado{boss.authorizedCount !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+                <ChevronRight size={20} color={theme.textMuted} strokeWidth={2.2} />
+              </TouchableOpacity>
+            ))
+          : null}
+
+        {!carregando && page === 'members' && members.length === 0 && !erro ? (
+          <Text style={[styles.empty, { color: theme.textMuted }]}>
+            Este chefe ainda não autorizou nenhum e-mail.
+          </Text>
         ) : null}
 
-        {sessoes.map((sessao) => {
-          const qtd = sessao.resultados.length;
-          const aprovados = sessao.resultados.filter(
-            (r) => r.notaTexto !== 'REPROVADO' && !r.reprovacaoTexto,
-          ).length;
-
-          return (
-            <View
-              key={sessao.id}
-              style={[styles.card, { borderColor: theme.border, backgroundColor: theme.surface }]}
-            >
-              <View style={styles.cardBody}>
-                <Text style={[styles.cardTipo, { color: theme.primary }]}>
-                  {tituloTipoProva(sessao.tipoProva)}
-                </Text>
-                <Text style={[styles.cardData, { color: theme.text }]}>{sessao.dataAplicacao}</Text>
-                <Text style={[styles.cardMeta, { color: theme.textMuted }]}>
-                  {qtd} participante{qtd !== 1 ? 's' : ''}
-                  {sessao.tipoProva === 'permanencia'
-                    ? ` · ${aprovados} aprovado${aprovados !== 1 ? 's' : ''}`
-                    : null}
-                </Text>
-                <Text style={[styles.cardId, { color: theme.textMuted }]} numberOfLines={1}>
-                  ID: {sessao.id}
-                </Text>
+        {!carregando && page === 'members'
+          ? members.map((m) => (
+              <View
+                key={m.email}
+                style={[styles.card, { borderColor: theme.border, backgroundColor: theme.surface }]}
+              >
+                <View style={styles.cardBody}>
+                  <Text style={[styles.cardEmail, { color: theme.text }]}>{m.email}</Text>
+                  <Text
+                    style={[
+                      styles.cardMeta,
+                      { color: m.ativo ? theme.gain : theme.textMuted, fontWeight: '700' },
+                    ]}
+                  >
+                    {m.ativo ? 'Ativo' : 'Inativo'}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.cardActions}>
-                <TouchableOpacity
-                  onPress={() => {
-                    setSessaoAtual(sessao);
-                    setModo('editar');
-                  }}
-                  style={[styles.iconBtn, { borderColor: theme.border }]}
-                  accessibilityLabel="Editar sessão"
-                >
-                  <Pencil size={18} color={ui.icon} strokeWidth={2.2} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    setErroExclusao(null);
-                    setSessaoParaExcluir(sessao);
-                  }}
-                  style={[styles.iconBtn, { borderColor: theme.loss }]}
-                  accessibilityLabel="Excluir sessão"
-                >
-                  <Trash2 size={18} color={theme.loss} strokeWidth={2.2} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-        })}
+            ))
+          : null}
       </ScrollView>
-
-      <ConfirmacaoExcluirSessaoModal
-        sessao={sessaoParaExcluir}
-        loading={excluindo}
-        onClose={() => {
-          if (!excluindo) setSessaoParaExcluir(null);
-        }}
-        onConfirm={() => void executarExclusao()}
-      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, width: '100%', minHeight: Platform.OS === 'web' ? ('100vh' as unknown as number) : undefined },
+  root: {
+    flex: 1,
+    width: '100%',
+    minHeight: Platform.OS === 'web' ? ('100vh' as unknown as number) : undefined,
+  },
   scroll: {
     padding: 20,
     paddingBottom: 48,
@@ -293,57 +262,49 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   urlTitle: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6 },
-  urlPath: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
-  urlHint: { fontSize: 12, lineHeight: 18 },
+  urlPath: { fontSize: 14, fontWeight: '700' },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     marginBottom: 16,
+    flexWrap: 'wrap',
   },
   toolBtn: {
     padding: 12,
     borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
   },
-  toolBtnPrimary: {
-    flex: 1,
+  countChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
-    borderRadius: PREMIUM.radiusMd,
-  },
-  toolBtnPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  loader: { marginVertical: 24 },
-  empty: { textAlign: 'center', fontSize: 14, marginTop: 12 },
-  erroBox: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 12,
-    padding: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
-    textAlign: 'center',
+  },
+  countText: { fontWeight: '800', fontSize: 13 },
+  loader: { marginVertical: 24 },
+  empty: { fontSize: 14, lineHeight: 20, marginTop: 8 },
+  erroBox: {
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: 13,
+    lineHeight: 18,
   },
   card: {
     flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderRadius: PREMIUM.radiusLg,
     padding: 16,
-    marginBottom: 12,
-    alignItems: 'center',
+    marginBottom: 10,
+    gap: 12,
   },
-  cardBody: { flex: 1, paddingRight: 8 },
-  cardTipo: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
-  cardData: { fontSize: 18, fontWeight: '800', marginTop: 4 },
-  cardMeta: { fontSize: 13, marginTop: 6 },
-  cardId: { fontSize: 10, marginTop: 6, fontFamily: Platform.select({ default: 'monospace' }) },
-  cardActions: { flexDirection: 'row', gap: 8 },
-  iconBtn: {
-    padding: 10,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-  },
+  cardBody: { flex: 1, gap: 4 },
+  cardEmail: { fontSize: 16, fontWeight: '700' },
+  cardMeta: { fontSize: 13 },
 });

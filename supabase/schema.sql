@@ -1,6 +1,7 @@
 -- TAF App — schema Supabase (substitui Firestore)
 -- Execute no SQL Editor do projeto Supabase.
 -- Ordem: tabelas primeiro, depois funções e policies.
+-- Painel admin de e-mails: também execute admin_directory.sql.
 
 -- Lookups de membros autorizados
 create table if not exists public.member_lookup (

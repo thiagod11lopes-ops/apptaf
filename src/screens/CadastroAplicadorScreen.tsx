@@ -18,10 +18,13 @@ import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
 import {
   getAllAplicadores,
+  salvarRubricaAplicadorSeVazia,
   type AplicadorItemPersist,
 } from '../services/aplicadoresIndexedDb';
+import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { aplicadorRepository } from '../offline-first/repositories/AplicadorRepository';
 import { hashAplicadorSenha, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../utils/aplicadorSenha';
+import { assinaturasUnicasDasSessoes } from '../utils/assinaturaAplicadorDasSessoes';
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
 import { AplicadoresCadastradosTable } from '../components/AplicadoresCadastradosTable';
@@ -231,8 +234,35 @@ export default function CadastroAplicadorScreen() {
   const recarregarAplicadores = useCallback(() => {
     getAllAplicadores()
       .then(async (lista) => {
+        // Recupera rúbricas já usadas em sessões e grava no card do aplicador.
+        let comRubrica = lista;
+        try {
+          const semRubrica = lista.filter((a) => !a.rubricaSvg?.trim());
+          if (semRubrica.length > 0) {
+            const assinaturas = assinaturasUnicasDasSessoes(await getAllSessoesAplicacao());
+            const porId = new Map(
+              assinaturas
+                .filter((a) => a.aplicadorId?.trim() && a.rubricaSvg?.trim())
+                .map((a) => [a.aplicadorId, a.rubricaSvg!.trim()] as const),
+            );
+            await Promise.all(
+              semRubrica.map(async (a) => {
+                const svg = porId.get(a.id);
+                if (svg) await salvarRubricaAplicadorSeVazia(a.id, svg);
+              }),
+            );
+            comRubrica = lista.map((a) => {
+              if (a.rubricaSvg?.trim()) return a;
+              const svg = porId.get(a.id);
+              return svg ? { ...a, rubricaSvg: svg } : a;
+            });
+          }
+        } catch {
+          comRubrica = lista;
+        }
+
         if (!isBoss) {
-          setAplicadores(lista);
+          setAplicadores(comRubrica);
           return;
         }
         try {
@@ -248,7 +278,7 @@ export default function CadastroAplicadorScreen() {
           const ownerUid = await resolveStorageOwnerUid();
           const cloudMap = await getAplicadorSenhasMapFirestore(ownerUid);
           const resolvido = await Promise.all(
-            lista.map(async (a) => {
+            comRubrica.map(async (a) => {
               const cloud = cloudMap[a.id];
               // 1) Senha da nuvem que corresponde ao hash atual (mais confiável).
               if (cloud && a.senhaHash && cloud.senhaHash === a.senhaHash) {
@@ -272,7 +302,7 @@ export default function CadastroAplicadorScreen() {
           );
           setAplicadores(resolvido);
         } catch {
-          setAplicadores(lista);
+          setAplicadores(comRubrica);
         }
       })
       .catch(() => undefined);

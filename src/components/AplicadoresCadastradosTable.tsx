@@ -132,13 +132,29 @@ export function AplicadoresCadastradosTable({
             <View style={styles.rubricaBlock}>
               <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>RÚBRICA</Text>
               {item.rubricaSvg?.trim() ? (
-                <View style={styles.rubricaPreview}>
-                  <RubricaCell svgUri={item.rubricaSvg} maxWidth={220} maxHeight={72} />
+                <View
+                  style={[
+                    styles.rubricaPreview,
+                    {
+                      borderColor: glass.border,
+                      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.96)' : '#FFFFFF',
+                    },
+                  ]}
+                >
+                  <RubricaCell svgUri={item.rubricaSvg} maxWidth={280} maxHeight={96} />
                 </View>
               ) : (
-                <Text style={[styles.rubricaVazia, { color: theme.textMuted }]}>
-                  Será salva na primeira assinatura
-                </Text>
+                <View
+                  style={[
+                    styles.rubricaPreview,
+                    styles.rubricaPreviewEmpty,
+                    { borderColor: glass.border },
+                  ]}
+                >
+                  <Text style={[styles.rubricaVazia, { color: theme.textMuted }]}>
+                    Será salva na primeira assinatura
+                  </Text>
+                </View>
               )}
             </View>
           </TafGlassPanel>
@@ -227,11 +243,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rubricaPreview: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minHeight: 88,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  rubricaPreviewEmpty: {
+    backgroundColor: 'transparent',
   },
   rubricaVazia: {
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.1,
+    textAlign: 'center',
   },
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Image, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Image, Text, StyleSheet, useWindowDimensions, Platform } from 'react-native';
 import { RUBRICA_NATIVA_ALTURA, RUBRICA_NATIVA_LARGURA } from '../utils/rubricaConstants';
 import { normalizarRubricaSvgDataUrl } from '../utils/rubricaSvgNormalize';
 
@@ -20,16 +20,36 @@ export function RubricaCell({
   maxHeight = RUBRICA_NATIVA_ALTURA,
 }: Props) {
   const { width: screenW } = useWindowDimensions();
-  const colMax = Math.min(maxWidth, Math.max(200, screenW * 0.42));
+  const colMax = Math.min(maxWidth, Math.max(120, Math.min(maxWidth, screenW * 0.42)));
 
   const uri = normalizarRubricaSvgDataUrl(svgUri);
   if (!uri) {
     return <Text style={styles.vazio}>—</Text>;
   }
 
-  const ratio = maxHeight / maxWidth;
+  const ratio = maxHeight / Math.max(1, maxWidth);
   const imgW = colMax;
-  const imgH = Math.round(colMax * ratio);
+  const imgH = Math.max(1, Math.round(colMax * ratio));
+
+  // RN Web Image frequentemente falha com data:image/svg+xml — usar <img> nativo.
+  if (Platform.OS === 'web') {
+    return (
+      <View style={[styles.cell, { width: imgW, height: imgH }]}>
+        <img
+          src={uri}
+          alt="Rúbrica"
+          width={imgW}
+          height={imgH}
+          style={{
+            width: imgW,
+            height: imgH,
+            objectFit: 'contain',
+            display: 'block',
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.cell, { width: imgW, height: imgH }]}>
@@ -37,7 +57,7 @@ export function RubricaCell({
         source={{ uri }}
         style={{ width: imgW, height: imgH }}
         resizeMode="contain"
-        accessibilityLabel="Rúbrica do candidato"
+        accessibilityLabel="Rúbrica"
       />
     </View>
   );

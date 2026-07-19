@@ -150,11 +150,10 @@ export function HistoricoCalendarioTaf({
 
   const selecionarDia = useCallback(
     (iso: string) => {
-      if (!diasComTeste.has(iso)) return;
       setDiaSelecionado((prev) => (prev === iso ? null : iso));
       onAviso?.(null);
     },
-    [diasComTeste, onAviso],
+    [onAviso],
   );
 
   const prepararLinhasPdfDoDia = useCallback(async () => {
@@ -347,53 +346,78 @@ export function HistoricoCalendarioTaf({
             </Text>
           </View>
 
-          <PressableScale
-            onPress={() => void gerarPdfDoDia()}
-            disabled={gerandoPdf}
-            style={[styles.btnPdfOuter, gerandoPdf ? { opacity: 0.7 } : null]}
-            accessibilityLabel="Gerar PDF único com resultados do dia em Downloads"
-          >
-            <LinearGradient
-              colors={[...theme.tokens.gradientPrimaryBtn]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[
-                styles.btnPdf,
-                Platform.OS === 'web'
-                  ? ({ boxShadow: '0 6px 16px rgba(37, 99, 235, 0.32)' } as object)
-                  : null,
-              ]}
+          {sessoesDoDia.length > 0 ? (
+            <PressableScale
+              onPress={() => void gerarPdfDoDia()}
+              disabled={gerandoPdf}
+              style={[styles.btnPdfOuter, gerandoPdf ? { opacity: 0.7 } : null]}
+              accessibilityLabel="Gerar PDF único com resultados do dia em Downloads"
             >
-              {gerandoPdf ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <>
-                  <Download size={18} color="#FFFFFF" strokeWidth={2.4} />
-                  <Text style={styles.btnPdfText}>
-                    Gerar Resultados do dia ({dataBrSelecionada})
-                  </Text>
-                </>
-              )}
-            </LinearGradient>
-          </PressableScale>
+              <LinearGradient
+                colors={[...theme.tokens.gradientPrimaryBtn]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[
+                  styles.btnPdf,
+                  Platform.OS === 'web'
+                    ? ({ boxShadow: '0 6px 16px rgba(37, 99, 235, 0.32)' } as object)
+                    : null,
+                ]}
+              >
+                {gerandoPdf ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <>
+                    <Download size={18} color="#FFFFFF" strokeWidth={2.4} />
+                    <Text style={styles.btnPdfText}>
+                      Gerar Resultados do dia ({dataBrSelecionada})
+                    </Text>
+                  </>
+                )}
+              </LinearGradient>
+            </PressableScale>
+          ) : null}
 
-          <PressableScale
-            onPress={() => setModalCadastrar(true)}
-            style={styles.btnCadastrarOuter}
-            accessibilityLabel="Cadastrar resultados manualmente pelo NIP"
-          >
-            <View
-              style={[
-                styles.btnCadastrar,
-                { borderColor: theme.primary, backgroundColor: theme.surface },
-              ]}
+          {sessoesDoDia.length === 0 ? (
+            <PressableScale
+              onPress={() => setModalCadastrar(true)}
+              style={styles.btnCadastrarOuter}
+              accessibilityLabel="Cadastrar resultados manualmente pelo NIP"
             >
-              <ClipboardPlus size={18} color={theme.primary} strokeWidth={2.4} />
-              <Text style={[styles.btnCadastrarText, { color: theme.primary }]}>
-                Cadastrar Resultados
-              </Text>
-            </View>
-          </PressableScale>
+              <LinearGradient
+                colors={[...theme.tokens.gradientPrimaryBtn]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[
+                  styles.btnPdf,
+                  Platform.OS === 'web'
+                    ? ({ boxShadow: '0 6px 16px rgba(37, 99, 235, 0.32)' } as object)
+                    : null,
+                ]}
+              >
+                <ClipboardPlus size={18} color="#FFFFFF" strokeWidth={2.4} />
+                <Text style={styles.btnPdfText}>Cadastrar Resultados</Text>
+              </LinearGradient>
+            </PressableScale>
+          ) : (
+            <PressableScale
+              onPress={() => setModalCadastrar(true)}
+              style={styles.btnCadastrarOuter}
+              accessibilityLabel="Cadastrar resultados manualmente pelo NIP"
+            >
+              <View
+                style={[
+                  styles.btnCadastrar,
+                  { borderColor: theme.primary, backgroundColor: theme.surface },
+                ]}
+              >
+                <ClipboardPlus size={18} color={theme.primary} strokeWidth={2.4} />
+                <Text style={[styles.btnCadastrarText, { color: theme.primary }]}>
+                  Cadastrar Resultados
+                </Text>
+              </View>
+            </PressableScale>
+          )}
 
           {sessoesDoDia.length === 0 ? (
             <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 8 }]}>
@@ -527,7 +551,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 6,
   },
-  cellInativo: { opacity: 0.45 },
+  cellInativo: { opacity: 0.85 },
   cellAtivo: {},
   cellComTeste: {},
   cellNum: { fontSize: 15, fontWeight: '700' },

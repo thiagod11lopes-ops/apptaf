@@ -1,0 +1,211 @@
+APPTAF — TESTE DE APTIDÃO FÍSICA
+DOCUMENTO DE VALOR INSTITUCIONAL E AGREGAÇÃO OPERACIONAL
+
+Destinatários: Chefia e níveis hierárquicos superiores
+Assunto: Valor real do sistema AppTAF e benefícios para a instituição
+Natureza: Documento informativo de apoio à decisão
+Data de referência: julho de 2026
+
+================================================================================
+1. FINALIDADE DESTE DOCUMENTO
+================================================================================
+
+Este texto apresenta, de forma objetiva, o VALOR REAL DO TRABALHO JÁ DESENVOLVIDO
+no sistema AppTAF e o GANHO CONCRETO que sua adoção pode proporcionar à instituição
+— em organização do TAF, controle de dados, rastreabilidade, redução de retrabalho
+e apoio à decisão da chefia.
+
+Não se trata de propaganda comercial. Trata-se de um ATIVO OPERACIONAL construído
+para a realidade do Teste de Aptidão Física (normas Armada e CFN/CGCFN-108), com
+identificação por NIP, aplicação em campo, registro de resultados, assinatura do
+aplicador e estatísticas gerenciais.
+
+================================================================================
+2. O QUE É O APPTAF
+================================================================================
+
+O AppTAF é um sistema completo de gestão do Teste de Aptidão Física, disponível em
+ambiente web e com estrutura preparada para dispositivos móveis, capaz de operar
+COM OU SEM CONEXÃO À INTERNET.
+
+Em síntese, o sistema cobre o ciclo completo:
+
+  1) Cadastro do efetivo (posto/graduação, NIP, nome, sexo, data de nascimento);
+  2) Aplicação do TAF com cronômetro, contagem de repetições e cálculo automático
+     de notas conforme a norma;
+  3) Registro e assinatura do aplicador (rúbrica digital);
+  4) Histórico e gestão de resultados, pendências e concluídos;
+  5) Estatísticas e indicadores para a chefia;
+  6) Exportação de PDF e backup em planilha (CSV);
+  7) Sincronização opcional em nuvem, com controle de acesso institucional.
+
+================================================================================
+3. VALOR REAL DO TRABALHO JÁ REALIZADO
+================================================================================
+
+3.1 Substituição de processos manuais e fragmentados
+
+Sem um sistema dedicado, o TAF costuma depender de planilhas soltas, anotações em
+papel, recalculo manual de notas por idade/sexo, dificuldade para localizar
+histórico e risco de perda de dados. O AppTAF concentra cadastro, aplicação,
+resultado e estatística em UMA ÚNICA FERRAMENTA, reduzindo dispersão de informação
+e erros de transcrição.
+
+3.2 Conformidade com a lógica normativa
+
+O sistema embute as regras de pontuação das normas utilizadas (incluindo referência
+CGCFN-108 para o TAF Naval) e calcula notas a partir da modalidade, do desempenho
+(tempo ou repetições), do sexo e da idade (derivada da data de nascimento). Isso
+transforma a aplicação do TAF em um processo PADRONIZADO E AUDITÁVEL.
+
+3.3 Rastreabilidade e responsabilidade
+
+O fluxo prevê identificação do militar por NIP, registro do aplicador, rúbrica/
+assinatura digital na finalização e histórico de sessões. Para a instituição, isso
+significa maior capacidade de responder a questionamentos sobre quem aplicou, quem
+foi avaliado, quando ocorreu e qual foi o resultado.
+
+3.4 Operação em campo (offline)
+
+O sistema foi projetado para funcionar MESMO SEM INTERNET, condição frequente em
+ginásios, pátios, piscinas e áreas de instrução. Os dados ficam no equipamento e
+podem ser sincronizados depois, quando houver rede.
+
+3.5 Apoio à decisão da chefia
+
+A área de estatísticas oferece visão gerencial: percentual de conclusão e aprovação,
+pendências por modalidade, distribuição de notas, qualidade cadastral (datas de
+nascimento pendentes ou já preenchidas) e gráficos para briefing. Em vez de
+receber apenas listas soltas, a chefia passa a dispor de INDICADORES PRONTOS PARA
+COMANDO.
+
+3.6 Estimativa de valor de mercado do ativo
+
+Para fins de referência institucional (não como proposta comercial), um sistema com
+esse escopo — se adquirido no mercado ou desenvolvido por empresa especializada —
+costuma situar-se, no Brasil, na seguinte faixa:
+
+  - Desenvolvimento sob encomenda / aquisição do ativo completo:
+    R$ 80.000 a R$ 350.000
+
+  - Referência prudente para produto maduro e implantável:
+    R$ 100.000 a R$ 200.000
+
+  - Custo estimado de reconstrução do zero (equipe especializada):
+    R$ 120.000 a R$ 400.000
+
+Ou seja: o trabalho já materializado no AppTAF NÃO É UM “APLICATIVO SIMPLES”.
+É um ativo de software com complexidade operacional, regras de negócio específicas
+e potencial de uso institucional contínuo.
+
+Observação: valores de mercado variam conforme suporte, customização, número de
+unidades atendidas e existência de contrato de manutenção. A faixa acima serve para
+dimensionar a magnitude do investimento intelectual e técnico já realizado.
+
+================================================================================
+4. O QUE O SISTEMA AGREGA À INSTITUIÇÃO
+================================================================================
+
+4.1 Eficiência operacional
+  - Menos tempo em digitação e conferência manual;
+  - Menos retrabalho na correção de notas;
+  - Aplicação mais rápida e padronizada no dia do TAF;
+  - Localização imediata de histórico por militar ou sessão.
+
+4.2 Qualidade e integridade da informação
+  - NIP como chave de identificação;
+  - Controle de cadastro (incluindo data de nascimento para idade e tabelas de nota);
+  - Painéis de qualidade cadastral (DN pendente / DN OK);
+  - Backup e restauração;
+  - Geração de PDF para arquivo e apresentação.
+
+4.3 Transparência e controle
+  - Resultados organizados por situação (pendente, parcial, concluído);
+  - Histórico consultável;
+  - Rúbrica do aplicador vinculada ao processo;
+  - Possibilidade de sincronização com acesso controlado (chefia / membros autorizados).
+
+4.4 Economia de recursos
+
+Ainda que o benefício principal seja organizacional, há economia indireta relevante:
+redução de horas de pessoal em montagem de planilhas; menor necessidade de
+reaplicação por erro de registro; menor risco de perda de dados históricos; e
+menos dependência de soluções genéricas sem aderência à norma.
+
+Uma economia conservadora de poucas horas por ciclo de TAF, multiplicada ao longo
+do ano e pelo efetivo envolvido, já justifica a adoção do sistema do ponto de
+vista administrativo.
+
+4.5 Imagem institucional e modernização
+
+A adoção de ferramenta própria, alinhada à doutrina e à rotina da OM, demonstra
+modernização de processos, preocupação com padronização, capacidade de gestão
+baseada em dados e iniciativa técnica com retorno operacional claro.
+
+================================================================================
+5. PRINCIPAIS CAPACIDADES JÁ DISPONÍVEIS
+================================================================================
+
+Cadastro       — Efetivo organizado por NIP, posto/graduação, sexo e DN
+Aplicar TAF    — Cronômetro, contagem, notas automáticas (Armada / CFN)
+Aplicador      — Cadastro, senha e rúbrica digital
+Resultados     — Histórico, pendências, concluídos, edição controlada
+Estatísticas   — Indicadores, gráficos e qualidade cadastral
+Normas         — Consulta e aplicação das tabelas oficiais embutidas
+Configurações  — Backup CSV, sincronização e controles de acesso
+Exportação     — PDF de resultados e resumos para arquivo/apresentação
+
+================================================================================
+6. RISCOS DE NÃO ADOTAR (OU DE MANTER PROCESSO MANUAL)
+================================================================================
+
+  - Dependência de planilhas frágeis e pessoais;
+  - Dificuldade de auditoria e reconstituição histórica;
+  - Inconsistência de notas por idade/sexo;
+  - Perda de conhecimento quando o militar responsável é transferido;
+  - Baixa capacidade de apresentar panorama gerencial à chefia em tempo hábil.
+
+O AppTAF mitiga esses riscos ao transformar o TAF em processo SISTEMATIZADO,
+REPETÍVEL E TRANSFERÍVEL.
+
+================================================================================
+7. CONCLUSÃO PARA A CHEFIA
+================================================================================
+
+O AppTAF representa um ATIVO INSTITUCIONAL CONCRETO, já desenvolvido e alinhado à
+rotina do Teste de Aptidão Física. Seu valor não está apenas no código, mas na
+capacidade de:
+
+  - padronizar a aplicação;
+  - proteger a informação;
+  - acelerar o trabalho em campo;
+  - oferecer indicadores à decisão;
+  - reduzir erros e retrabalho;
+  - preservar histórico e responsabilidade dos aplicadores.
+
+Em termos de mercado, trata-se de solução cuja reconstituição ou aquisição externa
+facilmente ultrapassaria a casa das CENTENAS DE MILHARES DE REAIS. Em termos de
+instituição, o retorno principal é operacional e gerencial: MAIS CONTROLE, MAIS
+PADRONIZAÇÃO E MELHOR APOIO AO COMANDO.
+
+Recomenda-se, do ponto de vista técnico-administrativo, o reconhecimento do
+trabalho realizado e a avaliação de sua adoção formal como ferramenta de apoio à
+gestão do TAF na OM.
+
+================================================================================
+8. ENCAMINHAMENTO SUGERIDO
+================================================================================
+
+  1) Apresentação demonstrativa do sistema à chefia
+     (fluxo: cadastro → aplicação → resultado → estatística → PDF);
+  2) Definição do setor responsável pela custódia dos dados e do backup;
+  3) Treinamento rápido dos aplicadores e registradores;
+  4) Uso piloto em um ciclo de TAF;
+  5) Avaliação de resultados (tempo, erros evitados, qualidade do histórico)
+     e decisão de adoção plena.
+
+================================================================================
+
+Documento elaborado para apoio à decisão hierárquica.
+Sistema: AppTAF — Gestão do Teste de Aptidão Física
+Local do arquivo: pasta Relatório do projeto no computador

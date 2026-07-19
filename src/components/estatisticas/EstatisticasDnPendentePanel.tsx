@@ -7,8 +7,9 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
-import { CalendarDays, CalendarCheck, Search, X } from 'lucide-react-native';
+import { CalendarDays, CalendarCheck, Search, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuthDataReload } from '../../hooks/useAuthDataReload';
 import { getUiColors } from '../../theme/uiColors';
@@ -21,6 +22,7 @@ import { dataNascimentoCadastroValida } from '../../utils/cadastroDadosTaf';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput, nipDigitos } from '../../utils/nipFormat';
 import { idadeFromDataNascimento } from '../../utils/idadeFromDataNascimento';
+import { compareByNomePtBr } from '../../utils/compareNomePtBr';
 import { AppModal } from '../premium/AppModal';
 import { PressableScale } from '../premium/PressableScale';
 import { TafGlassPanel } from '../mobile/TafTabChrome';
@@ -41,12 +43,24 @@ function postoGrad(c: CadastroItemPersist): string {
   return (c.praca || '').trim() || '—';
 }
 
+function matchBuscaNomeOuNip(c: CadastroItemPersist, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const nome = (c.nome || '').toLowerCase();
+  const nip = nipDigitos(c.nip || '');
+  const qDigits = nipDigitos(q);
+  if (qDigits.length >= 2 && nip.includes(qDigits)) return true;
+  return nome.includes(q);
+}
+
 export function EstatisticasDnPendentePanel() {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
   const [loading, setLoading] = useState(true);
   const [modo, setModo] = useState<ModoModal | null>(null);
+
+  // Modal DN Pendente (adicionar por NIP)
   const [nip, setNip] = useState('');
   const [encontrado, setEncontrado] = useState<CadastroItemPersist | null>(null);
   const [dataNascimento, setDataNascimento] = useState('');
@@ -54,6 +68,13 @@ export function EstatisticasDnPendentePanel() {
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [sucesso, setSucesso] = useState('');
+
+  // Modal DN OK (lista + busca + editar/apagar)
+  const [buscaOk, setBuscaOk] = useState('');
+  const [dnDrafts, setDnDrafts] = useState<Record<string, string>>({});
+  const [salvandoId, setSalvandoId] = useState<string | null>(null);
+  const [erroOk, setErroOk] = useState('');
+  const [sucessoOk, setSucessoOk] = useState('');
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -66,18 +87,24 @@ export function EstatisticasDnPendentePanel() {
 
   useAuthDataReload(carregar);
 
-  const { qtdPendente, qtdOk } = useMemo(() => {
+  const { qtdPendente, qtdOk, comDn } = useMemo(() => {
+    const okList: CadastroItemPersist[] = [];
     let pendente = 0;
-    let ok = 0;
     for (const c of cadastros) {
-      if (dataNascimentoCadastroValida(c.dataNascimento)) ok += 1;
+      if (dataNascimentoCadastroValida(c.dataNascimento)) okList.push(c);
       else pendente += 1;
     }
-    return { qtdPendente: pendente, qtdOk: ok };
+    okList.sort(compareByNomePtBr);
+    return { qtdPendente: pendente, qtdOk: okList.length, comDn: okList };
   }, [cadastros]);
 
+  const listaOkFiltrada = useMemo(
+    () => comDn.filter((c) => matchBuscaNomeOuNip(c, buscaOk)),
+    [comDn, buscaOk],
+  );
+
   const fecharModal = useCallback(() => {
-    if (salvando) return;
+    if (salvando || salvandoId) return;
     setModo(null);
     setNip('');
     setEncontrado(null);
@@ -85,17 +112,38 @@ export function EstatisticasDnPendentePanel() {
     setAviso('');
     setErro('');
     setSucesso('');
-  }, [salvando]);
+    setBuscaOk('');
+    setDnDrafts({});
+    setErroOk('');
+    setSucessoOk('');
+  }, [salvando, salvandoId]);
 
-  const abrirModal = useCallback((m: ModoModal) => {
-    setModo(m);
-    setNip('');
-    setEncontrado(null);
-    setDataNascimento('');
-    setAviso('');
-    setErro('');
-    setSucesso('');
-  }, []);
+  const abrirModal = useCallback(
+    (m: ModoModal) => {
+      setModo(m);
+      setNip('');
+      setEncontrado(null);
+      setDataNascimento('');
+      setAviso('');
+      setErro('');
+      setSucesso('');
+      setBuscaOk('');
+      setErroOk('');
+      setSucessoOk('');
+      if (m === 'ok') {
+        const drafts: Record<string, string> = {};
+        for (const c of cadastros) {
+          if (dataNascimentoCadastroValida(c.dataNascimento)) {
+            drafts[c.id] = c.dataNascimento.trim();
+          }
+        }
+        setDnDrafts(drafts);
+      } else {
+        setDnDrafts({});
+      }
+    },
+    [cadastros],
+  );
 
   const buscarPorNip = useCallback(() => {
     setErro('');
@@ -114,24 +162,18 @@ export function EstatisticasDnPendentePanel() {
       return;
     }
     const c = busca.cadastro;
-    const temDn = dataNascimentoCadastroValida(c.dataNascimento);
-    if (modo === 'pendente' && temDn) {
+    if (dataNascimentoCadastroValida(c.dataNascimento)) {
       setEncontrado(null);
       setAviso('Este cadastro já possui data de nascimento. Use o card DN OK para editar.');
       return;
     }
-    if (modo === 'ok' && !temDn) {
-      setEncontrado(null);
-      setAviso('Este cadastro está sem data de nascimento. Use o card DN Pendente.');
-      return;
-    }
     setEncontrado(c);
     setNip(c.nip || nipFmt);
-    setDataNascimento(temDn ? c.dataNascimento.trim() : '');
-  }, [nip, cadastros, modo]);
+    setDataNascimento('');
+  }, [nip, cadastros]);
 
-  const salvar = useCallback(async () => {
-    if (!encontrado || !modo) return;
+  const salvarPendente = useCallback(async () => {
+    if (!encontrado) return;
     const data = dataNascimento.trim();
     if (!dataNascimentoCadastroValida(data)) {
       setErro('Informe a data no formato DD/MM/AAAA.');
@@ -147,24 +189,94 @@ export function EstatisticasDnPendentePanel() {
       };
       await addCadastro(atualizado);
       setCadastros((prev) => prev.map((c) => (c.id === atualizado.id ? atualizado : c)));
-      setEncontrado(atualizado);
-      setSucesso(
-        modo === 'pendente'
-          ? 'Data de nascimento adicionada com sucesso.'
-          : 'Data de nascimento atualizada com sucesso.',
-      );
+      setEncontrado(null);
+      setNip('');
+      setDataNascimento('');
+      setSucesso('Data de nascimento adicionada com sucesso.');
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao salvar.');
     } finally {
       setSalvando(false);
     }
-  }, [encontrado, dataNascimento, modo]);
+  }, [encontrado, dataNascimento]);
+
+  const salvarDnOk = useCallback(
+    async (c: CadastroItemPersist) => {
+      const data = (dnDrafts[c.id] ?? '').trim();
+      if (data && !dataNascimentoCadastroValida(data)) {
+        setErroOk(`NIP ${c.nip}: use DD/MM/AAAA ou apague a data.`);
+        return;
+      }
+      setSalvandoId(c.id);
+      setErroOk('');
+      setSucessoOk('');
+      try {
+        const atualizado: CadastroItemPersist = {
+          ...c,
+          dataNascimento: data,
+        };
+        await addCadastro(atualizado);
+        setCadastros((prev) => prev.map((row) => (row.id === atualizado.id ? atualizado : row)));
+        if (!data) {
+          setDnDrafts((prev) => {
+            const next = { ...prev };
+            delete next[c.id];
+            return next;
+          });
+          setSucessoOk(`Data removida de ${c.nome || c.nip}.`);
+        } else {
+          setDnDrafts((prev) => ({ ...prev, [c.id]: data }));
+          setSucessoOk(`Data atualizada: ${c.nome || c.nip}.`);
+        }
+      } catch (e) {
+        setErroOk(e instanceof Error ? e.message : 'Falha ao salvar.');
+      } finally {
+        setSalvandoId(null);
+      }
+    },
+    [dnDrafts],
+  );
+
+  const apagarDnOk = useCallback(
+    async (c: CadastroItemPersist) => {
+      setDnDrafts((prev) => ({ ...prev, [c.id]: '' }));
+      setSalvandoId(c.id);
+      setErroOk('');
+      setSucessoOk('');
+      try {
+        const atualizado: CadastroItemPersist = {
+          ...c,
+          dataNascimento: '',
+        };
+        await addCadastro(atualizado);
+        setCadastros((prev) => prev.map((row) => (row.id === atualizado.id ? atualizado : row)));
+        setDnDrafts((prev) => {
+          const next = { ...prev };
+          delete next[c.id];
+          return next;
+        });
+        setSucessoOk(`Data removida de ${c.nome || c.nip}.`);
+      } catch (e) {
+        setErroOk(e instanceof Error ? e.message : 'Falha ao apagar.');
+        setDnDrafts((prev) => ({ ...prev, [c.id]: c.dataNascimento || '' }));
+      } finally {
+        setSalvandoId(null);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!sucesso) return;
     const t = setTimeout(() => setSucesso(''), 2500);
     return () => clearTimeout(t);
   }, [sucesso]);
+
+  useEffect(() => {
+    if (!sucessoOk) return;
+    const t = setTimeout(() => setSucessoOk(''), 2500);
+    return () => clearTimeout(t);
+  }, [sucessoOk]);
 
   if (loading) {
     return (
@@ -179,7 +291,7 @@ export function EstatisticasDnPendentePanel() {
   return (
     <View style={styles.wrap}>
       <Text style={[styles.lead, { color: theme.textSecondary }]}>
-        Acompanhe cadastros sem data de nascimento e complete ou edite pelo NIP.
+        Acompanhe cadastros sem data de nascimento e complete ou edite as datas.
       </Text>
 
       <View style={styles.cardsRow}>
@@ -252,8 +364,9 @@ export function EstatisticasDnPendentePanel() {
         </PressableScale>
       </View>
 
+      {/* Modal DN Pendente — adicionar por NIP */}
       <AppModal
-        visible={modo != null}
+        visible={modo === 'pendente'}
         transparent
         animationType="fade"
         onRequestClose={fecharModal}
@@ -270,13 +383,9 @@ export function EstatisticasDnPendentePanel() {
           >
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[styles.modalKicker, { color: theme.primary }]}>
-                  {modo === 'pendente' ? 'DN PENDENTE' : 'DN OK'}
-                </Text>
+                <Text style={[styles.modalKicker, { color: theme.primary }]}>DN PENDENTE</Text>
                 <Text style={[styles.modalTitle, { color: ui.text }]}>
-                  {modo === 'pendente'
-                    ? 'Adicionar data de nascimento'
-                    : 'Editar data de nascimento'}
+                  Adicionar data de nascimento
                 </Text>
               </View>
               <TouchableOpacity
@@ -347,14 +456,6 @@ export function EstatisticasDnPendentePanel() {
                 <Text style={[styles.cadastroMeta, { color: theme.textSecondary }]}>
                   {postoGrad(encontrado)} · {encontrado.categoria} · NIP {encontrado.nip || '—'}
                 </Text>
-                {modo === 'ok' && encontrado.dataNascimento?.trim() ? (
-                  <Text style={[styles.cadastroMeta, { color: theme.textMuted }]}>
-                    DN atual: {encontrado.dataNascimento}
-                    {idadeFromDataNascimento(encontrado.dataNascimento) != null
-                      ? ` · ${idadeFromDataNascimento(encontrado.dataNascimento)} anos`
-                      : ''}
-                  </Text>
-                ) : null}
 
                 <Text style={[styles.fieldLabel, { color: theme.textMuted, marginTop: 14 }]}>
                   DATA DE NASCIMENTO
@@ -375,9 +476,7 @@ export function EstatisticasDnPendentePanel() {
                     {
                       color: ui.text,
                       borderColor: theme.border,
-                      backgroundColor: theme.isDark
-                        ? 'rgba(2,6,23,0.45)'
-                        : '#FFFFFF',
+                      backgroundColor: theme.isDark ? 'rgba(2,6,23,0.45)' : '#FFFFFF',
                     },
                   ]}
                 />
@@ -388,22 +487,196 @@ export function EstatisticasDnPendentePanel() {
                 ) : null}
 
                 <TouchableOpacity
-                  onPress={() => void salvar()}
+                  onPress={() => void salvarPendente()}
                   disabled={salvando}
                   style={[
                     styles.saveBtn,
-                    {
-                      backgroundColor: theme.primary,
-                      opacity: salvando ? 0.6 : 1,
-                    },
+                    { backgroundColor: theme.primary, opacity: salvando ? 0.6 : 1 },
                   ]}
                 >
                   <Text style={[styles.saveBtnText, { color: theme.tokens.textOnPrimary }]}>
-                    {salvando ? 'Salvando…' : modo === 'pendente' ? 'Salvar data' : 'Atualizar data'}
+                    {salvando ? 'Salvando…' : 'Salvar data'}
                   </Text>
                 </TouchableOpacity>
               </View>
             ) : null}
+          </View>
+        </View>
+      </AppModal>
+
+      {/* Modal DN OK — lista completa com busca, editar e apagar */}
+      <AppModal
+        visible={modo === 'ok'}
+        transparent
+        animationType="fade"
+        onRequestClose={fecharModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalCardWide,
+              {
+                backgroundColor: theme.isDark ? 'rgba(15,23,42,0.98)' : 'rgba(255,255,255,0.98)',
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.modalKicker, { color: theme.gain }]}>DN OK</Text>
+                <Text style={[styles.modalTitle, { color: ui.text }]}>
+                  Cadastros com data de nascimento
+                </Text>
+                <Text style={[styles.modalSub, { color: theme.textMuted }]}>
+                  {listaOkFiltrada.length} de {qtdOk} · edite ou apague a DN
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={fecharModal}
+                style={[styles.closeBtn, { borderColor: theme.border }]}
+                accessibilityLabel="Fechar"
+              >
+                <X size={18} color={theme.textSecondary} strokeWidth={2.4} />
+              </TouchableOpacity>
+            </View>
+
+            <View
+              style={[
+                styles.searchWrap,
+                {
+                  borderColor: theme.border,
+                  backgroundColor: theme.isDark ? 'rgba(2,6,23,0.45)' : theme.backgroundSecondary,
+                },
+              ]}
+            >
+              <Search size={16} color={theme.textMuted} strokeWidth={2.4} />
+              <TextInput
+                value={buscaOk}
+                onChangeText={(t) => {
+                  setBuscaOk(t);
+                  setErroOk('');
+                }}
+                placeholder="Buscar por nome ou NIP"
+                placeholderTextColor={theme.textMuted}
+                style={[styles.searchInput, { color: ui.text }]}
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+              {buscaOk.trim() ? (
+                <TouchableOpacity onPress={() => setBuscaOk('')} accessibilityLabel="Limpar busca">
+                  <X size={16} color={theme.textMuted} strokeWidth={2.4} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {erroOk ? <Text style={[styles.feedback, { color: theme.loss }]}>{erroOk}</Text> : null}
+            {sucessoOk ? (
+              <Text style={[styles.feedback, { color: theme.gain }]}>{sucessoOk}</Text>
+            ) : null}
+
+            <ScrollView
+              style={styles.listaScroll}
+              contentContainerStyle={styles.listaContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+            >
+              {listaOkFiltrada.length === 0 ? (
+                <Text style={[styles.vazioLista, { color: theme.textMuted }]}>
+                  {qtdOk === 0
+                    ? 'Nenhum cadastro com data de nascimento.'
+                    : 'Nenhum resultado para a busca.'}
+                </Text>
+              ) : (
+                listaOkFiltrada.map((c) => {
+                  const draft = dnDrafts[c.id] ?? c.dataNascimento ?? '';
+                  const idade = idadeFromDataNascimento(draft);
+                  const busy = salvandoId === c.id;
+                  return (
+                    <View
+                      key={c.id}
+                      style={[
+                        styles.listaItem,
+                        {
+                          borderColor: theme.border,
+                          backgroundColor: theme.isDark
+                            ? 'rgba(2,6,23,0.35)'
+                            : 'rgba(248,250,252,0.95)',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.cadastroNome, { color: ui.text }]} numberOfLines={2}>
+                        {c.nome || '—'}
+                      </Text>
+                      <Text style={[styles.cadastroMeta, { color: theme.textSecondary }]}>
+                        {postoGrad(c)} · NIP {c.nip || '—'}
+                        {idade != null ? ` · ${idade} anos` : ''}
+                      </Text>
+
+                      <Text style={[styles.fieldLabel, { color: theme.textMuted, marginTop: 10 }]}>
+                        DATA DE NASCIMENTO
+                      </Text>
+                      <View style={styles.dnRow}>
+                        <TextInput
+                          value={draft}
+                          onChangeText={(t) => {
+                            setDnDrafts((prev) => ({ ...prev, [c.id]: formatDateInput(t) }));
+                            setErroOk('');
+                            setSucessoOk('');
+                          }}
+                          placeholder="DD/MM/AAAA"
+                          placeholderTextColor={theme.textMuted}
+                          keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                          maxLength={10}
+                          editable={!busy}
+                          style={[
+                            styles.input,
+                            styles.dnInput,
+                            {
+                              color: ui.text,
+                              borderColor: theme.border,
+                              backgroundColor: theme.isDark ? 'rgba(2,6,23,0.45)' : '#FFFFFF',
+                            },
+                          ]}
+                        />
+                        <TouchableOpacity
+                          onPress={() => void salvarDnOk(c)}
+                          disabled={busy}
+                          style={[
+                            styles.miniBtn,
+                            {
+                              backgroundColor: theme.primary,
+                              opacity: busy ? 0.55 : 1,
+                            },
+                          ]}
+                          accessibilityLabel={`Salvar data de ${c.nome}`}
+                        >
+                          <Text
+                            style={[styles.miniBtnText, { color: theme.tokens.textOnPrimary }]}
+                          >
+                            {busy ? '…' : 'Salvar'}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => void apagarDnOk(c)}
+                          disabled={busy}
+                          style={[
+                            styles.miniBtnIcon,
+                            {
+                              borderColor: theme.loss,
+                              backgroundColor: theme.lossMuted,
+                              opacity: busy ? 0.55 : 1,
+                            },
+                          ]}
+                          accessibilityLabel={`Apagar data de ${c.nome}`}
+                        >
+                          <Trash2 size={16} color={theme.loss} strokeWidth={2.4} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
           </View>
         </View>
       </AppModal>
@@ -459,11 +732,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(2,6,23,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
   },
   modalCard: {
     width: '100%',
     maxWidth: 420,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    gap: 10,
+  },
+  modalCardWide: {
+    width: '100%',
+    maxWidth: 520,
+    maxHeight: '90%',
     borderRadius: 20,
     borderWidth: 1,
     padding: 18,
@@ -485,6 +767,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: -0.3,
+  },
+  modalSub: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '600',
   },
   closeBtn: {
     width: 36,
@@ -521,6 +808,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'web' ? 8 : 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    padding: 0,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null),
+  },
   feedback: {
     fontSize: 12,
     fontWeight: '700',
@@ -556,5 +859,53 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: 14,
     fontWeight: '900',
+  },
+  listaScroll: {
+    flexGrow: 0,
+    maxHeight: 420,
+  },
+  listaContent: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  vazioLista: {
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    paddingVertical: 24,
+  },
+  listaItem: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
+  dnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  dnInput: {
+    flex: 1,
+    minWidth: 0,
+  },
+  miniBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniBtnText: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  miniBtnIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

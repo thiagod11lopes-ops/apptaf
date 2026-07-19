@@ -33,6 +33,8 @@ type Props = {
   total: number;
   tipoProva: TipoProvaAplicada;
   ultimo: boolean;
+  /** Sobrescreve o texto do botão principal (padrão: Próximo / Salvar sessão). */
+  confirmLabel?: string;
   onConfirm: (svgDataUrl: string) => void;
   onSkip: () => void;
   onCancel: () => void;
@@ -45,6 +47,7 @@ export function RubricaCaptureModal({
   total,
   tipoProva,
   ultimo,
+  confirmLabel,
   onConfirm,
   onSkip,
   onCancel,
@@ -168,7 +171,7 @@ export function RubricaCaptureModal({
                 <AssinaturaFuturistaBtnGhost label="Pular" onPress={onSkip} />
               )}
               <AssinaturaFuturistaBtnPrimary
-                label={ultimo ? 'Salvar sessão' : 'Próximo'}
+                label={confirmLabel ?? (ultimo ? 'Salvar sessão' : 'Próximo')}
                 onPress={confirmar}
                 disabled={!temTraco}
                 accent="cyan"

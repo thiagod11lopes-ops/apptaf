@@ -357,6 +357,10 @@ export default function ResultadosScreen() {
       <HistoricoSessaoDetalheModal
         sessao={sessaoDetalhe}
         onClose={() => setSessaoDetalhe(null)}
+        onSessaoAtualizada={(atualizada) => {
+          setSessaoDetalhe(atualizada);
+          carregar();
+        }}
       />
     </>
   );

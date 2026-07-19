@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
@@ -13,6 +14,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { ResultadosNavTabs } from '../components/resultados/ResultadosNavTabs';
 import { ResultadosNormaLauncher } from '../components/resultados/ResultadosNormaLauncher';
 import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoExcluirSessaoModal';
+import { HistoricoSessaoDetalheModal } from '../components/sismav/HistoricoSessaoDetalheModal';
 import { PressableScale } from '../components/premium/PressableScale';
 import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
 import { ResultadosPendenciaParcialPanel } from '../components/ResultadosPendenciaParcialPanel';
@@ -66,8 +68,10 @@ export default function ResultadosScreen() {
   );
   const [carregando, setCarregando] = useState(true);
   const [sessaoParaExcluir, setSessaoParaExcluir] = useState<SessaoAplicacaoTaf | null>(null);
+  const [sessaoDetalhe, setSessaoDetalhe] = useState<SessaoAplicacaoTaf | null>(null);
   const [excluindo, setExcluindo] = useState(false);
   const [erroExclusao, setErroExclusao] = useState<string | null>(null);
+  const ultimoToqueCardRef = useRef<{ id: string; at: number } | null>(null);
 
   const carregar = useCallback(() => {
     setCarregando(true);
@@ -118,6 +122,25 @@ export default function ResultadosScreen() {
       });
     },
     [navigation],
+  );
+
+  const abrirDetalheSessao = useCallback((sessao: SessaoAplicacaoTaf) => {
+    setSessaoDetalhe(sessao);
+  }, []);
+
+  /** Dois toques/cliques no card abrem a tabela do histórico. */
+  const onPressCardHistorico = useCallback(
+    (sessao: SessaoAplicacaoTaf) => {
+      const agora = Date.now();
+      const ultimo = ultimoToqueCardRef.current;
+      if (ultimo && ultimo.id === sessao.id && agora - ultimo.at < 320) {
+        ultimoToqueCardRef.current = null;
+        abrirDetalheSessao(sessao);
+        return;
+      }
+      ultimoToqueCardRef.current = { id: sessao.id, at: agora };
+    },
+    [abrirDetalheSessao],
   );
 
   const executarExclusao = useCallback(async () => {
@@ -249,8 +272,16 @@ export default function ResultadosScreen() {
                   <TafGlassPanel style={styles.sessaoCard}>
                     <View style={styles.sessaoRow}>
                       <PressableScale
-                        onPress={() => abrirSessao(sessao)}
+                        onPress={() => onPressCardHistorico(sessao)}
+                        {...(Platform.OS === 'web'
+                          ? ({
+                              onClick: (e: { detail?: number }) => {
+                                if (e?.detail === 2) abrirDetalheSessao(sessao);
+                              },
+                            } as object)
+                          : null)}
                         style={styles.sessaoMain}
+                        accessibilityHint="Toque duas vezes para ver a tabela de resultados"
                       >
                         <View style={styles.sessaoText}>
                           <Text style={[ts.label, { color: theme.primary }]}>{titulo}</Text>
@@ -268,9 +299,20 @@ export default function ResultadosScreen() {
                                 : ' · Registrador de TAF'
                               : null}
                           </Text>
+                          <Text style={[ts.caption, styles.duploCliqueHint, { color: theme.textMuted }]}>
+                            Clique duas vezes para ver resultados
+                          </Text>
                         </View>
-                        <ChevronRight size={22} color={ui.icon} strokeWidth={2.5} />
                       </PressableScale>
+                      <TouchableOpacity
+                        onPress={() => abrirSessao(sessao)}
+                        accessibilityLabel="Abrir resumo da aplicação"
+                        accessibilityRole="button"
+                        hitSlop={8}
+                        style={styles.chevronBtn}
+                      >
+                        <ChevronRight size={22} color={ui.icon} strokeWidth={2.5} />
+                      </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => {
                           setErroExclusao(null);
@@ -310,6 +352,11 @@ export default function ResultadosScreen() {
           if (!excluindo) setSessaoParaExcluir(null);
         }}
         onConfirm={() => void executarExclusao()}
+      />
+
+      <HistoricoSessaoDetalheModal
+        sessao={sessaoDetalhe}
+        onClose={() => setSessaoDetalhe(null)}
       />
     </>
   );
@@ -366,6 +413,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: PREMIUM.minTouch,
     gap: 10,
+  },
+  duploCliqueHint: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '600',
+    opacity: 0.85,
+  },
+  chevronBtn: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sessaoMain: {
     flex: 1,

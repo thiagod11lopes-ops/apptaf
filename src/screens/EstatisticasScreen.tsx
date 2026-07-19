@@ -13,6 +13,7 @@ import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb
 import { calcularEstatisticasTaf, META_CONCLUSAO_TAF_PCT } from '../utils/estatisticasTaf';
 import { StatSection } from '../components/estatisticas/StatSection';
 import { StatBarChart } from '../components/estatisticas/StatBarChart';
+import { EstatisticasDnPendentePanel } from '../components/estatisticas/EstatisticasDnPendentePanel';
 import { KpiCard } from '../components/fintech/KpiCard';
 import { PillTabs } from '../components/fintech/PillTabs';
 import { MonoValue } from '../components/fintech/MonoValue';
@@ -20,7 +21,7 @@ import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold'
 import { TafCenteredTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 
-type ViewTab = 'geral' | 'modalidade' | 'notas' | 'graficos';
+type ViewTab = 'geral' | 'modalidade' | 'notas' | 'graficos' | 'dn_pendente';
 
 const EstatisticasGraficosPanel = lazy(() =>
   import('../components/estatisticas/EstatisticasGraficosPanel').then((m) => ({
@@ -93,13 +94,14 @@ export default function EstatisticasScreen() {
               { id: 'modalidade', label: 'Provas' },
               { id: 'notas', label: 'Notas' },
               { id: 'graficos', label: 'Gráficos' },
+              { id: 'dn_pendente', label: 'DN Pendente' },
             ]}
             value={tab}
             onChange={setTab}
             centered
           />
 
-          {tab !== 'graficos' ? (
+          {tab !== 'graficos' && tab !== 'dn_pendente' ? (
             <Text style={[ts.bodySecondary, styles.lead]}>
               Dashboard TAF · notas recalculadas pela norma (sexo, idade, tempo).
             </Text>
@@ -116,6 +118,8 @@ export default function EstatisticasScreen() {
               <EstatisticasGraficosPanel stats={s} />
             </Suspense>
           ) : null}
+
+          {tab === 'dn_pendente' ? <EstatisticasDnPendentePanel /> : null}
 
           {(tab === 'geral' || tab === 'modalidade') && (
             <StatSection title="Resumo geral" accent="cyan">

@@ -134,6 +134,55 @@ export function modalidadeCorridaCaminhadaDispensavel(
   return vigente !== alvo;
 }
 
+type LinhaPdfCorridaCaminhada = LinhaCorridaCaminhada & {
+  rubricaCorridaSvg?: string;
+  rubricaCaminhadaSvg?: string;
+};
+
+/** Valores de corrida/caminhada para PDF: só a modalidade vigente é exibida. */
+export function valoresCorridaCaminhadaParaPdf(item: LinhaPdfCorridaCaminhada): {
+  notaCorrida: string;
+  situacaoCorrida: string;
+  rubricaCorridaSvg: string | undefined;
+  notaCaminhada: string;
+  situacaoCaminhada: string;
+  rubricaCaminhadaSvg: string | undefined;
+} {
+  const vigente = modalidadeCorridaCaminhadaVigente(item);
+  const vazio = '—';
+
+  if (vigente === 'corrida') {
+    return {
+      notaCorrida: item.notaCorrida || vazio,
+      situacaoCorrida: item.situacaoCorrida || vazio,
+      rubricaCorridaSvg: item.rubricaCorridaSvg,
+      notaCaminhada: vazio,
+      situacaoCaminhada: vazio,
+      rubricaCaminhadaSvg: undefined,
+    };
+  }
+
+  if (vigente === 'caminhada') {
+    return {
+      notaCorrida: vazio,
+      situacaoCorrida: vazio,
+      rubricaCorridaSvg: undefined,
+      notaCaminhada: item.notaCaminhada || vazio,
+      situacaoCaminhada: item.situacaoCaminhada || vazio,
+      rubricaCaminhadaSvg: item.rubricaCaminhadaSvg,
+    };
+  }
+
+  return {
+    notaCorrida: item.notaCorrida || vazio,
+    situacaoCorrida: item.situacaoCorrida || vazio,
+    rubricaCorridaSvg: item.rubricaCorridaSvg,
+    notaCaminhada: item.notaCaminhada || vazio,
+    situacaoCaminhada: item.situacaoCaminhada || vazio,
+    rubricaCaminhadaSvg: item.rubricaCaminhadaSvg,
+  };
+}
+
 /** Modalidade oposta a corrida/caminhada no TAF Armada. */
 export function modalidadeDistanciaOposta(
   prova: 'corrida' | 'caminhada',

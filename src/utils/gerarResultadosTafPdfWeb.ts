@@ -1,6 +1,7 @@
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { postoGradExibicaoAssinatura } from '../types/aplicadorAssinatura';
 import type { ResultadoTafLinha } from './resultadoTafCadastro';
+import { valoresCorridaCaminhadaParaPdf } from './corridaCaminhadaExcludente';
 import { RUBRICA_PDF_ALTURA, RUBRICA_PDF_LARGURA } from './rubricaConstants';
 import {
   desenharRubricaJsPdf,
@@ -40,6 +41,8 @@ export async function gerarResultadosTafPdfBlobWeb(
   const temAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));
   const marginBottom = temAssinatura ? 70 : 28;
   const usableW = pageW - marginX * 2;
+
+  const linhasPdf = linhas.map((r) => ({ ...r, ...valoresCorridaCaminhadaParaPdf(r) }));
 
   const rubW = 28;
   const rubH = 16;
@@ -88,7 +91,7 @@ export async function gerarResultadosTafPdfBlobWeb(
   const scale = usableW / totalW;
   const colWs = colunas.map((c) => c.width * scale);
 
-  const temRubrica = linhas.some(
+  const temRubrica = linhasPdf.some(
     (r) =>
       r.rubricaCorridaSvg ||
       r.rubricaCaminhadaSvg ||
@@ -122,7 +125,7 @@ export async function gerarResultadosTafPdfBlobWeb(
     doc.setFontSize(8);
     doc.setTextColor(75, 85, 99);
     doc.text(
-      pdfTexto(`${subtitulo} · Gerado em ${geradoEm} · ${linhas.length} registro(s)`),
+      pdfTexto(`${subtitulo} · Gerado em ${geradoEm} · ${linhasPdf.length} registro(s)`),
       marginX,
       y,
     );
@@ -199,7 +202,7 @@ export async function gerarResultadosTafPdfBlobWeb(
   desenharCabecalhoPagina();
   desenharHeaderTabela();
 
-  for (const linha of linhas) {
+  for (const linha of linhasPdf) {
     if (y + rowH > pageH - marginBottom) {
       novaPagina();
     }

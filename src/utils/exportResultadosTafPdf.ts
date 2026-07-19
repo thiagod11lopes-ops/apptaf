@@ -18,6 +18,7 @@ import {
   PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
 import { gerarResultadosTafPdfBlobWeb } from './gerarResultadosTafPdfWeb';
+import { valoresCorridaCaminhadaParaPdf } from './corridaCaminhadaExcludente';
 import {
   baixarArquivoParaDownloads,
   entregarPdfBlobWeb,
@@ -65,24 +66,25 @@ export function buildResultadosTafHtml(
   aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
-  const rows = linhas.map(
-      (r) => `<tr>
+  const rows = linhas.map((r) => {
+      const dist = valoresCorridaCaminhadaParaPdf(r);
+      return `<tr>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td>${escapeHtmlPdf(r.nip)}</td>
         <td class="col-nome">${escapeHtmlPdf(r.nome)}</td>
-        <td class="nota">${escapeHtmlPdf(r.notaCorrida)}</td>
-        <td>${escapeHtmlPdf(r.situacaoCorrida)}</td>
-        <td class="col-rubrica">${celulaRubricaHtml(r.rubricaCorridaSvg)}</td>
-        <td class="nota">${escapeHtmlPdf(r.notaCaminhada)}</td>
-        <td>${escapeHtmlPdf(r.situacaoCaminhada)}</td>
-        <td class="col-rubrica">${celulaRubricaHtml(r.rubricaCaminhadaSvg)}</td>
+        <td class="nota">${escapeHtmlPdf(dist.notaCorrida)}</td>
+        <td>${escapeHtmlPdf(dist.situacaoCorrida)}</td>
+        <td class="col-rubrica">${celulaRubricaHtml(dist.rubricaCorridaSvg)}</td>
+        <td class="nota">${escapeHtmlPdf(dist.notaCaminhada)}</td>
+        <td>${escapeHtmlPdf(dist.situacaoCaminhada)}</td>
+        <td class="col-rubrica">${celulaRubricaHtml(dist.rubricaCaminhadaSvg)}</td>
         <td class="nota">${escapeHtmlPdf(r.notaNatacao)}</td>
         <td>${escapeHtmlPdf(r.situacaoNatacao)}</td>
         <td class="col-rubrica">${celulaRubricaHtml(r.rubricaNatacaoSvg)}</td>
         <td>${escapeHtmlPdf(r.situacaoPermanencia)}</td>
         <td class="col-rubrica">${celulaRubricaHtml(r.rubricaPermanenciaSvg)}</td>
-      </tr>`,
-    );
+      </tr>`;
+    });
 
   const metaHtml = `${escapeHtmlPdf(subtitulo)} · Gerado em ${escapeHtmlPdf(dataStr)} · ${linhas.length} registro(s)`;
   const comAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));

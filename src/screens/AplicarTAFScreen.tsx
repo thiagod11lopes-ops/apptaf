@@ -94,6 +94,7 @@ import {
   removerParticipanteModalidadeDoHistorico,
 } from '../utils/registroModalidadeHistorico';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
+import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
 import {
   filtrarCadastrosDemonstracao,
   nipFeedbackOkFromCadastro,
@@ -206,6 +207,12 @@ type NipFeedbackLinha =
     }
   | { tipo: 'erro'; texto: string }
   | null;
+
+/** Sufixo ao lado do nome na identificação quando há data de nascimento válida. */
+function sufixoIdadeMilitar(dataNascimento: string): string {
+  const idade = idadeFromDataNascimento(dataNascimento);
+  return idade != null ? ` · ${idade} anos` : '';
+}
 
 const MAX_VOLTAS_COLUNAS = 99;
 
@@ -2952,6 +2959,7 @@ export default function AplicarTAFScreen() {
                           numberOfLines={2}
                         >
                           {fb.nomeMilitar}
+                          {sufixoIdadeMilitar(fb.dataNascimento)}
                         </Text>
                       </View>
                       <View

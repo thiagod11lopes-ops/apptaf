@@ -136,6 +136,7 @@ export default function CadastroAplicadorScreen() {
       praca: categoria === 'Praças' ? pracaSelecionada : undefined,
       senha: senhaPlano,
       senhaHash,
+      rubricaSvg: anterior?.rubricaSvg,
       updatedAt: Date.now(),
     };
 

@@ -55,6 +55,7 @@ export async function addAplicadorFirestore(uid: string, item: AplicadorItemPers
       oficial: payload.oficial,
       praca: payload.praca,
       senhaHash: payload.senhaHash,
+      rubricaSvg: payload.rubricaSvg,
       updatedAt: payload.updatedAt ?? Date.now(),
       ...(syncVersion != null ? { syncVersion, version: syncVersion } : {}),
     },

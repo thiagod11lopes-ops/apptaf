@@ -21,7 +21,7 @@ export function isBossDataSession(): boolean {
 /** Subconjunto local para assinatura offline (sem senha em texto). */
 export type AplicadorAssinaturaPersist = Pick<
   AplicadorItemPersist,
-  'id' | 'nip' | 'nome' | 'categoria' | 'oficial' | 'praca' | 'senhaHash' | 'updatedAt'
+  'id' | 'nip' | 'nome' | 'categoria' | 'oficial' | 'praca' | 'senhaHash' | 'rubricaSvg' | 'updatedAt'
 >;
 
 export function stripSenhaFromAplicador<T extends AplicadorItemPersist>(item: T): T {
@@ -40,6 +40,7 @@ export function toAplicadorMemberView(item: AplicadorItemPersist): AplicadorAssi
     oficial: base.oficial,
     praca: base.praca,
     senhaHash: base.senhaHash,
+    rubricaSvg: base.rubricaSvg,
     updatedAt: base.updatedAt,
   };
 }
@@ -58,6 +59,7 @@ export function aplicadorBusinessSnapshot(item: AplicadorItemPersist): Record<st
     oficial: view.oficial?.trim() || undefined,
     praca: view.praca?.trim() || undefined,
     senhaHash: view.senhaHash?.trim() || undefined,
+    rubricaSvg: view.rubricaSvg?.trim() || undefined,
   };
 }
 

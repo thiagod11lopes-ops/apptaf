@@ -10,6 +10,8 @@ export type AplicadorItemPersist = {
   senha?: string;
   /** SHA-256 da senha de assinatura do aplicador. */
   senhaHash?: string;
+  /** Rúbrica salva na 1ª assinatura — reutilizada automaticamente após a senha. */
+  rubricaSvg?: string;
   updatedAt?: number;
 };
 
@@ -141,6 +143,59 @@ async function pushAplicadorSenhaCloud(
  * Disponível para o chefe e para e-mails autorizados (membros).
  * A senha em texto é enviada à nuvem em coleção que apenas o chefe pode ler.
  */
+/**
+ * Grava a rúbrica do aplicador na primeira assinatura (first-write-wins).
+ * Disponível para o chefe e para e-mails autorizados.
+ * Retorna true se gravou; false se já existia rúbrica ou o aplicador não foi encontrado.
+ */
+export async function salvarRubricaAplicadorSeVazia(
+  id: string,
+  rubricaSvg: string,
+): Promise<boolean> {
+  const svg = rubricaSvg.trim();
+  if (!id.trim() || !svg) return false;
+
+  if (useOfflineFirstDb()) {
+    const uid = await resolveStorageOwnerUid();
+    return dataStore.saveAplicadorRubricaIfEmpty(id, svg, uid);
+  }
+  const uid = await waitForAuthenticatedUid();
+  if (uid) {
+    return dataStore.saveAplicadorRubricaIfEmpty(id, svg, uid);
+  }
+
+  try {
+    const db = await openDb();
+    return await new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const existing = getReq.result as AplicadorItemPersist | undefined;
+        if (!existing) {
+          resolve(false);
+          return;
+        }
+        if (existing.rubricaSvg?.trim()) {
+          resolve(false);
+          return;
+        }
+        const merged: AplicadorItemPersist = {
+          ...existing,
+          rubricaSvg: svg,
+          updatedAt: Date.now(),
+        };
+        const putReq = store.put(merged);
+        putReq.onsuccess = () => resolve(true);
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function alterarSenhaAplicador(id: string, novaSenha: string): Promise<boolean> {
   const { hashAplicadorSenha, formatSenhaAplicadorInput } = await import('../utils/aplicadorSenha');
   const senhaFmt = formatSenhaAplicadorInput(novaSenha);

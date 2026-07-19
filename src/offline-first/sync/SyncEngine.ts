@@ -67,7 +67,6 @@ import { confirmCloudDisplayReady } from './cloudDisplayGate';
 import { migrateAnonymousDexieToOwner, migrateDexieOwnerToOwner } from '../db/migration';
 import {
   isAuthorizedMemberSession,
-  isMemberAplicadorSenhaChange,
   toAplicadorFirestorePayload,
 } from '../../utils/aplicadorSyncPolicy';
 
@@ -252,8 +251,10 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
     if (!row) return;
 
     if (isAuthorizedMemberSession() && !row.deleted) {
-      // Membros só sobem troca de senha — alinhado ao LWW.
-      if (!isMemberAplicadorSenhaChange(row, undefined)) {
+      // Membros só sobem atualizações que preservam identidade (senha / rúbrica).
+      // Na fila não há remoto: exige identidade preenchida (criação continua bloqueada em saveAplicador).
+      const identidadeOk = Boolean(row.nip?.trim() && row.nome?.trim() && row.categoria);
+      if (!identidadeOk) {
         await syncLogger.info('queue', 'aplicador_upload_ignorado_membro', {
           operationId: entry.operationId,
           collection: 'aplicadores',

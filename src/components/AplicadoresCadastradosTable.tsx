@@ -4,12 +4,12 @@ import { Pencil, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { LabelNip } from './LabelNip';
 import type { AplicadorItemPersist } from '../services/aplicadoresIndexedDb';
-import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from './mobile/TafTabChrome';
 import { compareByNomePtBr } from '../utils/compareNomePtBr';
+import { RubricaCell } from './RubricaThumb';
 
 function postoGradLabel(item: AplicadorItemPersist): string {
   if (item.categoria === 'Oficiais') return (item.oficial || '').trim() || '—';
@@ -128,6 +128,19 @@ export function AplicadoresCadastradosTable({
                 </View>
               ) : null}
             </View>
+
+            <View style={styles.rubricaBlock}>
+              <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>RÚBRICA</Text>
+              {item.rubricaSvg?.trim() ? (
+                <View style={styles.rubricaPreview}>
+                  <RubricaCell svgUri={item.rubricaSvg} maxWidth={220} maxHeight={72} />
+                </View>
+              ) : (
+                <Text style={[styles.rubricaVazia, { color: theme.textMuted }]}>
+                  Será salva na primeira assinatura
+                </Text>
+              )}
+            </View>
           </TafGlassPanel>
         </View>
       ))}
@@ -208,5 +221,17 @@ const styles = StyleSheet.create({
   senhaValue: {
     fontVariant: ['tabular-nums'],
     letterSpacing: 2,
+  },
+  rubricaBlock: {
+    marginTop: 14,
+    gap: 8,
+  },
+  rubricaPreview: {
+    alignItems: 'flex-start',
+  },
+  rubricaVazia: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.1,
   },
 });

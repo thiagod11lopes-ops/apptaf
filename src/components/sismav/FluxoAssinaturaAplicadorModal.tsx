@@ -11,7 +11,11 @@ import {
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { AppModal } from '../premium/AppModal';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getAllAplicadores, type AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
+import {
+  getAllAplicadores,
+  salvarRubricaAplicadorSeVazia,
+  type AplicadorItemPersist,
+} from '../../services/aplicadoresIndexedDb';
 import { verificarSenhaAplicador, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../../utils/aplicadorSenha';
 import {
   postoGradAplicador,
@@ -48,6 +52,20 @@ function labelAplicador(item: AplicadorItemPersist): string {
   return nip ? `${nome} (${nip})` : nome;
 }
 
+function resumoAssinatura(
+  aplicador: AplicadorItemPersist,
+  rubricaSvg: string,
+): AplicadorAssinaturaResumo {
+  return {
+    aplicadorId: aplicador.id,
+    nome: aplicador.nome,
+    nip: aplicador.nip,
+    categoria: aplicador.categoria,
+    postoGrad: postoGradAplicador(aplicador),
+    rubricaSvg,
+  };
+}
+
 type Etapa = 'senha' | 'rubrica';
 
 type Props = {
@@ -69,6 +87,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
   const [rubricaStrokeAtual, setRubricaStrokeAtual] = useState<RubricaStroke>([]);
   const [canvasWidth, setCanvasWidth] = useState(420);
   const [erroRubrica, setErroRubrica] = useState('');
+  const [salvandoRubrica, setSalvandoRubrica] = useState(false);
 
   const aplicadorSelecionado = useMemo(
     () => aplicadores.find((a) => a.id === aplicadorSelecionadoId) ?? null,
@@ -82,6 +101,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
     setErroSenha('');
     setErroRubrica('');
     setVerificando(false);
+    setSalvandoRubrica(false);
     setAplicadorSelecionadoId('');
     setRubricaStrokes([]);
     setRubricaStrokeAtual([]);
@@ -128,6 +148,13 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
         setErroSenha('Senha incorreta para o aplicador selecionado.');
         return;
       }
+
+      const rubricaSalva = aplicadorSelecionado.rubricaSvg?.trim();
+      if (rubricaSalva) {
+        onConcluir(resumoAssinatura(aplicadorSelecionado, rubricaSalva));
+        return;
+      }
+
       setRubricaStrokes([]);
       setRubricaStrokeAtual([]);
       setErroRubrica('');
@@ -135,7 +162,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
     } finally {
       setVerificando(false);
     }
-  }, [aplicadorSelecionado, senha]);
+  }, [aplicadorSelecionado, onConcluir, senha]);
 
   const iniciarRubricaStroke = useCallback((event: GestureResponderEvent) => {
     const { locationX, locationY } = event.nativeEvent;
@@ -163,7 +190,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
   const temTracoRubrica =
     rubricaStrokes.some((s) => s.length > 0) || rubricaStrokeAtual.length > 0;
 
-  const concluirAssinatura = useCallback(() => {
+  const concluirAssinatura = useCallback(async () => {
     if (!aplicadorSelecionado) return;
 
     const todos: RubricaStroke[] = [
@@ -176,14 +203,17 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
     }
 
     const rubricaSvg = buildRubricaSvgDataUrl(todos, canvasWidth, RUBRICA_NATIVA_ALTURA);
-    onConcluir({
-      aplicadorId: aplicadorSelecionado.id,
-      nome: aplicadorSelecionado.nome,
-      nip: aplicadorSelecionado.nip,
-      categoria: aplicadorSelecionado.categoria,
-      postoGrad: postoGradAplicador(aplicadorSelecionado),
-      rubricaSvg,
-    });
+    setSalvandoRubrica(true);
+    setErroRubrica('');
+    try {
+      // First-write-wins: salva na planilha de aplicadores para reuso automático.
+      await salvarRubricaAplicadorSeVazia(aplicadorSelecionado.id, rubricaSvg);
+      onConcluir(resumoAssinatura(aplicadorSelecionado, rubricaSvg));
+    } catch {
+      setErroRubrica('Não foi possível salvar a rúbrica. Tente novamente.');
+    } finally {
+      setSalvandoRubrica(false);
+    }
   }, [aplicadorSelecionado, canvasWidth, onConcluir, rubricaStrokeAtual, rubricaStrokes]);
 
   const selectWebStyle = useMemo(
@@ -214,7 +244,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
                 <AssinaturaFuturistaHeader
                   kicker="APLICADOR"
                   title="Assinatura do aplicador"
-                  subtitle="Selecione o aplicador, informe a senha e desenhe a rúbrica."
+                  subtitle="Selecione o aplicador e informe a senha. Na primeira vez, a rúbrica será salva no cadastro."
                   accent="violet"
                 />
 
@@ -233,6 +263,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
                     {aplicadores.map((item) => (
                       <option key={item.id} value={item.id}>
                         {labelAplicador(item)}
+                        {item.rubricaSvg?.trim() ? ' · rúbrica salva' : ''}
                       </option>
                     ))}
                   </select>
@@ -259,6 +290,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
                               }}
                             >
                               {labelAplicador(item)}
+                              {item.rubricaSvg?.trim() ? ' · rúbrica salva' : ''}
                             </Text>
                           </TouchableOpacity>
                         );
@@ -316,10 +348,10 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
               <>
                 <AssinaturaFuturistaHeader
                   kicker="APLICADOR"
-                  title="Assinatura do aplicador"
+                  title="Primeira rúbrica"
                   subtitle={
                     aplicadorSelecionado
-                      ? `${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome}`
+                      ? `Desenhe a rúbrica de ${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome}. Ela ficará salva no cadastro.`
                       : 'Desenhe a rúbrica do aplicador.'
                   }
                   accent="violet"
@@ -382,9 +414,10 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
                 <AssinaturaFuturistaBtnRow>
                   <AssinaturaFuturistaBtnGhost label="Limpar" onPress={limparRubrica} flex />
                   <AssinaturaFuturistaBtnPrimary
-                    label="Concluir assinatura"
-                    onPress={concluirAssinatura}
-                    disabled={!temTracoRubrica}
+                    label={salvandoRubrica ? 'Salvando…' : 'Salvar e concluir'}
+                    onPress={() => void concluirAssinatura()}
+                    disabled={!temTracoRubrica || salvandoRubrica}
+                    loading={salvandoRubrica}
                     accent="violet"
                     flex
                   />

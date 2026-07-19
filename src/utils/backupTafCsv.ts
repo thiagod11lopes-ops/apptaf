@@ -139,6 +139,7 @@ const APLICADOR_COLUMNS = [
   'praca',
   'senha',
   'senhaHash',
+  'rubricaSvg',
   'updatedAt',
 ] as const;
 
@@ -458,10 +459,12 @@ function rowToAplicador(row: Record<string, string>): AplicadorItemPersist | nul
   const praca = optionalField(row.praca ?? '');
   const senha = optionalField(row.senha ?? '');
   const senhaHash = optionalField(row.senhaHash ?? '');
+  const rubricaSvg = optionalField(row.rubricaSvg ?? '');
   if (oficial) item.oficial = oficial;
   if (praca) item.praca = praca;
   if (senha) item.senha = senha;
   if (senhaHash) item.senhaHash = senhaHash;
+  if (rubricaSvg) item.rubricaSvg = rubricaSvg;
 
   const updatedAt = optionalNumber(row.updatedAt ?? '');
   if (updatedAt != null) item.updatedAt = updatedAt;

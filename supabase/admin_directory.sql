@@ -1,6 +1,15 @@
--- Painel admin (/admin/historico): lista e-mails chefe e autorizados.
--- Execute no SQL Editor do Supabase (uma vez).
+-- =============================================================================
+-- TAF — Painel Admin de e-mails (/admin/historico)
+-- Cole TODO este arquivo no SQL Editor do Supabase e clique em Run.
+-- Pode executar mais de uma vez sem erro (idempotente).
+-- NÃO substitui o schema.sql completo — só cria/atualiza as funções do admin.
+-- =============================================================================
 
+-- Remove versões anteriores (evita conflito de assinatura)
+drop function if exists public.admin_list_boss_emails();
+drop function if exists public.admin_list_authorized_emails(uuid);
+
+-- Lista e-mails chefe + quantidade de autorizados ativos
 create or replace function public.admin_list_boss_emails()
 returns table (
   owner_uid uuid,
@@ -20,7 +29,7 @@ as $$
   )
   select
     b.uid as owner_uid,
-    coalesce(nullif(trim(u.email), ''), b.uid::text) as email,
+    coalesce(nullif(lower(trim(u.email::text)), ''), b.uid::text) as email,
     (
       select count(*)::bigint
       from public.authorized_emails ae
@@ -32,6 +41,7 @@ as $$
   order by 2;
 $$;
 
+-- Lista e-mails autorizados de um chefe (p_boss = owner_uid do chefe)
 create or replace function public.admin_list_authorized_emails(p_boss uuid)
 returns table (
   email text,
@@ -43,13 +53,17 @@ security definer
 set search_path = public
 as $$
   select
-    ae.email,
-    ae.ativo,
+    lower(trim(ae.email)) as email,
+    coalesce(ae.ativo, true) as ativo,
     ae.criado_em
   from public.authorized_emails ae
   where ae.owner_uid = p_boss
-  order by ae.email;
+  order by 1;
 $$;
+
+-- Permissões para o app (chave anon / authenticated) chamar as funções
+revoke all on function public.admin_list_boss_emails() from public;
+revoke all on function public.admin_list_authorized_emails(uuid) from public;
 
 grant execute on function public.admin_list_boss_emails() to anon, authenticated;
 grant execute on function public.admin_list_authorized_emails(uuid) to anon, authenticated;

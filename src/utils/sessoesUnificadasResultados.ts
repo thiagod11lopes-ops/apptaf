@@ -15,13 +15,22 @@ import {
 
 export const SESSAO_REGISTRADOR_ID_PREFIX = 'registrador-';
 
+/** Sessão persistida do Registrador / cadastro manual: registrador-{cadastroId}-{tipo}. */
+export const REGISTRADOR_SESSAO_PERSISTIDA_RE =
+  /^registrador-(.+)-(corrida|natacao|permanencia|caminhada)$/;
+
 export function isSessaoVirtualRegistrador(sessao: SessaoAplicacaoTaf): boolean {
   return sessao.id.startsWith(SESSAO_REGISTRADOR_ID_PREFIX);
 }
 
+/** Sessão do Registrador gravada no IndexedDB (pode ser excluída pelo histórico). */
+export function isSessaoPersistidaRegistrador(sessao: SessaoAplicacaoTaf): boolean {
+  return REGISTRADOR_SESSAO_PERSISTIDA_RE.test(sessao.id);
+}
+
 /** Sessão gerada só na memória (cadastro legado), sem registro no banco. */
 export function isSessaoApenasVirtualCadastro(sessao: SessaoAplicacaoTaf): boolean {
-  return isSessaoVirtualRegistrador(sessao) && sessao.id.includes(':');
+  return isSessaoVirtualRegistrador(sessao) && !isSessaoPersistidaRegistrador(sessao);
 }
 
 function idParticipanteSessao(
@@ -213,7 +222,10 @@ export function unificarSessoesComCadastroRegistrador(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[],
 ): SessaoAplicacaoTaf[] {
-  const reais = sessoes.filter((s) => !isSessaoVirtualRegistrador(s));
+  // Mantém aplicações normais e sessões persistidas do Registrador/manual.
+  const reais = sessoes.filter(
+    (s) => !isSessaoVirtualRegistrador(s) || isSessaoPersistidaRegistrador(s),
+  );
   const virtuais = gerarSessoesVirtuaisFromCadastros(cadastros, reais);
   return [...reais, ...virtuais].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }

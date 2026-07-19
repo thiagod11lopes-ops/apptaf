@@ -8,12 +8,10 @@ import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { limparResultadoModalidadeCadastro } from '../utils/limparResultadoModalidade';
 import {
+  isSessaoPersistidaRegistrador,
   isSessaoVirtualRegistrador,
-  SESSAO_REGISTRADOR_ID_PREFIX,
+  REGISTRADOR_SESSAO_PERSISTIDA_RE,
 } from '../utils/sessoesUnificadasResultados';
-
-const REGISTRADOR_SESSAO_ID =
-  /^registrador-(.+)-(corrida|natacao|permanencia)$/;
 
 async function clearCadastroModalidade(
   cadastro: CadastroItemPersist,
@@ -30,7 +28,7 @@ async function clearCadastrosForSessaoHistorico(sessao: SessaoAplicacaoTaf): Pro
   const cadastros = await getAllCadastros();
   const tipo = sessao.tipoProva;
 
-  const registradorMatch = sessao.id.match(REGISTRADOR_SESSAO_ID);
+  const registradorMatch = sessao.id.match(REGISTRADOR_SESSAO_PERSISTIDA_RE);
   if (registradorMatch) {
     const cadastroId = registradorMatch[1];
     const cad = cadastros.find((c) => c.id === cadastroId);
@@ -68,11 +66,12 @@ export async function deleteSessaoFromHistorico(sessao: SessaoAplicacaoTaf): Pro
 
   await clearCadastrosForSessaoHistorico(sessao);
 
-  const isVirtual = isSessaoVirtualRegistrador(sessao);
-  const persistedRegistrador = sessao.id.startsWith(SESSAO_REGISTRADOR_ID_PREFIX);
   const exists = await sessaoExistsInDb(sessao.id);
+  const apenasMemoria =
+    isSessaoVirtualRegistrador(sessao) && !isSessaoPersistidaRegistrador(sessao) && !exists;
 
-  if (isVirtual && !exists && !persistedRegistrador) {
+  // Sessão só em memória: limpar cadastro já basta (não há linha no IndexedDB).
+  if (apenasMemoria) {
     return;
   }
 

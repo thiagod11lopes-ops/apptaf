@@ -38,7 +38,7 @@ import {
   type FiltroHistoricoMilitar,
 } from '../utils/filtrarSessoesHistoricoMilitar';
 import {
-  isSessaoApenasVirtualCadastro,
+  isSessaoPersistidaRegistrador,
   isSessaoVirtualRegistrador,
   unificarSessoesComCadastroRegistrador,
 } from '../utils/sessoesUnificadasResultados';
@@ -239,6 +239,7 @@ export default function ResultadosScreen() {
               const titulo = tituloTipoProva(sessao.tipoProva);
               const qtd = sessao.resultados.length;
               const virtualRegistrador = isSessaoVirtualRegistrador(sessao);
+              const registradorPersistido = isSessaoPersistidaRegistrador(sessao);
               const aprovados = sessao.resultados.filter(
                 (r) => r.notaTexto !== 'REPROVADO' && r.reprovacaoTexto == null,
               ).length;
@@ -261,24 +262,26 @@ export default function ResultadosScreen() {
                             {sessao.tipoProva === 'permanencia'
                               ? ` · ${aprovados} aprovado${aprovados !== 1 ? 's' : ''}`
                               : null}
-                            {virtualRegistrador ? ' · Registrador de TAF' : null}
+                            {virtualRegistrador
+                              ? registradorPersistido
+                                ? ' · Cadastro manual'
+                                : ' · Registrador de TAF'
+                              : null}
                           </Text>
                         </View>
                         <ChevronRight size={22} color={ui.icon} strokeWidth={2.5} />
                       </PressableScale>
-                      {!isSessaoApenasVirtualCadastro(sessao) ? (
-                        <TouchableOpacity
-                          onPress={() => {
-                            setErroExclusao(null);
-                            setSessaoParaExcluir(sessao);
-                          }}
-                          style={[styles.trashBtn, { borderColor: theme.loss }]}
-                          accessibilityLabel="Excluir sessão do histórico"
-                          accessibilityRole="button"
-                        >
-                          <Trash2 size={20} color={theme.loss} strokeWidth={2.2} />
-                        </TouchableOpacity>
-                      ) : null}
+                      <TouchableOpacity
+                        onPress={() => {
+                          setErroExclusao(null);
+                          setSessaoParaExcluir(sessao);
+                        }}
+                        style={[styles.trashBtn, { borderColor: theme.loss }]}
+                        accessibilityLabel="Excluir sessão do histórico"
+                        accessibilityRole="button"
+                      >
+                        <Trash2 size={20} color={theme.loss} strokeWidth={2.2} />
+                      </TouchableOpacity>
                     </View>
                   </TafGlassPanel>
                 </View>

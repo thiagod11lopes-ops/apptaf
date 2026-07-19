@@ -18,7 +18,10 @@ import {
   PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
 import { gerarResultadosTafPdfBlobWeb } from './gerarResultadosTafPdfWeb';
-import { valoresCorridaCaminhadaParaPdf } from './corridaCaminhadaExcludente';
+import {
+  colunasDistanciaPdfVisiveis,
+  valoresCorridaCaminhadaParaPdf,
+} from './corridaCaminhadaExcludente';
 import {
   baixarArquivoParaDownloads,
   entregarPdfBlobWeb,
@@ -41,24 +44,46 @@ export function estimarFolhasA4PdfResultadosTaf(
 /** Tempo padrão da prova de permanência em relatórios PDF. */
 export const PERMANENCIA_TEMPO_PDF_PADRAO = '10 minutos';
 
-const TITULO_RESULTADOS_TAF = 'Resultados TAF — Corrida, Caminhada, Natação e Permanência';
+function tituloResultadosTafPdf(mostrarCorrida: boolean, mostrarCaminhada: boolean): string {
+  const distancias: string[] = [];
+  if (mostrarCorrida) distancias.push('Corrida');
+  if (mostrarCaminhada) distancias.push('Caminhada');
+  const prefixo = distancias.length > 0 ? distancias.join(', ') : 'Distância';
+  return `Resultados TAF — ${prefixo}, Natação e Permanência`;
+}
 
-const RESULTADOS_TAF_THEAD = `<tr>
-        <th>P/G</th>
-        <th>NIP</th>
-        <th class="col-nome">Nome</th>
-        <th>Nota corrida</th>
-        <th>Situação</th>
-        <th class="col-rubrica">Rúbrica</th>
-        <th>Nota caminhada</th>
-        <th>Situação</th>
-        <th class="col-rubrica">Rúbrica</th>
-        <th>Nota natação</th>
-        <th>Situação</th>
-        <th class="col-rubrica">Rúbrica</th>
-        <th>Situação Permanência</th>
-        <th class="col-rubrica">Rúbrica</th>
-      </tr>`;
+function buildResultadosTafTheadHtml(mostrarCorrida: boolean, mostrarCaminhada: boolean): string {
+  const partes = [
+    '<th>P/G</th>',
+    '<th>NIP</th>',
+    '<th class="col-nome">Nome</th>',
+  ];
+  if (mostrarCorrida) {
+    partes.push('<th>Nota corrida</th>', '<th>Situação</th>', '<th class="col-rubrica">Rúbrica</th>');
+  }
+  if (mostrarCaminhada) {
+    partes.push(
+      '<th>Nota caminhada</th>',
+      '<th>Situação</th>',
+      '<th class="col-rubrica">Rúbrica</th>',
+    );
+  }
+  partes.push(
+    '<th>Nota natação</th>',
+    '<th>Situação</th>',
+    '<th class="col-rubrica">Rúbrica</th>',
+    '<th>Situação Permanência</th>',
+    '<th class="col-rubrica">Rúbrica</th>',
+  );
+  return `<tr>${partes.join('')}</tr>`;
+}
+
+function contarColunasResultadosTaf(mostrarCorrida: boolean, mostrarCaminhada: boolean): number {
+  let n = 3 + 3 + 2; // P/G NIP Nome + natação (3) + permanência (2)
+  if (mostrarCorrida) n += 3;
+  if (mostrarCaminhada) n += 3;
+  return n;
+}
 
 export function buildResultadosTafHtml(
   linhas: ResultadoTafLinha[],
@@ -66,40 +91,56 @@ export function buildResultadosTafHtml(
   aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
+  const { mostrarCorrida, mostrarCaminhada } = colunasDistanciaPdfVisiveis(linhas);
+  const titulo = tituloResultadosTafPdf(mostrarCorrida, mostrarCaminhada);
+  const theadHtml = buildResultadosTafTheadHtml(mostrarCorrida, mostrarCaminhada);
+  const colspan = contarColunasResultadosTaf(mostrarCorrida, mostrarCaminhada);
+
   const rows = linhas.map((r) => {
-      const dist = valoresCorridaCaminhadaParaPdf(r);
-      return `<tr>
-        <td>${escapeHtmlPdf(r.postoGrad)}</td>
-        <td>${escapeHtmlPdf(r.nip)}</td>
-        <td class="col-nome">${escapeHtmlPdf(r.nome)}</td>
-        <td class="nota">${escapeHtmlPdf(dist.notaCorrida)}</td>
-        <td>${escapeHtmlPdf(dist.situacaoCorrida)}</td>
-        <td class="col-rubrica">${celulaRubricaHtml(dist.rubricaCorridaSvg)}</td>
-        <td class="nota">${escapeHtmlPdf(dist.notaCaminhada)}</td>
-        <td>${escapeHtmlPdf(dist.situacaoCaminhada)}</td>
-        <td class="col-rubrica">${celulaRubricaHtml(dist.rubricaCaminhadaSvg)}</td>
-        <td class="nota">${escapeHtmlPdf(r.notaNatacao)}</td>
-        <td>${escapeHtmlPdf(r.situacaoNatacao)}</td>
-        <td class="col-rubrica">${celulaRubricaHtml(r.rubricaNatacaoSvg)}</td>
-        <td>${escapeHtmlPdf(r.situacaoPermanencia)}</td>
-        <td class="col-rubrica">${celulaRubricaHtml(r.rubricaPermanenciaSvg)}</td>
-      </tr>`;
-    });
+    const dist = valoresCorridaCaminhadaParaPdf(r);
+    const celulas = [
+      `<td>${escapeHtmlPdf(r.postoGrad)}</td>`,
+      `<td>${escapeHtmlPdf(r.nip)}</td>`,
+      `<td class="col-nome">${escapeHtmlPdf(r.nome)}</td>`,
+    ];
+    if (mostrarCorrida) {
+      celulas.push(
+        `<td class="nota">${escapeHtmlPdf(dist.notaCorrida)}</td>`,
+        `<td>${escapeHtmlPdf(dist.situacaoCorrida)}</td>`,
+        `<td class="col-rubrica">${celulaRubricaHtml(dist.rubricaCorridaSvg)}</td>`,
+      );
+    }
+    if (mostrarCaminhada) {
+      celulas.push(
+        `<td class="nota">${escapeHtmlPdf(dist.notaCaminhada)}</td>`,
+        `<td>${escapeHtmlPdf(dist.situacaoCaminhada)}</td>`,
+        `<td class="col-rubrica">${celulaRubricaHtml(dist.rubricaCaminhadaSvg)}</td>`,
+      );
+    }
+    celulas.push(
+      `<td class="nota">${escapeHtmlPdf(r.notaNatacao)}</td>`,
+      `<td>${escapeHtmlPdf(r.situacaoNatacao)}</td>`,
+      `<td class="col-rubrica">${celulaRubricaHtml(r.rubricaNatacaoSvg)}</td>`,
+      `<td>${escapeHtmlPdf(r.situacaoPermanencia)}</td>`,
+      `<td class="col-rubrica">${celulaRubricaHtml(r.rubricaPermanenciaSvg)}</td>`,
+    );
+    return `<tr>${celulas.join('')}</tr>`;
+  });
 
   const metaHtml = `${escapeHtmlPdf(subtitulo)} · Gerado em ${escapeHtmlPdf(dataStr)} · ${linhas.length} registro(s)`;
   const comAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));
 
   const conteudoHtml = buildPdfTableHtml({
     tableClass: 'resultados-taf',
-    theadHtml: RESULTADOS_TAF_THEAD,
+    theadHtml,
     rowHtml: rows,
-    emptyColspan: 14,
+    emptyColspan: colspan,
     rowsPerPage: comAssinatura ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
   });
 
   return buildPdfLandscapeDocument({
     documentTitle: 'Resultados TAF',
-    titulo: TITULO_RESULTADOS_TAF,
+    titulo,
     metaHtml,
     conteudoHtml,
     aplicadorHtml: blocosAplicadorAssinaturaHtml(aplicadorAssinaturas),

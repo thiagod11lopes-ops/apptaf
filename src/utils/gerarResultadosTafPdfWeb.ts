@@ -1,7 +1,10 @@
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { postoGradExibicaoAssinatura } from '../types/aplicadorAssinatura';
 import type { ResultadoTafLinha } from './resultadoTafCadastro';
-import { valoresCorridaCaminhadaParaPdf } from './corridaCaminhadaExcludente';
+import {
+  colunasDistanciaPdfVisiveis,
+  valoresCorridaCaminhadaParaPdf,
+} from './corridaCaminhadaExcludente';
 import { RUBRICA_PDF_ALTURA, RUBRICA_PDF_LARGURA } from './rubricaConstants';
 import {
   desenharRubricaJsPdf,
@@ -18,6 +21,14 @@ type Coluna = {
   get: (r: ResultadoTafLinha) => string;
   rubrica?: (r: ResultadoTafLinha) => string | undefined;
 };
+
+function tituloResultadosTafPdf(mostrarCorrida: boolean, mostrarCaminhada: boolean): string {
+  const distancias: string[] = [];
+  if (mostrarCorrida) distancias.push('Corrida');
+  if (mostrarCaminhada) distancias.push('Caminhada');
+  const prefixo = distancias.length > 0 ? distancias.join(', ') : 'Distância';
+  return `Resultados TAF — ${prefixo}, Natacao e Permanencia`;
+}
 
 /**
  * PDF A4 paisagem (web/iPhone) com todos os resultados do dia em um único arquivo.
@@ -42,6 +53,7 @@ export async function gerarResultadosTafPdfBlobWeb(
   const marginBottom = temAssinatura ? 70 : 28;
   const usableW = pageW - marginX * 2;
 
+  const { mostrarCorrida, mostrarCaminhada } = colunasDistanciaPdfVisiveis(linhas);
   const linhasPdf = linhas.map((r) => ({ ...r, ...valoresCorridaCaminhadaParaPdf(r) }));
 
   const rubW = 28;
@@ -50,24 +62,34 @@ export async function gerarResultadosTafPdfBlobWeb(
     { key: 'pg', label: 'P/G', width: 36, get: (r) => r.postoGrad },
     { key: 'nip', label: 'NIP', width: 52, get: (r) => r.nip },
     { key: 'nome', label: 'Nome', width: 90, get: (r) => r.nome },
-    { key: 'nc', label: 'Nota corr.', width: 38, get: (r) => r.notaCorrida },
-    { key: 'sc', label: 'Sit.', width: 42, get: (r) => r.situacaoCorrida },
-    {
-      key: 'rc',
-      label: 'Rub.',
-      width: rubW + 4,
-      get: () => '',
-      rubrica: (r) => r.rubricaCorridaSvg,
-    },
-    { key: 'ncam', label: 'Nota cam.', width: 38, get: (r) => r.notaCaminhada },
-    { key: 'scam', label: 'Sit.', width: 42, get: (r) => r.situacaoCaminhada },
-    {
-      key: 'rcam',
-      label: 'Rub.',
-      width: rubW + 4,
-      get: () => '',
-      rubrica: (r) => r.rubricaCaminhadaSvg,
-    },
+  ];
+  if (mostrarCorrida) {
+    colunas.push(
+      { key: 'nc', label: 'Nota corr.', width: 38, get: (r) => r.notaCorrida },
+      { key: 'sc', label: 'Sit.', width: 42, get: (r) => r.situacaoCorrida },
+      {
+        key: 'rc',
+        label: 'Rub.',
+        width: rubW + 4,
+        get: () => '',
+        rubrica: (r) => r.rubricaCorridaSvg,
+      },
+    );
+  }
+  if (mostrarCaminhada) {
+    colunas.push(
+      { key: 'ncam', label: 'Nota cam.', width: 38, get: (r) => r.notaCaminhada },
+      { key: 'scam', label: 'Sit.', width: 42, get: (r) => r.situacaoCaminhada },
+      {
+        key: 'rcam',
+        label: 'Rub.',
+        width: rubW + 4,
+        get: () => '',
+        rubrica: (r) => r.rubricaCaminhadaSvg,
+      },
+    );
+  }
+  colunas.push(
     { key: 'nn', label: 'Nota nat.', width: 38, get: (r) => r.notaNatacao },
     { key: 'sn', label: 'Sit.', width: 42, get: (r) => r.situacaoNatacao },
     {
@@ -85,7 +107,7 @@ export async function gerarResultadosTafPdfBlobWeb(
       get: () => '',
       rubrica: (r) => r.rubricaPermanenciaSvg,
     },
-  ];
+  );
 
   const totalW = colunas.reduce((acc, c) => acc + c.width, 0);
   const scale = usableW / totalW;
@@ -93,14 +115,15 @@ export async function gerarResultadosTafPdfBlobWeb(
 
   const temRubrica = linhasPdf.some(
     (r) =>
-      r.rubricaCorridaSvg ||
-      r.rubricaCaminhadaSvg ||
+      (mostrarCorrida && r.rubricaCorridaSvg) ||
+      (mostrarCaminhada && r.rubricaCaminhadaSvg) ||
       r.rubricaNatacaoSvg ||
       r.rubricaPermanenciaSvg,
   );
   const rowH = temRubrica ? Math.max(22, rubH + 8) : 14;
   const headerH = 16;
   const geradoEm = new Date().toLocaleString('pt-BR');
+  const tituloDoc = tituloResultadosTafPdf(mostrarCorrida, mostrarCaminhada);
 
   const pngCache = new Map<string, string | null>();
   const pngOf = (svg?: string) => {
@@ -119,7 +142,7 @@ export async function gerarResultadosTafPdfBlobWeb(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(17, 24, 39);
-    doc.text(pdfTexto('Resultados TAF — Corrida, Caminhada, Natacao e Permanencia'), marginX, y);
+    doc.text(pdfTexto(tituloDoc), marginX, y);
     y += 14;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);

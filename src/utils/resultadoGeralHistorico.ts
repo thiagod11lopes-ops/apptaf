@@ -348,9 +348,13 @@ function aggParaPendenciaParcial(agg: AggRow): PendenciaParcialItem | null {
 export function listarResultadosGeralFromHistorico(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
+  opts?: { somenteSessoesInformadas?: boolean },
 ): ResultadoGeralItem[] {
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
-  return agregarHistoricoPorParticipante(unificadas, cadastros)
+  // PDF do dia: não misturar sessões virtuais do Registrador (outras datas).
+  const base = opts?.somenteSessoesInformadas
+    ? sessoes
+    : unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  return agregarHistoricoPorParticipante(base, cadastros)
     .map((agg) => ({
       ...aggParaLinha(agg),
       ...metaCorridaCaminhadaFromCadastro(agg, cadastros),

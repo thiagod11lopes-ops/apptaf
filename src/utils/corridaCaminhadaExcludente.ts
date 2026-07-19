@@ -139,6 +139,22 @@ type LinhaPdfCorridaCaminhada = LinhaCorridaCaminhada & {
   rubricaCaminhadaSvg?: string;
 };
 
+/** Quais blocos de colunas (corrida / caminhada) incluir no PDF do conjunto. */
+export function colunasDistanciaPdfVisiveis(linhas: LinhaCorridaCaminhada[]): {
+  mostrarCorrida: boolean;
+  mostrarCaminhada: boolean;
+} {
+  let mostrarCorrida = false;
+  let mostrarCaminhada = false;
+  for (const item of linhas) {
+    const vigente = modalidadeCorridaCaminhadaVigente(item);
+    if (vigente === 'corrida') mostrarCorrida = true;
+    if (vigente === 'caminhada') mostrarCaminhada = true;
+    if (mostrarCorrida && mostrarCaminhada) break;
+  }
+  return { mostrarCorrida, mostrarCaminhada };
+}
+
 /** Valores de corrida/caminhada para PDF: só a modalidade vigente é exibida. */
 export function valoresCorridaCaminhadaParaPdf(item: LinhaPdfCorridaCaminhada): {
   notaCorrida: string;

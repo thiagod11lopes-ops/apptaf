@@ -157,7 +157,9 @@ export function HistoricoCalendarioTaf({
   );
 
   const prepararLinhasPdfDoDia = useCallback(async () => {
-    const linhasBase = listarResultadosGeralFromHistorico(sessoesDoDia, cadastros);
+    const linhasBase = listarResultadosGeralFromHistorico(sessoesDoDia, cadastros, {
+      somenteSessoesInformadas: true,
+    });
     if (linhasBase.length === 0) {
       throw new Error('Não há participantes para exportar neste dia.');
     }

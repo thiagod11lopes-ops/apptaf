@@ -19,6 +19,7 @@ import { invalidateRemoteSnapshotCache } from '../offline-first/sync/remoteSnaps
 import { forceNextFullRemoteFetch } from '../offline-first/sync/syncWatermark';
 import { clearPersistedStorageOwner } from './firebase/authUid';
 import { setLocalTeamWipeAck } from './applyTeamWipeIfNeeded';
+import { preserveTrustedE2eAfterDataWipe } from './supabase/teamE2eSession';
 import type { WipeCloudTeamResult } from './firebase/wipeCloudDataFirestore';
 
 export type WipeSystemDataOptions = {
@@ -255,6 +256,13 @@ export async function wipeSystemData(options: WipeSystemDataOptions): Promise<Wi
 
     if (uid) {
       await syncManager.endSystemWipe(uid);
+      // Escudo: exclusão limpa dados, não a criptografia — reafirma DEK da sessão.
+      const e2eOk = await preserveTrustedE2eAfterDataWipe(uid);
+      if (!e2eOk) {
+        console.warn(
+          '[wipe] chave E2E inativa após exclusão — entre de novo com e-mail e senha para o escudo verde',
+        );
+      }
     }
 
     onProgress?.({

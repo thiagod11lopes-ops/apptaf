@@ -194,6 +194,29 @@ export function isE2eSessionTrusted(): boolean {
   return trustActiveTeamKey && Boolean(getActiveTeamKey());
 }
 
+/**
+ * Após "Excluir todos os dados": a DEK e team_e2e_meta devem permanecer.
+ * Reafirma confiança na chave da sessão para o escudo não ficar vermelho.
+ */
+export async function preserveTrustedE2eAfterDataWipe(ownerUid: string): Promise<boolean> {
+  if (!ownerUid.trim()) return false;
+
+  const current = getActiveTeamKey();
+  if (current) {
+    trustActiveTeamKey = true;
+    setActiveTeamKey(current); // reafirma UI (escudo verde)
+    return true;
+  }
+
+  const restored = await restoreE2eFromSessionStorage(ownerUid);
+  if (restored && getActiveTeamKey()) {
+    trustActiveTeamKey = true;
+    setActiveTeamKey(getActiveTeamKey());
+    return true;
+  }
+  return Boolean(getActiveTeamKey());
+}
+
 export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<boolean> {
   if (getActiveTeamKey()) return true;
   if (!ownerUid.trim()) return false;

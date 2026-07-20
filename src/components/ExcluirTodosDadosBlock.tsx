@@ -77,6 +77,9 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
         }
         partes.push('Aparelhos autorizados serão esvaziados ao sincronizar.');
       }
+      partes.push(
+        'Se o escudo ficar vermelho: Conta → Sair → entre de novo com e-mail e senha.',
+      );
 
       const msg = partes.join(' ');
       setSucesso(msg);

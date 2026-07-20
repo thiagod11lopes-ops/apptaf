@@ -11,7 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useAuth } from '../contexts/AuthContext';
-import { X } from 'lucide-react-native';
+import { X, AlertTriangle } from 'lucide-react-native';
 import { Card } from '../components/Card';
 import { LabelNip } from '../components/LabelNip';
 import { LabelSO } from '../components/LabelSO';
@@ -23,12 +23,16 @@ import {
 } from '../services/aplicadoresIndexedDb';
 import { aplicadorRepository } from '../offline-first/repositories/AplicadorRepository';
 import { hashAplicadorSenha, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../utils/aplicadorSenha';
+import { nipDigitos } from '../utils/nipFormat';
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
 import { AplicadoresCadastradosTable } from '../components/AplicadoresCadastradosTable';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 import { TafCenteredTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
+import { AppModal } from '../components/premium/AppModal';
+import { PressableScale } from '../components/premium/PressableScale';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -68,6 +72,9 @@ export default function CadastroAplicadorScreen() {
   const [excluirId, setExcluirId] = useState<string | null>(null);
   const [excluirRubricaId, setExcluirRubricaId] = useState<string | null>(null);
   const [modalNipDuplicado, setModalNipDuplicado] = useState(false);
+  const [nipDuplicadoInfo, setNipDuplicadoInfo] = useState<{ nip: string; nome: string } | null>(
+    null,
+  );
   const [modalCadastroSucesso, setModalCadastroSucesso] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erroNuvem, setErroNuvem] = useState<string | null>(null);
@@ -101,22 +108,37 @@ export default function CadastroAplicadorScreen() {
     if (categoria === 'Oficiais' && !oficialSelecionado.trim()) faltantesAgora.push('Oficial');
     if (categoria === 'Praças' && !pracaSelecionada.trim()) faltantesAgora.push('Graduação');
 
+    const nipFinal = formatNipInput(nip).trim();
+    const nipDigits = nipDigitos(nipFinal);
+    if (nip.trim() && nipDigits.length !== 8) {
+      faltantesAgora.push('NIP (8 dígitos no formato 00.0000.00)');
+    }
+
     setFaltantes(faltantesAgora);
     if (faltantesAgora.length > 0) return;
 
-    const nipFinal = formatNipInput(nip).trim();
-    const nipDigits = nipFinal.replace(/\D/g, '');
-    if (nipDigits.length > 0) {
-      const jaExiste = aplicadores.some((a) => {
-        const outrosDigitos = (a.nip || '').replace(/\D/g, '');
-        if (outrosDigitos !== nipDigits) return false;
-        if (editandoId && a.id === editandoId) return false;
-        return true;
+    // Lista fresca do IndexedDB — evita falha se o estado ainda não carregou.
+    let listaAtual = aplicadores;
+    try {
+      listaAtual = await getAllAplicadores();
+      setAplicadores(listaAtual);
+    } catch {
+      /* mantém estado em memória */
+    }
+
+    const existente = listaAtual.find((a) => {
+      const outrosDigitos = nipDigitos(a.nip || '');
+      if (outrosDigitos !== nipDigits) return false;
+      if (editandoId && a.id === editandoId) return false;
+      return true;
+    });
+    if (existente) {
+      setNipDuplicadoInfo({
+        nip: formatNipInput(existente.nip || nipFinal),
+        nome: (existente.nome || '').trim() || 'Aplicador já cadastrado',
       });
-      if (jaExiste) {
-        setModalNipDuplicado(true);
-        return;
-      }
+      setModalNipDuplicado(true);
+      return;
     }
 
     const isEdicao = !!editandoId;
@@ -733,30 +755,84 @@ export default function CadastroAplicadorScreen() {
       ) : null}
 
       {modalNipDuplicado ? (
-        <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)' }]}>
-          <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[ts.h2, { color: theme.text }]}>NIP já cadastrado</Text>
-              <TouchableOpacity
-                onPress={() => setModalNipDuplicado(false)}
-                style={[styles.modalCloseBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
-              >
-                <X size={18} color={theme.textSecondary} strokeWidth={2} />
-              </TouchableOpacity>
-            </View>
-            <Text style={[ts.bodySecondary, styles.modalSubtitle, { color: theme.textSecondary }]}>
-              O NIP informado já está cadastrado como aplicador.
-            </Text>
-            <View style={styles.modalBtns}>
-              <TouchableOpacity
-                onPress={() => setModalNipDuplicado(false)}
-                style={[styles.modalBtn, { borderColor: theme.border, backgroundColor: theme.primary }]}
-              >
-                <Text style={[ts.caption, { color: theme.text }]}>Entendi</Text>
-              </TouchableOpacity>
+        <AppModal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setModalNipDuplicado(false);
+            setNipDuplicadoInfo(null);
+          }}
+        >
+          <View
+            style={[
+              styles.modalOverlay,
+              {
+                backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)',
+                zIndex: 3000,
+              },
+            ]}
+          >
+            <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalTitleRow}>
+                  <View style={[styles.warnIconWrap, { backgroundColor: theme.lossMuted }]}>
+                    <AlertTriangle size={18} color={dangerColor} strokeWidth={2.4} />
+                  </View>
+                  <Text style={[ts.h2, { color: theme.text, flex: 1 }]}>NIP já cadastrado</Text>
+                </View>
+                <TouchableOpacity
+                  accessibilityLabel="Fechar aviso de NIP duplicado"
+                  onPress={() => {
+                    setModalNipDuplicado(false);
+                    setNipDuplicadoInfo(null);
+                  }}
+                  style={[
+                    styles.modalCloseBtn,
+                    { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
+                  ]}
+                >
+                  <X size={18} color={theme.textSecondary} strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+              <Text style={[ts.bodySecondary, styles.modalSubtitle, { color: theme.textSecondary }]}>
+                Já existe um aplicador com o NIP{' '}
+                <Text style={{ fontWeight: '800', color: theme.text }}>
+                  {nipDuplicadoInfo?.nip || formatNipInput(nip)}
+                </Text>
+                {nipDuplicadoInfo?.nome ? (
+                  <>
+                    {' '}
+                    (
+                    <Text style={{ fontWeight: '800', color: theme.text }}>
+                      {nipDuplicadoInfo.nome}
+                    </Text>
+                    )
+                  </>
+                ) : null}
+                . Não é possível cadastrar dois aplicadores com o mesmo NIP.
+              </Text>
+              <View style={styles.modalBtns}>
+                <PressableScale
+                  onPress={() => {
+                    setModalNipDuplicado(false);
+                    setNipDuplicadoInfo(null);
+                  }}
+                  style={styles.modalBtnPrimaryOuter}
+                >
+                  <LinearGradient
+                    colors={[...theme.tokens.gradientPrimaryBtn]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.modalBtnPrimary}
+                  >
+                    <Text style={[ts.caption, { color: '#FFFFFF', fontWeight: '800' }]}>Entendi</Text>
+                  </LinearGradient>
+                </PressableScale>
+              </View>
             </View>
           </View>
-        </View>
+        </AppModal>
       ) : null}
     </>
   );
@@ -867,6 +943,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
+    zIndex: 3000,
   },
   modalCard: {
     width: '100%',
@@ -881,9 +958,24 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginBottom: 16,
+    gap: 10,
+  },
+  modalTitleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: 0,
+  },
+  warnIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalSubtitle: { marginBottom: 20, textAlign: 'center' },
   modalCloseBtn: { padding: 8, borderRadius: PREMIUM.radiusMd, borderWidth: 1 },
@@ -894,6 +986,14 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
     alignItems: 'center',
+  },
+  modalBtnPrimaryOuter: { flex: 1 },
+  modalBtnPrimary: {
+    minHeight: 46,
+    borderRadius: PREMIUM.radiusMd,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
   },
   modalTitleSuccess: { textAlign: 'center', marginBottom: 12 },
 });

@@ -52,6 +52,11 @@ grant select, insert, update on public.team_e2e_meta to authenticated;
 -- policies: ver supabase/schema.sql (team_e2e_meta_*)
 ```
 
+### SQL adicional (numeração de bancos BNC001…)
+No SQL Editor, execute também `supabase/database_registry.sql` (já incluído no final de `schema.sql` para projetos novos).
+
+Isso cria a tabela `database_registry` e a função `ensure_database_bank_code`, que atribui `BNC001`, `BNC002`, … a cada banco de chefe na ordem de criação.
+
 ## 6. Sync incremental (IndexedDB)
 - Após cada sync bem-sucedida, o app guarda um *watermark* (`syncWatermark.ts`).
 - Nas próximas comparações com a nuvem, só baixa registros alterados desde o watermark (com baseline do IndexedDB já sincronizado).

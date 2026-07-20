@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Image, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
@@ -20,6 +20,10 @@ import {
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 import { TafGlassPanel } from '../components/mobile/TafTabChrome';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
+import {
+  ensureDatabaseBankCode,
+  readCachedDatabaseBankCode,
+} from '../services/supabase/databaseRegistryCloud';
 
 const tafImage = require('../../TAF1.png');
 
@@ -51,6 +55,26 @@ export default function HomeScreen() {
     () => (isAuthenticated ? emailPrefixoExibicao(user?.email) : null),
     [isAuthenticated, user?.email],
   );
+
+  const [bankCode, setBankCode] = useState<string | null>(() =>
+    isAuthenticated ? readCachedDatabaseBankCode(dataOwnerUid) : null,
+  );
+
+  useEffect(() => {
+    if (!isAuthenticated || !dataOwnerUid) {
+      setBankCode(null);
+      return;
+    }
+    setBankCode(readCachedDatabaseBankCode(dataOwnerUid));
+    let cancelled = false;
+    void (async () => {
+      const code = await ensureDatabaseBankCode(dataOwnerUid);
+      if (!cancelled) setBankCode(code);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, dataOwnerUid, user?.uid]);
 
   const syncPendingTotal = useMemo(() => {
     const uploads = syncUi.counters.pendingUploads ?? pendingCount;
@@ -119,6 +143,15 @@ export default function HomeScreen() {
               accessibilityLabel={`Conta ${emailPrefixo}`}
             >
               {emailPrefixo}
+            </Text>
+          ) : null}
+          {bankCode ? (
+            <Text
+              style={[styles.bankCode, { color: theme.textMuted }]}
+              numberOfLines={1}
+              accessibilityLabel={`Banco de dados ${bankCode}`}
+            >
+              {bankCode}
             </Text>
           ) : null}
         </View>
@@ -233,6 +266,15 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 2,
     letterSpacing: 0.2,
+  },
+  bankCode: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 15,
+    textAlign: 'center',
+    width: '100%',
+    marginTop: 2,
+    letterSpacing: 0.8,
   },
   statsPanel: {
     flexShrink: 0,

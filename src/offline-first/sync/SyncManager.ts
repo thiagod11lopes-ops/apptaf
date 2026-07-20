@@ -51,6 +51,7 @@ import { isCloudOwnerUid, legacyFirebaseUidMessage } from '../../utils/cloudOwne
 import {
   ensureE2eKeyForCloudSync,
   ensureE2eUnlockedForSession,
+  clearE2eSession,
 } from '../../services/supabase/teamE2eSession';
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 import {
@@ -801,7 +802,10 @@ async function runSyncPipeline(
         setUiProgress(syncProgress.percent, 'Restaurando backup local…');
         await restoreLocalBackup(backupIdBeforeSync);
       }
-      throw new Error(result.stats.errors[0] ?? 'upload_failed');
+      const firstError =
+        result.stats.errors.map((e) => String(e ?? '').trim()).find((e) => e.length > 0) ??
+        'upload_failed';
+      throw new Error(firstError);
     }
 
     lastSyncAt = result.audit.finishedAt;
@@ -867,8 +871,8 @@ async function runSyncPipeline(
     return { ok: true };
   } catch (error) {
     const rawError = error instanceof Error ? error.message : String(error);
-    const detail = parseSyncError(rawError);
-    await syncLogger.error('sync-manager', rawError);
+    const detail = parseSyncError(rawError || 'upload_failed');
+    await syncLogger.error('sync-manager', rawError || 'upload_failed');
     await systemState.setOfflineMode();
     syncEngine.deactivateOnlineMode();
     await syncEngine.shutdownSession();
@@ -876,7 +880,14 @@ async function runSyncPipeline(
     mode = 'OFFLINE';
     await refreshPendingSummary();
 
-    if (silent) {
+    if (/E2E_KEY_MISMATCH/i.test(rawError)) {
+      clearE2eSession();
+    }
+
+    // Falha de chave entre aparelhos: sempre mostrar na UI (mesmo em auto-sync).
+    const forceUiError = /E2E_KEY_MISMATCH/i.test(rawError);
+
+    if (silent && !forceUiError) {
       // Auto-sync: não trava a UI em "Falha"; agenda nova tentativa com cooldown.
       backgroundSyncCooldownUntil = Date.now() + 45_000;
       if (uiPhase !== 'success' && uiPhase !== 'already_up_to_date') {

@@ -93,6 +93,16 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
     );
   }
 
+  if (/E2E_KEY_MISMATCH/i.test(msg)) {
+    return detail(
+      'e2e_key_mismatch',
+      'Chave diferente entre aparelhos',
+      msg.replace(/^E2E_KEY_MISMATCH:\s*/i, '').trim() ||
+        'A chave deste aparelho não abre os dados da nuvem do mesmo BNC.',
+      'Nos dois aparelhos: Conta → Sair → entre com o mesmo e-mail e senha. Depois sincronize no aparelho que tem os dados e, em seguida, no outro.',
+    );
+  }
+
   if (msg === E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE) {
     return detail(
       'e2e_not_activated',

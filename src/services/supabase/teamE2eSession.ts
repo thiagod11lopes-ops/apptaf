@@ -18,6 +18,8 @@ const LOCAL_STORAGE_KEY = 'taf:e2e:teamKey:durable';
 type StoredE2eSession = {
   ownerUid: string;
   keyJwk: JsonWebKey;
+  /** Alinha com team_e2e_meta.key_version — evita DEK antiga após wipe/recriação. */
+  keyVersion?: number;
 };
 
 function toBase64(bytes: Uint8Array): string {
@@ -146,9 +148,20 @@ async function importStoredTeamKey(stored: StoredE2eSession): Promise<CryptoKey 
   }
 }
 
-async function persistSessionKey(ownerUid: string, key: CryptoKey): Promise<void> {
+async function persistSessionKey(
+  ownerUid: string,
+  key: CryptoKey,
+  keyVersion?: number,
+): Promise<void> {
   const keyJwk = await crypto.subtle.exportKey('jwk', key);
-  writeStoredE2eSession({ ownerUid, keyJwk });
+  const version =
+    keyVersion ??
+    (await fetchTeamE2eMeta(ownerUid).then((m) => m?.key_version).catch(() => undefined));
+  writeStoredE2eSession({
+    ownerUid,
+    keyJwk,
+    keyVersion: typeof version === 'number' ? version : undefined,
+  });
 }
 
 export function clearE2eSession(): void {
@@ -176,12 +189,60 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
   const stored = readStoredE2eSession();
   if (!stored || stored.ownerUid !== ownerUid || !stored.keyJwk) return false;
 
+  // Se a meta na nuvem mudou (wipe / nova senha), descarta DEK local antiga.
+  try {
+    const meta = await fetchTeamE2eMeta(ownerUid);
+    if (meta) {
+      if (stored.keyVersion != null && meta.key_version !== stored.keyVersion) {
+        clearE2eSession();
+        return false;
+      }
+    }
+  } catch {
+    /* offline — tenta usar a chave local mesmo assim */
+  }
+
   const key = await importStoredTeamKey(stored);
   if (!key) return false;
   setActiveTeamKey(key);
-  // Regrava nos dois storages (migra session → local se faltava).
+
+  // Probe: se a nuvem tem dado cifrado e esta chave não abre, descarta DEK stale.
+  const probeOk = await probeStoredKeyAgainstCloud(ownerUid);
+  if (!probeOk) {
+    clearE2eSession();
+    return false;
+  }
+
   writeStoredE2eSession(stored);
   return true;
+}
+
+/** true se não há dado cifrado na nuvem ou se a DEK atual abre o primeiro registro. */
+async function probeStoredKeyAgainstCloud(ownerUid: string): Promise<boolean> {
+  try {
+    const { requireSupabase } = await import('../../config/supabase');
+    const { isCloudDataEncrypted, maybeDecryptFromCloud } = await import('./e2eCrypto');
+    const sb = requireSupabase();
+    const { data, error } = await sb
+      .from('cadastros')
+      .select('data')
+      .eq('owner_uid', ownerUid)
+      .limit(5);
+    if (error || !data?.length) return true;
+    for (const row of data) {
+      const payload = (row as { data?: Record<string, unknown> }).data ?? {};
+      if (!isCloudDataEncrypted(payload)) continue;
+      try {
+        await maybeDecryptFromCloud(payload);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -338,7 +399,7 @@ export async function activateE2eFromLoginPassword(
   try {
     const teamKey = await unwrapTeamKeyRaw(meta.wrapped_key_b64, password, meta.salt_b64);
     setActiveTeamKey(teamKey);
-    await persistSessionKey(ownerUid, teamKey);
+    await persistSessionKey(ownerUid, teamKey, meta.key_version ?? 1);
   } catch {
     throw new Error(
       'Não foi possível desbloquear a criptografia do banco. Confira a senha e tente de novo.',
@@ -383,7 +444,7 @@ export async function activateE2eForAuthorizedMember(
         memberWrap.salt_b64,
       );
       setActiveTeamKey(teamKey);
-      await persistSessionKey(bossUid, teamKey);
+      await persistSessionKey(bossUid, teamKey, memberWrap.key_version ?? 1);
       return;
     } catch {
       console.warn('[e2e] access_secret inválido; tentando fallbacks');
@@ -399,7 +460,7 @@ export async function activateE2eForAuthorizedMember(
         memberWrap.salt_b64,
       );
       setActiveTeamKey(teamKey);
-      await persistSessionKey(bossUid, teamKey);
+      await persistSessionKey(bossUid, teamKey, memberWrap.key_version ?? 1);
       return;
     } catch {
       /* continua */
@@ -446,7 +507,7 @@ export async function activateE2eForAuthorizedMember(
   }
 
   setActiveTeamKey(teamKey);
-  await persistSessionKey(bossUid, teamKey);
+  await persistSessionKey(bossUid, teamKey, meta.key_version ?? 1);
   // Preferência: gravar acesso automático daqui pra frente.
   try {
     const accessSecret = toBase64(crypto.getRandomValues(new Uint8Array(32)));
@@ -538,7 +599,7 @@ export async function rewrapTeamKeyWithNewPassword(
   const nextVersion = Math.max(1, (meta?.key_version ?? 0) + 1);
   await upsertTeamE2eMeta(ownerUid, saltB64, wrapped, nextVersion);
   setActiveTeamKey(teamKey);
-  await persistSessionKey(ownerUid, teamKey);
+  await persistSessionKey(ownerUid, teamKey, nextVersion);
 }
 
 export async function ensureE2eKeyForCloudSync(

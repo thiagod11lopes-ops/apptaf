@@ -54,8 +54,13 @@ function selectColumns(table: string): string {
     : 'id, owner_uid, data, updated_at';
 }
 
+export const E2E_KEY_MISMATCH_CODE = 'E2E_KEY_MISMATCH';
+export const E2E_KEY_MISMATCH_MESSAGE =
+  'A chave de criptografia deste aparelho não abre os dados da nuvem (BNC). Saia da conta e entre novamente com e-mail e senha neste aparelho para alinhar a chave do banco.';
+
 async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
   const out: CloudDocRow[] = [];
+  let decryptFailures = 0;
   for (const row of rows) {
     try {
       out.push({
@@ -64,12 +69,20 @@ async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
         data: await maybeDecryptFromCloud(row.data ?? {}),
       });
     } catch (error) {
-      // Documento cifrado com outra chave / corrompido — não derruba a sync inteira.
+      decryptFailures += 1;
       console.warn(
         `[e2e] não foi possível descriptografar ${row.id}:`,
         error instanceof Error ? error.message : error,
       );
     }
+  }
+  // Chave divergente entre aparelhos: NÃO silenciar (senão um BNC fica vazio e o outro cheio).
+  if (decryptFailures > 0) {
+    const err = new Error(
+      `${E2E_KEY_MISMATCH_CODE}: ${E2E_KEY_MISMATCH_MESSAGE} (${decryptFailures} registro(s) ilegíveis).`,
+    );
+    (err as Error & { code?: string }).code = E2E_KEY_MISMATCH_CODE;
+    throw err;
   }
   return out;
 }

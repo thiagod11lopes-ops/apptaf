@@ -13,6 +13,8 @@ type Props = {
   nome: string;
   nip: string;
   modalidade: ModalidadeResultadoTaf | null;
+  /** Quando a prova não é corrida/natação/permanência/caminhada (ex.: flexão). */
+  rotuloProva?: string;
   loading?: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -23,13 +25,17 @@ export function ConfirmacaoExcluirResultadoModal({
   nome,
   nip,
   modalidade,
+  rotuloProva,
   loading = false,
   onClose,
   onConfirm,
 }: Props) {
   const { theme } = useTheme();
   const t = theme.tokens;
-  const modLabel = modalidade ? labelModalidadeResultado(modalidade) : '';
+  const modLabel =
+    (modalidade ? labelModalidadeResultado(modalidade) : '') ||
+    (rotuloProva || '').trim() ||
+    'prova';
 
   const footer = (
     <View style={styles.footerRow}>

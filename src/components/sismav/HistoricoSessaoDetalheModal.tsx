@@ -10,14 +10,16 @@ import {
   Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { PenLine, Sparkles, X } from 'lucide-react-native';
+import { PenLine, Pencil, Sparkles, Trash2, X } from 'lucide-react-native';
 import { AppModal } from '../premium/AppModal';
 import { RubricaCaptureModal } from '../RubricaCaptureModal';
+import { ConfirmacaoExcluirResultadoModal } from './ConfirmacaoExcluirResultadoModal';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import {
   tituloTipoProva,
   updateSessaoAplicacao,
+  deleteSessaoAplicacao,
   type SessaoAplicacaoTaf,
   type TipoProvaAplicada,
 } from '../../services/resultadosAplicadosIndexedDb';
@@ -37,7 +39,70 @@ import {
   aplicarResultadoNoCadastro,
 } from '../../screens/aplicarTafNotaHelpers';
 import { persistirRubricasNoCadastro } from '../../utils/persistirRubricaCadastro';
+import {
+  limparResultadoModalidadeCadastro,
+  type ModalidadeResultadoTaf,
+} from '../../utils/limparResultadoModalidade';
 import type { TipoProvaTAF } from '../../taf/tafProvaTypes';
+
+function modalidadeExcluivel(tipo: TipoProvaAplicada): ModalidadeResultadoTaf | null {
+  if (tipo === 'corrida' || tipo === 'natacao' || tipo === 'permanencia' || tipo === 'caminhada') {
+    return tipo;
+  }
+  return null;
+}
+
+function limparResultadoFnNoCadastro(
+  cadastro: CadastroItemPersist,
+  tipo: TipoProvaAplicada,
+): CadastroItemPersist {
+  if (tipo === 'flexao_barra') {
+    return {
+      ...cadastro,
+      repsFlexaoBarra: undefined,
+      notaFlexaoBarra: undefined,
+      dataTafFlexaoBarra: undefined,
+    };
+  }
+  if (tipo === 'flexao_solo') {
+    return {
+      ...cadastro,
+      repsFlexaoSolo: undefined,
+      notaFlexaoSolo: undefined,
+      dataTafFlexaoSolo: undefined,
+    };
+  }
+  if (tipo === 'abdominal_remador') {
+    return {
+      ...cadastro,
+      repsAbdominalRemador: undefined,
+      notaAbdominalRemador: undefined,
+      dataTafAbdominalRemador: undefined,
+    };
+  }
+  if (tipo === 'abdominal_prancha') {
+    return {
+      ...cadastro,
+      tempoAbdominalPrancha: undefined,
+      notaAbdominalPrancha: undefined,
+      dataTafAbdominalPrancha: undefined,
+    };
+  }
+  return cadastro;
+}
+
+function reindexDraft(
+  draft: Record<number, string>,
+  removedIdx: number,
+): Record<number, string> {
+  const next: Record<number, string> = {};
+  Object.entries(draft).forEach(([k, v]) => {
+    const i = Number(k);
+    if (i === removedIdx) return;
+    next[i > removedIdx ? i - 1 : i] = v;
+  });
+  return next;
+}
 
 type Props = {
   sessao: SessaoAplicacaoTaf | null;
@@ -243,6 +308,8 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
   const [rubricaIdx, setRubricaIdx] = useState<number | null>(null);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [excluirIdx, setExcluirIdx] = useState<number | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const modoTafNaval = sessao?.normaTaf === 'cfn';
   const tipo = sessao?.tipoProva ?? 'corrida';
@@ -256,6 +323,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
       setDesempenhoDraft({});
       setRubricaIdx(null);
       setErro('');
+      setExcluirIdx(null);
       return;
     }
     setLinhas(sessao.resultados.map((r) => ({ ...r })));
@@ -269,6 +337,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
     setDesempenhoDraft({});
     setRubricaIdx(null);
     setErro('');
+    setExcluirIdx(null);
     void getAllCadastros()
       .then(setCadastros)
       .catch(() => setCadastros([]));
@@ -648,6 +717,107 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
     [inserirLinhaAbaixo],
   );
 
+  const habilitarEdicaoLinha = useCallback(
+    (idx: number) => {
+      const r = linhas[idx];
+      if (!r) return;
+      setMetas((prev) => {
+        const next = [...prev];
+        if (!next[idx]) {
+          next[idx] = { editavel: true, dataNascimento: '' };
+        } else {
+          next[idx] = { ...next[idx], editavel: true };
+        }
+        const busca = buscarCadastroPorNomeOuNip(cadastros, r.nip || r.nome || '');
+        if (busca.kind === 'found') {
+          next[idx] = {
+            ...next[idx],
+            editavel: true,
+            dataNascimento: busca.cadastro.dataNascimento || '',
+            sexo: busca.cadastro.sexo,
+            avisoNip: !(busca.cadastro.dataNascimento || '').trim()
+              ? 'Cadastro sem data de nascimento — nota indisponível'
+              : undefined,
+          };
+        }
+        return next;
+      });
+      setNipDraft((prev) => ({ ...prev, [idx]: r.nip || '' }));
+      setDesempenhoDraft((prev) => ({
+        ...prev,
+        [idx]: valorDesempenhoExibido(tipo, r, undefined),
+      }));
+    },
+    [linhas, cadastros, tipo],
+  );
+
+  const confirmarExclusaoLinha = useCallback(async () => {
+    if (excluirIdx == null || !sessao || excluindo) return;
+    const idx = excluirIdx;
+    const removido = linhas[idx];
+    if (!removido) {
+      setExcluirIdx(null);
+      return;
+    }
+
+    setExcluindo(true);
+    setErro('');
+    try {
+      const nextLinhas = renumerar(linhas.filter((_, i) => i !== idx));
+      const nextMetas = metas.filter((_, i) => i !== idx);
+      setNipDraft((prev) => reindexDraft(prev, idx));
+      setDesempenhoDraft((prev) => reindexDraft(prev, idx));
+
+      const nip = (removido.nip || '').trim();
+      if (nip) {
+        const busca = buscarCadastroPorNomeOuNip(cadastros, nip);
+        if (busca.kind === 'found') {
+          const modalidade = modalidadeExcluivel(tipo);
+          const cadLimpo = modalidade
+            ? limparResultadoModalidadeCadastro(busca.cadastro, modalidade)
+            : limparResultadoFnNoCadastro(busca.cadastro, tipo);
+          await addCadastro(cadLimpo);
+          setCadastros((prev) =>
+            prev.map((c) => (c.id === cadLimpo.id ? cadLimpo : c)),
+          );
+        }
+      }
+
+      if (nextLinhas.length === 0) {
+        await deleteSessaoAplicacao(sessao.id);
+        setExcluirIdx(null);
+        onSessaoAtualizada?.({ ...sessao, resultados: [] });
+        onClose();
+        return;
+      }
+
+      const atualizada: SessaoAplicacaoTaf = {
+        ...sessao,
+        resultados: nextLinhas,
+        updatedAt: Date.now(),
+      };
+      await updateSessaoAplicacao(atualizada);
+      setLinhas(nextLinhas);
+      setMetas(nextMetas);
+      setExcluirIdx(null);
+      onSessaoAtualizada?.(atualizada);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível excluir a linha.');
+    } finally {
+      setExcluindo(false);
+    }
+  }, [
+    excluirIdx,
+    sessao,
+    excluindo,
+    linhas,
+    metas,
+    cadastros,
+    tipo,
+    onClose,
+    onSessaoAtualizada,
+  ]);
+
   return (
     <AppModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -687,7 +857,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
                 {salvando ? ' · Salvando…' : ''}
               </Text>
               <Text style={[styles.hint, { color: theme.textMuted }]}>
-                Clique com o botão direito em uma linha para inserir um resultado manual abaixo.
+                Use Editar/Excluir na coluna Ações. Clique com o botão direito para inserir uma linha.
               </Text>
             </View>
             <TouchableOpacity
@@ -741,6 +911,9 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
                   <Text style={[styles.th, styles.colSit, { color: theme.textMuted }]}>Situação</Text>
                   <Text style={[styles.th, styles.colRubrica, { color: theme.textMuted }]}>
                     Rúbrica
+                  </Text>
+                  <Text style={[styles.th, styles.colAcoes, { color: theme.textMuted }]}>
+                    Ações
                   </Text>
                 </View>
 
@@ -916,6 +1089,51 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
                           </TouchableOpacity>
                         )}
                       </View>
+
+                      <View style={[styles.td, styles.colAcoes, styles.acoesCell]}>
+                        <TouchableOpacity
+                          onPress={() => habilitarEdicaoLinha(idx)}
+                          style={[
+                            styles.acaoBtn,
+                            {
+                              borderColor: theme.border,
+                              backgroundColor: editavel
+                                ? theme.isDark
+                                  ? 'rgba(56,189,248,0.18)'
+                                  : 'rgba(224,242,254,0.95)'
+                                : theme.isDark
+                                  ? 'rgba(2,6,23,0.35)'
+                                  : 'rgba(248,250,252,0.95)',
+                            },
+                          ]}
+                          accessibilityLabel="Editar linha"
+                          disabled={salvando || excluindo}
+                        >
+                          <Pencil
+                            size={15}
+                            color={editavel ? theme.primary : ui.icon}
+                            strokeWidth={2.3}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setExcluirIdx(idx)}
+                          style={[
+                            styles.acaoBtn,
+                            {
+                              borderColor: theme.isDark
+                                ? 'rgba(248,113,113,0.35)'
+                                : 'rgba(220,38,38,0.25)',
+                              backgroundColor: theme.isDark
+                                ? 'rgba(127,29,29,0.25)'
+                                : 'rgba(254,226,226,0.9)',
+                            },
+                          ]}
+                          accessibilityLabel="Excluir linha"
+                          disabled={salvando || excluindo}
+                        >
+                          <Trash2 size={15} color={theme.loss} strokeWidth={2.3} />
+                        </TouchableOpacity>
+                      </View>
                     </Pressable>
                   );
                 })}
@@ -945,6 +1163,19 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         onConfirm={confirmarRubrica}
         onSkip={() => setRubricaIdx(null)}
         onCancel={() => setRubricaIdx(null)}
+      />
+
+      <ConfirmacaoExcluirResultadoModal
+        visible={excluirIdx != null}
+        nome={(excluirIdx != null ? linhas[excluirIdx]?.nome : '')?.trim() || 'Militar'}
+        nip={(excluirIdx != null ? linhas[excluirIdx]?.nip : '')?.trim() || '—'}
+        modalidade={modalidadeExcluivel(tipo)}
+        rotuloProva={titulo}
+        loading={excluindo}
+        onClose={() => {
+          if (!excluindo) setExcluirIdx(null);
+        }}
+        onConfirm={() => void confirmarExclusaoLinha()}
       />
     </AppModal>
   );
@@ -1063,9 +1294,24 @@ const styles = StyleSheet.create({
   colNota: { width: 72 },
   colSit: { width: 96 },
   colRubrica: { width: 120 },
+  colAcoes: { width: 88 },
   rubricaCell: {
     justifyContent: 'center',
     paddingRight: 0,
+  },
+  acoesCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingRight: 0,
+  },
+  acaoBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cellInput: {
     borderWidth: 1,

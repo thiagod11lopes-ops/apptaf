@@ -93,6 +93,17 @@ function renumerar(resultados: ResultadoCorridaItem[]): ResultadoCorridaItem[] {
   return resultados.map((r, i) => ({ ...r, corredor: i + 1 }));
 }
 
+function limparNotaCampos(): Pick<
+  ResultadoCorridaItem,
+  'notaTexto' | 'noraTexto' | 'reprovacaoTexto'
+> {
+  return {
+    notaTexto: undefined,
+    noraTexto: undefined,
+    reprovacaoTexto: undefined,
+  };
+}
+
 function calcularCamposDesempenho(
   tipo: TipoProvaAplicada,
   desempenhoRaw: string,
@@ -104,20 +115,25 @@ function calcularCamposDesempenho(
     return {
       tempoMs: 0,
       desempenhoTexto: undefined,
-      notaTexto: undefined,
-      noraTexto: undefined,
-      reprovacaoTexto: undefined,
+      ...limparNotaCampos(),
     };
   }
 
-  const fb = { dataNascimento: meta.dataNascimento, sexo: meta.sexo };
+  const fb = {
+    dataNascimento: (meta.dataNascimento || '').trim(),
+    sexo: meta.sexo,
+  };
 
   if (tipo === 'permanencia') {
     const low = desempenho.toLowerCase();
     const aprovado = low.startsWith('a');
     const reprovado = low.startsWith('r');
     if (!aprovado && !reprovado) {
-      return { desempenhoTexto: desempenho, tempoMs: 10 * 60 * 1000 };
+      return {
+        desempenhoTexto: desempenho,
+        tempoMs: 10 * 60 * 1000,
+        ...limparNotaCampos(),
+      };
     }
     const notaTexto = aprovado ? 'Aprovado' : 'REPROVADO';
     return {
@@ -133,7 +149,11 @@ function calcularCamposDesempenho(
   if (provaEhReps(tipo)) {
     const reps = parseInt(desempenho.replace(/\D/g, ''), 10);
     if (!Number.isFinite(reps) || reps < 0) {
-      return { desempenhoTexto: desempenho, tempoMs: 0 };
+      return {
+        desempenhoTexto: desempenho,
+        tempoMs: 0,
+        ...limparNotaCampos(),
+      };
     }
     const notaTexto = calcularNotaLinhaReps(tipo, reps, fb);
     const limpa = notaTexto === '—' ? undefined : notaTexto;
@@ -149,7 +169,12 @@ function calcularCamposDesempenho(
 
   const ms = tempoStringParaMsProva(desempenho);
   if (ms == null) {
-    return { desempenhoTexto: desempenho, tempoMs: 0 };
+    // Tempo incompleto (ex.: "12") — zera nota até MM:SS válido.
+    return {
+      desempenhoTexto: desempenho,
+      tempoMs: 0,
+      ...limparNotaCampos(),
+    };
   }
   const notaTexto = calcularNotaLinhaTempo(tipo as TipoProvaTAF, ms, fb, modoTafNaval);
   const limpa = notaTexto === '—' ? undefined : notaTexto;
@@ -160,6 +185,41 @@ function calcularCamposDesempenho(
     noraTexto: limpa,
     reprovacaoTexto: limpa === 'REPROVADO' ? 'Reprovado' : undefined,
     prova: tipo,
+  };
+}
+
+function valorDesempenhoExibido(
+  tipo: TipoProvaAplicada,
+  r: ResultadoCorridaItem,
+  draft?: string,
+): string {
+  if (draft != null) return draft;
+  if (tipo === 'permanencia' || provaEhReps(tipo)) {
+    return r.desempenhoTexto ?? '';
+  }
+  return (
+    formatMsByModality(
+      tipo === 'natacao' || tipo === 'abdominal_prancha' ? 'natacao' : 'corrida',
+      r.tempoMs,
+    ) || ''
+  );
+}
+
+function metaFromCadastro(
+  cadastros: CadastroItemPersist[],
+  nipOuNome: string,
+  fallback?: Pick<MetaLinha, 'dataNascimento' | 'sexo'>,
+): Pick<MetaLinha, 'dataNascimento' | 'sexo'> {
+  const busca = buscarCadastroPorNomeOuNip(cadastros, nipOuNome);
+  if (busca.kind === 'found') {
+    return {
+      dataNascimento: busca.cadastro.dataNascimento || '',
+      sexo: busca.cadastro.sexo,
+    };
+  }
+  return {
+    dataNascimento: fallback?.dataNascimento ?? '',
+    sexo: fallback?.sexo,
   };
 }
 
@@ -332,7 +392,13 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         setLinhas((prev) => {
           const next = [...prev];
           if (!next[idx]) return prev;
-          next[idx] = { ...next[idx], nip: nipFmt, nome: '' };
+          next[idx] = {
+            ...next[idx],
+            nip: nipFmt,
+            nome: '',
+            ...limparNotaCampos(),
+            tempoMs: provaEhReps(tipo) || tipo === 'permanencia' ? next[idx].tempoMs : 0,
+          };
           return next;
         });
         setMetas((prev) => {
@@ -354,7 +420,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         setLinhas((prev) => {
           const next = [...prev];
           if (!next[idx]) return prev;
-          next[idx] = { ...next[idx], nip: nipFmt, nome: '' };
+          next[idx] = { ...next[idx], nip: nipFmt, nome: '', ...limparNotaCampos() };
           return next;
         });
         setMetas((prev) => {
@@ -376,7 +442,9 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         editavel: true,
         dataNascimento: c.dataNascimento || '',
         sexo: c.sexo,
-        avisoNip: undefined,
+        avisoNip: !(c.dataNascimento || '').trim()
+          ? 'Cadastro sem data de nascimento — nota indisponível'
+          : undefined,
       };
       setMetas((prev) => {
         const next = [...prev];
@@ -389,7 +457,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
       setLinhas((prev) => {
         const next = [...prev];
         if (!next[idx]) return prev;
-        const desemp = (desempenhoDraft[idx] ?? '').trim();
+        const desemp = valorDesempenhoExibido(tipo, next[idx], desempenhoDraft[idx]).trim();
         const calc = desemp
           ? calcularCamposDesempenho(tipo, desemp, metaOk, modoTafNaval)
           : {};
@@ -406,6 +474,23 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
     [cadastros, tipo, desempenhoDraft, modoTafNaval],
   );
 
+  // Se o cadastro carregar depois do NIP digitado, resolve e recalcula a nota.
+  useEffect(() => {
+    if (!cadastros.length) return;
+    metas.forEach((meta, idx) => {
+      if (!meta?.editavel) return;
+      const nip = (nipDraft[idx] ?? linhas[idx]?.nip ?? '').trim();
+      if (nipDigitos(nip).length < 8) return;
+      // Já resolvido (tem nome) — não reprocessa.
+      if ((linhas[idx]?.nome ?? '').trim()) return;
+      const busca = buscarCadastroPorNomeOuNip(cadastros, nip);
+      if (busca.kind !== 'found') return;
+      aplicarNipNaLinha(idx, nip);
+    });
+    // Intencional: só reage à lista de cadastros (evita loop com metas/linhas).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cadastros]);
+
   const aplicarDesempenhoNaLinha = useCallback(
     (idx: number, raw: string) => {
       const valor =
@@ -418,23 +503,47 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         const next = [...prev];
         const atual = next[idx];
         if (!atual) return prev;
-        const busca = buscarCadastroPorNomeOuNip(cadastros, atual.nip || '');
-        const metaFb =
-          busca.kind === 'found'
-            ? {
-                dataNascimento: busca.cadastro.dataNascimento || '',
-                sexo: busca.cadastro.sexo,
-              }
-            : {
-                dataNascimento: metas[idx]?.dataNascimento ?? '',
-                sexo: metas[idx]?.sexo,
-              };
+        const nip = (nipDraft[idx] ?? atual.nip ?? '').trim();
+        const metaFb = metaFromCadastro(cadastros, nip, metas[idx]);
         const calc = calcularCamposDesempenho(tipo, valor, metaFb, modoTafNaval);
         next[idx] = { ...atual, ...calc, prova: tipo };
         return next;
       });
+
+      setMetas((prev) => {
+        const next = [...prev];
+        const meta = next[idx];
+        if (!meta?.editavel) return prev;
+        const nip = (nipDraft[idx] ?? '').trim();
+        const metaFb = metaFromCadastro(cadastros, nip, meta);
+        const tempoValido =
+          tipo !== 'permanencia' &&
+          !provaEhReps(tipo) &&
+          tempoStringParaMsProva(valor) != null;
+        const faltaDn = tempoValido && !(metaFb.dataNascimento || '').trim();
+        const avisoAtual = meta.avisoNip;
+        const avisoNovo = faltaDn
+          ? 'Cadastro sem data de nascimento — nota indisponível'
+          : avisoAtual?.includes('data de nascimento')
+            ? undefined
+            : avisoAtual;
+        if (
+          metaFb.dataNascimento === meta.dataNascimento &&
+          metaFb.sexo === meta.sexo &&
+          avisoNovo === avisoAtual
+        ) {
+          return prev;
+        }
+        next[idx] = {
+          ...meta,
+          dataNascimento: metaFb.dataNascimento || meta.dataNascimento,
+          sexo: metaFb.sexo ?? meta.sexo,
+          avisoNip: avisoNovo,
+        };
+        return next;
+      });
     },
-    [tipo, metas, modoTafNaval, cadastros],
+    [tipo, metas, modoTafNaval, cadastros, nipDraft],
   );
 
   const salvarLinhaSePronta = useCallback(
@@ -455,6 +564,60 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
       void persistirSessao(L, M);
     },
     [linhas, metas, tipo, persistirSessao],
+  );
+
+  /** Recalcula nota/situação com drafts atuais e só então grava (evita blur com estado antigo). */
+  const finalizarEdicaoLinha = useCallback(
+    (idx: number) => {
+      const atual = linhas[idx];
+      const meta = metas[idx];
+      if (!atual || !meta?.editavel) return;
+
+      const nip = (nipDraft[idx] ?? atual.nip ?? '').trim();
+      const valorRaw = valorDesempenhoExibido(tipo, atual, desempenhoDraft[idx]);
+      const valor =
+        tipo === 'permanencia' || provaEhReps(tipo)
+          ? valorRaw
+          : formatMinutosSegundosInput(valorRaw);
+      const metaFb = metaFromCadastro(cadastros, nip, meta);
+      const calc = calcularCamposDesempenho(tipo, valor, metaFb, modoTafNaval);
+
+      const nextLinhas = [...linhas];
+      nextLinhas[idx] = {
+        ...atual,
+        ...calc,
+        nip: atual.nip || nip,
+        prova: tipo,
+      };
+      const nextMetas = [...metas];
+      nextMetas[idx] = {
+        ...meta,
+        ...metaFb,
+        avisoNip:
+          metaFb.dataNascimento?.trim() || !valor.trim()
+            ? meta.avisoNip?.includes('não encontrado') || meta.avisoNip?.includes('incompleto')
+              ? meta.avisoNip
+              : undefined
+            : 'Cadastro sem data de nascimento — nota indisponível',
+      };
+
+      setLinhas(nextLinhas);
+      setMetas(nextMetas);
+      if (valor.trim()) {
+        setDesempenhoDraft((prev) => ({ ...prev, [idx]: valor }));
+      }
+      salvarLinhaSePronta(idx, nextLinhas, nextMetas);
+    },
+    [
+      linhas,
+      metas,
+      nipDraft,
+      desempenhoDraft,
+      tipo,
+      cadastros,
+      modoTafNaval,
+      salvarLinhaSePronta,
+    ],
   );
 
   const confirmarRubrica = useCallback(
@@ -627,21 +790,32 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
                         {r.corredor || idx + 1}
                       </Text>
 
-                      <Text
-                        style={[styles.td, styles.colNome, { color: ui.text }]}
-                        numberOfLines={2}
-                      >
-                        {editavel
-                          ? r.nome?.trim() || meta?.avisoNip || '—'
-                          : r.nome?.trim() || '—'}
-                      </Text>
+                      {editavel ? (
+                        <View style={[styles.td, styles.colNome]}>
+                          <Text style={{ color: ui.text, fontSize: 12, fontWeight: '700' }} numberOfLines={2}>
+                            {r.nome?.trim() || '—'}
+                          </Text>
+                          {meta?.avisoNip ? (
+                            <Text
+                              style={{ color: theme.loss, fontSize: 10, marginTop: 2, fontWeight: '600' }}
+                              numberOfLines={2}
+                            >
+                              {meta.avisoNip}
+                            </Text>
+                          ) : null}
+                        </View>
+                      ) : (
+                        <Text style={[styles.td, styles.colNome, { color: ui.text }]} numberOfLines={2}>
+                          {r.nome?.trim() || '—'}
+                        </Text>
+                      )}
 
                       {editavel ? (
                         <View style={[styles.td, styles.colNip]}>
                           <TextInput
                             value={nipDraft[idx] ?? r.nip ?? ''}
                             onChangeText={(t) => aplicarNipNaLinha(idx, t)}
-                            onBlur={() => salvarLinhaSePronta(idx)}
+                            onBlur={() => finalizarEdicaoLinha(idx)}
                             placeholder="NIP"
                             placeholderTextColor={theme.textMuted}
                             keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
@@ -666,19 +840,9 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
                       {editavel ? (
                         <View style={[styles.td, styles.colTempo]}>
                           <TextInput
-                            value={
-                              desempenhoDraft[idx] ??
-                              (tipo === 'permanencia' || provaEhReps(tipo)
-                                ? r.desempenhoTexto ?? ''
-                                : formatMsByModality(
-                                    tipo === 'natacao' || tipo === 'abdominal_prancha'
-                                      ? 'natacao'
-                                      : 'corrida',
-                                    r.tempoMs,
-                                  ) || '')
-                            }
+                            value={valorDesempenhoExibido(tipo, r, desempenhoDraft[idx])}
                             onChangeText={(t) => aplicarDesempenhoNaLinha(idx, t)}
-                            onBlur={() => salvarLinhaSePronta(idx)}
+                            onBlur={() => finalizarEdicaoLinha(idx)}
                             placeholder={placeholderDesempenho(tipo)}
                             placeholderTextColor={theme.textMuted}
                             keyboardType={

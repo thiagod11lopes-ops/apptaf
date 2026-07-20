@@ -166,7 +166,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     const onVisibilityChange = (): void => {
       if (document.visibilityState !== 'visible') return;
       if (!getFirebaseAuth()?.currentUser) return;
-      void syncManager.refreshCloudDiff();
+      void syncManager.refreshCloudDiff({ forcePull: true });
       // Voltou ao app online → tenta sync automática em segundo plano.
       syncManager.scheduleBackgroundSync(2_000);
     };

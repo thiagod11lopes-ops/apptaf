@@ -142,6 +142,11 @@ let backgroundSyncRunning = false;
 let backgroundSyncRetryAfterBusy = false;
 /** Após falha silenciosa, evita martelar a nuvem. */
 let backgroundSyncCooldownUntil = 0;
+/**
+ * Evento postgres_changes remoto: força full fetch + LWW mesmo se a estimativa
+ * incremental disser "nada pendente" (cadastro novo do chefe no membro).
+ */
+let realtimeForcePull = false;
 /** Dono para o qual o espelho nuvem→local já rodou nesta sessão online. */
 let cloudMirrorDoneOwner: string | null = null;
 let cloudMirrorPromise: Promise<{ ok: boolean; error?: string }> | null = null;
@@ -458,7 +463,17 @@ function onRealtimeRemoteChange(): void {
           `applyTeamWipeIfNeeded falhou: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
+      // Cadastro/sessão novos do outro aparelho: full fetch (incremental pode
+      // subestimar e o auto-sync abortava com "nothing_pending").
+      invalidateRemoteSnapshotCache();
+      try {
+        await forceNextFullRemoteFetch(uid);
+      } catch {
+        // segue o pull
+      }
     }
+    realtimeForcePull = true;
+    backgroundSyncCooldownUntil = 0;
     void refreshCloudQueueEstimate(true);
     syncManager.scheduleBackgroundSync(REALTIME_PULL_DEBOUNCE_MS);
   })();
@@ -1183,7 +1198,8 @@ export const syncManager = {
       backgroundSyncRetryAfterBusy = true;
       return { ok: false, skipped: 'busy' };
     }
-    if (Date.now() < backgroundSyncCooldownUntil) {
+    const forceFromRealtime = realtimeForcePull;
+    if (!forceFromRealtime && Date.now() < backgroundSyncCooldownUntil) {
       return { ok: false, skipped: 'cooldown' };
     }
     if (isModoDemonstracaoAtivo()) {
@@ -1202,6 +1218,7 @@ export const syncManager = {
     }
 
     backgroundSyncRunning = true;
+    realtimeForcePull = false;
     try {
       const uid = ownerUid ?? getCachedDataOwnerUid();
       if (uid) {
@@ -1227,12 +1244,22 @@ export const syncManager = {
       const pendingDownloads = counters.pendingDownloads ?? 0;
       const needsMirror = Boolean(uid && cloudMirrorDoneOwner !== uid);
 
-      if (pendingUploads <= 0 && pendingDownloads <= 0 && !needsMirror) {
+      if (
+        !forceFromRealtime &&
+        pendingUploads <= 0 &&
+        pendingDownloads <= 0 &&
+        !needsMirror
+      ) {
         notifyListeners();
         return { ok: false, skipped: 'nothing_pending' };
       }
 
-      if (needsMirror && pendingUploads <= 0 && pendingDownloads <= 0) {
+      if (
+        !forceFromRealtime &&
+        needsMirror &&
+        pendingUploads <= 0 &&
+        pendingDownloads <= 0
+      ) {
         const mirror = await runCloudAuthoritativeMirror({ silent: true });
         return {
           ok: mirror.ok,
@@ -1249,6 +1276,8 @@ export const syncManager = {
         }
       }
       if (!getActiveTeamKey()) {
+        // Mantém o pedido de pull se a chave ainda não desbloqueou.
+        if (forceFromRealtime) realtimeForcePull = true;
         await syncLogger.info(
           'sync',
           'Auto-sync adiada: criptografia da equipe não está ativa nesta sessão.',
@@ -1256,7 +1285,8 @@ export const syncManager = {
         return { ok: false, skipped: 'e2e' };
       }
 
-      if (needsMirror && uid) {
+      if ((needsMirror || forceFromRealtime) && uid) {
+        invalidateRemoteSnapshotCache();
         await forceNextFullRemoteFetch(uid);
       }
 
@@ -1264,6 +1294,7 @@ export const syncManager = {
         pendingUploads,
         pendingDownloads,
         needsMirror,
+        forceFromRealtime,
       });
       const result = await runSyncPipeline(authFn, { silent: true });
       if (result.ok) {
@@ -1276,16 +1307,34 @@ export const syncManager = {
     }
   },
 
-  /** Revalida diferenças locais × nuvem (ex.: PWA voltou ao foco). */
-  async refreshCloudDiff(): Promise<void> {
+  /**
+   * Revalida diferenças locais × nuvem.
+   * `forcePull`: full fetch + LWW mesmo sem pendências estimadas (foco do app / realtime).
+   */
+  async refreshCloudDiff(options?: { forcePull?: boolean }): Promise<void> {
     if (!syncAuthAvailable || syncInFlight) {
       await refreshPendingSummary();
       notifyListeners();
       return;
     }
+    const forcePull = options?.forcePull === true;
+    const uid = ownerUid ?? getCachedDataOwnerUid();
+    if (forcePull && uid) {
+      invalidateRemoteSnapshotCache();
+      try {
+        await forceNextFullRemoteFetch(uid);
+      } catch {
+        // ignore
+      }
+      realtimeForcePull = true;
+      backgroundSyncCooldownUntil = 0;
+    }
     await refreshPendingSummary();
     await refreshCloudQueueEstimate(true);
     notifyListeners();
+    if (forcePull) {
+      this.scheduleBackgroundSync(AUTO_SYNC_RECONNECT_MS);
+    }
   },
 
   onDisconnect(): void {

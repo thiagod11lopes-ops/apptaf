@@ -1,8 +1,9 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../Button';
+import { PasswordInput } from './PasswordInput';
 import { TermosCriacaoBancoModal } from './TermosCriacaoBancoModal';
 import { canUseEmailAuth } from '../../services/firebase/googleAuth';
 import { readPersistedAuthProfile } from '../../services/firebase/authProfile';
@@ -16,7 +17,13 @@ import {
   clearDatabaseTermsPreAccepted,
   setDatabaseTermsPreAcceptedForEmail,
 } from '../../offline-first/auth/databaseTerms';
-import { isKnownAuthEmailOnDevice } from '../../offline-first/auth/knownAuthEmails';
+import {
+  isKnownAuthEmailOnDevice,
+  rememberKnownAuthEmailOnDevice,
+  listRecentKnownAuthEmails,
+  filterRecentAuthEmailSuggestions,
+  RECENT_AUTH_EMAILS_SUGGEST_LIMIT,
+} from '../../offline-first/auth/knownAuthEmails';
 
 type Mode = 'login' | 'register' | 'forgot' | 'recovery';
 
@@ -52,11 +59,34 @@ export function EmailPasswordAuthForm({
   const [info, setInfo] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsModalVisible, setTermsModalVisible] = useState(false);
+  const [recentEmails, setRecentEmails] = useState<string[]>([]);
+  const [emailFocused, setEmailFocused] = useState(false);
   const emailWasAllowedRef = useRef(false);
+  const blurHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
     if (forceRecovery) setMode('recovery');
   }, [forceRecovery]);
+
+  const refreshRecentEmails = useCallback(() => {
+    void listRecentKnownAuthEmails(RECENT_AUTH_EMAILS_SUGGEST_LIMIT).then(setRecentEmails);
+  }, []);
+
+  useEffect(() => {
+    refreshRecentEmails();
+  }, [refreshRecentEmails]);
+
+  useEffect(() => {
+    return () => {
+      if (blurHideTimerRef.current) clearTimeout(blurHideTimerRef.current);
+    };
+  }, []);
+
+  const emailSuggestions = useMemo(
+    () => filterRecentAuthEmailSuggestions(email, recentEmails),
+    [email, recentEmails],
+  );
+  const showEmailSuggestions = emailFocused && emailSuggestions.length > 0;
 
   const inputStyle = [
     styles.input,
@@ -94,7 +124,7 @@ export function EmailPasswordAuthForm({
     [resetTermsState, termsAccepted],
   );
 
-  const handleEmailChange = useCallback(
+  const applyEmailText = useCallback(
     (text: string) => {
       setEmail(text);
       if (forceRecovery || mode === 'recovery' || mode === 'forgot') {
@@ -125,6 +155,26 @@ export function EmailPasswordAuthForm({
       }
     },
     [forceRecovery, mode, resetTermsState],
+  );
+
+  const handleEmailChange = useCallback(
+    (text: string) => {
+      applyEmailText(text);
+    },
+    [applyEmailText],
+  );
+
+  const selectSuggestedEmail = useCallback(
+    (suggested: string) => {
+      if (blurHideTimerRef.current) {
+        clearTimeout(blurHideTimerRef.current);
+        blurHideTimerRef.current = null;
+      }
+      applyEmailText(suggested);
+      setEmailFocused(false);
+      void rememberKnownAuthEmailOnDevice(suggested).then(refreshRecentEmails);
+    },
+    [applyEmailText, refreshRecentEmails],
   );
 
   const handleAcceptTerms = useCallback(() => {
@@ -168,6 +218,10 @@ export function EmailPasswordAuthForm({
 
     setLoading(true);
     try {
+      if (mode !== 'recovery') {
+        await rememberKnownAuthEmailOnDevice(email);
+        refreshRecentEmails();
+      }
       if (mode === 'login') {
         await signInWithEmail(email, password);
         onSuccess?.();
@@ -211,6 +265,7 @@ export function EmailPasswordAuthForm({
     onSuccess,
     password,
     password2,
+    refreshRecentEmails,
     requestPasswordReset,
     resetTermsState,
     signInWithEmail,
@@ -241,18 +296,61 @@ export function EmailPasswordAuthForm({
   return (
     <View style={styles.wrap}>
       {mode !== 'recovery' ? (
-        <TextInput
-          value={email}
-          onChangeText={handleEmailChange}
-          placeholder="E-mail @marinha.mil.br"
-          placeholderTextColor={theme.textMuted}
-          style={inputStyle}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          autoComplete="email"
-          textContentType="emailAddress"
-        />
+        <View style={styles.emailField}>
+          <TextInput
+            value={email}
+            onChangeText={handleEmailChange}
+            onFocus={() => {
+              if (blurHideTimerRef.current) {
+                clearTimeout(blurHideTimerRef.current);
+                blurHideTimerRef.current = null;
+              }
+              setEmailFocused(true);
+            }}
+            onBlur={() => {
+              blurHideTimerRef.current = setTimeout(() => setEmailFocused(false), 180);
+            }}
+            placeholder="E-mail @marinha.mil.br"
+            placeholderTextColor={theme.textMuted}
+            style={inputStyle}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            autoComplete="email"
+            textContentType="emailAddress"
+          />
+          {showEmailSuggestions ? (
+            <View
+              style={[
+                styles.suggestions,
+                {
+                  borderColor: theme.border,
+                  backgroundColor: theme.backgroundSecondary,
+                },
+              ]}
+            >
+              {emailSuggestions.map((item) => (
+                <Pressable
+                  key={item}
+                  onPress={() => selectSuggestedEmail(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Usar e-mail ${item}`}
+                  style={({ pressed }) => [
+                    styles.suggestionRow,
+                    {
+                      borderTopColor: theme.border,
+                      backgroundColor: pressed ? theme.background : 'transparent',
+                    },
+                  ]}
+                >
+                  <Text style={[ts.body, { color: theme.text }]} numberOfLines={1}>
+                    {item}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </View>
       ) : null}
 
       {mode === 'recovery' ? (
@@ -264,30 +362,20 @@ export function EmailPasswordAuthForm({
       ) : null}
 
       {mode === 'login' || mode === 'register' || mode === 'recovery' ? (
-        <TextInput
+        <PasswordInput
           value={password}
           onChangeText={setPassword}
           placeholder={mode === 'recovery' ? 'Nova senha' : 'Senha'}
-          placeholderTextColor={theme.textMuted}
-          style={inputStyle}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
           autoComplete={mode === 'login' ? 'password' : 'new-password'}
           textContentType={mode === 'login' ? 'password' : 'newPassword'}
         />
       ) : null}
 
       {mode === 'register' || mode === 'recovery' ? (
-        <TextInput
+        <PasswordInput
           value={password2}
           onChangeText={setPassword2}
           placeholder="Confirmar senha"
-          placeholderTextColor={theme.textMuted}
-          style={inputStyle}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
           autoComplete="new-password"
           textContentType="newPassword"
         />
@@ -364,12 +452,33 @@ export function EmailPasswordAuthForm({
 
 const styles = StyleSheet.create({
   wrap: { gap: 10 },
+  emailField: {
+    position: 'relative',
+    zIndex: 20,
+  },
   input: {
     borderWidth: 1,
     borderRadius: PREMIUM.radiusMd,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
+  },
+  suggestions: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '100%',
+    marginTop: 4,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    overflow: 'hidden',
+    zIndex: 30,
+    elevation: 6,
+  },
+  suggestionRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   btn: { marginTop: 4 },
   termsChip: {

@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../Button';
+import { PasswordInput } from './PasswordInput';
 
 type Props = {
   onSuccess?: () => void;
@@ -20,15 +21,6 @@ export function AlterarSenhaContaForm({ onSuccess, onError }: Props) {
   const [password2, setPassword2] = useState('');
   const [loading, setLoading] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
-
-  const inputStyle = [
-    styles.input,
-    {
-      borderColor: theme.border,
-      backgroundColor: theme.backgroundSecondary,
-      color: theme.text,
-    },
-  ];
 
   const submit = useCallback(async () => {
     setInfo(null);
@@ -69,39 +61,24 @@ export function AlterarSenhaContaForm({ onSuccess, onError }: Props) {
         Informe a senha atual e a nova. Assim o escudo verde continua ativo e NIP/nome seguem
         criptografados na nuvem.
       </Text>
-      <TextInput
+      <PasswordInput
         value={currentPassword}
         onChangeText={setCurrentPassword}
         placeholder="Senha atual"
-        placeholderTextColor={theme.textMuted}
-        style={inputStyle}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
         autoComplete="password"
         textContentType="password"
       />
-      <TextInput
+      <PasswordInput
         value={password}
         onChangeText={setPassword}
         placeholder="Nova senha"
-        placeholderTextColor={theme.textMuted}
-        style={inputStyle}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
         autoComplete="new-password"
         textContentType="newPassword"
       />
-      <TextInput
+      <PasswordInput
         value={password2}
         onChangeText={setPassword2}
         placeholder="Confirmar nova senha"
-        placeholderTextColor={theme.textMuted}
-        style={inputStyle}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
         autoComplete="new-password"
         textContentType="newPassword"
       />
@@ -113,13 +90,6 @@ export function AlterarSenhaContaForm({ onSuccess, onError }: Props) {
 
 const styles = StyleSheet.create({
   wrap: { gap: 10 },
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
   btn: { marginTop: 4 },
   info: { textAlign: 'center', marginTop: 4, lineHeight: 18 },
 });

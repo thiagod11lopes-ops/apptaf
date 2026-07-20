@@ -342,9 +342,37 @@ export async function ensureE2eUnlockedForSession(
     return true;
   }
 
-  if (await restoreE2eFromSessionStorage(ownerUid)) return true;
-
   const emailKey = normalizeAuthEmail(email ?? '');
+  // Membro: wrap da nuvem primeiro (DEK local pode ser de antes do wipe/reimport).
+  if (emailKey) {
+    try {
+      const { getCachedLoginUid } = await import('../firebase/authUid');
+      const loginUid = getCachedLoginUid();
+      if (loginUid && loginUid !== ownerUid) {
+        await activateE2eForAuthorizedMember(ownerUid, emailKey);
+        if (getActiveTeamKey()) return true;
+      }
+    } catch {
+      /* tenta storage */
+    }
+  }
+
+  if (await restoreE2eFromSessionStorage(ownerUid)) {
+    const ok = await withTimeout(probeStoredKeyAgainstCloud(ownerUid), 4_000, true);
+    if (ok) return true;
+    // DEK local não abre a nuvem — descarta e tenta wrap do membro.
+    clearE2eSession();
+    if (emailKey) {
+      try {
+        await activateE2eForAuthorizedMember(ownerUid, emailKey);
+        return Boolean(getActiveTeamKey());
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
   if (!emailKey) return false;
 
   try {
@@ -376,6 +404,19 @@ async function persistMemberWrap(
   );
 }
 
+async function cryptoKeysEqual(a: CryptoKey, b: CryptoKey): Promise<boolean> {
+  const [ra, rb] = await Promise.all([
+    crypto.subtle.exportKey('raw', a),
+    crypto.subtle.exportKey('raw', b),
+  ]);
+  if (ra.byteLength !== rb.byteLength) return false;
+  const ua = new Uint8Array(ra);
+  const ub = new Uint8Array(rb);
+  let diff = 0;
+  for (let i = 0; i < ua.length; i += 1) diff |= ua[i] ^ ub[i];
+  return diff === 0;
+}
+
 /**
  * Chefe com DEK desbloqueada: cria/atualiza acesso automático do e-mail autorizado.
  * O membro desbloqueia só com Auth (lê access_secret_b64 via RLS).
@@ -405,14 +446,16 @@ export async function provisionAuthorizedMemberE2eAccess(
   const emailKey = normalizeAuthEmail(email);
   const existing = await fetchTeamE2eMemberWrap(bossUid, emailKey);
   if (existing?.access_secret_b64?.trim()) {
-    // Já tem desbloqueio automático — revalida unwrap; se ok, mantém.
     try {
-      await unwrapTeamKeyRaw(
+      const unwrapped = await unwrapTeamKeyRaw(
         existing.wrapped_key_b64,
         existing.access_secret_b64,
         existing.salt_b64,
       );
-      return { ok: true };
+      // Wrap pode abrir, mas apontar para DEK antiga (pré-wipe) — regenera.
+      if (await cryptoKeysEqual(unwrapped, teamKey)) {
+        return { ok: true };
+      }
     } catch {
       /* regenera abaixo */
     }
@@ -559,9 +602,23 @@ export async function activateE2eForAuthorizedMember(
       setActiveTeamKey(teamKey);
       trustActiveTeamKey = true;
       await persistSessionKey(bossUid, teamKey, memberWrap.key_version ?? 1);
+      // Confirma se a DEK do wrap abre dados atuais da nuvem.
+      const cloudOk = await withTimeout(probeStoredKeyAgainstCloud(bossUid), 5_000, true);
+      if (!cloudOk) {
+        clearE2eSession();
+        throw new Error(
+          'Acesso do membro desatualizado. Peça ao chefe (escudo verde) para marcar de novo o checklist do seu e-mail em Configurações.',
+        );
+      }
       void healCloudAfterUnlock(bossUid);
       return;
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /checklist|desatualizado/i.test(error.message)
+      ) {
+        throw error;
+      }
       console.warn('[e2e] access_secret inválido; tentando fallbacks');
     }
   }

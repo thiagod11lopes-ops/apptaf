@@ -99,7 +99,7 @@ export function parseSyncError(raw?: string | null): SyncErrorDetail {
       'Chave diferente entre aparelhos',
       msg.replace(/^E2E_KEY_MISMATCH:\s*/i, '').trim() ||
         'A chave deste aparelho não abre os dados da nuvem do mesmo BNC.',
-      'Nos dois aparelhos: Conta → Sair → entre com o mesmo e-mail e senha. Depois sincronize no aparelho que tem os dados e, em seguida, no outro.',
+      'No chefe (escudo verde): Configurações → e-mails autorizados → desmarque e marque de novo o checklist do colega. No autorizado: Conta → Sair → entre com e-mail e senha.',
     );
   }
 

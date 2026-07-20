@@ -993,6 +993,27 @@ async function runSyncPipeline(
 
     completeStep('finalizing');
     await applyCountersAfterSuccessfulSync();
+    // Chefe: realinha wraps dos autorizados com a DEK atual (após wipe/CSV).
+    if (!isAuthorizedMemberSession() && ownerUid) {
+      try {
+        const { authorizedEmailRepository } = await import('../repositories/AuthorizedEmailRepository');
+        const { provisionE2eAccessForAllAuthorizedEmails } = await import(
+          '../../services/supabase/teamE2eSession'
+        );
+        const emails = await authorizedEmailRepository.listLocal(ownerUid);
+        if (emails.length > 0) {
+          await provisionE2eAccessForAllAuthorizedEmails(
+            ownerUid,
+            emails.map((e) => e.email),
+          );
+        }
+      } catch (provErr) {
+        await syncLogger.warn(
+          'e2e',
+          `Reprovision wraps autorizados: ${provErr instanceof Error ? provErr.message : String(provErr)}`,
+        );
+      }
+    }
     // Evita eco do próprio upload via postgres_changes reabrir sync em loop.
     suppressRealtimeEcho(2_000);
     notifyDataChanged();
@@ -1046,8 +1067,29 @@ async function runSyncPipeline(
     await refreshPendingSummary();
 
     // Não derruba escudo verde após login com senha (mismatch parcial em sync grande).
-    if (/E2E_KEY_MISMATCH/i.test(rawError) && !isE2eSessionTrusted()) {
-      clearE2eSession();
+    // Membro: limpa DEK stale e tenta wrap da nuvem de novo.
+    if (/E2E_KEY_MISMATCH/i.test(rawError)) {
+      if (isAuthorizedMemberSession()) {
+        clearE2eSession();
+        const email = getFirebaseAuth()?.currentUser?.email;
+        const uid = ownerUid ?? getCachedDataOwnerUid();
+        if (uid && email) {
+          try {
+            const { activateE2eForAuthorizedMember } = await import(
+              '../../services/supabase/teamE2eSession'
+            );
+            await activateE2eForAuthorizedMember(uid, email);
+            if (getActiveTeamKey()) {
+              backgroundSyncCooldownUntil = 0;
+              syncManager.scheduleBackgroundSync(2_000);
+            }
+          } catch {
+            /* segue erro na UI */
+          }
+        }
+      } else if (!isE2eSessionTrusted()) {
+        clearE2eSession();
+      }
     }
 
     // Falha de chave entre aparelhos: sempre mostrar na UI (mesmo em auto-sync).

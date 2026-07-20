@@ -192,8 +192,8 @@ export default function LoginScreen() {
               {trocarSenhaContaAberto ? (
                 <View style={styles.trocarSenhaBox}>
                   <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 18 }]}>
-                    Senha de login da conta. Membro autorizado: após a 1ª liberação, usa a própria senha
-                    para abrir o banco do chefe.
+                    Senha de login da conta. Membro autorizado: entra no banco do chefe só com a
+                    própria senha (acesso liberado na autorização).
                   </Text>
                   <AlterarSenhaContaForm
                     onSuccess={() => {

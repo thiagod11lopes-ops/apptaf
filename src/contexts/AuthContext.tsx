@@ -140,9 +140,12 @@ async function activateE2eWithPassword(
 function isMemberBootstrapNeeded(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const code = (error as { code?: string }).code;
-  if (code === E2E_MEMBER_NEEDS_BOOTSTRAP) return true;
+  if (code === E2E_MEMBER_NEEDS_BOOTSTRAP || code === 'e2e_member_wrap_missing') return true;
   const message = error instanceof Error ? error.message : String(error);
-  return message.includes('senha de criptografia do chefe');
+  return (
+    message.includes('senha de criptografia do chefe') ||
+    message.includes('acesso ao banco ainda não foi liberado')
+  );
 }
 
 function hydrateInitialUser(): AppAuthUser | null {

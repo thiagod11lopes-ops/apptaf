@@ -27,6 +27,8 @@ import {
 import {
   E2E_MEMBER_NEEDS_BOOTSTRAP,
   E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE,
+  E2E_MEMBER_WRAP_MISSING,
+  E2E_MEMBER_WRAP_MISSING_MESSAGE,
 } from '../../services/supabase/teamE2eSession';
 
 type Mode = 'login' | 'register' | 'forgot' | 'recovery';
@@ -50,7 +52,15 @@ function isBootstrapRequiredError(error: unknown): boolean {
   if ((error as { code?: string }).code === E2E_MEMBER_NEEDS_BOOTSTRAP) return true;
   const message = error instanceof Error ? error.message : String(error);
   return message === E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE
-    || message.includes('senha de criptografia do chefe');
+    || message.includes('senha de criptografia do chefe (campo extra)');
+}
+
+function isWrapMissingError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if ((error as { code?: string }).code === E2E_MEMBER_WRAP_MISSING) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return message === E2E_MEMBER_WRAP_MISSING_MESSAGE
+    || message.includes('acesso ao banco ainda não foi liberado');
 }
 
 export function EmailPasswordAuthForm({
@@ -252,6 +262,12 @@ export function EmailPasswordAuthForm({
           onSuccess?.();
           return;
         } catch (e) {
+          if (isWrapMissingError(e)) {
+            setNeedBossCryptoPassword(false);
+            setInfo(E2E_MEMBER_WRAP_MISSING_MESSAGE);
+            onError?.(E2E_MEMBER_WRAP_MISSING_MESSAGE);
+            return;
+          }
           if (isBootstrapRequiredError(e)) {
             setNeedBossCryptoPassword(true);
             setInfo(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
@@ -286,6 +302,12 @@ export function EmailPasswordAuthForm({
           onSuccess?.();
           return;
         } catch (e) {
+          if (isWrapMissingError(e)) {
+            setNeedBossCryptoPassword(false);
+            setInfo(E2E_MEMBER_WRAP_MISSING_MESSAGE);
+            onError?.(E2E_MEMBER_WRAP_MISSING_MESSAGE);
+            return;
+          }
           if (isBootstrapRequiredError(e)) {
             setNeedBossCryptoPassword(true);
             setInfo(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);

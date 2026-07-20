@@ -643,9 +643,13 @@ create table if not exists public.team_e2e_member_wraps (
   salt_b64 text not null,
   wrapped_key_b64 text not null,
   key_version int not null default 1,
+  access_secret_b64 text,
   updated_at timestamptz not null default now(),
   primary key (owner_uid, email_key)
 );
+
+alter table public.team_e2e_member_wraps
+  add column if not exists access_secret_b64 text;
 
 create index if not exists idx_team_e2e_member_wraps_email
   on public.team_e2e_member_wraps (email_key);

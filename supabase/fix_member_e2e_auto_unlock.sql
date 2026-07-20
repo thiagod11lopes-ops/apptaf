@@ -1,7 +1,8 @@
 -- =============================================================================
--- TAF — Embrulho E2E por membro autorizado (idempotente)
+-- TAF — Desbloqueio automático E2E para membro autorizado (idempotente)
 -- Cole no SQL Editor do Supabase e clique em Run.
--- Permite ao membro desbloquear a DEK do chefe (wrap automático na autorização).
+-- O chefe (com escudo verde) grava um segredo de acesso; o membro desbloqueia
+-- só com login Auth, sem senha de criptografia do chefe.
 -- =============================================================================
 
 create table if not exists public.team_e2e_member_wraps (
@@ -10,7 +11,6 @@ create table if not exists public.team_e2e_member_wraps (
   salt_b64 text not null,
   wrapped_key_b64 text not null,
   key_version int not null default 1,
-  access_secret_b64 text,
   updated_at timestamptz not null default now(),
   primary key (owner_uid, email_key)
 );

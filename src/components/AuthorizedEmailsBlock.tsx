@@ -84,12 +84,15 @@ export function AuthorizedEmailsBlock() {
       const pushErrors = await pushPendingAuthorizedEmails(user.uid);
       setInput('');
       if (pushErrors.length > 0) {
+        const dekLocked = pushErrors.some((e) => /escudo verde|criptografia bloqueada/i.test(e));
         setMsg(
-          `E-mail ${email} autorizado localmente. Envio à nuvem pendente — sincronize para o colega poder entrar no seu banco.`,
+          dekLocked
+            ? `E-mail ${email} autorizado. Com o escudo verde, sincronize para liberar o acesso automático do colega ao seu banco.`
+            : `E-mail ${email} autorizado localmente. Envio à nuvem pendente — sincronize para o colega poder entrar no seu banco.`,
         );
       } else {
         setMsg(
-          `E-mail ${email} autorizado na nuvem. O colega já pode entrar e usar o seu banco de dados.`,
+          `E-mail ${email} autorizado na nuvem com acesso automático. O colega entra só com a senha dele.`,
         );
       }
       await recarregar();
@@ -133,8 +136,8 @@ export function AuthorizedEmailsBlock() {
   return (
     <View>
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
-        Pessoas autorizadas entram com o e-mail/senha delas e acessam seus cadastros e resultados TAF.
-        Nuvem verde = e-mail no seu banco na nuvem; vermelha = ainda não sincronizado.
+        Pessoas autorizadas entram com o e-mail/senha delas e acessam automaticamente o seu banco
+        (sem senha de criptografia do chefe). Autorize com o escudo verde ativo para liberar o acesso na hora.
       </Text>
 
       <View style={styles.addRow}>

@@ -136,25 +136,36 @@ export function getCurrentFirebaseUid(): string | null {
   return null;
 }
 
-function translateAuthError(message: string): string {
+function translateAuthError(message: string, context?: 'signin' | 'signup' | 'reset'): string {
   const m = message.toLowerCase();
   if (m.includes('invalid login credentials') || m.includes('invalid_credentials')) {
     return 'E-mail ou senha incorretos.';
   }
   if (m.includes('email not confirmed') || m.includes('email_not_confirmed')) {
-    return 'Confirme seu e-mail pelo link enviado antes de entrar.';
+    return 'Confirme seu e-mail pelo link enviado antes de entrar. Verifique também a pasta de spam.';
   }
   if (m.includes('user already registered') || m.includes('already been registered')) {
-    return 'Este e-mail já possui conta. Faça login ou recupere a senha.';
+    return 'Este e-mail já possui conta. Use Entrar (não Criar conta) ou recupere a senha.';
   }
   if (m.includes('password should be') || m.includes('password is known')) {
     return 'A senha não atende aos requisitos. Use ao menos 6 caracteres.';
   }
-  if (m.includes('rate limit') || m.includes('too many') || m.includes('over_email_send_rate_limit')) {
+  if (
+    m.includes('rate limit') ||
+    m.includes('too many') ||
+    m.includes('over_email_send_rate_limit') ||
+    m.includes('email rate limit')
+  ) {
+    if (context === 'signup' || m.includes('email') || m.includes('over_email')) {
+      return (
+        'Limite de e-mails de confirmação do Supabase atingido (vale para o projeto inteiro, ' +
+        'não é bloqueio do e-mail autorizado). Aguarde cerca de 1 hora OU no painel Supabase: ' +
+        'Authentication → Providers → Email → desative "Confirm email" e tente Criar conta de novo uma vez.'
+      );
+    }
     return (
-      'Muitas tentativas de login/cadastro (limite do Supabase). ' +
-      'Aguarde alguns minutos (às vezes até ~1 h) e tente de novo. ' +
-      'Se já entrou e só falta o checklist do chefe, peça para marcar o acesso e tente Entrar de novo sem cadastrar outra vez.'
+      'Muitas tentativas de login (limite do Supabase). Aguarde alguns minutos e use Entrar. ' +
+      'Não use Criar conta de novo se a conta já existe.'
     );
   }
   return message;
@@ -183,7 +194,6 @@ export async function signInWithEmailPassword(
   if (error) {
     const msg = error.message || '';
     if (/rate limit|too many/i.test(msg)) {
-      // Última chance: sessão residual do mesmo e-mail após tentativas anteriores.
       const { data: again } = await sb.auth.getSession();
       const againEmail = again.session?.user?.email
         ? normalizeAuthEmail(again.session.user.email)
@@ -192,7 +202,7 @@ export async function signInWithEmailPassword(
         return mapSupabaseUser(again.session.user);
       }
     }
-    throw new Error(translateAuthError(msg));
+    throw new Error(translateAuthError(msg, 'signin'));
   }
   if (!data.user) throw new Error('Login sem usuário.');
   return mapSupabaseUser(data.user);
@@ -210,8 +220,25 @@ export async function signUpWithEmailPassword(
     password,
     options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
   });
-  if (error) throw new Error(translateAuthError(error.message));
+  if (error) {
+    const msg = error.message || '';
+    // Conta já criada em tentativa anterior (confirmação pendente ou concluída).
+    if (/already|registered|exists/i.test(msg)) {
+      throw new Error(translateAuthError(msg, 'signup'));
+    }
+    throw new Error(translateAuthError(msg, 'signup'));
+  }
   if (!data.user) throw new Error('Cadastro sem usuário.');
+
+  // Supabase pode devolver user sem session quando "Confirm email" está ativo.
+  // identities vazio = e-mail já cadastrado (anti-enumeration); trate como conta existente.
+  const identities = (data.user as { identities?: unknown[] }).identities;
+  if (Array.isArray(identities) && identities.length === 0) {
+    throw new Error(
+      'Este e-mail já possui conta (ou aguarda confirmação). Use Entrar ou verifique o e-mail de confirmação.',
+    );
+  }
+
   const needsEmailConfirmation = !data.session;
   return {
     user: mapSupabaseUser(data.user),
@@ -226,7 +253,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
   const { error } = await sb.auth.resetPasswordForEmail(normalizedEmail, {
     redirectTo: redirectTo || undefined,
   });
-  if (error) throw new Error(translateAuthError(error.message));
+  if (error) throw new Error(translateAuthError(error.message, 'reset'));
 }
 
 export async function updateAccountPassword(newPassword: string): Promise<void> {

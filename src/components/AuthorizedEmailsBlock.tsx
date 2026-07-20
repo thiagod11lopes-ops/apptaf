@@ -205,8 +205,9 @@ export function AuthorizedEmailsBlock() {
   return (
     <View>
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
-        Autorize o e-mail e marque o checklist para liberar o acesso ao banco (escudo verde ativo).
-        Checklist marcado = colega entra só com a senha dele, sem pedir senha de criptografia.
+        Checklist marcado = colega entra só com a senha dele. Se o cadastro dele falhar com
+        &quot;muitas tentativas&quot;, é limite de e-mail do Supabase: Authentication → Providers → Email →
+        desative Confirm email (ou aguarde ~1 h).
       </Text>
 
       <View style={styles.addRow}>

@@ -223,9 +223,8 @@ export function EmailPasswordAuthForm({
     }
 
     if (mode === 'register' && !termsAccepted) {
-      setTermsModalVisible(true);
-      onError?.('Aceite os termos de criação do banco de dados para continuar.');
-      return;
+      // Termos de "novo banco" só após o Auth saber se é chefe ou membro autorizado.
+      // Membro autorizado não cria banco — não bloqueia o cadastro aqui.
     }
 
     setLoading(true);
@@ -264,7 +263,10 @@ export function EmailPasswordAuthForm({
         }
       }
       if (mode === 'register') {
-        setDatabaseTermsPreAcceptedForEmail(email);
+        // Pré-aceite só se o usuário já leu os termos; membros autorizados ignoram no AuthContext.
+        if (termsAccepted) {
+          setDatabaseTermsPreAcceptedForEmail(email);
+        }
         try {
           const result = await signUpWithEmail(
             email,
@@ -274,7 +276,9 @@ export function EmailPasswordAuthForm({
               : undefined,
           );
           if (result.needsEmailConfirmation) {
-            setInfo('Conta criada. Confirme o e-mail pelo link enviado e depois faça login.');
+            setInfo(
+              'Conta criada. Confirme o e-mail pelo link enviado (e spam) e depois use Entrar — não clique em Criar conta de novo.',
+            );
             setMode('login');
             setPassword('');
             setPassword2('');
@@ -484,9 +488,15 @@ export function EmailPasswordAuthForm({
         title={title}
         onPress={() => void submit()}
         loading={loading}
-        disabled={mode === 'register' && !termsAccepted}
         style={styles.btn}
       />
+
+      {mode === 'register' ? (
+        <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 18, marginTop: 4 }]}>
+          E-mail autorizado pelo chefe: crie a conta uma vez, confirme o e-mail se pedir, depois use
+          Entrar. Se aparecer limite do Supabase, aguarde ou desative &quot;Confirm email&quot; no painel Auth.
+        </Text>
+      ) : null}
 
       {info ? (
         <Text style={[ts.caption, styles.info, { color: theme.gain }]}>{info}</Text>

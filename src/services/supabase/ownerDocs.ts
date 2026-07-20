@@ -54,6 +54,30 @@ function selectColumns(table: string): string {
     : 'id, owner_uid, data, updated_at';
 }
 
+/** Lê um único doc (owner_uid, id) — evita listar/descriptografar a tabela inteira. */
+export async function getOwnerDoc(
+  table: string,
+  ownerUid: string,
+  id: string,
+): Promise<CloudDocRow | null> {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from(table)
+    .select(selectColumns(table))
+    .eq('owner_uid', ownerUid)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  try {
+    const mapped = await mapDecryptedRows([data as CloudDocRow]);
+    return mapped[0] ?? null;
+  } catch {
+    // Rubrica/doc único ilegível não deve derrubar o download do cadastro.
+    return null;
+  }
+}
+
 export const E2E_KEY_MISMATCH_CODE = 'E2E_KEY_MISMATCH';
 export const E2E_KEY_MISMATCH_MESSAGE =
   'A chave de criptografia deste aparelho não abre os dados da nuvem (BNC). Saia da conta e entre novamente com e-mail e senha neste aparelho para alinhar a chave do banco.';

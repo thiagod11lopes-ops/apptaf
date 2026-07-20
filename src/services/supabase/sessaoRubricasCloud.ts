@@ -1,4 +1,4 @@
-import { deleteOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
+import { deleteOwnerDoc, getOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
 import type { SessaoResultadoRubrica } from '../../utils/sessaoLight';
 
 export type SessaoRubricasPayload = {
@@ -8,7 +8,6 @@ export type SessaoRubricasPayload = {
 export type SessaoRubricasDoc = SessaoRubricasPayload;
 
 const TABLE = 'sessao_rubricas';
-const RUBRIC_BATCH_THRESHOLD = 4;
 
 export async function setSessaoRubricasCloud(
   uid: string,
@@ -35,12 +34,15 @@ export async function getAllSessaoRubricasCloud(
   return map;
 }
 
+/** Uma linha — nunca varre a tabela inteira. */
 export async function getSessaoRubricasCloud(
   uid: string,
   id: string,
 ): Promise<SessaoRubricasPayload | null> {
-  const all = await getAllSessaoRubricasCloud(uid);
-  return all.get(id) ?? null;
+  const row = await getOwnerDoc(TABLE, uid, id);
+  if (!row) return null;
+  const doc = rowToDoc<SessaoRubricasPayload & { id: string }>(row);
+  return { resultados: Array.isArray(doc.resultados) ? doc.resultados : [] };
 }
 
 export async function getAllSessaoRubricasFirestoreMap(
@@ -54,7 +56,7 @@ export async function fetchSessaoRubricasForIds(
   ids: string[],
 ): Promise<Map<string, SessaoRubricasDoc>> {
   if (ids.length === 0) return new Map();
-  if (ids.length <= RUBRIC_BATCH_THRESHOLD) {
+  if (ids.length <= 8) {
     const pairs = await Promise.all(
       ids.map(async (id) => {
         const rub = await getSessaoRubricasCloud(uid, id);

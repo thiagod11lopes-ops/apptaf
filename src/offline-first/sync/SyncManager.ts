@@ -948,10 +948,21 @@ async function runSyncPipeline(
     }
 
     if (!result.success) {
-      if (backupIdBeforeSync != null) {
+      const applied = (result.stats.downloads ?? 0) + (result.stats.uploads ?? 0);
+      // Com downloads parciais (ex.: 1800 cadastros), restaurar o backup zerava o membro
+      // de volta a ~centenas e o pending nunca terminava.
+      if (backupIdBeforeSync != null && applied === 0) {
         setActiveStep('finalizing');
         setUiProgress(syncProgress.percent, 'Restaurando backup local…');
         await restoreLocalBackup(backupIdBeforeSync);
+      } else if (applied > 0) {
+        await syncLogger.warn(
+          'sync-manager',
+          `Sync parcial preservada: ↑${result.stats.uploads} ↓${result.stats.downloads} (sem restore). Erros: ${result.stats.errors.length}`,
+        );
+        notifyDataChanged();
+        await refreshPendingSummary();
+        await refreshCloudQueueEstimate(true);
       }
       const firstError =
         result.stats.errors.map((e) => String(e ?? '').trim()).find((e) => e.length > 0) ??
@@ -1123,7 +1134,7 @@ export const syncManager = {
       ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
       this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
       // Espelho nuvem na sessão online (não bloqueia aqui — Auth pode await).
-      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 20_000, silent: true });
+      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
     } else {
       stopCloudDiffWatch();
       stopRealtimeBridge();
@@ -1162,7 +1173,7 @@ export const syncManager = {
       startCloudDiffWatch();
       ensureRealtimeBridge(dataOwnerUid);
       this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
-      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 20_000, silent: true });
+      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
     }
     notifyListeners();
   },
@@ -1187,7 +1198,7 @@ export const syncManager = {
     await refreshCloudQueueEstimate(true);
     notifyListeners();
     this.scheduleBackgroundSync(AUTO_SYNC_RECONNECT_MS);
-    void this.awaitCloudAuthoritativeMirror({ timeoutMs: 20_000, silent: true });
+    void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
   },
 
   /**
@@ -1197,7 +1208,7 @@ export const syncManager = {
     timeoutMs?: number;
     silent?: boolean;
   }): Promise<{ ok: boolean; error?: string; timedOut?: boolean }> {
-    const timeoutMs = options?.timeoutMs ?? 18_000;
+    const timeoutMs = options?.timeoutMs ?? 120_000;
     const silent = options?.silent !== false;
     if (getConnectivityState() !== 'ONLINE') {
       return { ok: false, error: 'offline' };

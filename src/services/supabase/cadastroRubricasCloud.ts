@@ -1,10 +1,9 @@
-import { deleteOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
+import { deleteOwnerDoc, getOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
 import type { CadastroRubricas } from '../../utils/cadastroLight';
 
 export type CadastroRubricasPayload = CadastroRubricas;
 
 const TABLE = 'cadastro_rubricas';
-const RUBRIC_BATCH_THRESHOLD = 4;
 
 export async function setCadastroRubricasCloud(
   uid: string,
@@ -29,12 +28,14 @@ export async function getAllCadastroRubricasCloud(
   return map;
 }
 
+/** Uma linha — nunca varre a tabela inteira. */
 export async function getCadastroRubricasCloud(
   uid: string,
   id: string,
 ): Promise<CadastroRubricasPayload | null> {
-  const all = await getAllCadastroRubricasCloud(uid);
-  return all.get(id) ?? null;
+  const row = await getOwnerDoc(TABLE, uid, id);
+  if (!row) return null;
+  return rowToDoc<CadastroRubricasPayload & { id: string }>(row);
 }
 
 export async function getAllCadastroRubricasFirestoreMap(
@@ -43,12 +44,16 @@ export async function getAllCadastroRubricasFirestoreMap(
   return getAllCadastroRubricasCloud(uid);
 }
 
+/**
+ * Baixa rubricas para os ids pedidos.
+ * Muitos ids → 1 full fetch. Poucos → get por id (sem N×full-table).
+ */
 export async function fetchCadastroRubricasForIds(
   uid: string,
   ids: string[],
 ): Promise<Map<string, CadastroRubricas>> {
   if (ids.length === 0) return new Map();
-  if (ids.length <= RUBRIC_BATCH_THRESHOLD) {
+  if (ids.length <= 8) {
     const pairs = await Promise.all(
       ids.map(async (id) => {
         const rub = await getCadastroRubricasCloud(uid, id);

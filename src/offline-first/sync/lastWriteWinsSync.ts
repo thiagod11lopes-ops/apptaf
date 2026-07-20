@@ -729,16 +729,17 @@ async function downloadRecord(
 
   let payload: SyncRecord = remote;
   if (collection === 'cadastros' && remote.deleted !== true) {
-    const rubricas =
-      rubricCaches?.cadastros.get(remote.id) ??
-      (await getCadastroRubricasFirestore(ownerUid, remote.id));
+    // Com cache pré-carregado: ausência = sem rubrica (NÃO refetch da tabela inteira).
+    const rubricas = rubricCaches
+      ? (rubricCaches.cadastros.get(remote.id) ?? null)
+      : await getCadastroRubricasFirestore(ownerUid, remote.id);
     if (rubricas) {
       payload = mergeCadastroRubricas(payload as CadastroRecord, rubricas) as SyncRecord;
     }
   } else if (collection === 'sessoes' && remote.deleted !== true) {
-    const rubDoc =
-      rubricCaches?.sessoes.get(remote.id) ??
-      (await getSessaoRubricasFirestore(ownerUid, remote.id));
+    const rubDoc = rubricCaches
+      ? (rubricCaches.sessoes.get(remote.id) ?? null)
+      : await getSessaoRubricasFirestore(ownerUid, remote.id);
     if (rubDoc) {
       payload = applySessaoRubricasFromRemote(payload as SessaoRecord, rubDoc) as SyncRecord;
     }

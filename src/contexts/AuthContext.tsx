@@ -290,7 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await syncManager.bindSession(ownerUid);
       syncManager.setAuthAvailable(true);
       if (getConnectivityState() === 'ONLINE') {
-        await syncManager.awaitCloudAuthoritativeMirror({ timeoutMs: 18_000, silent: true });
+        await syncManager.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
         notifyDataChanged();
       }
       void syncManager.refreshCloudDiff().catch((err) => {
@@ -313,7 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const owner = getCachedDataOwnerUid() ?? mapped.uid;
         void restoreE2eForOwner(owner, mapped.email);
         if (getConnectivityState() === 'ONLINE') {
-          void syncManager.awaitCloudAuthoritativeMirror({ timeoutMs: 18_000, silent: true });
+          void syncManager.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
         }
         return true;
       }
@@ -354,7 +354,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Online: espelha a nuvem no IndexedDB antes da UI confiar nos dados locais.
             if (getConnectivityState() === 'ONLINE') {
               await syncManager.awaitCloudAuthoritativeMirror({
-                timeoutMs: 18_000,
+                timeoutMs: 180_000,
                 silent: true,
               });
             }

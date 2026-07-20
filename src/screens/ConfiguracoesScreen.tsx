@@ -7,7 +7,6 @@ import { Card } from '../components/Card';
 import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
 import { ExcluirTodosDadosBlock } from '../components/ExcluirTodosDadosBlock';
 import { AuthorizedEmailsBlock } from '../components/AuthorizedEmailsBlock';
-import { SyncStatusBar } from '../components/sismav/SyncStatusBar';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function ConfiguracoesScreen() {
@@ -37,17 +36,6 @@ export default function ConfiguracoesScreen() {
             />
           </View>
         </Card>
-
-        {firebaseEnabled ? (
-          <Card elevated>
-            <Text style={ts.h2}>Sincronização com a nuvem</Text>
-            <Text style={[ts.caption, styles.sectionHint, { color: theme.textSecondary }]}>
-              Use a chave na tela inicial para enviar e receber dados. O carregamento rápido some em
-              até 3 segundos; se a sync continuar, acompanhe o progresso aqui.
-            </Text>
-            <SyncStatusBar embedded />
-          </Card>
-        ) : null}
 
         {isAuthenticated && firebaseEnabled && isBoss ? (
           <Card elevated>

@@ -5,7 +5,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
-import { SyncLiveStatusModal } from '../components/sismav/SyncLiveStatusModal';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
@@ -39,10 +38,9 @@ function emailPrefixoExibicao(email: string | null | undefined): string | null {
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { isNarrowPhone } = useAplicarTafLayout();
-  const { user, authReady, isAuthenticated, firebaseEnabled, dataOwnerUid } = useAuth();
-  const { syncUi, pendingCount, startSyncFromToggle } = useOfflineSyncState();
+  const { user, authReady, isAuthenticated, dataOwnerUid } = useAuth();
+  const { syncUi } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
-  const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
 
   const emailPrefixo = useMemo(
     () => (isAuthenticated ? emailPrefixoExibicao(user?.email) : null),
@@ -70,35 +68,13 @@ export default function HomeScreen() {
     };
   }, [authReady, isAuthenticated, dataOwnerUid, user?.uid]);
 
-  const syncPendingTotal = useMemo(() => {
-    const uploads = syncUi.counters.pendingUploads ?? pendingCount;
-    const downloads = syncUi.counters.pendingDownloads ?? 0;
-    return uploads + downloads;
-  }, [pendingCount, syncUi.counters.pendingDownloads, syncUi.counters.pendingUploads]);
-
-  /** Abre modal de status; se houver pendência e não estiver syncando, dispara sync em background. */
-  const handleSyncPress = useCallback(() => {
-    setSyncStatusModalVisible(true);
-    if (!syncUi.isSyncing && syncPendingTotal > 0) {
-      void startSyncFromToggle();
-    }
-  }, [startSyncFromToggle, syncUi.isSyncing, syncPendingTotal]);
-
-  const syncSaveIconState = useMemo((): 'idle' | 'pending' | 'success' => {
-    if (syncUi.phase === 'success' || syncUi.phase === 'already_up_to_date') {
-      return syncPendingTotal > 0 ? 'pending' : 'success';
-    }
-    if (syncPendingTotal > 0 || syncUi.isSyncing) return 'pending';
-    return 'idle';
-  }, [syncUi.phase, syncUi.isSyncing, syncPendingTotal]);
-
-  /** Cards = espelho do IndexedDB local (não da API da nuvem). */
+  /** Cards = espelho local do banco na nuvem (atualizado automaticamente online). */
   const recarregarResumo = useCallback(async () => {
     try {
       const next = await loadResumoInicioFromIndexedDb();
       setResumo(next);
     } catch (error) {
-      console.warn('[home] falha ao recalcular cards do IndexedDB:', error);
+      console.warn('[home] falha ao recalcular cards:', error);
     }
     if (isAuthenticated && dataOwnerUid) {
       try {
@@ -112,7 +88,7 @@ export default function HomeScreen() {
 
   useAuthDataReload(recarregarResumo);
 
-  // Após sync (sucesso, já atualizado ou erro), relê o IndexedDB — não depende da nuvem ter respondido.
+  // Após sync automático (sucesso, já atualizado ou erro), atualiza os cards.
   useEffect(() => {
     const phase = syncUi.phase;
     if (
@@ -166,14 +142,7 @@ export default function HomeScreen() {
             </Text>
           ) : null}
         </View>
-        <TopActionIcons
-          activeRoute="Home"
-          inline
-          centered
-          onSyncPress={firebaseEnabled ? handleSyncPress : undefined}
-          syncPendingBadge={syncPendingTotal > 0 ? syncPendingTotal : 0}
-          syncSaveIconState={syncSaveIconState}
-        />
+        <TopActionIcons activeRoute="Home" inline centered />
       </View>
 
       <TafGlassPanel accent="cyan" style={styles.statsPanel}>
@@ -219,11 +188,6 @@ export default function HomeScreen() {
           />
         </View>
       </TafGlassPanel>
-
-      <SyncLiveStatusModal
-        visible={syncStatusModalVisible}
-        onClose={() => setSyncStatusModalVisible(false)}
-      />
     </MobileScreenScaffold>
   );
 }

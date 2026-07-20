@@ -1,10 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Platform, StyleSheet, View, Text, ActivityIndicator } from 'react-native';
+import { Platform, StyleSheet, View, ActivityIndicator } from 'react-native';
 import {
   BookOpen,
-  Check,
   ClipboardList,
-  Save,
   Settings,
   Shield,
   User,
@@ -70,10 +68,6 @@ type Props = {
   inline?: boolean;
   /** Centraliza os ícones na faixa (Home). */
   centered?: boolean;
-  /** Abre modal de sincronização com a nuvem (ícone à esquerda de Normas). */
-  onSyncPress?: () => void;
-  syncPendingBadge?: number;
-  syncSaveIconState?: 'idle' | 'pending' | 'success';
 };
 
 function wrapTooltip(
@@ -94,12 +88,9 @@ export function TopActionIcons({
   activeRoute,
   inline = false,
   centered = false,
-  onSyncPress,
-  syncPendingBadge = 0,
-  syncSaveIconState = 'idle',
 }: Props) {
   const { theme } = useTheme();
-  const { isAuthenticated, isBoss } = useAuth();
+  const { isAuthenticated, isBoss, firebaseEnabled } = useAuth();
   const { e2eActive } = useE2eEncryptionStatus();
   const [e2eModalVisible, setE2eModalVisible] = useState(false);
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
@@ -159,96 +150,17 @@ export function TopActionIcons({
       : { elevation: 8 },
   ];
 
-  const syncBorderColor =
-    syncSaveIconState === 'success'
-      ? theme.gain
-      : syncPendingBadge > 0
-        ? theme.primary
-        : theme.border;
-  const syncIconColor =
-    syncSaveIconState === 'success'
-      ? theme.gain
-      : syncPendingBadge > 0
-        ? theme.primary
-        : tabInk;
-
-  const syncTooltipTitle =
-    syncSaveIconState === 'success'
-      ? 'Sincronizado'
-      : syncPendingBadge > 0
-        ? 'Atualizações pendentes'
-        : 'Status da nuvem';
-  const syncTooltipDescription =
-    syncSaveIconState === 'success'
-      ? 'Dados atualizados com a nuvem. Toque para ver o status.'
-      : syncPendingBadge > 0
-        ? `${syncPendingBadge} pendência(s) — sync em tempo real com a nuvem. Toque para acompanhar.`
-        : 'Sync em tempo real com a nuvem e outros dispositivos. Toque para ver o status.';
-
   const e2eColor = e2eActive ? theme.gain : theme.loss;
   const e2eTooltipTitle = e2eActive ? 'Criptografia ativa' : 'Criptografia inativa';
   const e2eTooltipDescription = e2eActive
     ? 'NIP e nome vão cifrados para a nuvem. Toque para detalhes.'
     : 'Chave inativa nesta sessão. Toque para ver como ativar.';
+  const showE2eShield = firebaseEnabled && isAuthenticated;
 
   return (
     <>
     <View style={[styles.row, inline && styles.rowInline, centered && styles.rowCentered]}>
-      {onSyncPress
-        ? wrapTooltip(
-            inline,
-            syncTooltipTitle,
-            syncTooltipDescription,
-            <PressableScale
-              onPress={onSyncPress}
-              style={[btnStyle, { borderColor: syncBorderColor }]}
-              accessibilityLabel={
-                syncSaveIconState === 'success'
-                  ? 'Nuvem sincronizada. Abrir status.'
-                  : syncPendingBadge > 0
-                    ? `${syncPendingBadge} pendência(s). Abrir status da sincronização automática.`
-                    : 'Abrir status da sincronização com a nuvem'
-              }
-            >
-              <Save size={iconSize} color={syncIconColor} strokeWidth={strokeWidth} />
-              {syncSaveIconState === 'success' ? (
-                <View
-                  style={[
-                    styles.badge,
-                    styles.successBadge,
-                    {
-                      backgroundColor: theme.gain,
-                      borderColor: theme.cardBg,
-                    },
-                    Platform.OS === 'web'
-                      ? ({ boxShadow: '0 2px 8px rgba(22,163,74,0.45)' } as object)
-                      : { elevation: 4 },
-                  ]}
-                >
-                  <Check size={11} color="#FFFFFF" strokeWidth={3} />
-                </View>
-              ) : syncPendingBadge > 0 ? (
-                <View
-                  style={[
-                    styles.badge,
-                    {
-                      backgroundColor: theme.loss,
-                      borderColor: theme.cardBg,
-                    },
-                    Platform.OS === 'web'
-                      ? ({ boxShadow: '0 2px 8px rgba(220,38,38,0.45)' } as object)
-                      : { elevation: 4 },
-                  ]}
-                >
-                  <Text style={styles.badgeText}>
-                    {syncPendingBadge > 99 ? '99+' : syncPendingBadge.toLocaleString('pt-BR')}
-                  </Text>
-                </View>
-              ) : null}
-            </PressableScale>,
-          )
-        : null}
-      {onSyncPress
+      {showE2eShield
         ? wrapTooltip(
             inline,
             e2eTooltipTitle,
@@ -411,29 +323,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 4,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  successBadge: {
-    minWidth: 20,
-    width: 20,
-    paddingHorizontal: 0,
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
-    lineHeight: 12,
-    fontVariant: ['tabular-nums'],
   },
 });

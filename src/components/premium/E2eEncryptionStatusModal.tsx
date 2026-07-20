@@ -68,14 +68,13 @@ export function E2eEncryptionStatusModal({ visible, e2eActive, onClose }: Props)
         {e2eActive ? (
           <>
             <Text style={[styles.paragraph, { color: theme.text }]}>
-              A chave da equipe está desbloqueada nesta sessão. Ao sincronizar com a nuvem, o{' '}
+              A chave da equipe está desbloqueada nesta sessão. Online, o{' '}
               <Text style={styles.em}>NIP</Text> e o <Text style={styles.em}>nome</Text> dos
-              militares vão cifrados (AES-GCM) — quem olhar o banco na nuvem não lê esses dados
-              sem a chave.
+              militares vão cifrados (AES-GCM) para a nuvem — quem olhar o banco remoto não lê esses
+              dados sem a chave.
             </Text>
             <Text style={[styles.paragraph, { color: theme.textSecondary }]}>
-              No aparelho (uso offline), os cadastros continuam legíveis para o app funcionar sem
-              internet.
+              Sem internet, o app usa o cache local do aparelho para continuar funcionando.
             </Text>
           </>
         ) : (
@@ -83,11 +82,11 @@ export function E2eEncryptionStatusModal({ visible, e2eActive, onClose }: Props)
             <Text style={[styles.paragraph, { color: theme.text }]}>
               A chave de criptografia <Text style={styles.em}>não está ativa</Text> nesta sessão.
               Enquanto isso, o sistema <Text style={styles.em}>não envia</Text> NIP e nome em texto
-              claro para a nuvem — a sincronização é bloqueada até desbloquear a chave.
+              claro para a nuvem — o acesso cifrado fica bloqueado até desbloquear a chave.
             </Text>
             <Text style={[styles.paragraph, { color: theme.textSecondary }]}>
               Para ativar: saia da conta e entre novamente com <Text style={styles.em}>e-mail e
-              senha</Text>. Depois disso, o ícone fica verde e os cadastros sincronizam cifrados.
+              senha</Text>. Depois disso, o ícone fica verde e os cadastros seguem cifrados na nuvem.
             </Text>
           </>
         )}

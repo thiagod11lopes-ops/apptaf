@@ -51,11 +51,11 @@ export default function LoginScreen() {
     if (isSessionLoading) return 'Preparando conta…';
     if (passwordRecoveryPending) return 'Defina uma nova senha para continuar';
     if (!isAuthenticated) return 'Modo offline · dados locais';
-    if (appMode !== 'OFFLINE') return statusHint ?? 'Sincronizando com a nuvem…';
+    if (appMode !== 'OFFLINE') return statusHint ?? 'Atualizando com a nuvem…';
     if (pendingCount > 0) {
-      return `Conectado · ${pendingCount} alteração(ões) local(is) aguardando sync`;
+      return `Conectado · ${pendingCount} alteração(ões) serão enviadas ao voltar online`;
     }
-    return 'Conectado · use a chave na tela inicial para sincronizar';
+    return 'Conectado · online a nuvem é a fonte dos dados';
   }, [
     appMode,
     isAuthenticated,
@@ -236,7 +236,7 @@ export default function LoginScreen() {
 
         <Text style={[ts.caption, styles.footer]}>
           {firebaseEnabled
-            ? 'Após entrar, sua sessão permanece ativa. A sincronização é feita manualmente na tela inicial.'
+            ? 'Após entrar, sua sessão permanece ativa. Online, o banco da nuvem é a fonte dos dados.'
             : 'Adicione as chaves do Supabase em .env para habilitar login e nuvem.'}
         </Text>
       </ScrollView>

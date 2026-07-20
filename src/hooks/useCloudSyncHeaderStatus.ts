@@ -35,13 +35,13 @@ export function useCloudSyncHeaderStatus(_cloudLoad?: CloudUserLoadProps) {
     if (syncInProgress) return null;
     if (uploadError) return uploadError;
     if (pendingCount > 0) {
-      return `${pendingCount} alteração(ões) local(is) · use a chave na tela inicial`;
+      return `${pendingCount} alteração(ões) aguardando envio automático`;
     }
     if (isAuthenticated && isOfflineMode) {
       return 'Modo offline';
     }
     if (!online) return 'Sem internet · operação 100% local';
-    return 'Modo offline · use a chave na tela inicial para sincronizar';
+    return 'Online · nuvem como fonte dos dados';
   }, [
     syncInProgress,
     uploadError,

@@ -81,6 +81,12 @@ export function EmailPasswordAuthForm({
       setPassword2('');
       if (next === 'register') {
         if (!termsAccepted) setTermsModalVisible(true);
+      } else if (next === 'login') {
+        // Mantém pré-aceite se o usuário já leu os termos (fluxo "Já tenho conta").
+        setTermsModalVisible(false);
+        if (!termsAccepted) {
+          clearDatabaseTermsPreAccepted();
+        }
       } else {
         resetTermsState();
       }

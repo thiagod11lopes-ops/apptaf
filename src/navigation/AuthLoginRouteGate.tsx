@@ -25,8 +25,13 @@ export function AuthLoginRouteGate() {
       return;
     }
 
+    // Primeira observação: se o login já confirmou enquanto a sessão ainda prepara
+    // (perfil hidratado / evento SIGNED_IN antes do gate ver "deslogado"), marca para ir à Home.
     if (wasAuthenticatedRef.current === null) {
       wasAuthenticatedRef.current = isAuthenticated;
+      if (isAuthenticated && isSessionLoading) {
+        goHomeWhenSessionReadyRef.current = true;
+      }
       return;
     }
 

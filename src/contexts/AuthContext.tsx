@@ -149,6 +149,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /** UID já finalizado nesta sessão (evita re-finalizar em loop com eventos repetidos do Supabase). */
   const finalizedUidRef = useRef<string | null>(null);
   const finalizingRef = useRef(false);
+  /** Callers concorrentes (signIn + onAuthStateChange) aguardam a mesma Promise em vez de retornar cedo. */
+  const finalizeInFlightRef = useRef<Promise<boolean> | null>(null);
+  /** Evita que SIGNED_IN finalize antes do E2E com senha no fluxo e-mail/senha. */
+  const emailPasswordAuthInFlightRef = useRef(false);
   const termsGateRef = useRef(termsGate);
   termsGateRef.current = termsGate;
 
@@ -206,7 +210,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     finalizedUidRef.current = null;
     finalizingRef.current = false;
     setTermsBusy(false);
-    setTermsGate(null);
+    const pendingGate = termsGateRef.current;
+    if (pendingGate) {
+      // Libera quem estiver awaiting ensureNewDatabaseTermsAccepted (evita "Concluindo login…" eterno).
+      pendingGate.resolve(false);
+      setTermsGate(null);
+    }
     setCloudAuthUser(null);
     setUser(null);
     setIsAuthorizedMember(false);
@@ -257,55 +266,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (supabaseEnabled) {
       await syncManager.bindSession(ownerUid);
       syncManager.setAuthAvailable(true);
-      await syncManager.refreshCloudDiff();
+      // Diff da nuvem não deve bloquear a entrada no app.
+      void syncManager.refreshCloudDiff().catch((err) => {
+        console.warn('[auth] refreshCloudDiff (fallback) falhou:', err);
+      });
     }
   }, [supabaseEnabled]);
 
   const finalizeAuthenticatedSession = useCallback(
-    async (mapped: AppAuthUser, { force = false }: { force?: boolean } = {}) => {
-      // Evita loop de finalização: eventos INITIAL_SESSION/SIGNED_IN repetidos para o mesmo usuário.
-      if (finalizingRef.current) return;
+    async (mapped: AppAuthUser, { force = false }: { force?: boolean } = {}): Promise<boolean> => {
+      // signIn e onAuthStateChange disparam juntos — todos aguardam a mesma finalização.
+      if (finalizeInFlightRef.current) {
+        const ok = await finalizeInFlightRef.current;
+        if (!force && finalizedUidRef.current === mapped.uid) return ok;
+        if (!force) return ok;
+      }
       if (!force && finalizedUidRef.current === mapped.uid) {
         setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
         syncManager.setAuthAvailable(true);
-        return;
+        return true;
       }
-      finalizingRef.current = true;
-      finalizedUidRef.current = mapped.uid;
-      setIsSessionLoading(true);
+
+      const run = async (): Promise<boolean> => {
+        finalizingRef.current = true;
+        finalizedUidRef.current = mapped.uid;
+        try {
+          // Termos antes do spinner — o modal precisa ficar usável (sem "Concluindo login…" por cima).
+          const termsOk = await ensureNewDatabaseTermsAccepted(mapped.uid, mapped.email);
+          if (!termsOk) {
+            await abortSessionWithoutTerms();
+            return false;
+          }
+
+          setIsSessionLoading(true);
+          await hydrateAppStorageFromIndexedDb();
+          confirmCloudDisplayReady();
+          const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
+          await restoreE2eForOwner(session.dataOwnerUid);
+          setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
+          setUser(mapped);
+          setDataOwnerUid(session.dataOwnerUid);
+          setIsAuthorizedMember(session.isAuthorizedMember);
+          setAuthUidState(mapped.uid, session.dataOwnerUid, true);
+          persistAuthProfile(mapped);
+          void rememberKnownAuthEmailOnDevice(mapped.email);
+          clearPendingSyncResume();
+          setAuthReady(true);
+          notifyDataChanged();
+
+          if (supabaseEnabled) {
+            await syncManager.bindSession(session.dataOwnerUid);
+            syncManager.setAuthAvailable(true);
+            // Estimativa de fila na nuvem é secundária — não segurar a Home.
+            void syncManager.refreshCloudDiff().catch((err) => {
+              console.warn('[auth] refreshCloudDiff falhou:', err);
+            });
+          }
+          return true;
+        } catch (error) {
+          console.warn('[auth] finalizeAuthenticatedSession falhou:', error);
+          await applySignedInAppUserFallback(mapped);
+          return true;
+        } finally {
+          finalizingRef.current = false;
+          setIsSessionLoading(false);
+        }
+      };
+
+      const promise = run();
+      finalizeInFlightRef.current = promise;
       try {
-        const termsOk = await ensureNewDatabaseTermsAccepted(mapped.uid, mapped.email);
-        if (!termsOk) {
-          await abortSessionWithoutTerms();
-          return;
-        }
-
-        await hydrateAppStorageFromIndexedDb();
-        confirmCloudDisplayReady();
-        const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
-        await restoreE2eForOwner(session.dataOwnerUid);
-        setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
-        setUser(mapped);
-        setDataOwnerUid(session.dataOwnerUid);
-        setIsAuthorizedMember(session.isAuthorizedMember);
-        setAuthUidState(mapped.uid, session.dataOwnerUid, true);
-        persistAuthProfile(mapped);
-        void rememberKnownAuthEmailOnDevice(mapped.email);
-        clearPendingSyncResume();
-        setAuthReady(true);
-        notifyDataChanged();
-
-        if (supabaseEnabled) {
-          await syncManager.bindSession(session.dataOwnerUid);
-          syncManager.setAuthAvailable(true);
-          await syncManager.refreshCloudDiff();
-        }
-      } catch (error) {
-        console.warn('[auth] finalizeAuthenticatedSession falhou:', error);
-        await applySignedInAppUserFallback(mapped);
+        return await promise;
       } finally {
-        finalizingRef.current = false;
-        setIsSessionLoading(false);
+        if (finalizeInFlightRef.current === promise) {
+          finalizeInFlightRef.current = null;
+        }
       }
     },
     [abortSessionWithoutTerms, applySignedInAppUserFallback, ensureNewDatabaseTermsAccepted, supabaseEnabled],
@@ -355,6 +390,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isFirebaseAuthRedirectReturn()) return;
         finalizedUidRef.current = null;
         finalizingRef.current = false;
+        finalizeInFlightRef.current = null;
         setIsSessionLoading(false);
         setRecoveryPending(false);
 
@@ -445,6 +481,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearFirebaseAuthParamsFromWindow();
           return;
         }
+        // Login/cadastro por senha: o fluxo explícito ativa E2E e chama finalize — evita corrida.
+        if (emailPasswordAuthInFlightRef.current && event === 'SIGNED_IN') {
+          setCloudAuthUser({ uid: session.user.id, email: session.user.email ?? null });
+          clearFirebaseAuthParamsFromWindow();
+          return;
+        }
         if (event !== 'TOKEN_REFRESHED') {
           applySignedIn(
             session.user.id,
@@ -474,25 +516,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           'Configure o Supabase no arquivo .env (veja .env.example) antes de entrar.',
         );
       }
-      const signedIn = await signInWithEmailPassword(email, password);
-      setRecoveryPending(false);
-      const termsOk = await ensureNewDatabaseTermsAccepted(signedIn.uid, signedIn.email);
-      if (!termsOk) {
-        await abortSessionWithoutTerms();
-        throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
+      emailPasswordAuthInFlightRef.current = true;
+      try {
+        const signedIn = await signInWithEmailPassword(email, password);
+        setRecoveryPending(false);
+
+        // E2E com a senha de login antes da finalização (onAuthStateChange só restaura sessionStorage).
+        const access = await resolveMemberAccess(signedIn.uid, signedIn.email);
+        const ownerUid =
+          access.isAuthorizedMember &&
+          isCloudOwnerUid(access.dataOwnerUid) &&
+          access.dataOwnerUid !== signedIn.uid
+            ? access.dataOwnerUid
+            : signedIn.uid;
+        await activateE2eWithPassword(ownerUid, password, { strict: true });
+
+        // Termos + migração: uma única finalização (SIGNED_IN foi ignorado durante este fluxo).
+        const ok = await finalizeAuthenticatedSession(signedIn);
+        if (!ok) {
+          throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
+        }
+        await waitForAuthenticatedUid(20_000);
+      } finally {
+        emailPasswordAuthInFlightRef.current = false;
       }
-      const session = await resolveLocalSessionAfterLogin(signedIn.uid, signedIn.email);
-      await activateE2eWithPassword(session.dataOwnerUid, password, { strict: true });
-      await finalizeAuthenticatedSession(signedIn);
-      await waitForAuthenticatedUid(20_000);
     },
-    [
-      abortSessionWithoutTerms,
-      ensureNewDatabaseTermsAccepted,
-      finalizeAuthenticatedSession,
-      setRecoveryPending,
-      supabaseEnabled,
-    ],
+    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
   );
 
   const signUpWithEmail = useCallback(
@@ -502,28 +551,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           'Configure o Supabase no arquivo .env (veja .env.example) antes de criar conta.',
         );
       }
-      const result = await signUpWithEmailPassword(email, password);
-      if (result.user && !result.needsEmailConfirmation) {
-        setRecoveryPending(false);
-        const termsOk = await ensureNewDatabaseTermsAccepted(result.user.uid, result.user.email);
-        if (!termsOk) {
-          await abortSessionWithoutTerms();
-          throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
+      emailPasswordAuthInFlightRef.current = true;
+      try {
+        const result = await signUpWithEmailPassword(email, password);
+        if (result.user && !result.needsEmailConfirmation) {
+          setRecoveryPending(false);
+          const access = await resolveMemberAccess(result.user.uid, result.user.email);
+          const ownerUid =
+            access.isAuthorizedMember &&
+            isCloudOwnerUid(access.dataOwnerUid) &&
+            access.dataOwnerUid !== result.user.uid
+              ? access.dataOwnerUid
+              : result.user.uid;
+          await activateE2eWithPassword(ownerUid, password, { strict: true });
+          const ok = await finalizeAuthenticatedSession(result.user);
+          if (!ok) {
+            throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
+          }
+          await waitForAuthenticatedUid(20_000);
         }
-        const session = await resolveLocalSessionAfterLogin(result.user.uid, result.user.email);
-        await activateE2eWithPassword(session.dataOwnerUid, password, { strict: true });
-        await finalizeAuthenticatedSession(result.user);
-        await waitForAuthenticatedUid(20_000);
+        return { needsEmailConfirmation: result.needsEmailConfirmation };
+      } finally {
+        emailPasswordAuthInFlightRef.current = false;
       }
-      return { needsEmailConfirmation: result.needsEmailConfirmation };
     },
-    [
-      abortSessionWithoutTerms,
-      ensureNewDatabaseTermsAccepted,
-      finalizeAuthenticatedSession,
-      setRecoveryPending,
-      supabaseEnabled,
-    ],
+    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
   );
 
   const requestPasswordReset = useCallback(
@@ -629,6 +681,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const ownerBeforeLogout = getCachedDataOwnerUid();
     finalizedUidRef.current = null;
     finalizingRef.current = false;
+    finalizeInFlightRef.current = null;
     clearE2eSession();
     await signOutCloud();
     setCloudAuthUser(null);

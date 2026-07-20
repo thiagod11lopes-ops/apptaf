@@ -20,7 +20,9 @@ import { useE2eEncryptionStatus } from '../../hooks/useE2eEncryptionStatus';
 import { ActionIconTooltip } from './ActionIconTooltip';
 import { PressableScale } from './PressableScale';
 import { E2eEncryptionStatusModal } from './E2eEncryptionStatusModal';
+import { SyncLiveStatusModal } from '../sismav/SyncLiveStatusModal';
 import { PREMIUM } from '../../theme/premium';
+import { syncManager } from '../../offline-first/sync/SyncManager';
 import {
   isModoDemonstracaoAtivo,
   subscribeModoDemonstracao,
@@ -98,6 +100,7 @@ export function TopActionIcons({
   const { e2eActive } = useE2eEncryptionStatus();
   const cloudOnline = connectivity === 'ONLINE' || connectivity === 'SYNCING';
   const [e2eModalVisible, setE2eModalVisible] = useState(false);
+  const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [demoCarregando, setDemoCarregando] = useState(false);
   const [demoModal, setDemoModal] = useState<{
@@ -164,8 +167,13 @@ export function TopActionIcons({
   const cloudColor = cloudOnline ? theme.gain : theme.loss;
   const cloudTooltipTitle = cloudOnline ? 'Online · nuvem' : 'Offline · local';
   const cloudTooltipDescription = cloudOnline
-    ? 'Conectado: o sistema usa os dados da nuvem como fonte.'
-    : 'Sem internet: o sistema usa o cache local (IndexedDB) neste aparelho.';
+    ? 'Toque para ver o status: barras de recebimento e envio com a nuvem.'
+    : 'Sem internet — toque para ver o status. Alterações ficam no IndexedDB até reconectar.';
+
+  const openSyncStatus = useCallback(() => {
+    setSyncStatusModalVisible(true);
+    void syncManager.refreshCloudDiff({ forcePull: true }).catch(() => {});
+  }, []);
 
   return (
     <>
@@ -175,7 +183,8 @@ export function TopActionIcons({
             inline,
             cloudTooltipTitle,
             cloudTooltipDescription,
-            <View
+            <PressableScale
+              onPress={openSyncStatus}
               style={[
                 btnStyle,
                 {
@@ -183,11 +192,10 @@ export function TopActionIcons({
                   backgroundColor: cloudOnline ? theme.gainMuted : 'rgba(220, 38, 38, 0.1)',
                 },
               ]}
-              accessibilityRole="image"
               accessibilityLabel={
                 cloudOnline
-                  ? 'Online: usando dados da nuvem'
-                  : 'Offline: usando dados locais IndexedDB'
+                  ? 'Online: usando dados da nuvem. Abrir status de sincronização.'
+                  : 'Offline: usando dados locais IndexedDB. Abrir status de sincronização.'
               }
             >
               {cloudOnline ? (
@@ -195,7 +203,7 @@ export function TopActionIcons({
               ) : (
                 <CloudOff size={iconSize} color={cloudColor} strokeWidth={strokeWidth} />
               )}
-            </View>,
+            </PressableScale>,
           )
         : null}
       {showE2eShield
@@ -328,6 +336,10 @@ export function TopActionIcons({
       visible={e2eModalVisible}
       e2eActive={e2eActive}
       onClose={() => setE2eModalVisible(false)}
+    />
+    <SyncLiveStatusModal
+      visible={syncStatusModalVisible}
+      onClose={() => setSyncStatusModalVisible(false)}
     />
     </>
   );

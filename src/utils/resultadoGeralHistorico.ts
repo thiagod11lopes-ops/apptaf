@@ -167,6 +167,34 @@ function aggParaLinha(agg: AggRow): ResultadoGeralItem {
   };
 }
 
+function mergeKeyForParticipante(
+  map: Map<string, AggRow>,
+  preferredId: string,
+  nip: string,
+): { key: string; agg?: AggRow } {
+  const d = nipDigitos(nip);
+  if (d.length >= 8) {
+    for (const [key, row] of map) {
+      if (nipDigitos(row.nip) !== d) continue;
+      const preferCadastroId =
+        preferredId &&
+        !preferredId.startsWith('nip:') &&
+        !preferredId.startsWith('nome:') &&
+        preferredId !== key;
+      if (preferCadastroId) {
+        map.delete(key);
+        row.id = preferredId;
+        map.set(preferredId, row);
+        return { key: preferredId, agg: row };
+      }
+      return { key, agg: row };
+    }
+  }
+  const existing = map.get(preferredId);
+  if (existing) return { key: preferredId, agg: existing };
+  return { key: preferredId };
+}
+
 /** Agrega participantes e modalidades a partir das sessões do Histórico (sessão mais recente prevalece). */
 export function agregarHistoricoPorParticipante(
   sessoes: SessaoAplicacaoTaf[],
@@ -181,12 +209,15 @@ export function agregarHistoricoPorParticipante(
       const id = idParticipante(r, cadastros);
       if (!id) continue;
 
-      let agg = map.get(id);
+      const busca = buscarCadastroPorNomeOuNip(
+        cadastros,
+        (r.nip ?? '').trim() || (r.nome ?? '').trim(),
+      );
+      const nipHint =
+        busca.kind === 'found' ? (busca.cadastro.nip ?? '') : (r.nip ?? '');
+      const merged = mergeKeyForParticipante(map, id, nipHint);
+      let agg = merged.agg;
       if (!agg) {
-        const busca = buscarCadastroPorNomeOuNip(
-          cadastros,
-          (r.nip ?? '').trim() || (r.nome ?? '').trim(),
-        );
         agg = {
           id: busca.kind === 'found' ? busca.cadastro.id : id,
           nip:
@@ -198,7 +229,7 @@ export function agregarHistoricoPorParticipante(
               ? (busca.cadastro.nome ?? '').trim() || '—'
               : (r.nome ?? '').trim() || '—',
         };
-        map.set(id, agg);
+        map.set(merged.key, agg);
       }
 
       atualizarIdentidade(agg, r, cadastros);
@@ -412,21 +443,29 @@ export function enriquecerLinhasDistanciaMetaFromHistorico(
 
 export type ResumoInicioTafHistorico = {
   totalCadastrados: number;
-  /** Três modalidades no Histórico. */
+  /** Cadastrados com as três modalidades no Histórico. */
   completos: number;
-  /** Ao menos uma modalidade no Histórico, sem as três. */
+  /** Cadastrados com ao menos uma modalidade no Histórico, sem as três. */
   parcial: number;
-  /** Cadastrados sem nenhuma sessão no Histórico. */
+  /** Cadastrados sem nenhuma modalidade no Histórico. */
   semTeste: number;
 };
 
-function cadastroNoHistorico(c: CadastroItemPersist, aggs: AggRow[]): boolean {
+function findAggRowForCadastro(aggs: AggRow[], c: CadastroItemPersist): AggRow | undefined {
+  const byId = aggs.find((agg) => agg.id === c.id);
+  if (byId) return byId;
   const nipC = nipDigitos(c.nip);
-  return aggs.some((agg) => {
-    if (agg.id === c.id) return true;
-    const nipA = nipDigitos(agg.nip);
-    return nipC.length >= 8 && nipA.length >= 8 && nipC === nipA;
-  });
+  if (nipC.length < 8) return undefined;
+  return aggs.find((agg) => nipDigitos(agg.nip) === nipC);
+}
+
+function classificarAggNoResumo(agg: AggRow): 'completo' | 'parcial' | 'vazio' {
+  const requisitoCorrida = temRequisitoCorridaOuCaminhada(agg);
+  const temNatacao = !!agg.natacao;
+  const temPerm = !!agg.permanencia;
+  if (requisitoCorrida && temNatacao && temPerm) return 'completo';
+  if (requisitoCorrida || temNatacao || temPerm) return 'parcial';
+  return 'vazio';
 }
 
 /** Resumo da aba Iniciar com base no Histórico de aplicações. */
@@ -437,17 +476,22 @@ export function calcularResumoInicioTafFromHistorico(
   const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
   const aggs = agregarHistoricoPorParticipante(unificadas, cadastros);
 
+  // Conta só cadastrados — evita inflar Parcial/Concluídos com sessões órfãs
+  // (ex.: NIP sem cadastro) que deixam Pendente igual entre dispositivos e Parcial diferente.
   let completos = 0;
   let parcial = 0;
-  for (const agg of aggs) {
-    const requisitoCorrida = temRequisitoCorridaOuCaminhada(agg);
-    const temNatacao = !!agg.natacao;
-    const temPerm = !!agg.permanencia;
-    if (requisitoCorrida && temNatacao && temPerm) completos += 1;
-    else if (requisitoCorrida || temNatacao || temPerm || agg.corrida || agg.caminhada) parcial += 1;
+  let semTeste = 0;
+  for (const c of cadastros) {
+    const agg = findAggRowForCadastro(aggs, c);
+    if (!agg) {
+      semTeste += 1;
+      continue;
+    }
+    const classe = classificarAggNoResumo(agg);
+    if (classe === 'completo') completos += 1;
+    else if (classe === 'parcial') parcial += 1;
+    else semTeste += 1;
   }
-
-  const semTeste = cadastros.filter((c) => !cadastroNoHistorico(c, aggs)).length;
 
   return {
     totalCadastrados: cadastros.length,

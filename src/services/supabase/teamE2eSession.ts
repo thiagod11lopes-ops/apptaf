@@ -191,7 +191,7 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
 
   // Se a meta na nuvem mudou (wipe / nova senha), descarta DEK local antiga.
   try {
-    const meta = await fetchTeamE2eMeta(ownerUid);
+    const meta = await withTimeout(fetchTeamE2eMeta(ownerUid), 2_500, null);
     if (meta) {
       if (stored.keyVersion != null && meta.key_version !== stored.keyVersion) {
         clearE2eSession();
@@ -205,16 +205,37 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
   const key = await importStoredTeamKey(stored);
   if (!key) return false;
   setActiveTeamKey(key);
-
-  // Probe: se a nuvem tem dado cifrado e esta chave não abre, descarta DEK stale.
-  const probeOk = await probeStoredKeyAgainstCloud(ownerUid);
-  if (!probeOk) {
-    clearE2eSession();
-    return false;
-  }
-
   writeStoredE2eSession(stored);
+  // Probe na nuvem em background — não segura "Concluindo login…".
+  void verifyStoredKeyInBackground(ownerUid);
   return true;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(fallback);
+      });
+  });
+}
+
+async function verifyStoredKeyInBackground(ownerUid: string): Promise<void> {
+  try {
+    const ok = await withTimeout(probeStoredKeyAgainstCloud(ownerUid), 3_000, true);
+    if (!ok) {
+      clearE2eSession();
+      console.warn('[e2e] DEK local rejeitada pela nuvem — escudo vermelho até novo login com senha');
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 /** true se não há dado cifrado na nuvem ou se a DEK atual abre algum registro. */
@@ -223,7 +244,8 @@ async function probeStoredKeyAgainstCloud(ownerUid: string): Promise<boolean> {
     const { requireSupabase } = await import('../../config/supabase');
     const { isCloudDataEncrypted, maybeDecryptFromCloud } = await import('./e2eCrypto');
     const sb = requireSupabase();
-    const tables = ['cadastros', 'sessoes', 'aplicadores', 'pre_cadastros'] as const;
+    // Só cadastros + sessões (histórico) — o bastante para detectar chave errada sem varrer tudo.
+    const tables = ['cadastros', 'sessoes'] as const;
     let sawEncrypted = false;
 
     for (const table of tables) {
@@ -231,7 +253,7 @@ async function probeStoredKeyAgainstCloud(ownerUid: string): Promise<boolean> {
         .from(table)
         .select('data')
         .eq('owner_uid', ownerUid)
-        .limit(8);
+        .limit(4);
       if (error || !data?.length) continue;
       for (const row of data) {
         const payload = (row as { data?: Record<string, unknown> }).data ?? {};
@@ -241,12 +263,11 @@ async function probeStoredKeyAgainstCloud(ownerUid: string): Promise<boolean> {
           await maybeDecryptFromCloud(payload);
           return true;
         } catch {
-          // tenta próximo registro/tabela
+          // tenta próximo
         }
       }
     }
 
-    // Havia cifrado e nenhum abriu com esta DEK.
     if (sawEncrypted) return false;
     return true;
   } catch {
@@ -265,9 +286,9 @@ export async function ensureE2eUnlockedForSession(
   if (!ownerUid.trim()) return false;
 
   if (getActiveTeamKey()) {
-    const ok = await probeStoredKeyAgainstCloud(ownerUid);
-    if (ok) return true;
-    clearE2eSession();
+    // Não bloqueia UI com probe — valida depois.
+    void verifyStoredKeyInBackground(ownerUid);
+    return true;
   }
 
   if (await restoreE2eFromSessionStorage(ownerUid)) return true;
@@ -430,13 +451,15 @@ export async function activateE2eFromLoginPassword(
     );
   }
 
-  await healCloudAfterUnlock(ownerUid);
+  // Limpeza pesada na nuvem: nunca bloquear o login.
+  void healCloudAfterUnlock(ownerUid);
 }
 
+/** Remove docs cifrados com chave antiga — roda em background após o unlock. */
 async function healCloudAfterUnlock(ownerUid: string): Promise<void> {
   try {
     const { purgeUndecryptableOwnerDocs } = await import('./ownerDocs');
-    const removed = await purgeUndecryptableOwnerDocs(ownerUid);
+    const removed = await withTimeout(purgeUndecryptableOwnerDocs(ownerUid), 20_000, 0);
     if (removed > 0) {
       console.info(`[e2e] removidos ${removed} registro(s) na nuvem cifrados com chave antiga`);
     }
@@ -483,7 +506,7 @@ export async function activateE2eForAuthorizedMember(
       );
       setActiveTeamKey(teamKey);
       await persistSessionKey(bossUid, teamKey, memberWrap.key_version ?? 1);
-      await healCloudAfterUnlock(bossUid);
+      void healCloudAfterUnlock(bossUid);
       return;
     } catch {
       console.warn('[e2e] access_secret inválido; tentando fallbacks');
@@ -500,7 +523,7 @@ export async function activateE2eForAuthorizedMember(
       );
       setActiveTeamKey(teamKey);
       await persistSessionKey(bossUid, teamKey, memberWrap.key_version ?? 1);
-      await healCloudAfterUnlock(bossUid);
+      void healCloudAfterUnlock(bossUid);
       return;
     } catch {
       /* continua */
@@ -548,7 +571,7 @@ export async function activateE2eForAuthorizedMember(
 
   setActiveTeamKey(teamKey);
   await persistSessionKey(bossUid, teamKey, meta.key_version ?? 1);
-  await healCloudAfterUnlock(bossUid);
+  void healCloudAfterUnlock(bossUid);
   // Preferência: gravar acesso automático daqui pra frente.
   try {
     const accessSecret = toBase64(crypto.getRandomValues(new Uint8Array(32)));

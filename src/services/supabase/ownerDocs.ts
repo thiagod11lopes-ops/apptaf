@@ -110,30 +110,27 @@ export async function purgeUndecryptableOwnerDocs(ownerUid: string): Promise<num
   if (!ownerUid.trim() || !getActiveTeamKey()) return 0;
   const sb = requireSupabase();
   let removed = 0;
+  // No máximo 1 página por tabela — evita varrer a nuvem inteira no login.
+  const maxPerTable = PAGE_SIZE;
 
   for (const table of HEAL_TABLES) {
-    let from = 0;
-    for (;;) {
-      const { data, error } = await sb
-        .from(table)
-        .select('id, data')
-        .eq('owner_uid', ownerUid)
-        .order('id', { ascending: true })
-        .range(from, from + PAGE_SIZE - 1);
-      if (error) throw new Error(error.message);
-      const chunk = (data ?? []) as Array<{ id: string; data: unknown }>;
-      for (const row of chunk) {
-        const payload = (row.data ?? {}) as Record<string, unknown>;
-        if (!isCloudDataEncrypted(payload)) continue;
-        try {
-          await maybeDecryptFromCloud(payload);
-        } catch {
-          await deleteOwnerDoc(table, ownerUid, row.id);
-          removed += 1;
-        }
+    const { data, error } = await sb
+      .from(table)
+      .select('id, data')
+      .eq('owner_uid', ownerUid)
+      .order('id', { ascending: true })
+      .range(0, maxPerTable - 1);
+    if (error) throw new Error(error.message);
+    const chunk = (data ?? []) as Array<{ id: string; data: unknown }>;
+    for (const row of chunk) {
+      const payload = (row.data ?? {}) as Record<string, unknown>;
+      if (!isCloudDataEncrypted(payload)) continue;
+      try {
+        await maybeDecryptFromCloud(payload);
+      } catch {
+        await deleteOwnerDoc(table, ownerUid, row.id);
+        removed += 1;
       }
-      if (chunk.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
     }
   }
 

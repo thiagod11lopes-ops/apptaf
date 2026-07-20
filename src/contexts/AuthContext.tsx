@@ -273,7 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     confirmCloudDisplayReady();
     const access = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email).catch(() => null);
     const ownerUid = access?.dataOwnerUid ?? getCachedDataOwnerUid() ?? mapped.uid;
-    await restoreE2eForOwner(ownerUid, mapped.email);
+    void restoreE2eForOwner(ownerUid, mapped.email);
     const isMember = access?.isAuthorizedMember ?? ownerUid !== mapped.uid;
     setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
     setUser(mapped);
@@ -307,7 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
         syncManager.setAuthAvailable(true);
         const owner = getCachedDataOwnerUid() ?? mapped.uid;
-        await restoreE2eForOwner(owner, mapped.email);
+        void restoreE2eForOwner(owner, mapped.email);
         return true;
       }
 
@@ -326,7 +326,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await hydrateAppStorageFromIndexedDb();
           confirmCloudDisplayReady();
           const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
-          await restoreE2eForOwner(session.dataOwnerUid, mapped.email);
+          // E2E: não pode travar o spinner — timeout curto + continua.
+          await Promise.race([
+            restoreE2eForOwner(session.dataOwnerUid, mapped.email),
+            new Promise<void>((resolve) => setTimeout(resolve, 4_000)),
+          ]);
           setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
           setUser(mapped);
           setDataOwnerUid(session.dataOwnerUid);
@@ -579,11 +583,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!ok) {
           throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
         }
-        await waitForAuthenticatedUid(20_000);
+        await waitForAuthenticatedUid(8_000);
         if (supabaseEnabled) {
-          void syncManager.tryBackgroundSync().catch((err) => {
-            console.warn('[auth] sync pós-login:', err);
-          });
+          // Sync depois do login — não compete com a abertura da Home.
+          setTimeout(() => {
+            void syncManager.tryBackgroundSync().catch((err) => {
+              console.warn('[auth] sync pós-login:', err);
+            });
+          }, 2_500);
         }
       } finally {
         emailPasswordAuthInFlightRef.current = false;

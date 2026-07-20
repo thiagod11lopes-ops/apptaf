@@ -6,7 +6,6 @@ import { Button } from '../Button';
 import { PasswordInput } from './PasswordInput';
 import { TermosCriacaoBancoModal } from './TermosCriacaoBancoModal';
 import { canUseEmailAuth } from '../../services/firebase/googleAuth';
-import { readPersistedAuthProfile } from '../../services/firebase/authProfile';
 import { PREMIUM } from '../../theme/premium';
 import {
   isAllowedAuthEmail,
@@ -18,7 +17,6 @@ import {
   setDatabaseTermsPreAcceptedForEmail,
 } from '../../offline-first/auth/databaseTerms';
 import {
-  isKnownAuthEmailOnDevice,
   rememberKnownAuthEmailOnDevice,
   listRecentKnownAuthEmails,
   filterRecentAuthEmailSuggestions,
@@ -40,12 +38,6 @@ type Props = {
   forceRecovery?: boolean;
   onRecoveryDone?: () => void;
 };
-
-function isReturningLocalEmail(email: string): boolean {
-  const profile = readPersistedAuthProfile();
-  if (!profile?.email?.trim()) return false;
-  return normalizeAuthEmail(profile.email) === normalizeAuthEmail(email);
-}
 
 function isBootstrapRequiredError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -162,16 +154,10 @@ export function EmailPasswordAuthForm({
       const becameComplete = allowed && !emailWasAllowedRef.current;
       emailWasAllowedRef.current = allowed;
 
-      if (becameComplete && !isReturningLocalEmail(text)) {
-        // Só trata como novo banco se o e-mail nunca autenticou neste dispositivo.
-        void (async () => {
-          if (await isKnownAuthEmailOnDevice(text)) return;
-          setMode('register');
-          setInfo(null);
-          setTermsAccepted(false);
-          clearDatabaseTermsPreAccepted();
-          setTermsModalVisible(true);
-        })();
+      // Não força "Cadastrar" automaticamente: e-mails autorizados pelo chefe
+      // devem preferir Entrar (conta já criada) e evita flood de signUp/rate limit.
+      // Novo banco: usuário usa o link "Criar conta".
+      if (becameComplete) {
         return;
       }
 

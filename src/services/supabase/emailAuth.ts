@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { getSupabase, isSupabaseConfigured, requireSupabase } from '../../config/supabase';
-import { assertAllowedAuthEmail } from '../../utils/normalizeAuthEmail';
+import { assertAllowedAuthEmail, normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
 
 export type AppAuthUser = {
   uid: string;
@@ -150,8 +150,12 @@ function translateAuthError(message: string): string {
   if (m.includes('password should be') || m.includes('password is known')) {
     return 'A senha não atende aos requisitos. Use ao menos 6 caracteres.';
   }
-  if (m.includes('rate limit') || m.includes('too many')) {
-    return 'Muitas tentativas. Aguarde um momento e tente de novo.';
+  if (m.includes('rate limit') || m.includes('too many') || m.includes('over_email_send_rate_limit')) {
+    return (
+      'Muitas tentativas de login/cadastro (limite do Supabase). ' +
+      'Aguarde alguns minutos (às vezes até ~1 h) e tente de novo. ' +
+      'Se já entrou e só falta o checklist do chefe, peça para marcar o acesso e tente Entrar de novo sem cadastrar outra vez.'
+    );
   }
   return message;
 }
@@ -162,11 +166,34 @@ export async function signInWithEmailPassword(
 ): Promise<AppAuthUser> {
   const normalizedEmail = assertAllowedAuthEmail(email);
   const sb = requireSupabase();
+
+  // Sessão já aberta para o mesmo e-mail: reutiliza (evita rate limit em retries de E2E).
+  const { data: existing } = await sb.auth.getSession();
+  const existingEmail = existing.session?.user?.email
+    ? normalizeAuthEmail(existing.session.user.email)
+    : null;
+  if (existing.session?.user && existingEmail === normalizedEmail) {
+    return mapSupabaseUser(existing.session.user);
+  }
+
   const { data, error } = await sb.auth.signInWithPassword({
     email: normalizedEmail,
     password,
   });
-  if (error) throw new Error(translateAuthError(error.message));
+  if (error) {
+    const msg = error.message || '';
+    if (/rate limit|too many/i.test(msg)) {
+      // Última chance: sessão residual do mesmo e-mail após tentativas anteriores.
+      const { data: again } = await sb.auth.getSession();
+      const againEmail = again.session?.user?.email
+        ? normalizeAuthEmail(again.session.user.email)
+        : null;
+      if (again.session?.user && againEmail === normalizedEmail) {
+        return mapSupabaseUser(again.session.user);
+      }
+    }
+    throw new Error(translateAuthError(msg));
+  }
   if (!data.user) throw new Error('Login sem usuário.');
   return mapSupabaseUser(data.user);
 }

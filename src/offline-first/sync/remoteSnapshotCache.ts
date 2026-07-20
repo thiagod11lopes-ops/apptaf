@@ -31,6 +31,10 @@ import {
   listCadastrosTombstonesForSync,
   listSessoesTombstonesForSync,
 } from '../../services/supabase/cloudTombstonesForSync';
+import {
+  getOwnerDocsDecryptFailureAccum,
+  resetOwnerDocsDecryptFailureAccum,
+} from '../../services/supabase/ownerDocs';
 
 export type RemoteTombstoneCollection = 'cadastros' | 'sessoes' | 'aplicadores';
 
@@ -39,6 +43,11 @@ export type RemoteCollectionsSnapshot = {
   fetchedAt: number;
   /** 'full' = todas as linhas baixadas; 'incremental' = baseline local + deltas desde o watermark. */
   fetchMode: 'full' | 'incremental';
+  /**
+   * false quando houve decrypt parcial / snapshot incompleto — LWW não deve podar
+   * locais synced só por ausência neste ciclo (evita loop baixar→apagar→baixar).
+   */
+  trustworthyForPrune: boolean;
   /** Registros ativos na nuvem (deleted filtrado — inalterado para UI/LWW atual). */
   remoteCad: CadastroItemPersist[];
   remoteSess: SessaoAplicacaoTaf[];
@@ -180,6 +189,8 @@ export async function fetchRemoteCollectionsSnapshot(
   const watermark = await getRemoteSyncWatermark(ownerUid);
   const canIncremental = watermark != null && watermark > 0 && !(await isFullFetchDue(ownerUid));
 
+  resetOwnerDocsDecryptFailureAccum();
+
   if (canIncremental) {
     const since = Math.max(0, watermark - INCREMENTAL_SINCE_MARGIN_MS);
     // Ativos: incremental. Tombstones: sempre lista completa — exclusões não podem
@@ -213,10 +224,13 @@ export async function fetchRemoteCollectionsSnapshot(
       app: new Set(tombstones.remoteAppTombstones.map((t) => t.id)),
     };
 
+    const decryptFailures = getOwnerDocsDecryptFailureAccum();
     cached = {
       ownerUid,
       fetchedAt: Date.now(),
       fetchMode: 'incremental',
+      // Incremental já não poda; flag só documenta confiança do delta.
+      trustworthyForPrune: decryptFailures === 0,
       remoteCad: mergeById(baseline.remoteCad, deltaCad).filter((r) => !tombIds.cad.has(r.id)),
       remoteSess: mergeById(baseline.remoteSess, deltaSess).filter((r) => !tombIds.sess.has(r.id)),
       remoteApp: mergeById(baseline.remoteApp, deltaApp).filter((r) => !tombIds.app.has(r.id)),
@@ -245,10 +259,12 @@ export async function fetchRemoteCollectionsSnapshot(
   // markFullFetchDone só após LWW íntegro (SyncManager) — evita consumir
   // o orçamento de 24h quando o download ok mas a aplicação falha.
 
+  const decryptFailures = getOwnerDocsDecryptFailureAccum();
   cached = {
     ownerUid,
     fetchedAt: Date.now(),
     fetchMode: 'full',
+    trustworthyForPrune: decryptFailures === 0,
     remoteCad,
     remoteSess,
     remoteApp,
@@ -268,6 +284,7 @@ export function withTombstoneDefaults(
     ...EMPTY_TOMBSTONES,
     fetchMode: 'full',
     ...snapshot,
+    trustworthyForPrune: snapshot.trustworthyForPrune ?? false,
     remoteCadTombstones: snapshot.remoteCadTombstones ?? [],
     remoteSessTombstones: snapshot.remoteSessTombstones ?? [],
     remoteAppTombstones: snapshot.remoteAppTombstones ?? [],

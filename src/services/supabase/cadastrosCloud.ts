@@ -1,6 +1,5 @@
 import type { CadastroItemPersist } from '../cadastrosIndexedDb';
 import { tombstoneToCloudDoc, type TombstonePayload } from '../../offline-first/sync/tombstone';
-import { dedupeCadastrosPorNip } from '../../utils/dedupeCadastrosPorNip';
 import { formatNipInput, nipChaveCadastro } from '../../utils/nipFormat';
 import { stampCadastro } from '../offline/recordTimestamps';
 import {
@@ -41,7 +40,8 @@ function rowsToCadastrosLight(rows: Awaited<ReturnType<typeof listOwnerDocs>>): 
       }),
     );
   }
-  return dedupeCadastrosPorNip(items);
+  // Sem dedupe por NIP aqui: o LWW compara por id. Dedupe só na UI (listCadastrosForDisplay).
+  return items;
 }
 
 export async function getCadastrosFirestoreSince(

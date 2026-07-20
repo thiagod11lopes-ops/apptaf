@@ -293,6 +293,8 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
   forceUploadIds?: Set<string>,
   remoteTombstones?: TombstonePayload[],
   fetchMode: 'full' | 'incremental' = 'full',
+  /** Ausência na nuvem só vira prune quando true (full + snapshot confiável + não-membro). */
+  allowCloudAbsencePrune = false,
 ): { plan: PlannedSyncItem[]; ignored: number; syncedMissingOnCloud: number } {
   const localMap = new Map(localRows.map((r) => [r.id, r]));
   const remoteMap = buildRemoteMapForLww(ownerUid, remoteRows, toRecord, remoteTombstones);
@@ -308,8 +310,8 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
     const decision = decideLastWriteWins(local, remote);
 
     // Id só no local (já synced):
-    // - full fetch (nuvem autoritativa): remover local — ausência na nuvem = verdade.
-    // - incremental: não apagar (snapshot parcial); marca para full fetch depois.
+    // - full fetch confiável (chefe): remover local — ausência na nuvem = verdade.
+    // - membro / incremental / snapshot parcial: NÃO apagar (evita loop baixar→apagar→baixar).
     if (
       decision.action === 'upload' &&
       decision.reason === 'somente_local' &&
@@ -317,7 +319,7 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       !isUnsyncedLocalStatus(local.syncStatus) &&
       !forceUploadIds?.has(id)
     ) {
-      if (fetchMode === 'full') {
+      if (fetchMode === 'full' && allowCloudAbsencePrune) {
         const pruneAt = Math.max(readUpdatedAt(local) + 1, Date.now());
         plan.push({
           collection,
@@ -906,7 +908,10 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     );
   }
 
-  const runReconcileAndPlan = async (fetchMode: 'full' | 'incremental') => {
+  const runReconcileAndPlan = async (
+    fetchMode: 'full' | 'incremental',
+    allowCloudAbsencePrune: boolean,
+  ) => {
     await reconcileIdenticalUnsyncedLocals(
       'cadastros',
       ownerUid,
@@ -947,6 +952,7 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       plainCadIds,
       remoteCadTombstones,
       fetchMode,
+      allowCloudAbsencePrune,
     );
     const sessPlanFresh = buildSyncPlan(
       'sessoes',
@@ -957,6 +963,7 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       plainSessIds,
       remoteSessTombstones,
       fetchMode,
+      allowCloudAbsencePrune,
     );
     const appPlanFresh = buildSyncPlan(
       'aplicadores',
@@ -967,12 +974,27 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       plainAppIds,
       remoteAppTombstones,
       fetchMode,
+      allowCloudAbsencePrune,
     );
 
     return { cadPlanFresh, sessPlanFresh, appPlanFresh, localCadFresh, localSessFresh, localAppFresh };
   };
 
-  let planned = await runReconcileAndPlan(remoteSnapshot.fetchMode);
+  const allowPruneThisCycle =
+    remoteSnapshot.fetchMode === 'full' &&
+    remoteSnapshot.trustworthyForPrune !== false &&
+    !isAuthorizedMemberSession();
+
+  if (remoteSnapshot.fetchMode === 'full' && !allowPruneThisCycle) {
+    await syncLogger.info(
+      'sync-lww',
+      isAuthorizedMemberSession()
+        ? 'Membro autorizado: prune por ausência desativado (só tombstone real remove local)'
+        : 'Snapshot remoto não confiável para prune (decrypt parcial) — ausência local preservada',
+    );
+  }
+
+  let planned = await runReconcileAndPlan(remoteSnapshot.fetchMode, allowPruneThisCycle);
 
   // Incremental viu ids sincronizados ausentes na nuvem → full fetch imediato (nuvem = SoT).
   const missingHint =
@@ -995,13 +1017,54 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       remoteSessTombstones = [],
       remoteAppTombstones = [],
     } = remoteSnapshot);
-    planned = await runReconcileAndPlan(remoteSnapshot.fetchMode);
+    const allowPruneAfterFull =
+      remoteSnapshot.fetchMode === 'full' &&
+      remoteSnapshot.trustworthyForPrune !== false &&
+      !isAuthorizedMemberSession();
+    planned = await runReconcileAndPlan(remoteSnapshot.fetchMode, allowPruneAfterFull);
   }
 
   const { cadPlanFresh, sessPlanFresh, appPlanFresh, localCadFresh, localSessFresh, localAppFresh } =
     planned;
 
-  const fullPlan = [...cadPlanFresh.plan, ...sessPlanFresh.plan, ...appPlanFresh.plan];
+  // Disjuntor: poda em massa num ciclo = snapshot suspeito (não aplicar).
+  const stripMassSyntheticPrune = (
+    plan: PlannedSyncItem[],
+    localCount: number,
+  ): { plan: PlannedSyncItem[]; stripped: number } => {
+    const prunes = plan.filter(
+      (p) =>
+        p.action === 'download' &&
+        (p.remote as SyncRecord & { syntheticCloudAbsence?: boolean })?.syntheticCloudAbsence ===
+          true,
+    );
+    const threshold = Math.max(50, Math.ceil(Math.max(localCount, 1) * 0.05));
+    if (prunes.length < threshold) return { plan, stripped: 0 };
+    const pruneIds = new Set(prunes.map((p) => `${p.collection}:${p.id}`));
+    return {
+      plan: plan.filter((p) => !pruneIds.has(`${p.collection}:${p.id}`)),
+      stripped: prunes.length,
+    };
+  };
+
+  let cadPlan = cadPlanFresh.plan;
+  let sessPlan = sessPlanFresh.plan;
+  let appPlan = appPlanFresh.plan;
+  const massCad = stripMassSyntheticPrune(cadPlan, localCadFresh.length);
+  const massSess = stripMassSyntheticPrune(sessPlan, localSessFresh.length);
+  const massApp = stripMassSyntheticPrune(appPlan, localAppFresh.length);
+  cadPlan = massCad.plan;
+  sessPlan = massSess.plan;
+  appPlan = massApp.plan;
+  const massStripped = massCad.stripped + massSess.stripped + massApp.stripped;
+  if (massStripped > 0) {
+    await syncLogger.warn(
+      'sync-lww',
+      `Prune em massa bloqueado (${massStripped} registro(s)) — snapshot tratado como incompleto`,
+    );
+  }
+
+  const fullPlan = [...cadPlan, ...sessPlan, ...appPlan];
   const plannedDownloadItems = fullPlan.filter((p) => p.action === 'download');
   // Downloads redundantes (conteúdo idêntico ao local, só metadados de sync
   // divergentes — ex.: reupload de re-criptografia) viram alinhamento local.
@@ -1030,7 +1093,12 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     uploadItems,
     plannedUploads: uploadItems.length,
     plannedDownloads: downloadItems.length,
-    totalIgnored: cadPlanFresh.ignored + sessPlanFresh.ignored + appPlanFresh.ignored + alignedDownloads,
+    totalIgnored:
+      cadPlanFresh.ignored +
+      sessPlanFresh.ignored +
+      appPlanFresh.ignored +
+      alignedDownloads +
+      massStripped,
     localCad: localCadFresh,
     localSess: localSessFresh,
     localApp: localAppFresh,

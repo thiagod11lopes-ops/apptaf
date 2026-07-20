@@ -82,6 +82,17 @@ export const E2E_KEY_MISMATCH_CODE = 'E2E_KEY_MISMATCH';
 export const E2E_KEY_MISMATCH_MESSAGE =
   'A chave de criptografia deste aparelho não abre os dados da nuvem (BNC). Saia da conta e entre novamente com e-mail e senha neste aparelho para alinhar a chave do banco.';
 
+/** Acumulador de falhas de decrypt na listagem — usado para não podar LWW em snapshot parcial. */
+let ownerDocsDecryptFailureAccum = 0;
+
+export function resetOwnerDocsDecryptFailureAccum(): void {
+  ownerDocsDecryptFailureAccum = 0;
+}
+
+export function getOwnerDocsDecryptFailureAccum(): number {
+  return ownerDocsDecryptFailureAccum;
+}
+
 async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
   const out: CloudDocRow[] = [];
   let decryptFailures = 0;
@@ -103,6 +114,7 @@ async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
       );
     }
   }
+  ownerDocsDecryptFailureAccum += decryptFailures;
   // Nenhum registro legível com a chave atual → chave errada neste aparelho.
   if (encryptedSeen > 0 && out.length === 0 && decryptFailures > 0) {
     const err = new Error(
@@ -111,7 +123,7 @@ async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
     (err as Error & { code?: string }).code = E2E_KEY_MISMATCH_CODE;
     throw err;
   }
-  // Parcial: mantém só os legíveis (órfãos de chave antiga serão sobrescritos no upload local).
+  // Parcial: mantém só os legíveis — o sync NÃO deve podar ausência nesse ciclo.
   return out;
 }
 
@@ -134,27 +146,30 @@ export async function purgeUndecryptableOwnerDocs(ownerUid: string): Promise<num
   if (!ownerUid.trim() || !getActiveTeamKey()) return 0;
   const sb = requireSupabase();
   let removed = 0;
-  // No máximo 1 página por tabela — evita varrer a nuvem inteira no login.
-  const maxPerTable = PAGE_SIZE;
 
   for (const table of HEAL_TABLES) {
-    const { data, error } = await sb
-      .from(table)
-      .select('id, data')
-      .eq('owner_uid', ownerUid)
-      .order('id', { ascending: true })
-      .range(0, maxPerTable - 1);
-    if (error) throw new Error(error.message);
-    const chunk = (data ?? []) as Array<{ id: string; data: unknown }>;
-    for (const row of chunk) {
-      const payload = (row.data ?? {}) as Record<string, unknown>;
-      if (!isCloudDataEncrypted(payload)) continue;
-      try {
-        await maybeDecryptFromCloud(payload);
-      } catch {
-        await deleteOwnerDoc(table, ownerUid, row.id);
-        removed += 1;
+    let from = 0;
+    for (;;) {
+      const { data, error } = await sb
+        .from(table)
+        .select('id, data')
+        .eq('owner_uid', ownerUid)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) throw new Error(error.message);
+      const chunk = (data ?? []) as Array<{ id: string; data: unknown }>;
+      for (const row of chunk) {
+        const payload = (row.data ?? {}) as Record<string, unknown>;
+        if (!isCloudDataEncrypted(payload)) continue;
+        try {
+          await maybeDecryptFromCloud(payload);
+        } catch {
+          await deleteOwnerDoc(table, ownerUid, row.id);
+          removed += 1;
+        }
       }
+      if (chunk.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
     }
   }
 

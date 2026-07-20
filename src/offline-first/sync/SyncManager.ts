@@ -105,12 +105,14 @@ const ALREADY_UP_TO_DATE_MS = 2000;
 export const AUTO_SYNC_DEBOUNCE_MS = 400;
 /** Ao voltar a internet / foco. */
 export const AUTO_SYNC_RECONNECT_MS = 1_000;
-/** Após evento realtime remoto — puxa LWW sem esperar o cronômetro. */
-const REALTIME_PULL_DEBOUNCE_MS = 200;
+/** Após evento realtime remoto — coalesce lotes (CSV) antes do pull. */
+const REALTIME_PULL_DEBOUNCE_MS = 2_000;
 /** Pull inicial ao carregar / autenticar no banco. */
 const SESSION_START_SYNC_MS = 600;
 /** Membro autorizado: varredura periódica (rede lenta / Realtime falhou). */
-const MEMBER_CLOUD_POLL_MS = 5_000;
+const MEMBER_CLOUD_POLL_MS = 8_000;
+/** A cada N ticks do poll do membro: força full fetch (~96s). */
+const MEMBER_FULL_FETCH_EVERY_TICKS = 12;
 
 type Listener = (state: SyncManagerState) => void;
 
@@ -427,8 +429,8 @@ function startMemberCloudPoll(): void {
       if (!uid) return;
       realtimeForcePull = true;
       backgroundSyncCooldownUntil = 0;
-      // A cada 3 ciclos (~15s): full fetch; nos outros, LWW incremental + force pull.
-      if (memberCloudPollTick % 3 === 0) {
+      // Full fetch periódico — evita martelar full a cada poucos segundos durante CSV do chefe.
+      if (memberCloudPollTick % MEMBER_FULL_FETCH_EVERY_TICKS === 0) {
         invalidateRemoteSnapshotCache();
         try {
           await forceNextFullRemoteFetch(uid);
@@ -511,13 +513,16 @@ function onRealtimeRemoteChange(): void {
           `applyTeamWipeIfNeeded falhou: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      // Cadastro/sessão novos do outro aparelho: full fetch (incremental pode
-      // subestimar e o auto-sync abortava com "nothing_pending").
+      // Mudanças remotas: invalida cache e puxa. Full fetch fica a cargo do
+      // watermark / poll do membro — forçar full a cada linha do CSV gerava
+      // snapshots incompletos e loop de prune no autorizado.
       invalidateRemoteSnapshotCache();
-      try {
-        await forceNextFullRemoteFetch(uid);
-      } catch {
-        // segue o pull
+      if (!isAuthorizedMemberSession()) {
+        try {
+          await forceNextFullRemoteFetch(uid);
+        } catch {
+          // segue o pull
+        }
       }
     }
     realtimeForcePull = true;
@@ -646,6 +651,9 @@ async function refreshCounters(pendingDownloads: number | null = counters.pendin
 }
 
 async function compactCadastrosIfNeeded(uid: string): Promise<void> {
+  // No membro, compactar por NIP apaga ids locais que a nuvem ainda tem → próximo
+  // sync rebaixa e o ciclo repete (perda visual + looping).
+  if (isAuthorizedMemberSession()) return;
   try {
     const removed = await compactDuplicateCadastrosByNip(uid);
     if (removed > 0) {

@@ -7,8 +7,9 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
+  Pressable,
 } from 'react-native';
-import { Cloud, Trash2, UserPlus } from 'lucide-react-native';
+import { Check, Cloud, Trash2, UserPlus } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { listAuthorizedEmails } from '../offline-first/sync/firebase/FirebaseGateway';
@@ -20,6 +21,12 @@ import { pushPendingAuthorizedEmails } from '../offline-first/sync/syncAuthorize
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { isAllowedAuthEmail, authEmailDomainErrorMessage, normalizeAuthEmail } from '../utils/normalizeAuthEmail';
 import { PREMIUM } from '../theme/premium';
+import { listEmailsWithE2eAccessLiberated } from '../services/supabase/teamE2eMemberWrapsCloud';
+import {
+  provisionAuthorizedMemberE2eAccess,
+  removeMemberE2eWrap,
+} from '../services/supabase/teamE2eSession';
+import { isE2eKeyActive } from '../services/supabase/e2eCrypto';
 
 export function AuthorizedEmailsBlock() {
   const { theme } = useTheme();
@@ -29,6 +36,7 @@ export function AuthorizedEmailsBlock() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -42,7 +50,6 @@ export function AuthorizedEmailsBlock() {
     setErro(null);
     try {
       let items = await authorizedEmailRepository.listLocalWithCloudStatus(user.uid);
-      // Confere com a nuvem do banco do chefe (quando online).
       try {
         const remote = await listAuthorizedEmails(user.uid);
         const remoteKeys = new Set(remote.map((e) => normalizeAuthEmail(e.email)));
@@ -51,7 +58,16 @@ export function AuthorizedEmailsBlock() {
           cloudSynced: remoteKeys.has(normalizeAuthEmail(item.email)),
         }));
       } catch {
-        // Offline / falha: mantém status local (synced = verde).
+        /* offline: mantém status local */
+      }
+      try {
+        const liberated = await listEmailsWithE2eAccessLiberated(user.uid);
+        items = items.map((item) => ({
+          ...item,
+          e2eAccessLiberated: liberated.has(normalizeAuthEmail(item.email)),
+        }));
+      } catch {
+        /* offline / tabela ausente */
       }
       setEmails(items);
     } catch (e) {
@@ -84,15 +100,23 @@ export function AuthorizedEmailsBlock() {
       const pushErrors = await pushPendingAuthorizedEmails(user.uid);
       setInput('');
       if (pushErrors.length > 0) {
-        const dekLocked = pushErrors.some((e) => /escudo verde|criptografia bloqueada/i.test(e));
         setMsg(
-          dekLocked
-            ? `E-mail ${email} autorizado. Com o escudo verde, sincronize para liberar o acesso automático do colega ao seu banco.`
-            : `E-mail ${email} autorizado localmente. Envio à nuvem pendente — sincronize para o colega poder entrar no seu banco.`,
+          `E-mail ${email} autorizado. Marque o checklist ao lado para liberar o acesso ao banco (escudo verde necessário).`,
         );
+      } else if (isE2eKeyActive()) {
+        const provisioned = await provisionAuthorizedMemberE2eAccess(user.uid, email);
+        if (provisioned.ok) {
+          setMsg(
+            `E-mail ${email} autorizado e acesso liberado. O colega entra só com a senha dele.`,
+          );
+        } else {
+          setMsg(
+            `E-mail ${email} autorizado na nuvem. Marque o checklist ao lado para liberar o acesso ao banco.`,
+          );
+        }
       } else {
         setMsg(
-          `E-mail ${email} autorizado na nuvem com acesso automático. O colega entra só com a senha dele.`,
+          `E-mail ${email} autorizado. Com o escudo verde, marque o checklist ao lado para liberar o acesso.`,
         );
       }
       await recarregar();
@@ -103,6 +127,51 @@ export function AuthorizedEmailsBlock() {
       setSaving(false);
     }
   }, [input, recarregar, user?.email, user?.uid]);
+
+  const handleToggleE2eAccess = useCallback(
+    async (entry: AuthorizedEmailListItem) => {
+      if (!user?.uid) return;
+      const email = normalizeAuthEmail(entry.email);
+      setTogglingEmail(email);
+      setErro(null);
+      setMsg(null);
+      try {
+        if (entry.e2eAccessLiberated) {
+          await removeMemberE2eWrap(user.uid, email);
+          setMsg(`Acesso ao banco removido para ${email}. O e-mail continua autorizado.`);
+        } else {
+          if (!isE2eKeyActive()) {
+            setErro(
+              'Escudo verde necessário. Entre com a senha da conta (criptografia ativa) e marque o checklist de novo.',
+            );
+            return;
+          }
+          // Garante e-mail na nuvem antes do wrap.
+          if (!entry.cloudSynced) {
+            await authorizedEmailRepository.addLocal(user.uid, email);
+            await pushPendingAuthorizedEmails(user.uid);
+          }
+          const result = await provisionAuthorizedMemberE2eAccess(user.uid, email);
+          if (!result.ok) {
+            setErro(
+              result.skipped === 'dek_locked'
+                ? 'Escudo verde necessário. Desbloqueie a criptografia e tente de novo.'
+                : result.error ?? 'Não foi possível liberar o acesso.',
+            );
+            return;
+          }
+          setMsg(`Acesso liberado para ${email}. O colega já pode entrar no seu banco.`);
+        }
+        await recarregar();
+        notifyDataChanged();
+      } catch (e) {
+        setErro(e instanceof Error ? e.message : 'Não foi possível alterar o acesso.');
+      } finally {
+        setTogglingEmail(null);
+      }
+    },
+    [recarregar, user?.uid],
+  );
 
   const handleRemove = useCallback(
     async (email: string) => {
@@ -136,8 +205,8 @@ export function AuthorizedEmailsBlock() {
   return (
     <View>
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
-        Pessoas autorizadas entram com o e-mail/senha delas e acessam automaticamente o seu banco
-        (sem senha de criptografia do chefe). Autorize com o escudo verde ativo para liberar o acesso na hora.
+        Autorize o e-mail e marque o checklist para liberar o acesso ao banco (escudo verde ativo).
+        Checklist marcado = colega entra só com a senha dele, sem pedir senha de criptografia.
       </Text>
 
       <View style={styles.addRow}>
@@ -191,6 +260,10 @@ export function AuthorizedEmailsBlock() {
             const cloudLabel = entry.cloudSynced
               ? `${entry.email} sincronizado com o banco na nuvem`
               : `${entry.email} ainda não sincronizado com a nuvem`;
+            const busy = togglingEmail === normalizeAuthEmail(entry.email);
+            const checkLabel = entry.e2eAccessLiberated
+              ? `Acesso liberado para ${entry.email}`
+              : `Liberar acesso ao banco para ${entry.email}`;
             return (
               <View
                 key={entry.email}
@@ -199,6 +272,28 @@ export function AuthorizedEmailsBlock() {
                   { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
                 ]}
               >
+                <Pressable
+                  onPress={() => void handleToggleE2eAccess(entry)}
+                  disabled={saving || busy}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: entry.e2eAccessLiberated }}
+                  accessibilityLabel={checkLabel}
+                  style={[
+                    styles.checkbox,
+                    {
+                      borderColor: entry.e2eAccessLiberated ? theme.gain : theme.border,
+                      backgroundColor: entry.e2eAccessLiberated
+                        ? theme.gain
+                        : theme.background,
+                    },
+                  ]}
+                >
+                  {busy ? (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  ) : entry.e2eAccessLiberated ? (
+                    <Check size={14} color="#fff" strokeWidth={3} />
+                  ) : null}
+                </Pressable>
                 <Text style={[ts.body, { color: theme.text, flex: 1 }]} numberOfLines={1}>
                   {entry.email}
                 </Text>
@@ -211,7 +306,7 @@ export function AuthorizedEmailsBlock() {
                 </View>
                 <TouchableOpacity
                   onPress={() => void handleRemove(entry.email)}
-                  disabled={saving}
+                  disabled={saving || busy}
                   accessibilityLabel={`Remover ${entry.email}`}
                   style={styles.removeBtn}
                 >
@@ -260,6 +355,15 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
   cloudIcon: { padding: 6, marginLeft: 4 },
   removeBtn: { padding: 6, marginLeft: 2 },

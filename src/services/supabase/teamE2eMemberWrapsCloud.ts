@@ -99,3 +99,28 @@ export async function deleteTeamE2eMemberWrap(
     throw new Error(error.message);
   }
 }
+
+/** E-mails do chefe que já têm desbloqueio automático (access_secret). */
+export async function listEmailsWithE2eAccessLiberated(
+  ownerUid: string,
+): Promise<Set<string>> {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from('team_e2e_member_wraps')
+    .select('email_key, access_secret_b64')
+    .eq('owner_uid', ownerUid);
+  if (error) {
+    if (/relation|does not exist|schema cache|404|access_secret_b64|column/i.test(error.message)) {
+      return new Set();
+    }
+    throw new Error(error.message);
+  }
+  const out = new Set<string>();
+  for (const row of data ?? []) {
+    const key = normalizeAuthEmail(String(row.email_key ?? ''));
+    if (key && String(row.access_secret_b64 ?? '').trim()) {
+      out.add(key);
+    }
+  }
+  return out;
+}

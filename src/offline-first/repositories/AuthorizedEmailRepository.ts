@@ -12,6 +12,8 @@ export type LocalAuthorizedEmail = AuthorizedEmailEntry & {
 export type AuthorizedEmailListItem = AuthorizedEmailEntry & {
   /** true = registro já está na nuvem do banco do chefe. */
   cloudSynced: boolean;
+  /** true = acesso E2E liberado (membro entra com escudo / sem senha do chefe). */
+  e2eAccessLiberated: boolean;
 };
 
 function rowId(ownerUid: string, email: string): string {
@@ -41,6 +43,7 @@ export const authorizedEmailRepository = {
         ativo,
         criadoEm,
         cloudSynced: syncStatus === 'synced',
+        e2eAccessLiberated: false,
       }));
   },
 

@@ -42,6 +42,14 @@ export async function resolveLocalSessionAfterLogin(
     console.warn('[auth] migrateDeviceDataOnLogin falhou:', error);
   }
   setAuthUidState(loginUid, dataOwnerUid, true);
+
+  // Membro/chefe: aplicar wipe remoto ANTES da UI ler o IndexedDB.
+  try {
+    await applyTeamWipeIfNeeded(dataOwnerUid, loginUid);
+  } catch (error) {
+    console.warn('[auth] applyTeamWipeIfNeeded no login falhou:', error);
+  }
+
   return { dataOwnerUid, isAuthorizedMember };
 }
 

@@ -54,6 +54,7 @@ import {
   clearE2eSession,
 } from '../../services/supabase/teamE2eSession';
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
+import { applyTeamWipeIfNeeded } from './syncTeamWipe';
 import {
   attachRealConflictsToSyncAudit,
   scanAndAuditRealConflicts,
@@ -437,9 +438,26 @@ async function runCloudDiffCycle(): Promise<void> {
 
 function onRealtimeRemoteChange(): void {
   if (!syncAuthAvailable) return;
-  // Sempre agenda — se houver sync em voo, tryBackgroundSync reagenda ao ficar livre.
-  void refreshCloudQueueEstimate(true);
-  syncManager.scheduleBackgroundSync(REALTIME_PULL_DEBOUNCE_MS);
+  // team_wipe e demais mudanças: aplica wipe mesmo sem pendências na fila.
+  void (async () => {
+    const uid = ownerUid ?? getCachedDataOwnerUid();
+    if (uid) {
+      try {
+        const wiped = await applyTeamWipeIfNeeded(uid, getCachedLoginUid());
+        if (wiped) {
+          await refreshPendingSummary();
+          notifyListeners();
+        }
+      } catch (error) {
+        await syncLogger.warn(
+          'realtime',
+          `applyTeamWipeIfNeeded falhou: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    void refreshCloudQueueEstimate(true);
+    syncManager.scheduleBackgroundSync(REALTIME_PULL_DEBOUNCE_MS);
+  })();
 }
 
 function ensureRealtimeBridge(uid: string | null | undefined): void {
@@ -988,6 +1006,14 @@ export const syncManager = {
     // Crash recovery da fila (7.4) — processing órfão volta a pending.
     await syncQueue.recoverStaleProcessing(dataOwnerUid);
     await syncEngine.preparePendingOwner(dataOwnerUid);
+    try {
+      await applyTeamWipeIfNeeded(dataOwnerUid, getCachedLoginUid());
+    } catch (error) {
+      await syncLogger.warn(
+        'sync',
+        `applyTeamWipeIfNeeded (bind): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     await compactCadastrosIfNeeded(dataOwnerUid);
     await loadLastSyncFromAudit();
     await refreshPendingSummary();
@@ -1007,6 +1033,14 @@ export const syncManager = {
   },
 
   async evaluateOnReconnect(): Promise<void> {
+    const uid = ownerUid ?? getCachedDataOwnerUid();
+    if (uid) {
+      try {
+        await applyTeamWipeIfNeeded(uid, getCachedLoginUid());
+      } catch {
+        // ignore
+      }
+    }
     await refreshPendingSummary();
     await refreshCloudQueueEstimate(true);
     notifyListeners();
@@ -1061,6 +1095,23 @@ export const syncManager = {
 
     backgroundSyncRunning = true;
     try {
+      const uid = ownerUid ?? getCachedDataOwnerUid();
+      if (uid) {
+        try {
+          const wiped = await applyTeamWipeIfNeeded(uid, getCachedLoginUid());
+          if (wiped) {
+            await refreshPendingSummary();
+            notifyListeners();
+            // Wipe aplicado — não precisa LWW se a nuvem/local estão vazios alinhados.
+          }
+        } catch (error) {
+          await syncLogger.warn(
+            'sync',
+            `applyTeamWipeIfNeeded (auto): ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
       await refreshPendingSummary();
       await refreshCloudQueueEstimate(true);
       const pendingUploads = pendingSummary.total;
@@ -1070,7 +1121,6 @@ export const syncManager = {
         return { ok: false, skipped: 'nothing_pending' };
       }
 
-      const uid = ownerUid ?? getCachedDataOwnerUid();
       const email = getFirebaseAuth()?.currentUser?.email ?? null;
       if (uid && !getActiveTeamKey()) {
         try {

@@ -214,15 +214,23 @@ export async function resolveStorageOwnerUid(): Promise<string | null> {
   }
 
   if (owner && isCloudOwnerUid(owner) && legacyOwnerMigrationDoneFor !== owner) {
-    try {
-      const { migrateLegacyFirebaseOwnersToCloudUid } = await import(
-        '../../offline-first/db/migration'
-      );
-      await migrateLegacyFirebaseOwnersToCloudUid(owner);
-      legacyOwnerMigrationDoneFor = owner;
-    } catch (error) {
-      console.warn('[auth] migrateLegacyFirebaseOwnersToCloudUid falhou:', error);
-    }
+    // Não bloqueia a UI (milhares de linhas no CSV legado). Lista já une todos os owners.
+    legacyOwnerMigrationDoneFor = owner;
+    void (async () => {
+      try {
+        const { reconcileOrphanOwnersToSession } = await import(
+          '../../offline-first/db/migration'
+        );
+        const moved = await reconcileOrphanOwnersToSession(owner);
+        if (moved > 0) {
+          const { notifyDataChanged } = await import('../../offline-first/sync/SyncEngine');
+          notifyDataChanged();
+        }
+      } catch (error) {
+        console.warn('[auth] reconcileOrphanOwnersToSession falhou:', error);
+        legacyOwnerMigrationDoneFor = null;
+      }
+    })();
   }
 
   return owner;

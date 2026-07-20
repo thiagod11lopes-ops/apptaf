@@ -100,7 +100,6 @@ export default function HomeScreen() {
   }, [syncUi.phase, syncUi.isSyncing, syncPendingTotal]);
 
   const recarregarResumo = useCallback(async () => {
-    if (!authReady) return;
     try {
       const [cadastros, sessoes, sessoesExcluidas] = await Promise.all([
         getAllCadastros(),
@@ -108,8 +107,8 @@ export default function HomeScreen() {
         getDeletedSessoesAplicacao(),
       ]);
       setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros, sessoesExcluidas));
-    } catch {
-      // Mantém resumo anterior — falha de rede não zera a tela.
+    } catch (error) {
+      console.warn('[home] falha ao recalcular cards:', error);
     }
     if (isAuthenticated && dataOwnerUid) {
       try {
@@ -119,7 +118,7 @@ export default function HomeScreen() {
         // mantém código anterior
       }
     }
-  }, [authReady, isAuthenticated, user?.uid, dataOwnerUid]);
+  }, [isAuthenticated, user?.uid, dataOwnerUid]);
 
   useAuthDataReload(recarregarResumo);
 

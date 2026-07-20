@@ -143,43 +143,60 @@ function uniqueOwnerSources(...uids: (string | null | undefined)[]): string[] {
   return out;
 }
 
+/** Owners distintos presentes no Dexie (inclui CSV legado / Firebase / UUID antigo). */
+async function listOwnerUidsInTable(
+  table: 'cadastros' | 'sessoes' | 'aplicadores',
+): Promise<string[]> {
+  const db = getTafDatabase();
+  if (!db) return [];
+  try {
+    const keys = await db[table].orderBy('ownerUid').uniqueKeys();
+    return keys.filter((k): k is string => typeof k === 'string' && k.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
 function resolveDisplayOwnerUid(ownerUid: string | null): string {
   if (ownerUid?.trim()) return ownerUid.trim();
   return ANONYMOUS_OWNER;
 }
 
-/** Lista cadastros para exibição — inclui owner persistido, login e __local__ (modo offline). */
+/** Lista cadastros para exibição — une todos os owners locais do aparelho (CSV/sessão). */
 export async function listCadastrosForDisplay(ownerUid: string | null): Promise<CadastroRecord[]> {
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
   const loginUid = getCachedLoginUid();
-  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
+  const indexedOwners = await listOwnerUidsInTable('cadastros');
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid, ...indexedOwners);
   const batches = await Promise.all(sources.map((uid) => listCadastros(uid)));
   const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
   const merged = mergeRecordsById(mergeTarget, batches);
   return dedupeCadastrosByNipNewest(merged) as CadastroRecord[];
 }
 
-/** Lista sessões para exibição — inclui owner persistido, login e __local__ (modo offline). */
+/** Lista sessões para exibição — une todos os owners locais do aparelho. */
 export async function listSessoesForDisplay(ownerUid: string | null): Promise<SessaoRecord[]> {
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
   const loginUid = getCachedLoginUid();
-  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
+  const indexedOwners = await listOwnerUidsInTable('sessoes');
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid, ...indexedOwners);
   const batches = await Promise.all(sources.map((uid) => listSessoes(uid)));
   const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
   return mergeRecordsById(mergeTarget, batches).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 
-/** Lista aplicadores para exibição — inclui owner persistido, login e __local__ (modo offline). */
+/** Lista aplicadores para exibição — une todos os owners locais do aparelho. */
 export async function listAplicadoresForDisplay(ownerUid: string | null): Promise<AplicadorRecord[]> {
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
   const loginUid = getCachedLoginUid();
-  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
+  const indexedOwners = await listOwnerUidsInTable('aplicadores');
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid, ...indexedOwners);
   const batches = await Promise.all(sources.map((uid) => listAplicadores(uid)));
   const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
   return mergeRecordsById(mergeTarget, batches);

@@ -22,7 +22,7 @@ import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { acknowledgeTeamWipeAfterLocalRestore } from '../offline-first/sync/syncTeamWipe';
 import { resolveStorageOwnerUid, getCachedLoginUid, setAuthUidState, invalidateLegacyOwnerMigrationCache } from '../services/firebase/authUid';
 import { isCloudOwnerUid } from './cloudOwnerUid';
-import { migrateLegacyFirebaseOwnersToCloudUid } from '../offline-first/db/migration';
+import { migrateLegacyFirebaseOwnersToCloudUid, reconcileOrphanOwnersToSession } from '../offline-first/db/migration';
 import { readUpdatedAt } from '../offline-first/sync/recordMeta';
 import {
   gatherSystemBackupData,
@@ -1018,9 +1018,14 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
   if (isCloudOwnerUid(ownerUid)) {
     invalidateLegacyOwnerMigrationCache();
     try {
-      await migrateLegacyFirebaseOwnersToCloudUid(ownerUid);
+      await reconcileOrphanOwnersToSession(ownerUid);
     } catch (error) {
-      console.warn('[backup-csv] migrateLegacyFirebaseOwnersToCloudUid falhou:', error);
+      console.warn('[backup-csv] reconcileOrphanOwnersToSession falhou:', error);
+      try {
+        await migrateLegacyFirebaseOwnersToCloudUid(ownerUid);
+      } catch (inner) {
+        console.warn('[backup-csv] migrateLegacyFirebaseOwnersToCloudUid falhou:', inner);
+      }
     }
   }
 

@@ -287,3 +287,47 @@ export async function migrateLegacyFirebaseOwnersToCloudUid(
     await migrateDexieOwnerToOwner(owner, targetOwnerUid);
   }
 }
+
+/**
+ * Se a sessão atual tem poucos/nenhum cadastro mas o aparelho tem dados sob outros owners
+ * (CSV legado, Firebase, outro UUID), migra tudo para o owner da sessão.
+ */
+export async function reconcileOrphanOwnersToSession(targetOwnerUid: string): Promise<number> {
+  if (!isCloudOwnerUid(targetOwnerUid)) return 0;
+  const db = getTafDatabase();
+  if (!db) return 0;
+
+  let active: Array<{ ownerUid?: string; deleted?: boolean }> = [];
+  try {
+    active = (await db.cadastros.toArray()).filter((r) => r.deleted !== true);
+  } catch {
+    return 0;
+  }
+  if (active.length === 0) {
+    await migrateAnonymousDexieToOwner(targetOwnerUid);
+    await migrateLegacyFirebaseOwnersToCloudUid(targetOwnerUid);
+    return 0;
+  }
+
+  const underTarget = active.filter((r) => r.ownerUid === targetOwnerUid).length;
+  // Já tem a maior parte dos dados no owner certo — só limpa Firebase/anônimo.
+  if (underTarget > 0 && underTarget >= Math.ceil(active.length * 0.5)) {
+    await migrateAnonymousDexieToOwner(targetOwnerUid);
+    await migrateLegacyFirebaseOwnersToCloudUid(targetOwnerUid);
+    return 0;
+  }
+
+  const owners = new Set<string>();
+  for (const row of active) {
+    if (row.ownerUid?.trim()) owners.add(row.ownerUid.trim());
+  }
+
+  let moved = 0;
+  for (const owner of owners) {
+    if (owner === targetOwnerUid) continue;
+    const result = await migrateDexieOwnerToOwner(owner, targetOwnerUid);
+    moved += result.cadastros + result.sessoes + result.aplicadores;
+  }
+  await migrateAnonymousDexieToOwner(targetOwnerUid);
+  return moved;
+}

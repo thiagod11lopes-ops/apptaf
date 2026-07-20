@@ -59,10 +59,10 @@ import {
   activateE2eFromLoginPassword,
   activateE2eForAuthorizedMember,
   clearE2eSession,
+  ensureE2eUnlockedForSession,
   ensureTeamKeyUnlocked,
   E2E_MEMBER_NEEDS_BOOTSTRAP,
   E2E_RECOVERY_NEEDS_UNLOCKED_SESSION_MESSAGE,
-  restoreE2eFromSessionStorage,
   rewrapMemberE2eWithNewPassword,
   rewrapTeamKeyWithNewPassword,
 } from '../services/supabase/teamE2eSession';
@@ -113,9 +113,9 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-async function restoreE2eForOwner(ownerUid: string): Promise<void> {
+async function restoreE2eForOwner(ownerUid: string, email?: string | null): Promise<void> {
   try {
-    await restoreE2eFromSessionStorage(ownerUid);
+    await ensureE2eUnlockedForSession(ownerUid, email);
   } catch (error) {
     console.warn('[e2e] restauração da sessão falhou:', error);
   }
@@ -273,7 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     confirmCloudDisplayReady();
     const access = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email).catch(() => null);
     const ownerUid = access?.dataOwnerUid ?? getCachedDataOwnerUid() ?? mapped.uid;
-    await restoreE2eForOwner(ownerUid);
+    await restoreE2eForOwner(ownerUid, mapped.email);
     const isMember = access?.isAuthorizedMember ?? ownerUid !== mapped.uid;
     setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
     setUser(mapped);
@@ -306,6 +306,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!force && finalizedUidRef.current === mapped.uid) {
         setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
         syncManager.setAuthAvailable(true);
+        const owner = getCachedDataOwnerUid() ?? mapped.uid;
+        await restoreE2eForOwner(owner, mapped.email);
         return true;
       }
 
@@ -324,7 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await hydrateAppStorageFromIndexedDb();
           confirmCloudDisplayReady();
           const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
-          await restoreE2eForOwner(session.dataOwnerUid);
+          await restoreE2eForOwner(session.dataOwnerUid, mapped.email);
           setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
           setUser(mapped);
           setDataOwnerUid(session.dataOwnerUid);
@@ -478,6 +480,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthorizedMember(Boolean(loginUid && owner && loginUid !== owner));
         setAuthUidState(loginUid, owner, true);
         setAuthReady(true);
+        void restoreE2eForOwner(owner, profile?.email ?? null);
         await syncManager.bindSession(owner);
         syncManager.setAuthAvailable(Boolean(data.session?.user));
       } else {
@@ -495,7 +498,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthReady(true);
           const owner =
             getCachedDataOwnerUid() ?? session.user.id;
-          void restoreE2eForOwner(owner);
+          void restoreE2eForOwner(owner, session.user.email ?? null);
         }
         clearFirebaseAuthParamsFromWindow();
         return;

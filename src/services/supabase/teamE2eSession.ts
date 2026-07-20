@@ -12,6 +12,8 @@ import {
 import { normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
 
 const SESSION_STORAGE_KEY = 'taf:e2e:teamKey';
+/** Persiste junto com o login (localStorage) para F5 / PWA manter escudo verde. */
+const LOCAL_STORAGE_KEY = 'taf:e2e:teamKey:durable';
 
 type StoredE2eSession = {
   ownerUid: string;
@@ -82,39 +84,127 @@ async function unwrapTeamKeyRaw(
   );
 }
 
-async function persistSessionKey(ownerUid: string, key: CryptoKey): Promise<void> {
-  if (typeof sessionStorage === 'undefined') return;
-  const keyJwk = await crypto.subtle.exportKey('jwk', key);
-  const stored: StoredE2eSession = { ownerUid, keyJwk };
-  sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(stored));
-}
-
-export function clearE2eSession(): void {
-  setActiveTeamKey(null);
-  if (typeof sessionStorage !== 'undefined') {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+function writeStoredE2eSession(stored: StoredE2eSession): void {
+  const raw = JSON.stringify(stored);
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, raw);
+    }
+  } catch {
+    /* quota / private mode */
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(LOCAL_STORAGE_KEY, raw);
+    }
+  } catch {
+    /* quota / private mode */
   }
 }
 
-export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<boolean> {
-  if (getActiveTeamKey()) return true;
-  if (typeof sessionStorage === 'undefined') return false;
-  const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
-  if (!raw) return false;
+function parseStoredE2eSession(raw: string | null): StoredE2eSession | null {
+  if (!raw) return null;
   try {
     const stored = JSON.parse(raw) as StoredE2eSession;
-    if (stored.ownerUid !== ownerUid || !stored.keyJwk) return false;
-    const key = await crypto.subtle.importKey(
+    if (stored?.ownerUid && stored.keyJwk) return stored;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function readStoredE2eSession(): StoredE2eSession | null {
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const fromSession = parseStoredE2eSession(sessionStorage.getItem(SESSION_STORAGE_KEY));
+      if (fromSession) return fromSession;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      return parseStoredE2eSession(localStorage.getItem(LOCAL_STORAGE_KEY));
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+async function importStoredTeamKey(stored: StoredE2eSession): Promise<CryptoKey | null> {
+  try {
+    return await crypto.subtle.importKey(
       'jwk',
       stored.keyJwk,
       { name: 'AES-GCM', length: 256 },
       true,
       ['encrypt', 'decrypt'],
     );
-    setActiveTeamKey(key);
-    return true;
   } catch {
-    return false;
+    return null;
+  }
+}
+
+async function persistSessionKey(ownerUid: string, key: CryptoKey): Promise<void> {
+  const keyJwk = await crypto.subtle.exportKey('jwk', key);
+  writeStoredE2eSession({ ownerUid, keyJwk });
+}
+
+export function clearE2eSession(): void {
+  setActiveTeamKey(null);
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<boolean> {
+  if (getActiveTeamKey()) return true;
+  if (!ownerUid.trim()) return false;
+
+  const stored = readStoredE2eSession();
+  if (!stored || stored.ownerUid !== ownerUid || !stored.keyJwk) return false;
+
+  const key = await importStoredTeamKey(stored);
+  if (!key) return false;
+  setActiveTeamKey(key);
+  // Regrava nos dois storages (migra session → local se faltava).
+  writeStoredE2eSession(stored);
+  return true;
+}
+
+/**
+ * Mantém escudo verde após F5 / reabertura: restaura DEK persistida
+ * ou desbloqueia membro via access_secret na nuvem.
+ */
+export async function ensureE2eUnlockedForSession(
+  ownerUid: string,
+  email?: string | null,
+): Promise<boolean> {
+  if (getActiveTeamKey()) return true;
+  if (!ownerUid.trim()) return false;
+
+  if (await restoreE2eFromSessionStorage(ownerUid)) return true;
+
+  const emailKey = normalizeAuthEmail(email ?? '');
+  if (!emailKey) return false;
+
+  try {
+    await activateE2eForAuthorizedMember(ownerUid, emailKey);
+    return Boolean(getActiveTeamKey());
+  } catch {
+    return Boolean(getActiveTeamKey());
   }
 }
 

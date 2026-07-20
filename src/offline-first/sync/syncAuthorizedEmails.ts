@@ -82,15 +82,17 @@ export async function pushPendingAuthorizedEmails(ownerUid: string): Promise<str
     }
   }
 
-  // Backfill: e-mails já autorizados sem access_secret (chefe com DEK).
-  try {
-    const all = await authorizedEmailRepository.listLocal(ownerUid);
-    await provisionE2eAccessForAllAuthorizedEmails(
-      ownerUid,
-      all.map((e) => e.email),
-    );
-  } catch (error) {
-    console.warn('[sync] provision E2E autorizados:', error);
+  // Backfill E2E só quando houve pendência nesta rodada — evita trabalho/eco a cada auto-sync.
+  if (pending.length > 0) {
+    try {
+      const all = await authorizedEmailRepository.listLocal(ownerUid);
+      await provisionE2eAccessForAllAuthorizedEmails(
+        ownerUid,
+        all.map((e) => e.email),
+      );
+    } catch (error) {
+      console.warn('[sync] provision E2E autorizados:', error);
+    }
   }
 
   return errors;

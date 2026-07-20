@@ -815,8 +815,10 @@ async function executePlanItem(
 
 async function ensureNoPendingRemain(ownerUid: string, stats: LwwSyncStats): Promise<void> {
   const remaining = await getPendingSyncItems(ownerUid);
-  if (remaining.total > 0) {
-    stats.errors.push(`pending_remain:${remaining.total}`);
+  // E-mails autorizados têm fila própria; não falham o LWW (evita retry em loop).
+  const nonEmail = remaining.total - (remaining.authorizedEmails ?? 0);
+  if (nonEmail > 0) {
+    stats.errors.push(`pending_remain:${nonEmail}`);
   }
 }
 

@@ -194,21 +194,37 @@ export async function addAuthorizedEmail(
   const sb = requireSupabase();
   const emailKey = normalizeAuthEmail(email);
   const id = emailKey;
-  const { error } = await sb.from('authorized_emails').upsert({
-    id,
-    owner_uid: ownerUid,
-    email: emailKey,
-    ativo: true,
-    criado_em: new Date().toISOString(),
-  });
-  if (error) return { ok: false, error: error.message };
+
+  // Já na nuvem e ativo: não regrava (evita UPDATE → Realtime → loop de sync).
+  const { data: existing, error: readErr } = await sb
+    .from('authorized_emails')
+    .select('id, ativo, criado_em')
+    .eq('owner_uid', ownerUid)
+    .eq('id', id)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+
+  if (!existing || existing.ativo === false) {
+    const { error } = await sb.from('authorized_emails').upsert({
+      id,
+      owner_uid: ownerUid,
+      email: emailKey,
+      ativo: true,
+      criado_em: existing?.criado_em ?? new Date().toISOString(),
+    });
+    if (error) return { ok: false, error: error.message };
+  }
+
   const { error: lookupErr } = await sb.from('member_lookup').upsert({
     email_key: emailKey,
     email: emailKey,
     boss_uid: ownerUid,
     ativo: true,
   });
-  if (lookupErr) return { ok: false, error: lookupErr.message };
+  // authorized_emails já ok — falha no lookup não deve manter pendência local em loop.
+  if (lookupErr) {
+    console.warn('[auth] member_lookup após autorizar e-mail:', lookupErr.message);
+  }
   return { ok: true };
 }
 

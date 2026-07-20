@@ -24,7 +24,7 @@ const REALTIME_TABLES = [
   'team_wipe',
 ] as const;
 
-const DEBOUNCE_MS = 400;
+const DEBOUNCE_MS = 200;
 
 type RemoteChangeHandler = () => void;
 

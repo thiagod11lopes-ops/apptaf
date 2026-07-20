@@ -52,6 +52,7 @@ import {
   ensureE2eKeyForCloudSync,
   ensureE2eUnlockedForSession,
   clearE2eSession,
+  isE2eSessionTrusted,
 } from '../../services/supabase/teamE2eSession';
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 import { applyTeamWipeIfNeeded } from './syncTeamWipe';
@@ -1044,7 +1045,8 @@ async function runSyncPipeline(
     mode = 'OFFLINE';
     await refreshPendingSummary();
 
-    if (/E2E_KEY_MISMATCH/i.test(rawError)) {
+    // Não derruba escudo verde após login com senha (mismatch parcial em sync grande).
+    if (/E2E_KEY_MISMATCH/i.test(rawError) && !isE2eSessionTrusted()) {
       clearE2eSession();
     }
 

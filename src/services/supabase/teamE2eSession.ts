@@ -189,6 +189,11 @@ export function clearE2eSession(): void {
   }
 }
 
+/** true após login com senha / access_secret — não derrubar o escudo por probe/sync parcial. */
+export function isE2eSessionTrusted(): boolean {
+  return trustActiveTeamKey && Boolean(getActiveTeamKey());
+}
+
 export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<boolean> {
   if (getActiveTeamKey()) return true;
   if (!ownerUid.trim()) return false;

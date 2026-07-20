@@ -67,6 +67,7 @@ import {
   rewrapMemberE2eWithNewPassword,
   rewrapTeamKeyWithNewPassword,
 } from '../services/supabase/teamE2eSession';
+import { getActiveTeamKey } from '../services/supabase/e2eCrypto';
 import { fetchTeamE2eMeta } from '../services/supabase/teamE2eCloud';
 import { ensureDatabaseBankCode } from '../services/supabase/databaseRegistryCloud';
 
@@ -290,8 +291,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await syncManager.bindSession(ownerUid);
       syncManager.setAuthAvailable(true);
       if (getConnectivityState() === 'ONLINE') {
-        await syncManager.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
-        notifyDataChanged();
+        // Espelho em segundo plano — não trava "Concluindo login…".
+        void syncManager
+          .awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true })
+          .then(() => notifyDataChanged())
+          .catch(() => {});
       }
       void syncManager.refreshCloudDiff().catch((err) => {
         console.warn('[auth] refreshCloudDiff (fallback) falhou:', err);
@@ -333,11 +337,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await hydrateAppStorageFromIndexedDb();
           confirmCloudDisplayReady();
           const session = await resolveLocalSessionAfterLogin(mapped.uid, mapped.email);
-          // E2E: não pode travar o spinner — timeout curto + continua.
-          await Promise.race([
-            restoreE2eForOwner(session.dataOwnerUid, mapped.email),
-            new Promise<void>((resolve) => setTimeout(resolve, 4_000)),
-          ]);
+          // Senha de login já pode ter desbloqueado a DEK — não competir com timeout curto.
+          if (!getActiveTeamKey()) {
+            await Promise.race([
+              restoreE2eForOwner(session.dataOwnerUid, mapped.email),
+              new Promise<void>((resolve) => setTimeout(resolve, 12_000)),
+            ]);
+          } else {
+            void restoreE2eForOwner(session.dataOwnerUid, mapped.email);
+          }
           setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
           setUser(mapped);
           setDataOwnerUid(session.dataOwnerUid);
@@ -351,12 +359,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (supabaseEnabled) {
             await syncManager.bindSession(session.dataOwnerUid);
             syncManager.setAuthAvailable(true);
-            // Online: espelha a nuvem no IndexedDB antes da UI confiar nos dados locais.
+            // Online: espelho em segundo plano (2k+ cadastros não podem travar o login).
             if (getConnectivityState() === 'ONLINE') {
-              await syncManager.awaitCloudAuthoritativeMirror({
-                timeoutMs: 180_000,
-                silent: true,
-              });
+              void syncManager
+                .awaitCloudAuthoritativeMirror({
+                  timeoutMs: 180_000,
+                  silent: true,
+                })
+                .then(() => notifyDataChanged())
+                .catch(() => {});
             }
             notifyDataChanged();
             void syncManager.refreshCloudDiff().catch((err) => {

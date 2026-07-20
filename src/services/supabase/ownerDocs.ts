@@ -61,12 +61,15 @@ export const E2E_KEY_MISMATCH_MESSAGE =
 async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
   const out: CloudDocRow[] = [];
   let decryptFailures = 0;
+  let encryptedSeen = 0;
   for (const row of rows) {
+    const raw = row.data ?? {};
+    if (isCloudDataEncrypted(raw)) encryptedSeen += 1;
     try {
       out.push({
         ...row,
         deleted: row.deleted ?? false,
-        data: await maybeDecryptFromCloud(row.data ?? {}),
+        data: await maybeDecryptFromCloud(raw),
       });
     } catch (error) {
       decryptFailures += 1;
@@ -76,15 +79,65 @@ async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
       );
     }
   }
-  // Chave divergente entre aparelhos: NÃO silenciar (senão um BNC fica vazio e o outro cheio).
-  if (decryptFailures > 0) {
+  // Nenhum registro legível com a chave atual → chave errada neste aparelho.
+  if (encryptedSeen > 0 && out.length === 0 && decryptFailures > 0) {
     const err = new Error(
       `${E2E_KEY_MISMATCH_CODE}: ${E2E_KEY_MISMATCH_MESSAGE} (${decryptFailures} registro(s) ilegíveis).`,
     );
     (err as Error & { code?: string }).code = E2E_KEY_MISMATCH_CODE;
     throw err;
   }
+  // Parcial: mantém só os legíveis (órfãos de chave antiga serão sobrescritos no upload local).
   return out;
+}
+
+const HEAL_TABLES = [
+  'cadastros',
+  'cadastro_rubricas',
+  'sessoes',
+  'sessao_rubricas',
+  'aplicadores',
+  'aplicador_senhas',
+  'pre_cadastros',
+] as const;
+
+/**
+ * Após desbloquear a chave correta (senha): remove na nuvem docs cifrados
+ * que esta chave não abre (lixo de chave antiga / outro aparelho).
+ * Assim o próximo sync reenvia os dados locais com a chave alinhada.
+ */
+export async function purgeUndecryptableOwnerDocs(ownerUid: string): Promise<number> {
+  if (!ownerUid.trim() || !getActiveTeamKey()) return 0;
+  const sb = requireSupabase();
+  let removed = 0;
+
+  for (const table of HEAL_TABLES) {
+    let from = 0;
+    for (;;) {
+      const { data, error } = await sb
+        .from(table)
+        .select('id, data')
+        .eq('owner_uid', ownerUid)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) throw new Error(error.message);
+      const chunk = (data ?? []) as Array<{ id: string; data: unknown }>;
+      for (const row of chunk) {
+        const payload = (row.data ?? {}) as Record<string, unknown>;
+        if (!isCloudDataEncrypted(payload)) continue;
+        try {
+          await maybeDecryptFromCloud(payload);
+        } catch {
+          await deleteOwnerDoc(table, ownerUid, row.id);
+          removed += 1;
+        }
+      }
+      if (chunk.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+  }
+
+  return removed;
 }
 
 /** Lista todos os docs do owner (paginado — evita corte em 1000). */

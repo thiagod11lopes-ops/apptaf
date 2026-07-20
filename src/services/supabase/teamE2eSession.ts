@@ -217,28 +217,37 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
   return true;
 }
 
-/** true se não há dado cifrado na nuvem ou se a DEK atual abre o primeiro registro. */
+/** true se não há dado cifrado na nuvem ou se a DEK atual abre algum registro. */
 async function probeStoredKeyAgainstCloud(ownerUid: string): Promise<boolean> {
   try {
     const { requireSupabase } = await import('../../config/supabase');
     const { isCloudDataEncrypted, maybeDecryptFromCloud } = await import('./e2eCrypto');
     const sb = requireSupabase();
-    const { data, error } = await sb
-      .from('cadastros')
-      .select('data')
-      .eq('owner_uid', ownerUid)
-      .limit(5);
-    if (error || !data?.length) return true;
-    for (const row of data) {
-      const payload = (row as { data?: Record<string, unknown> }).data ?? {};
-      if (!isCloudDataEncrypted(payload)) continue;
-      try {
-        await maybeDecryptFromCloud(payload);
-        return true;
-      } catch {
-        return false;
+    const tables = ['cadastros', 'sessoes', 'aplicadores', 'pre_cadastros'] as const;
+    let sawEncrypted = false;
+
+    for (const table of tables) {
+      const { data, error } = await sb
+        .from(table)
+        .select('data')
+        .eq('owner_uid', ownerUid)
+        .limit(8);
+      if (error || !data?.length) continue;
+      for (const row of data) {
+        const payload = (row as { data?: Record<string, unknown> }).data ?? {};
+        if (!isCloudDataEncrypted(payload)) continue;
+        sawEncrypted = true;
+        try {
+          await maybeDecryptFromCloud(payload);
+          return true;
+        } catch {
+          // tenta próximo registro/tabela
+        }
       }
     }
+
+    // Havia cifrado e nenhum abriu com esta DEK.
+    if (sawEncrypted) return false;
     return true;
   } catch {
     return true;
@@ -253,8 +262,13 @@ export async function ensureE2eUnlockedForSession(
   ownerUid: string,
   email?: string | null,
 ): Promise<boolean> {
-  if (getActiveTeamKey()) return true;
   if (!ownerUid.trim()) return false;
+
+  if (getActiveTeamKey()) {
+    const ok = await probeStoredKeyAgainstCloud(ownerUid);
+    if (ok) return true;
+    clearE2eSession();
+  }
 
   if (await restoreE2eFromSessionStorage(ownerUid)) return true;
 
@@ -364,6 +378,7 @@ export async function provisionE2eAccessForAllAuthorizedEmails(
 /**
  * Ativa criptografia E2E com a senha de login.
  * Chefe: cria chave de equipe na primeira vez.
+ * Sempre relê a meta na nuvem após criar (evita corrida entre aparelhos).
  */
 export async function activateE2eFromLoginPassword(
   ownerUid: string,
@@ -392,8 +407,17 @@ export async function activateE2eFromLoginPassword(
       ['encrypt', 'decrypt'],
     );
     const wrapped = await wrapTeamKeyRaw(teamKey, password, saltB64);
-    await upsertTeamE2eMeta(ownerUid, saltB64, wrapped);
-    meta = { owner_uid: ownerUid, salt_b64: saltB64, wrapped_key_b64: wrapped, key_version: 1 };
+    // Versão alta invalida DEK antiga guardada sem version / de outro aparelho.
+    const keyVersion = Math.max(1, Math.floor(Date.now() / 1000));
+    await upsertTeamE2eMeta(ownerUid, saltB64, wrapped, keyVersion);
+  }
+
+  // Sempre a meta canônica da nuvem (ganhador da corrida entre aparelhos).
+  meta = await fetchTeamE2eMeta(ownerUid);
+  if (!meta) {
+    throw new Error(
+      'Não foi possível criar/ler a criptografia do banco. Tente entrar novamente.',
+    );
   }
 
   try {
@@ -404,6 +428,20 @@ export async function activateE2eFromLoginPassword(
     throw new Error(
       'Não foi possível desbloquear a criptografia do banco. Confira a senha e tente de novo.',
     );
+  }
+
+  await healCloudAfterUnlock(ownerUid);
+}
+
+async function healCloudAfterUnlock(ownerUid: string): Promise<void> {
+  try {
+    const { purgeUndecryptableOwnerDocs } = await import('./ownerDocs');
+    const removed = await purgeUndecryptableOwnerDocs(ownerUid);
+    if (removed > 0) {
+      console.info(`[e2e] removidos ${removed} registro(s) na nuvem cifrados com chave antiga`);
+    }
+  } catch (error) {
+    console.warn('[e2e] limpeza de docs ilegíveis falhou:', error);
   }
 }
 
@@ -445,6 +483,7 @@ export async function activateE2eForAuthorizedMember(
       );
       setActiveTeamKey(teamKey);
       await persistSessionKey(bossUid, teamKey, memberWrap.key_version ?? 1);
+      await healCloudAfterUnlock(bossUid);
       return;
     } catch {
       console.warn('[e2e] access_secret inválido; tentando fallbacks');
@@ -461,6 +500,7 @@ export async function activateE2eForAuthorizedMember(
       );
       setActiveTeamKey(teamKey);
       await persistSessionKey(bossUid, teamKey, memberWrap.key_version ?? 1);
+      await healCloudAfterUnlock(bossUid);
       return;
     } catch {
       /* continua */
@@ -508,6 +548,7 @@ export async function activateE2eForAuthorizedMember(
 
   setActiveTeamKey(teamKey);
   await persistSessionKey(bossUid, teamKey, meta.key_version ?? 1);
+  await healCloudAfterUnlock(bossUid);
   // Preferência: gravar acesso automático daqui pra frente.
   try {
     const accessSecret = toBase64(crypto.getRandomValues(new Uint8Array(32)));

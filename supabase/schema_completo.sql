@@ -1,15 +1,87 @@
 -- =============================================================================
--- TAF App — SCHEMA COMPLETO (idempotente)
--- Cole TODO este arquivo no SQL Editor do Supabase e clique em Run.
+-- TAF App — SCHEMA COMPLETO (apaga objetos do AppTAF e recria do zero)
+--
+-- Como usar no Supabase → SQL Editor:
+--   1) Selecione TODO este arquivo (Ctrl+A)
+--   2) Cole no SQL Editor
+--   3) Clique em Run
+--
+-- ATENÇÃO: a seção LIMPEZA apaga DADOS das tabelas do AppTAF (cadastros,
+-- sessões, e-mails autorizados, E2E, etc.). NÃO apaga auth.users (contas).
 -- Pode executar mais de uma vez sem erro.
--- NÃO apaga dados existentes (só cria/atualiza tabelas, funções e policies).
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- Tabelas
+-- 0) LIMPEZA — remove objetos antigos do AppTAF (idempotente)
 -- ---------------------------------------------------------------------------
 
-create table if not exists public.member_lookup (
+do $$
+declare
+  tbl text;
+  tables text[] := array[
+    'cadastros',
+    'cadastro_rubricas',
+    'sessoes',
+    'sessao_rubricas',
+    'aplicadores',
+    'aplicador_senhas',
+    'pre_cadastros',
+    'authorized_emails',
+    'team_wipe',
+    'team_e2e_member_wraps',
+    'team_e2e_meta',
+    'database_registry',
+    'member_lookup',
+    'member_uid_lookup'
+  ];
+begin
+  foreach tbl in array tables loop
+    if exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = tbl
+    ) then
+      execute format('alter publication supabase_realtime drop table public.%I', tbl);
+    end if;
+  end loop;
+exception
+  when undefined_object then
+    null;
+end $$;
+
+drop function if exists public.admin_list_boss_emails();
+drop function if exists public.admin_list_authorized_emails(uuid);
+drop function if exists public.ensure_database_bank_code(uuid);
+drop function if exists public.resolve_member_boss(text);
+drop function if exists public.register_authorized_member_login(uuid, text, uuid);
+drop function if exists public.can_access_owner(uuid);
+drop function if exists public.is_active_member_of(uuid);
+drop function if exists public.is_boss(uuid);
+
+drop table if exists public.team_e2e_member_wraps cascade;
+drop table if exists public.team_e2e_meta cascade;
+drop table if exists public.team_wipe cascade;
+drop table if exists public.pre_cadastros cascade;
+drop table if exists public.aplicador_senhas cascade;
+drop table if exists public.aplicadores cascade;
+drop table if exists public.sessao_rubricas cascade;
+drop table if exists public.sessoes cascade;
+drop table if exists public.cadastro_rubricas cascade;
+drop table if exists public.cadastros cascade;
+drop table if exists public.authorized_emails cascade;
+drop table if exists public.database_registry cascade;
+drop table if exists public.member_uid_lookup cascade;
+drop table if exists public.member_lookup cascade;
+
+drop sequence if exists public.database_bank_number_seq;
+
+-- ---------------------------------------------------------------------------
+-- 1) Tabelas
+-- ---------------------------------------------------------------------------
+
+create table public.member_lookup (
   email_key text primary key,
   email text not null,
   boss_uid uuid not null,
@@ -19,7 +91,7 @@ create table if not exists public.member_lookup (
   criado_em timestamptz default now()
 );
 
-create table if not exists public.member_uid_lookup (
+create table public.member_uid_lookup (
   member_uid uuid primary key,
   boss_uid uuid not null,
   ativo boolean not null default true,
@@ -27,7 +99,7 @@ create table if not exists public.member_uid_lookup (
   last_login_at timestamptz
 );
 
-create table if not exists public.authorized_emails (
+create table public.authorized_emails (
   id text not null,
   owner_uid uuid not null,
   email text not null,
@@ -36,7 +108,7 @@ create table if not exists public.authorized_emails (
   primary key (owner_uid, id)
 );
 
-create table if not exists public.cadastros (
+create table public.cadastros (
   id text not null,
   owner_uid uuid not null,
   data jsonb not null default '{}'::jsonb,
@@ -45,7 +117,7 @@ create table if not exists public.cadastros (
   primary key (owner_uid, id)
 );
 
-create table if not exists public.cadastro_rubricas (
+create table public.cadastro_rubricas (
   id text not null,
   owner_uid uuid not null,
   data jsonb not null default '{}'::jsonb,
@@ -53,24 +125,7 @@ create table if not exists public.cadastro_rubricas (
   primary key (owner_uid, id)
 );
 
-create table if not exists public.sessoes (
-  id text not null,
-  owner_uid uuid not null,
-  data jsonb not null default '{}'::jsonb,
-  updated_at bigint not null default 0,
-  deleted boolean not null default false,
-  primary key (owner_uid, id)
-);
-
-create table if not exists public.sessao_rubricas (
-  id text not null,
-  owner_uid uuid not null,
-  data jsonb not null default '{}'::jsonb,
-  updated_at bigint not null default 0,
-  primary key (owner_uid, id)
-);
-
-create table if not exists public.aplicadores (
+create table public.sessoes (
   id text not null,
   owner_uid uuid not null,
   data jsonb not null default '{}'::jsonb,
@@ -79,7 +134,7 @@ create table if not exists public.aplicadores (
   primary key (owner_uid, id)
 );
 
-create table if not exists public.aplicador_senhas (
+create table public.sessao_rubricas (
   id text not null,
   owner_uid uuid not null,
   data jsonb not null default '{}'::jsonb,
@@ -87,7 +142,7 @@ create table if not exists public.aplicador_senhas (
   primary key (owner_uid, id)
 );
 
-create table if not exists public.pre_cadastros (
+create table public.aplicadores (
   id text not null,
   owner_uid uuid not null,
   data jsonb not null default '{}'::jsonb,
@@ -96,13 +151,30 @@ create table if not exists public.pre_cadastros (
   primary key (owner_uid, id)
 );
 
-create table if not exists public.team_wipe (
+create table public.aplicador_senhas (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  primary key (owner_uid, id)
+);
+
+create table public.pre_cadastros (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  deleted boolean not null default false,
+  primary key (owner_uid, id)
+);
+
+create table public.team_wipe (
   owner_uid uuid primary key,
   wiped_at bigint not null,
   wiped_at_server timestamptz default now()
 );
 
-create table if not exists public.team_e2e_meta (
+create table public.team_e2e_meta (
   owner_uid uuid primary key,
   salt_b64 text not null,
   wrapped_key_b64 text not null,
@@ -110,9 +182,9 @@ create table if not exists public.team_e2e_meta (
   updated_at timestamptz default now()
 );
 
-create sequence if not exists public.database_bank_number_seq;
+create sequence public.database_bank_number_seq;
 
-create table if not exists public.database_registry (
+create table public.database_registry (
   owner_uid uuid primary key,
   bank_number int not null unique,
   bank_code text not null unique,
@@ -120,20 +192,43 @@ create table if not exists public.database_registry (
   created_at timestamptz not null default now()
 );
 
+create table public.team_e2e_member_wraps (
+  owner_uid uuid not null,
+  email_key text not null,
+  salt_b64 text not null,
+  wrapped_key_b64 text not null,
+  key_version int not null default 1,
+  access_secret_b64 text,
+  updated_at timestamptz not null default now(),
+  primary key (owner_uid, email_key)
+);
+
 -- ---------------------------------------------------------------------------
--- Indices
+-- 2) Indices
 -- ---------------------------------------------------------------------------
 
-create index if not exists idx_cadastros_owner_updated on public.cadastros (owner_uid, updated_at);
-create index if not exists idx_sessoes_owner_updated on public.sessoes (owner_uid, updated_at);
-create index if not exists idx_aplicadores_owner_updated on public.aplicadores (owner_uid, updated_at);
-create index if not exists idx_pre_cadastros_owner_updated on public.pre_cadastros (owner_uid, updated_at);
-create index if not exists idx_member_lookup_boss on public.member_lookup (boss_uid);
-create index if not exists idx_member_uid_lookup_boss on public.member_uid_lookup (boss_uid);
-create index if not exists idx_database_registry_number on public.database_registry (bank_number);
+create index idx_cadastros_owner_updated on public.cadastros (owner_uid, updated_at);
+create index idx_sessoes_owner_updated on public.sessoes (owner_uid, updated_at);
+create index idx_aplicadores_owner_updated on public.aplicadores (owner_uid, updated_at);
+create index idx_pre_cadastros_owner_updated on public.pre_cadastros (owner_uid, updated_at);
+create index idx_member_lookup_boss on public.member_lookup (boss_uid);
+create index idx_member_uid_lookup_boss on public.member_uid_lookup (boss_uid);
+create index idx_database_registry_number on public.database_registry (bank_number);
+create index idx_team_e2e_member_wraps_email on public.team_e2e_member_wraps (email_key);
+
+-- Replica identity FULL: filtros Realtime em UPDATE/DELETE funcionam corretamente
+alter table public.cadastros replica identity full;
+alter table public.cadastro_rubricas replica identity full;
+alter table public.sessoes replica identity full;
+alter table public.sessao_rubricas replica identity full;
+alter table public.aplicadores replica identity full;
+alter table public.aplicador_senhas replica identity full;
+alter table public.pre_cadastros replica identity full;
+alter table public.authorized_emails replica identity full;
+alter table public.team_wipe replica identity full;
 
 -- ---------------------------------------------------------------------------
--- Helpers de autorizacao
+-- 3) Helpers de autorizacao
 -- ---------------------------------------------------------------------------
 
 create or replace function public.is_boss(owner uuid)
@@ -180,7 +275,7 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- Privileges
+-- 4) Privileges
 -- ---------------------------------------------------------------------------
 
 grant usage on schema public to anon, authenticated;
@@ -197,7 +292,8 @@ grant select, insert, update, delete on
   public.aplicador_senhas,
   public.pre_cadastros,
   public.team_wipe,
-  public.team_e2e_meta
+  public.team_e2e_meta,
+  public.team_e2e_member_wraps
 to authenticated;
 
 grant select, insert on public.database_registry to authenticated;
@@ -208,7 +304,7 @@ grant execute on function public.is_active_member_of(uuid) to authenticated, ano
 grant execute on function public.can_access_owner(uuid) to authenticated, anon;
 
 -- ---------------------------------------------------------------------------
--- RLS
+-- 5) RLS
 -- ---------------------------------------------------------------------------
 
 alter table public.member_lookup enable row level security;
@@ -224,9 +320,9 @@ alter table public.pre_cadastros enable row level security;
 alter table public.team_wipe enable row level security;
 alter table public.team_e2e_meta enable row level security;
 alter table public.database_registry enable row level security;
+alter table public.team_e2e_member_wraps enable row level security;
 
 -- member_lookup
-drop policy if exists member_lookup_select on public.member_lookup;
 create policy member_lookup_select on public.member_lookup
   for select to authenticated
   using (
@@ -234,12 +330,10 @@ create policy member_lookup_select on public.member_lookup
     or boss_uid = auth.uid()
   );
 
-drop policy if exists member_lookup_insert on public.member_lookup;
 create policy member_lookup_insert on public.member_lookup
   for insert to authenticated
   with check (boss_uid = auth.uid());
 
-drop policy if exists member_lookup_update on public.member_lookup;
 create policy member_lookup_update on public.member_lookup
   for update to authenticated
   using (
@@ -254,122 +348,146 @@ create policy member_lookup_update on public.member_lookup
     )
   );
 
-drop policy if exists member_lookup_delete on public.member_lookup;
 create policy member_lookup_delete on public.member_lookup
   for delete to authenticated
   using (boss_uid = auth.uid());
 
 -- member_uid_lookup
-drop policy if exists member_uid_lookup_select on public.member_uid_lookup;
 create policy member_uid_lookup_select on public.member_uid_lookup
   for select to authenticated
   using (member_uid = auth.uid() or boss_uid = auth.uid());
 
-drop policy if exists member_uid_lookup_upsert on public.member_uid_lookup;
 create policy member_uid_lookup_upsert on public.member_uid_lookup
   for all to authenticated
   using (member_uid = auth.uid() or boss_uid = auth.uid())
   with check (member_uid = auth.uid() or boss_uid = auth.uid());
 
 -- authorized_emails
-drop policy if exists authorized_emails_boss on public.authorized_emails;
 create policy authorized_emails_boss on public.authorized_emails
   for all to authenticated
   using (owner_uid = auth.uid())
   with check (owner_uid = auth.uid());
 
 -- Dados compartilhados
-drop policy if exists cadastros_access on public.cadastros;
 create policy cadastros_access on public.cadastros
   for all to authenticated
   using (public.can_access_owner(owner_uid))
   with check (public.can_access_owner(owner_uid));
 
-drop policy if exists cadastro_rubricas_access on public.cadastro_rubricas;
 create policy cadastro_rubricas_access on public.cadastro_rubricas
   for all to authenticated
   using (public.can_access_owner(owner_uid))
   with check (public.can_access_owner(owner_uid));
 
-drop policy if exists sessoes_access on public.sessoes;
 create policy sessoes_access on public.sessoes
   for all to authenticated
   using (public.can_access_owner(owner_uid))
   with check (public.can_access_owner(owner_uid));
 
-drop policy if exists sessao_rubricas_access on public.sessao_rubricas;
 create policy sessao_rubricas_access on public.sessao_rubricas
   for all to authenticated
   using (public.can_access_owner(owner_uid))
   with check (public.can_access_owner(owner_uid));
 
-drop policy if exists aplicadores_access on public.aplicadores;
 create policy aplicadores_access on public.aplicadores
   for all to authenticated
   using (public.can_access_owner(owner_uid))
   with check (public.can_access_owner(owner_uid));
 
-drop policy if exists aplicador_senhas_select on public.aplicador_senhas;
 create policy aplicador_senhas_select on public.aplicador_senhas
   for select to authenticated
   using (public.is_boss(owner_uid));
 
-drop policy if exists aplicador_senhas_write on public.aplicador_senhas;
 create policy aplicador_senhas_write on public.aplicador_senhas
   for insert to authenticated
   with check (public.can_access_owner(owner_uid));
 
-drop policy if exists aplicador_senhas_update on public.aplicador_senhas;
 create policy aplicador_senhas_update on public.aplicador_senhas
   for update to authenticated
   using (public.can_access_owner(owner_uid))
   with check (public.can_access_owner(owner_uid));
 
-drop policy if exists aplicador_senhas_delete on public.aplicador_senhas;
 create policy aplicador_senhas_delete on public.aplicador_senhas
   for delete to authenticated
   using (public.is_boss(owner_uid));
 
-drop policy if exists pre_cadastros_access on public.pre_cadastros;
 create policy pre_cadastros_access on public.pre_cadastros
   for all to authenticated
   using (public.can_access_owner(owner_uid))
   with check (public.can_access_owner(owner_uid));
 
-drop policy if exists team_wipe_access on public.team_wipe;
 create policy team_wipe_access on public.team_wipe
   for all to authenticated
   using (public.can_access_owner(owner_uid))
   with check (public.is_boss(owner_uid));
 
-drop policy if exists team_e2e_meta_select on public.team_e2e_meta;
 create policy team_e2e_meta_select on public.team_e2e_meta
   for select to authenticated
   using (public.can_access_owner(owner_uid));
 
-drop policy if exists team_e2e_meta_insert on public.team_e2e_meta;
 create policy team_e2e_meta_insert on public.team_e2e_meta
   for insert to authenticated
   with check (public.is_boss(owner_uid));
 
-drop policy if exists team_e2e_meta_update on public.team_e2e_meta;
 create policy team_e2e_meta_update on public.team_e2e_meta
   for update to authenticated
   using (public.is_boss(owner_uid))
   with check (public.is_boss(owner_uid));
 
-drop policy if exists database_registry_select on public.database_registry;
 create policy database_registry_select on public.database_registry
   for select to authenticated
   using (public.can_access_owner(owner_uid));
 
-drop policy if exists database_registry_insert on public.database_registry;
 create policy database_registry_insert on public.database_registry
   for insert to authenticated
   with check (public.is_boss(owner_uid));
 
+create policy team_e2e_member_wraps_select on public.team_e2e_member_wraps
+  for select to authenticated
+  using (
+    public.is_boss(owner_uid)
+    or (
+      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and public.is_active_member_of(owner_uid)
+    )
+  );
+
+create policy team_e2e_member_wraps_insert on public.team_e2e_member_wraps
+  for insert to authenticated
+  with check (
+    public.is_boss(owner_uid)
+    or (
+      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and public.is_active_member_of(owner_uid)
+    )
+  );
+
+create policy team_e2e_member_wraps_update on public.team_e2e_member_wraps
+  for update to authenticated
+  using (
+    public.is_boss(owner_uid)
+    or (
+      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and public.is_active_member_of(owner_uid)
+    )
+  )
+  with check (
+    public.is_boss(owner_uid)
+    or (
+      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and public.is_active_member_of(owner_uid)
+    )
+  );
+
+create policy team_e2e_member_wraps_delete on public.team_e2e_member_wraps
+  for delete to authenticated
+  using (
+    public.is_boss(owner_uid)
+    or email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+  );
+
 -- ---------------------------------------------------------------------------
--- Codigo do banco (BNC001, BNC002, ...)
+-- 6) Codigo do banco (BNC001, BNC002, ...)
 -- ---------------------------------------------------------------------------
 
 create or replace function public.ensure_database_bank_code(p_owner uuid)
@@ -402,7 +520,6 @@ begin
     return existing;
   end if;
 
-  -- So o chefe aloca numero novo; membro aguarda o chefe.
   if not public.is_boss(p_owner) then
     return null;
   end if;
@@ -427,33 +544,9 @@ $$;
 
 grant execute on function public.ensure_database_bank_code(uuid) to authenticated;
 
--- Backfill: bancos que ja tem chave E2E recebem numero pela ordem de criacao.
-do $$
-declare
-  max_n int;
-begin
-  insert into public.database_registry (owner_uid, bank_number, bank_code, created_at)
-  select
-    t.owner_uid,
-    row_number() over (order by t.updated_at nulls last, t.owner_uid)::int,
-    'BNC' || lpad(row_number() over (order by t.updated_at nulls last, t.owner_uid)::text, 3, '0'),
-    coalesce(t.updated_at, now())
-  from public.team_e2e_meta t
-  where not exists (
-    select 1 from public.database_registry r where r.owner_uid = t.owner_uid
-  )
-  on conflict (owner_uid) do nothing;
-
-  select coalesce(max(bank_number), 0) into max_n from public.database_registry;
-  perform setval('public.database_bank_number_seq', greatest(max_n, 1), max_n > 0);
-end $$;
-
 -- ---------------------------------------------------------------------------
--- Painel Admin (/admin/historico)
+-- 7) Painel Admin (/admin/historico)
 -- ---------------------------------------------------------------------------
-
-drop function if exists public.admin_list_boss_emails();
-drop function if exists public.admin_list_authorized_emails(uuid);
 
 create or replace function public.admin_list_boss_emails()
 returns table (
@@ -518,7 +611,7 @@ grant execute on function public.admin_list_boss_emails() to anon, authenticated
 grant execute on function public.admin_list_authorized_emails(uuid) to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- Login membro autorizado (ver também fix_member_login.sql)
+-- 8) Login membro autorizado
 -- ---------------------------------------------------------------------------
 
 create or replace function public.resolve_member_boss(p_email text)
@@ -634,81 +727,7 @@ grant execute on function public.resolve_member_boss(text) to authenticated;
 grant execute on function public.register_authorized_member_login(uuid, text, uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
--- Embrulho E2E por membro (ver também fix_member_e2e_wraps.sql)
--- ---------------------------------------------------------------------------
-
-create table if not exists public.team_e2e_member_wraps (
-  owner_uid uuid not null,
-  email_key text not null,
-  salt_b64 text not null,
-  wrapped_key_b64 text not null,
-  key_version int not null default 1,
-  access_secret_b64 text,
-  updated_at timestamptz not null default now(),
-  primary key (owner_uid, email_key)
-);
-
-alter table public.team_e2e_member_wraps
-  add column if not exists access_secret_b64 text;
-
-create index if not exists idx_team_e2e_member_wraps_email
-  on public.team_e2e_member_wraps (email_key);
-
-alter table public.team_e2e_member_wraps enable row level security;
-
-grant select, insert, update, delete on public.team_e2e_member_wraps to authenticated;
-
-drop policy if exists team_e2e_member_wraps_select on public.team_e2e_member_wraps;
-create policy team_e2e_member_wraps_select on public.team_e2e_member_wraps
-  for select to authenticated
-  using (
-    public.is_boss(owner_uid)
-    or (
-      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
-      and public.is_active_member_of(owner_uid)
-    )
-  );
-
-drop policy if exists team_e2e_member_wraps_insert on public.team_e2e_member_wraps;
-create policy team_e2e_member_wraps_insert on public.team_e2e_member_wraps
-  for insert to authenticated
-  with check (
-    public.is_boss(owner_uid)
-    or (
-      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
-      and public.is_active_member_of(owner_uid)
-    )
-  );
-
-drop policy if exists team_e2e_member_wraps_update on public.team_e2e_member_wraps;
-create policy team_e2e_member_wraps_update on public.team_e2e_member_wraps
-  for update to authenticated
-  using (
-    public.is_boss(owner_uid)
-    or (
-      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
-      and public.is_active_member_of(owner_uid)
-    )
-  )
-  with check (
-    public.is_boss(owner_uid)
-    or (
-      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
-      and public.is_active_member_of(owner_uid)
-    )
-  );
-
-drop policy if exists team_e2e_member_wraps_delete on public.team_e2e_member_wraps;
-create policy team_e2e_member_wraps_delete on public.team_e2e_member_wraps
-  for delete to authenticated
-  using (
-    public.is_boss(owner_uid)
-    or email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
-  );
-
--- ---------------------------------------------------------------------------
--- Realtime (postgres_changes) — sync multi-dispositivo em tempo real
--- Requer Realtime habilitado no projeto (Dashboard → Database → Publications).
+-- 9) Realtime (postgres_changes) — sync multi-dispositivo
 -- ---------------------------------------------------------------------------
 
 do $$

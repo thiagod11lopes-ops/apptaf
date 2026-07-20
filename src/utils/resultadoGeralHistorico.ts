@@ -472,8 +472,9 @@ function classificarAggNoResumo(agg: AggRow): 'completo' | 'parcial' | 'vazio' {
 export function calcularResumoInicioTafFromHistorico(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[],
+  sessoesExcluidas: SessaoAplicacaoTaf[] = [],
 ): ResumoInicioTafHistorico {
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros, sessoesExcluidas);
   const aggs = agregarHistoricoPorParticipante(unificadas, cadastros);
 
   // Conta só cadastrados — evita inflar Parcial/Concluídos com sessões órfãs

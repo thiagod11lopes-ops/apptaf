@@ -28,11 +28,8 @@ import {
 } from '../../services/supabase/sessoesCloud';
 import {
   listAplicadoresTombstonesForSync,
-  listAplicadoresTombstonesSinceForSync,
   listCadastrosTombstonesForSync,
-  listCadastrosTombstonesSinceForSync,
   listSessoesTombstonesForSync,
-  listSessoesTombstonesSinceForSync,
 } from '../../services/supabase/cloudTombstonesForSync';
 
 export type RemoteTombstoneCollection = 'cadastros' | 'sessoes' | 'aplicadores';
@@ -131,30 +128,6 @@ function mergeById<T extends { id: string }>(baseline: T[], delta: T[]): T[] {
   return [...map.values()];
 }
 
-function localRowToSyncTombstone(row: {
-  id: string;
-  updatedAt: number;
-  deleted?: boolean;
-  deletedAt?: number;
-  deletedBy?: string;
-  syncVersion?: number;
-  version?: number;
-  updatedBy?: string;
-  deviceId?: string;
-}): TombstonePayload | null {
-  if (row.deleted !== true) return null;
-  return {
-    id: row.id,
-    updatedAt: row.updatedAt,
-    deleted: true,
-    deletedAt: row.deletedAt ?? row.updatedAt,
-    deletedBy: row.deletedBy,
-    syncVersion: row.syncVersion ?? row.version,
-    updatedBy: row.updatedBy,
-    deviceId: row.deviceId,
-  };
-}
-
 /** Baseline remoto a partir do IndexedDB já sincronizado (evita full fetch). */
 async function buildRemoteBaselineFromLocal(ownerUid: string): Promise<{
   remoteCad: CadastroItemPersist[];
@@ -188,42 +161,6 @@ async function buildRemoteBaselineFromLocal(ownerUid: string): Promise<{
   return { remoteCad, remoteSess, remoteApp };
 }
 
-/** Tombstones já conhecidos localmente (synced + deleted). */
-async function buildTombstoneBaselineFromLocal(ownerUid: string): Promise<{
-  remoteCadTombstones: TombstonePayload[];
-  remoteSessTombstones: TombstonePayload[];
-  remoteAppTombstones: TombstonePayload[];
-}> {
-  const [localCad, localSess, localApp] = await Promise.all([
-    listCadastrosForSync(ownerUid, true),
-    listSessoesForSync(ownerUid, true),
-    listAplicadoresForSync(ownerUid, true),
-  ]);
-
-  const remoteCadTombstones: TombstonePayload[] = [];
-  for (const row of localCad) {
-    if (isUnsyncedLocalStatus(row.syncStatus)) continue;
-    const tombstone = localRowToSyncTombstone(row);
-    if (tombstone) remoteCadTombstones.push(tombstone);
-  }
-
-  const remoteSessTombstones: TombstonePayload[] = [];
-  for (const row of localSess) {
-    if (isUnsyncedLocalStatus(row.syncStatus)) continue;
-    const tombstone = localRowToSyncTombstone(row);
-    if (tombstone) remoteSessTombstones.push(tombstone);
-  }
-
-  const remoteAppTombstones: TombstonePayload[] = [];
-  for (const row of localApp) {
-    if (isUnsyncedLocalStatus(row.syncStatus)) continue;
-    const tombstone = localRowToSyncTombstone(row);
-    if (tombstone) remoteAppTombstones.push(tombstone);
-  }
-
-  return { remoteCadTombstones, remoteSessTombstones, remoteAppTombstones };
-}
-
 /** Margem de segurança do fetch incremental — cobre skew de relógio entre dispositivos. */
 export const INCREMENTAL_SINCE_MARGIN_MS = 10 * 60_000;
 
@@ -245,39 +182,31 @@ export async function fetchRemoteCollectionsSnapshot(
 
   if (canIncremental) {
     const since = Math.max(0, watermark - INCREMENTAL_SINCE_MARGIN_MS);
-    const [
-      deltaCad,
-      deltaSess,
-      deltaApp,
-      deltaCadTombstones,
-      deltaSessTombstones,
-      deltaAppTombstones,
-    ] = await Promise.all([
-      fetchRemoteCollection('cadastros', ownerUid, () => getCadastrosFirestoreSince(ownerUid, since)),
-      fetchRemoteCollection('sessoes', ownerUid, () => getSessoesFirestoreSince(ownerUid, since)),
-      fetchRemoteCollection('aplicadores', ownerUid, () => getAplicadoresFirestoreSince(ownerUid, since)),
-      fetchRemoteCollection('cadastros', ownerUid, () =>
-        listCadastrosTombstonesSinceForSync(ownerUid, since),
-      ),
-      fetchRemoteCollection('sessoes', ownerUid, () => listSessoesTombstonesSinceForSync(ownerUid, since)),
-      fetchRemoteCollection('aplicadores', ownerUid, () =>
-        listAplicadoresTombstonesSinceForSync(ownerUid, since),
-      ),
-    ]);
+    // Ativos: incremental. Tombstones: sempre lista completa — exclusões não podem
+    // depender do watermark (relógio / delta perdido deixava histórico fantasma).
+    const [deltaCad, deltaSess, deltaApp, allCadTombstones, allSessTombstones, allAppTombstones] =
+      await Promise.all([
+        fetchRemoteCollection('cadastros', ownerUid, () => getCadastrosFirestoreSince(ownerUid, since)),
+        fetchRemoteCollection('sessoes', ownerUid, () => getSessoesFirestoreSince(ownerUid, since)),
+        fetchRemoteCollection('aplicadores', ownerUid, () =>
+          getAplicadoresFirestoreSince(ownerUid, since),
+        ),
+        fetchRemoteCollection('cadastros', ownerUid, () => listCadastrosTombstonesForSync(ownerUid)),
+        fetchRemoteCollection('sessoes', ownerUid, () => listSessoesTombstonesForSync(ownerUid)),
+        fetchRemoteCollection('aplicadores', ownerUid, () =>
+          listAplicadoresTombstonesForSync(ownerUid),
+        ),
+      ]);
 
-    const [baseline, tombBaseline] = await Promise.all([
-      buildRemoteBaselineFromLocal(ownerUid),
-      buildTombstoneBaselineFromLocal(ownerUid),
-    ]);
+    const baseline = await buildRemoteBaselineFromLocal(ownerUid);
 
     const tombstones = {
-      remoteCadTombstones: mergeById(tombBaseline.remoteCadTombstones, deltaCadTombstones),
-      remoteSessTombstones: mergeById(tombBaseline.remoteSessTombstones, deltaSessTombstones),
-      remoteAppTombstones: mergeById(tombBaseline.remoteAppTombstones, deltaAppTombstones),
+      remoteCadTombstones: allCadTombstones,
+      remoteSessTombstones: allSessTombstones,
+      remoteAppTombstones: allAppTombstones,
     };
 
-    // Registro excluído na nuvem chega só como tombstone; remove do baseline
-    // ativo (local + delta) para o LWW enxergar a exclusão.
+    // Registro excluído na nuvem: remove do baseline ativo (local + delta).
     const tombIds = {
       cad: new Set(tombstones.remoteCadTombstones.map((t) => t.id)),
       sess: new Set(tombstones.remoteSessTombstones.map((t) => t.id)),

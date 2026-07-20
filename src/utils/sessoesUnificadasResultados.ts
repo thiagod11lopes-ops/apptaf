@@ -174,10 +174,28 @@ function resultadoFromCadastro(
   return resultadoPermanenciaFromCadastro(c, corredor);
 }
 
+function cadastroSuprimidoPorSessaoExcluida(
+  cadastroId: string,
+  tipo: TipoProvaAplicada,
+  cadastros: CadastroItemPersist[],
+  sessoesExcluidas: SessaoAplicacaoTaf[],
+): boolean {
+  const persistedId = `${SESSAO_REGISTRADOR_ID_PREFIX}${cadastroId}-${tipo}`;
+  for (const s of sessoesExcluidas) {
+    if (s.tipoProva !== tipo) continue;
+    if (s.id === persistedId) return true;
+    for (const r of s.resultados ?? []) {
+      if (idParticipanteSessao(r, cadastros) === cadastroId) return true;
+    }
+  }
+  return false;
+}
+
 /** Gera sessões virtuais a partir do Registrador de TAF (dados só no cadastro). */
 export function gerarSessoesVirtuaisFromCadastros(
   cadastros: CadastroItemPersist[],
   sessoesReais: SessaoAplicacaoTaf[],
+  sessoesExcluidas: SessaoAplicacaoTaf[] = [],
 ): SessaoAplicacaoTaf[] {
   const grupos = new Map<string, { data: string; tipo: TipoProvaAplicada; resultados: ResultadoCorridaItem[] }>();
 
@@ -185,6 +203,7 @@ export function gerarSessoesVirtuaisFromCadastros(
     for (const tipo of ['corrida', 'natacao', 'permanencia', 'caminhada'] as const) {
       if (!cadastroTemModalidade(c, tipo)) continue;
       if (participanteJaNaSessaoReal(c.id, tipo, sessoesReais, cadastros)) continue;
+      if (cadastroSuprimidoPorSessaoExcluida(c.id, tipo, cadastros, sessoesExcluidas)) continue;
 
       const data = dataModalidadeParaSessao(c, tipo);
       if (!data) continue;
@@ -221,12 +240,13 @@ export function gerarSessoesVirtuaisFromCadastros(
 export function unificarSessoesComCadastroRegistrador(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[],
+  sessoesExcluidas: SessaoAplicacaoTaf[] = [],
 ): SessaoAplicacaoTaf[] {
   // Mantém aplicações normais e sessões persistidas do Registrador/manual.
   const reais = sessoes.filter(
     (s) => !isSessaoVirtualRegistrador(s) || isSessaoPersistidaRegistrador(s),
   );
-  const virtuais = gerarSessoesVirtuaisFromCadastros(cadastros, reais);
+  const virtuais = gerarSessoesVirtuaisFromCadastros(cadastros, reais, sessoesExcluidas);
   return [...reais, ...virtuais].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 

@@ -113,6 +113,13 @@ export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
   return getAllSessoesAplicacaoLocal();
 }
 
+/** Sessões soft-deleted locais — usadas para não recriar cards virtuais no Histórico. */
+export async function getDeletedSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
+  if (!useOfflineFirstDb()) return [];
+  const uid = await resolveStorageOwnerUid();
+  return dataStore.getDeletedSessoes(uid);
+}
+
 export async function addSessaoAplicacao(
   input: Omit<SessaoAplicacaoTaf, 'id' | 'criadoEm'> & { id?: string },
 ): Promise<string> {

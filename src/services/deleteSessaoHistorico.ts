@@ -12,6 +12,7 @@ import {
   isSessaoVirtualRegistrador,
   REGISTRADOR_SESSAO_PERSISTIDA_RE,
 } from '../utils/sessoesUnificadasResultados';
+import { syncManager } from '../offline-first/sync/SyncManager';
 
 async function clearCadastroModalidade(
   cadastro: CadastroItemPersist,
@@ -22,9 +23,15 @@ async function clearCadastroModalidade(
   await dataStore.upsertCadastro(limpo, ownerUid);
 }
 
-/** Limpa campos do Registrador no cadastro para evitar sessões virtuais após exclusão. */
-async function clearCadastrosForSessaoHistorico(sessao: SessaoAplicacaoTaf): Promise<void> {
-  const ownerUid = await resolveStorageOwnerUid();
+/**
+ * Limpa campos do Registrador no cadastro ligados à sessão excluída —
+ * evita sessões virtuais recriarem o card no histórico (este e outros aparelhos).
+ */
+export async function clearCadastrosForSessaoHistorico(
+  sessao: Pick<SessaoAplicacaoTaf, 'id' | 'tipoProva' | 'resultados'>,
+  ownerUidOverride?: string,
+): Promise<void> {
+  const ownerUid = ownerUidOverride ?? (await resolveStorageOwnerUid());
   const cadastros = await getAllCadastros();
   const tipo = sessao.tipoProva;
 
@@ -38,7 +45,7 @@ async function clearCadastrosForSessaoHistorico(sessao: SessaoAplicacaoTaf): Pro
     return;
   }
 
-  for (const resultado of sessao.resultados) {
+  for (const resultado of sessao.resultados ?? []) {
     const alvo = (resultado.nip ?? '').trim() || (resultado.nome ?? '').trim();
     if (!alvo) continue;
     const busca = buscarCadastroPorNomeOuNip(cadastros, alvo);
@@ -72,8 +79,11 @@ export async function deleteSessaoFromHistorico(sessao: SessaoAplicacaoTaf): Pro
 
   // Sessão só em memória: limpar cadastro já basta (não há linha no IndexedDB).
   if (apenasMemoria) {
+    syncManager.scheduleBackgroundSync(2_000);
     return;
   }
 
   await deleteSessaoAplicacao(sessao.id);
+  // Envia tombstone + cadastro limpo à nuvem sem esperar o debounce longo.
+  syncManager.scheduleBackgroundSync(2_000);
 }

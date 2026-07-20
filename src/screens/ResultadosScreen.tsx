@@ -24,6 +24,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import {
   getAllSessoesAplicacao,
+  getDeletedSessoesAplicacao,
   tituloTipoProva,
   type SessaoAplicacaoTaf,
 } from '../services/resultadosAplicadosIndexedDb';
@@ -75,10 +76,12 @@ export default function ResultadosScreen() {
 
   const carregar = useCallback(() => {
     setCarregando(true);
-    Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
-      .then(([cadastrosLista, sessoesLista]) => {
+    Promise.all([getAllCadastros(), getAllSessoesAplicacao(), getDeletedSessoesAplicacao()])
+      .then(([cadastrosLista, sessoesLista, sessoesExcluidas]) => {
         setCadastros(cadastrosLista);
-        setSessoes(unificarSessoesComCadastroRegistrador(sessoesLista, cadastrosLista));
+        setSessoes(
+          unificarSessoesComCadastroRegistrador(sessoesLista, cadastrosLista, sessoesExcluidas),
+        );
       })
       .finally(() => setCarregando(false));
   }, []);

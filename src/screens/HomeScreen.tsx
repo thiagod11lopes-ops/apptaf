@@ -9,7 +9,10 @@ import { SyncLiveStatusModal } from '../components/sismav/SyncLiveStatusModal';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
-import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import {
+  getAllSessoesAplicacao,
+  getDeletedSessoesAplicacao,
+} from '../services/resultadosAplicadosIndexedDb';
 import {
   calcularResumoInicioTafFromHistorico,
   type ResumoInicioTafHistorico,
@@ -74,11 +77,12 @@ export default function HomeScreen() {
   const recarregarResumo = useCallback(async () => {
     if (!authReady) return;
     try {
-      const [cadastros, sessoes] = await Promise.all([
+      const [cadastros, sessoes, sessoesExcluidas] = await Promise.all([
         getAllCadastros(),
         getAllSessoesAplicacao(),
+        getDeletedSessoesAplicacao(),
       ]);
-      setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros));
+      setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros, sessoesExcluidas));
     } catch {
       // Mantém resumo anterior — falha de rede não zera a tela.
     }

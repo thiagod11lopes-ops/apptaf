@@ -48,6 +48,12 @@ export class DataStore {
     return filterRowsForDisplay(rows).map(stripMeta);
   }
 
+  /** Soft-deletes locais (ainda no Dexie) — bloqueiam recriação de sessões virtuais. */
+  async getDeletedSessoes(ownerUid: string | null): Promise<SessaoAplicacaoTaf[]> {
+    const rows = await listSessoesForSync(resolveOwnerUid(ownerUid), true);
+    return rows.filter((r) => r.deleted === true).map(stripMeta);
+  }
+
   async getResumo(ownerUid: string | null): Promise<ResumoInicioTafHistorico> {
     const [cadastros, sessoes] = await Promise.all([
       this.getCadastros(ownerUid),

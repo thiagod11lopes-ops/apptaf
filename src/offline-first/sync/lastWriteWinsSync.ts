@@ -719,6 +719,24 @@ async function downloadRecord(
     }
   }
 
+  // Exclusão remota de sessão: limpa cadastro com base no conteúdo local ainda ativo,
+  // para não recriar card virtual no Histórico neste aparelho.
+  if (
+    collection === 'sessoes' &&
+    remote.deleted === true &&
+    localFresh &&
+    (localFresh as SessaoRecord).deleted !== true
+  ) {
+    try {
+      const { clearCadastrosForSessaoHistorico } = await import(
+        '../../services/deleteSessaoHistorico'
+      );
+      await clearCadastrosForSessaoHistorico(localFresh as SessaoRecord, ownerUid);
+    } catch (error) {
+      console.warn('[sync] limpeza de cadastro após tombstone de sessão falhou:', error);
+    }
+  }
+
   let payload: SyncRecord = remote;
   if (collection === 'cadastros' && remote.deleted !== true) {
     const rubricas =

@@ -64,6 +64,7 @@ import {
   rewrapTeamKeyWithNewPassword,
 } from '../services/supabase/teamE2eSession';
 import { fetchTeamE2eMeta } from '../services/supabase/teamE2eCloud';
+import { ensureDatabaseBankCode } from '../services/supabase/databaseRegistryCloud';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -320,6 +321,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Estimativa de fila na nuvem é secundária — não segurar a Home.
             void syncManager.refreshCloudDiff().catch((err) => {
               console.warn('[auth] refreshCloudDiff falhou:', err);
+            });
+            void ensureDatabaseBankCode(session.dataOwnerUid).catch((err) => {
+              console.warn('[auth] ensureDatabaseBankCode falhou:', err);
             });
           }
           return true;

@@ -107,3 +107,43 @@ begin
   select coalesce(max(bank_number), 0) into max_n from public.database_registry;
   perform setval('public.database_bank_number_seq', greatest(max_n, 1), max_n > 0);
 end $$;
+
+-- Atualiza lista de chefes com created_at (fallback de numeração no app).
+drop function if exists public.admin_list_boss_emails();
+create or replace function public.admin_list_boss_emails()
+returns table (
+  owner_uid uuid,
+  email text,
+  authorized_count bigint,
+  created_at timestamptz
+)
+language sql
+security definer
+set search_path = public
+as $$
+  with bosses as (
+    select owner_uid as uid from public.team_e2e_meta
+    union
+    select owner_uid from public.authorized_emails
+    union
+    select distinct boss_uid from public.member_lookup
+  )
+  select
+    b.uid as owner_uid,
+    coalesce(nullif(lower(trim(u.email::text)), ''), b.uid::text) as email,
+    (
+      select count(*)::bigint
+      from public.authorized_emails ae
+      where ae.owner_uid = b.uid
+        and ae.ativo is distinct from false
+    ) as authorized_count,
+    coalesce(
+      u.created_at,
+      (select t.updated_at from public.team_e2e_meta t where t.owner_uid = b.uid),
+      now()
+    ) as created_at
+  from bosses b
+  left join auth.users u on u.id = b.uid
+  order by 4 nulls last, 2;
+$$;
+grant execute on function public.admin_list_boss_emails() to anon, authenticated;

@@ -61,20 +61,21 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
-    if (!isAuthenticated || !dataOwnerUid) {
-      setBankCode(null);
-      return;
-    }
-    setBankCode(readCachedDatabaseBankCode(dataOwnerUid));
+    if (!authReady) return;
     let cancelled = false;
     void (async () => {
+      if (!isAuthenticated || !dataOwnerUid) {
+        if (!cancelled) setBankCode(null);
+        return;
+      }
+      if (!cancelled) setBankCode(readCachedDatabaseBankCode(dataOwnerUid));
       const code = await ensureDatabaseBankCode(dataOwnerUid);
       if (!cancelled) setBankCode(code);
     })();
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, dataOwnerUid, user?.uid]);
+  }, [authReady, isAuthenticated, dataOwnerUid, user?.uid]);
 
   const syncPendingTotal = useMemo(() => {
     const uploads = syncUi.counters.pendingUploads ?? pendingCount;
@@ -109,6 +110,14 @@ export default function HomeScreen() {
       setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros, sessoesExcluidas));
     } catch {
       // Mantém resumo anterior — falha de rede não zera a tela.
+    }
+    if (isAuthenticated && dataOwnerUid) {
+      try {
+        const code = await ensureDatabaseBankCode(dataOwnerUid);
+        setBankCode(code);
+      } catch {
+        // mantém código anterior
+      }
     }
   }, [authReady, isAuthenticated, user?.uid, dataOwnerUid]);
 

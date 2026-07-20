@@ -14,7 +14,8 @@ create or replace function public.admin_list_boss_emails()
 returns table (
   owner_uid uuid,
   email text,
-  authorized_count bigint
+  authorized_count bigint,
+  created_at timestamptz
 )
 language sql
 security definer
@@ -35,10 +36,15 @@ as $$
       from public.authorized_emails ae
       where ae.owner_uid = b.uid
         and ae.ativo is distinct from false
-    ) as authorized_count
+    ) as authorized_count,
+    coalesce(
+      u.created_at,
+      (select t.updated_at from public.team_e2e_meta t where t.owner_uid = b.uid),
+      now()
+    ) as created_at
   from bosses b
   left join auth.users u on u.id = b.uid
-  order by 2;
+  order by 4 nulls last, 2;
 $$;
 
 -- Lista e-mails autorizados de um chefe (p_boss = owner_uid do chefe)

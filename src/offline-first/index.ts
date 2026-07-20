@@ -24,3 +24,8 @@ export { decideLastWriteWins, resolveLastWriteWins } from './sync/lastWriteWins'
 export { executeLastWriteWinsSync } from './sync/lastWriteWinsSync';
 export { appendSyncAudit, listSyncAuditHistory } from './sync/syncAudit';
 export { migrateLegacyToDexie } from './db/migration';
+export {
+  startRealtimeBridge,
+  stopRealtimeBridge,
+  isRealtimeBridgeActive,
+} from './sync/RealtimeBridge';

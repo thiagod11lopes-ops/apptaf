@@ -705,3 +705,36 @@ create policy team_e2e_member_wraps_delete on public.team_e2e_member_wraps
     public.is_boss(owner_uid)
     or email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
   );
+
+-- ---------------------------------------------------------------------------
+-- Realtime (postgres_changes) — sync multi-dispositivo em tempo real
+-- Requer Realtime habilitado no projeto (Dashboard → Database → Publications).
+-- ---------------------------------------------------------------------------
+
+do $$
+declare
+  tbl text;
+  tables text[] := array[
+    'cadastros',
+    'cadastro_rubricas',
+    'sessoes',
+    'sessao_rubricas',
+    'aplicadores',
+    'aplicador_senhas',
+    'pre_cadastros',
+    'authorized_emails',
+    'team_wipe'
+  ];
+begin
+  foreach tbl in array tables loop
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = tbl
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', tbl);
+    end if;
+  end loop;
+end $$;

@@ -58,6 +58,11 @@ import {
   scanAndAuditRealConflicts,
   type AuditedRealConflict,
 } from './auditRealConflicts';
+import {
+  startRealtimeBridge,
+  stopRealtimeBridge,
+  suppressRealtimeEcho,
+} from './RealtimeBridge';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
@@ -92,10 +97,14 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
 
 const SUCCESS_DISPLAY_MS = 3000;
 const ALREADY_UP_TO_DATE_MS = 2000;
-/** Debounce após edições locais — sync automática em segundo plano. */
-export const AUTO_SYNC_DEBOUNCE_MS = 15_000;
+/** Debounce após edições locais — push rápido para a nuvem (botão disco / auto). */
+export const AUTO_SYNC_DEBOUNCE_MS = 800;
 /** Ao voltar a internet / foco. */
 export const AUTO_SYNC_RECONNECT_MS = 2_000;
+/** Após evento realtime remoto — puxa LWW sem esperar o cronômetro. */
+const REALTIME_PULL_DEBOUNCE_MS = 500;
+/** Pull inicial ao carregar / autenticar no banco. */
+const SESSION_START_SYNC_MS = 1_200;
 
 type Listener = (state: SyncManagerState) => void;
 
@@ -135,9 +144,10 @@ let cloudDiffCyclePauseTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudDiffCountdownSec = 45;
 let cloudDiffCyclePaused = false;
 let cloudDiffCompareInFlight = false;
-export const CLOUD_DIFF_COUNTDOWN_SEC = 45;
+/** Fallback quando Realtime cair — ainda compara IndexedDB × nuvem. */
+export const CLOUD_DIFF_COUNTDOWN_SEC = 20;
 const CLOUD_DIFF_CYCLE_PAUSE_SYNCED_MS = 2000;
-const CLOUD_DIFF_CYCLE_PAUSE_NEEDS_SYNC_MS = 10_000;
+const CLOUD_DIFF_CYCLE_PAUSE_NEEDS_SYNC_MS = 5_000;
 const listeners = new Set<Listener>();
 
 function buildCloudDiffWatch(): { countdownSec: number | null; flashMessage: string | null } {
@@ -408,6 +418,8 @@ async function runCloudDiffCycle(): Promise<void> {
     if (pending === 0) {
       scheduleCloudDiffCyclePause(CLOUD_DIFF_CYCLE_PAUSE_SYNCED_MS);
     } else {
+      // Diferença detectada → sincroniza de fato (não só badge).
+      syncManager.scheduleBackgroundSync(0);
       scheduleCloudDiffCyclePause(CLOUD_DIFF_CYCLE_PAUSE_NEEDS_SYNC_MS);
     }
   } catch {
@@ -416,6 +428,22 @@ async function runCloudDiffCycle(): Promise<void> {
     cloudDiffCompareInFlight = false;
     notifyListeners();
   }
+}
+
+function onRealtimeRemoteChange(): void {
+  if (!syncAuthAvailable) return;
+  // Sempre agenda — se houver sync em voo, tryBackgroundSync reagenda ao ficar livre.
+  void refreshCloudQueueEstimate(true);
+  syncManager.scheduleBackgroundSync(REALTIME_PULL_DEBOUNCE_MS);
+}
+
+function ensureRealtimeBridge(uid: string | null | undefined): void {
+  const owner = (uid || '').trim();
+  if (!owner || !syncAuthAvailable) {
+    stopRealtimeBridge();
+    return;
+  }
+  startRealtimeBridge(owner, onRealtimeRemoteChange);
 }
 
 function tickCloudDiffCountdown(): void {
@@ -790,6 +818,8 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
 
     completeStep('finalizing');
     await applyCountersAfterSuccessfulSync();
+    // Evita eco do próprio upload via postgres_changes reabrir sync em loop.
+    suppressRealtimeEcho(4_000);
     notifyDataChanged();
 
     const durationMs = Date.now() - startedAt;
@@ -897,8 +927,11 @@ export const syncManager = {
     if (authenticated) {
       scheduleCloudQueueEstimate();
       startCloudDiffWatch();
+      ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
+      this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
     } else {
       stopCloudDiffWatch();
+      stopRealtimeBridge();
       counters = { ...counters, pendingDownloads: null };
     }
     notifyListeners();
@@ -922,6 +955,8 @@ export const syncManager = {
     scheduleCloudQueueEstimate();
     if (syncAuthAvailable) {
       startCloudDiffWatch();
+      ensureRealtimeBridge(dataOwnerUid);
+      this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
     }
     notifyListeners();
   },
@@ -964,6 +999,8 @@ export const syncManager = {
   /** Sync silenciosa — sem modal; erros de E2E/offline são ignorados (não atrapalham UI). */
   async tryBackgroundSync(): Promise<{ ok: boolean; skipped?: string }> {
     if (backgroundSyncRunning || syncInFlight) {
+      // Não perde pull remoto / flush local se chegou evento no meio do sync.
+      this.scheduleBackgroundSync(1_500);
       return { ok: false, skipped: 'busy' };
     }
     if (isModoDemonstracaoAtivo()) {
@@ -1109,6 +1146,7 @@ export const syncManager = {
 
   async beginSystemWipe(): Promise<void> {
     stopCloudDiffWatch();
+    stopRealtimeBridge();
     if (queueEstimateTimer) {
       clearTimeout(queueEstimateTimer);
       queueEstimateTimer = null;
@@ -1120,18 +1158,21 @@ export const syncManager = {
     await refreshAfterSystemWipe(dataOwnerUid);
     if (syncAuthAvailable && dataOwnerUid) {
       startCloudDiffWatch();
+      ensureRealtimeBridge(dataOwnerUid);
     }
   },
 
   resumeAfterInterruptedWipe(): void {
     if (syncAuthAvailable) {
       startCloudDiffWatch();
+      ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
     }
   },
 
   async shutdown(): Promise<void> {
     this.cancelScheduledBackgroundSync();
     stopCloudDiffWatch();
+    stopRealtimeBridge();
     await returnToOfflineMode();
     ownerUid = null;
     pendingSummary = EMPTY_SUMMARY;

@@ -182,8 +182,8 @@ export function TopActionIcons({
     syncSaveIconState === 'success'
       ? 'Dados atualizados com a nuvem. Toque para ver o status.'
       : syncPendingBadge > 0
-        ? `${syncPendingBadge} pendência(s) — sync automática online. Toque para acompanhar.`
-        : 'Sync automática com internet. Toque para ver o status.';
+        ? `${syncPendingBadge} pendência(s) — sync em tempo real com a nuvem. Toque para acompanhar.`
+        : 'Sync em tempo real com a nuvem e outros dispositivos. Toque para ver o status.';
 
   const e2eColor = e2eActive ? theme.gain : theme.loss;
   const e2eTooltipTitle = e2eActive ? 'Criptografia ativa' : 'Criptografia inativa';

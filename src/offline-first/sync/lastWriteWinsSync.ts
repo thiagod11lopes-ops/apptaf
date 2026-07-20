@@ -225,41 +225,6 @@ export function mergeRemoteMapWithTombstones(
   return remoteMap;
 }
 
-/** Tombstone sintético para aplicar exclusão local quando a nuvem (full fetch) não tem o id. */
-function syntheticRemoteDeletionFromLocal(local: SyncRecord, ownerUid: string): SyncRecord {
-  const at = Math.max(readUpdatedAt(local), Date.now());
-  return remoteDocToSyncRecord(
-    {
-      id: local.id,
-      updatedAt: at,
-      deleted: true,
-      deletedAt: at,
-      syncVersion: Math.max(1, (local.syncVersion ?? local.version ?? 1) + 1),
-      version: Math.max(1, (local.syncVersion ?? local.version ?? 1) + 1),
-      updatedBy: local.updatedBy,
-      deviceId: local.deviceId ?? 'cloud-sot',
-      deletedBy: local.updatedBy,
-      /** Ausência no snapshot — não é exclusão explícita do usuário. */
-      syntheticCloudAbsence: true,
-    } as Record<string, unknown>,
-    ownerUid,
-  );
-}
-
-/**
- * Nuvem vazia ou bem menor que o local: não tratar ids sincronizados ausentes como wipe.
- * (Evita apagar IndexedDB e rebaixar tudo após Aplicar TAF / fetch parcial.)
- */
-function remoteSnapshotLooksSparse(
-  localRows: SyncRecord[],
-  remoteRows: Array<{ id: string }>,
-): boolean {
-  const localActive = localRows.filter((r) => r.deleted !== true).length;
-  if (localActive <= 0) return false;
-  if (remoteRows.length === 0) return true;
-  return remoteRows.length < Math.max(3, Math.floor(localActive * 0.5));
-}
-
 function buildRemoteMapForLww<TRemote extends { id: string }>(
   ownerUid: string,
   remoteRows: TRemote[],
@@ -341,9 +306,10 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
     const hasRemote = remoteMap.has(id);
     const decision = decideLastWriteWins(local, remote);
 
-    // Nuvem = base verdadeira: id já sincronizado que sumiu no full fetch → aplica exclusão.
-    // No incremental, não ressuscita (baseline local pode mascarar exclusão) — pede full fetch.
-    // Exceção: snapshot remoto vazio/esparso → reenviar local (não wipe IndexedDB).
+    // Id só no local (já synced): NUNCA apagar por ausência no snapshot.
+    // Remoção real só via tombstone (já mesclado em remoteMap → decide download).
+    // Remigração / IDs novos / fetch parcial faziam "baixar tudo de novo".
+    // Full fetch → reenviar; incremental → marca para full fetch depois.
     if (
       decision.action === 'upload' &&
       decision.reason === 'somente_local' &&
@@ -351,21 +317,7 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       !isUnsyncedLocalStatus(local.syncStatus) &&
       !forceUploadIds?.has(id)
     ) {
-      const hasRealTombstone = remoteTombstones?.some((t) => t.id === id) === true;
-      const sparseRemote = remoteSnapshotLooksSparse(localRows, remoteRows);
-
-      if (fetchMode === 'full' && (hasRealTombstone || !sparseRemote)) {
-        plan.push({
-          collection,
-          id,
-          action: 'download',
-          local,
-          remote: syntheticRemoteDeletionFromLocal(local, ownerUid),
-          hasRemote: true,
-        });
-        continue;
-      }
-      if (fetchMode === 'full' && sparseRemote) {
+      if (fetchMode === 'full') {
         plan.push({
           collection,
           id,

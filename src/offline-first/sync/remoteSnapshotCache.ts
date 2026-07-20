@@ -276,21 +276,21 @@ export async function fetchRemoteCollectionsSnapshot(
       remoteAppTombstones: mergeById(tombBaseline.remoteAppTombstones, deltaAppTombstones),
     };
 
-    // Registro excluído na nuvem chega só como tombstone delta; remove do
-    // baseline ativo para o LWW enxergar a exclusão em vez de um ativo antigo.
-    const deltaTombIds = {
-      cad: new Set(deltaCadTombstones.map((t) => t.id)),
-      sess: new Set(deltaSessTombstones.map((t) => t.id)),
-      app: new Set(deltaAppTombstones.map((t) => t.id)),
+    // Registro excluído na nuvem chega só como tombstone; remove do baseline
+    // ativo (local + delta) para o LWW enxergar a exclusão.
+    const tombIds = {
+      cad: new Set(tombstones.remoteCadTombstones.map((t) => t.id)),
+      sess: new Set(tombstones.remoteSessTombstones.map((t) => t.id)),
+      app: new Set(tombstones.remoteAppTombstones.map((t) => t.id)),
     };
 
     cached = {
       ownerUid,
       fetchedAt: Date.now(),
       fetchMode: 'incremental',
-      remoteCad: mergeById(baseline.remoteCad, deltaCad).filter((r) => !deltaTombIds.cad.has(r.id)),
-      remoteSess: mergeById(baseline.remoteSess, deltaSess).filter((r) => !deltaTombIds.sess.has(r.id)),
-      remoteApp: mergeById(baseline.remoteApp, deltaApp).filter((r) => !deltaTombIds.app.has(r.id)),
+      remoteCad: mergeById(baseline.remoteCad, deltaCad).filter((r) => !tombIds.cad.has(r.id)),
+      remoteSess: mergeById(baseline.remoteSess, deltaSess).filter((r) => !tombIds.sess.has(r.id)),
+      remoteApp: mergeById(baseline.remoteApp, deltaApp).filter((r) => !tombIds.app.has(r.id)),
       ...tombstones,
       remotePre: [],
     };

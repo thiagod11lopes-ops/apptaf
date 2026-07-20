@@ -81,7 +81,7 @@ describe('mergeRemoteMapWithTombstones → LWW', () => {
     expect(local.deleted).toBe(false);
   });
 
-  it('registro ativo remoto não é sobrescrito por tombstone do mesmo id', () => {
+  it('tombstone remoto mais recente substitui ativo obsoleto no mapa', () => {
     const activeRemote = remoteDocToSyncRecord(
       {
         id: 'cad-1',
@@ -99,9 +99,34 @@ describe('mergeRemoteMapWithTombstones → LWW', () => {
       [{ id: 'cad-1', updatedAt: 9999, deleted: true, deletedAt: 9999, syncVersion: 9 }],
       OWNER,
     );
+    expect(remoteMap.get('cad-1')?.deleted).toBe(true);
+    expect(remoteMap.get('cad-1')?.updatedAt).toBe(9999);
+
+    const local = localActive({ updatedAt: 5000, syncVersion: 2 });
+    const decision = decideLastWriteWins(local, remoteMap.get('cad-1'));
+    expect(decision.action).toBe('download');
+  });
+
+  it('tombstone remoto mais antigo: ativo mais novo permanece no mapa', () => {
+    const activeRemote = remoteDocToSyncRecord(
+      {
+        id: 'cad-1',
+        nip: '1234',
+        nome: 'Ativo nuvem',
+        updatedAt: 9000,
+        syncVersion: 5,
+        deleted: false,
+      },
+      OWNER,
+    );
+    const remoteMap = new Map<string, typeof activeRemote>([['cad-1', activeRemote]]);
+    mergeRemoteMapWithTombstones(
+      remoteMap,
+      [{ id: 'cad-1', updatedAt: 3000, deleted: true, deletedAt: 3000, syncVersion: 2 }],
+      OWNER,
+    );
     expect(remoteMap.get('cad-1')?.deleted).toBe(false);
-    expect(remoteMap.get('cad-1')?.updatedAt).toBe(7000);
-    expect(remoteMap.get('cad-1')?.nome).toBe('Ativo nuvem');
+    expect(remoteMap.get('cad-1')?.updatedAt).toBe(9000);
   });
 
   it('registros sem exclusão: mapa remoto ativo permanece igual', () => {

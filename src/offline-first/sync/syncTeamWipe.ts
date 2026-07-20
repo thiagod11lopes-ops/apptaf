@@ -9,6 +9,8 @@ import { wipeOwnerData } from '../db/localDb';
 import { getTafDatabase, setMeta, getMeta } from '../db/tafDatabase';
 import { syncEngine, notifyDataChanged } from './SyncEngine';
 import { isUnsyncedLocalStatus } from './syncStatus';
+import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
+import { forceNextFullRemoteFetch } from './syncWatermark';
 
 const TEAM_WIPE_ACK_PREFIX = 'teamWipeAck:';
 
@@ -47,21 +49,23 @@ async function wipeLocalOwnerBundle(ownerUid: string): Promise<void> {
 }
 
 /**
- * Dados locais a preservar no bootstrap/sync.
- * Offline-first: qualquer registro ativo (ou pendente) impede wipe automático.
- * Soft-deletes locais também contam — o LWW precisa enxergar o tombstone.
+ * Dados locais a preservar no bootstrap/sync após wipe remoto.
+ * Nuvem é a base verdadeira: dados já sincronizados são apagados.
+ * Só preserva edições locais ainda não sincronizadas feitas DEPOIS do wipe
+ * (ex.: restauração CSV / trabalho offline após o esvaziamento).
  */
-async function hasLocalDataToPreserve(ownerUid: string, _wipedAt: number): Promise<boolean> {
+async function hasLocalDataToPreserve(ownerUid: string, wipedAt: number): Promise<boolean> {
   const db = getTafDatabase();
   if (!db || !ownerUid.trim()) return false;
 
   const shouldPreserve = (row: {
     deleted?: boolean;
     syncStatus?: string;
+    updatedAt?: number;
   }): boolean => {
-    if (isUnsyncedLocalStatus(row.syncStatus)) return true;
-    // Qualquer dado local (ativo ou tombstone) no bootstrap → não apagar IndexedDB.
-    return true;
+    if (!isUnsyncedLocalStatus(row.syncStatus)) return false;
+    const at = typeof row.updatedAt === 'number' ? row.updatedAt : 0;
+    return at > wipedAt;
   };
 
   try {
@@ -116,6 +120,8 @@ export async function applyTeamWipeIfNeeded(
   }
 
   await syncEngine.resetAfterWipe(dataOwnerUid);
+  invalidateRemoteSnapshotCache();
+  await forceNextFullRemoteFetch(dataOwnerUid);
   await setLocalTeamWipeAck(dataOwnerUid, remoteWipedAt);
   notifyDataChanged();
   return true;

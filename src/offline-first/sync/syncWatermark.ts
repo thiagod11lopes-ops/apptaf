@@ -40,3 +40,10 @@ export async function isFullFetchDue(ownerUid: string): Promise<boolean> {
   if (!Number.isFinite(at) || at <= 0) return true;
   return Date.now() - at >= FULL_FETCH_INTERVAL_MS;
 }
+
+/** Força o próximo snapshot remoto a ser completo (após wipe / exclusões em massa). */
+export async function forceNextFullRemoteFetch(ownerUid: string): Promise<void> {
+  if (!ownerUid.trim()) return;
+  await setMeta(fullFetchKey(ownerUid), '0');
+  await setMeta(watermarkKey(ownerUid), '0');
+}

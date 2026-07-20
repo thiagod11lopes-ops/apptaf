@@ -16,6 +16,7 @@ import { syncEngine } from '../offline-first/sync/SyncEngine';
 import { syncManager } from '../offline-first/sync/SyncManager';
 import { systemState } from '../offline-first/sync/SystemState';
 import { invalidateRemoteSnapshotCache } from '../offline-first/sync/remoteSnapshotCache';
+import { forceNextFullRemoteFetch } from '../offline-first/sync/syncWatermark';
 import { clearPersistedStorageOwner } from './firebase/authUid';
 import { setLocalTeamWipeAck } from './applyTeamWipeIfNeeded';
 import type { WipeCloudTeamResult } from './firebase/wipeCloudDataFirestore';
@@ -158,6 +159,7 @@ export async function wipeSystemData(options: WipeSystemDataOptions): Promise<Wi
 
       step += 1;
       await setLocalTeamWipeAck(uid, cloudCounts.teamWipeAt);
+      await forceNextFullRemoteFetch(uid);
       await systemState.setOfflineMode();
       await yieldToUi();
     }

@@ -82,6 +82,7 @@ import {
   fetchRemoteCollectionsSnapshot,
   invalidateRemoteSnapshotCache,
 } from './remoteSnapshotCache';
+import { forceNextFullRemoteFetch } from './syncWatermark';
 import {
   countBusinessContentDrift,
   resolveContentDriftAction,
@@ -190,8 +191,9 @@ export function tombstonePayloadToSyncRecord(
 }
 
 /**
- * Preenche o mapa remoto: ativos primeiro; se id só existe como tombstone, entra como deleted.
- * Não sobrescreve registro ativo. Não altera decideLastWriteWins.
+ * Preenche o mapa remoto: ativos + tombstones.
+ * Tombstone mais recente (ou empate de exclusão) prevalece sobre ativo obsoleto —
+ * evita histórico fantasma quando o delta incremental ainda carrega ativo antigo.
  */
 export function mergeRemoteMapWithTombstones(
   remoteMap: Map<string, SyncRecord>,
@@ -200,10 +202,46 @@ export function mergeRemoteMapWithTombstones(
 ): Map<string, SyncRecord> {
   if (!tombstones?.length) return remoteMap;
   for (const tombstone of tombstones) {
-    if (remoteMap.has(tombstone.id)) continue;
-    remoteMap.set(tombstone.id, tombstonePayloadToSyncRecord(tombstone, ownerUid));
+    const tombRec = tombstonePayloadToSyncRecord(tombstone, ownerUid);
+    const existing = remoteMap.get(tombstone.id);
+    if (!existing) {
+      remoteMap.set(tombstone.id, tombRec);
+      continue;
+    }
+    const decision = decideLastWriteWins(existing, tombRec);
+    if (decision.action === 'download') {
+      remoteMap.set(tombstone.id, tombRec);
+      continue;
+    }
+    // Empate temporal com exclusão remota: nuvem manda.
+    if (
+      existing.deleted !== true &&
+      tombRec.deleted === true &&
+      readUpdatedAt(tombRec) >= readUpdatedAt(existing)
+    ) {
+      remoteMap.set(tombstone.id, tombRec);
+    }
   }
   return remoteMap;
+}
+
+/** Tombstone sintético para aplicar exclusão local quando a nuvem (full fetch) não tem o id. */
+function syntheticRemoteDeletionFromLocal(local: SyncRecord, ownerUid: string): SyncRecord {
+  const at = Math.max(readUpdatedAt(local), Date.now());
+  return remoteDocToSyncRecord(
+    {
+      id: local.id,
+      updatedAt: at,
+      deleted: true,
+      deletedAt: at,
+      syncVersion: Math.max(1, (local.syncVersion ?? local.version ?? 1) + 1),
+      version: Math.max(1, (local.syncVersion ?? local.version ?? 1) + 1),
+      updatedBy: local.updatedBy,
+      deviceId: local.deviceId ?? 'cloud-sot',
+      deletedBy: local.updatedBy,
+    },
+    ownerUid,
+  );
 }
 
 function buildRemoteMapForLww<TRemote extends { id: string }>(
@@ -272,18 +310,45 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
   toRecord: (remote: TRemote, ownerUid: string) => SyncRecord,
   forceUploadIds?: Set<string>,
   remoteTombstones?: TombstonePayload[],
-): { plan: PlannedSyncItem[]; ignored: number } {
+  fetchMode: 'full' | 'incremental' = 'full',
+): { plan: PlannedSyncItem[]; ignored: number; syncedMissingOnCloud: number } {
   const localMap = new Map(localRows.map((r) => [r.id, r]));
   const remoteMap = buildRemoteMapForLww(ownerUid, remoteRows, toRecord, remoteTombstones);
   const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
   const plan: PlannedSyncItem[] = [];
   let ignored = 0;
+  let syncedMissingOnCloud = 0;
 
   for (const id of allIds) {
     const local = localMap.get(id);
     const remote = remoteMap.get(id);
     const hasRemote = remoteMap.has(id);
     const decision = decideLastWriteWins(local, remote);
+
+    // Nuvem = base verdadeira: id já sincronizado que sumiu no full fetch → aplica exclusão.
+    // No incremental, não ressuscita (baseline local pode mascarar exclusão) — pede full fetch.
+    if (
+      decision.action === 'upload' &&
+      decision.reason === 'somente_local' &&
+      local &&
+      !isUnsyncedLocalStatus(local.syncStatus) &&
+      !forceUploadIds?.has(id)
+    ) {
+      if (fetchMode === 'full') {
+        plan.push({
+          collection,
+          id,
+          action: 'download',
+          local,
+          remote: syntheticRemoteDeletionFromLocal(local, ownerUid),
+          hasRemote: true,
+        });
+        continue;
+      }
+      syncedMissingOnCloud += 1;
+      ignored += 1;
+      continue;
+    }
 
     if (decision.action === 'skip') {
       if (forceUploadIds?.has(id) && local) {
@@ -356,7 +421,7 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
     });
   }
 
-  return { plan, ignored };
+  return { plan, ignored, syncedMissingOnCloud };
 }
 
 /** Alinha syncStatus local quando LWW ignora registro já idêntico ao remoto. */
@@ -805,8 +870,8 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     listAplicadoresForSync(ownerUid, true),
   ]);
 
-  const remoteSnapshot = await fetchRemoteCollectionsSnapshot(ownerUid, forceRemote);
-  const {
+  let remoteSnapshot = await fetchRemoteCollectionsSnapshot(ownerUid, forceRemote);
+  let {
     remoteCad,
     remoteSess,
     remoteApp,
@@ -830,64 +895,100 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     );
   }
 
-  await reconcileIdenticalUnsyncedLocals(
-    'cadastros',
-    ownerUid,
-    localCad,
-    remoteCad,
-    remoteToCadastroRecord,
-    remoteCadTombstones,
-  );
-  await reconcileIdenticalUnsyncedLocals(
-    'sessoes',
-    ownerUid,
-    localSess,
-    remoteSess,
-    remoteToSessaoRecord,
-    remoteSessTombstones,
-  );
-  await reconcileIdenticalUnsyncedLocals(
-    'aplicadores',
-    ownerUid,
-    localApp,
-    remoteApp,
-    remoteToAplicadorRecord,
-    remoteAppTombstones,
-  );
+  const runReconcileAndPlan = async (fetchMode: 'full' | 'incremental') => {
+    await reconcileIdenticalUnsyncedLocals(
+      'cadastros',
+      ownerUid,
+      localCad,
+      remoteCad,
+      remoteToCadastroRecord,
+      remoteCadTombstones,
+    );
+    await reconcileIdenticalUnsyncedLocals(
+      'sessoes',
+      ownerUid,
+      localSess,
+      remoteSess,
+      remoteToSessaoRecord,
+      remoteSessTombstones,
+    );
+    await reconcileIdenticalUnsyncedLocals(
+      'aplicadores',
+      ownerUid,
+      localApp,
+      remoteApp,
+      remoteToAplicadorRecord,
+      remoteAppTombstones,
+    );
 
-  const [localCadFresh, localSessFresh, localAppFresh] = await Promise.all([
-    listCadastrosForSync(ownerUid, true),
-    listSessoesForSync(ownerUid, true),
-    listAplicadoresForSync(ownerUid, true),
-  ]);
+    const [localCadFresh, localSessFresh, localAppFresh] = await Promise.all([
+      listCadastrosForSync(ownerUid, true),
+      listSessoesForSync(ownerUid, true),
+      listAplicadoresForSync(ownerUid, true),
+    ]);
 
-  const cadPlanFresh = buildSyncPlan(
-    'cadastros',
-    ownerUid,
-    localCadFresh,
-    remoteCad,
-    remoteToCadastroRecord,
-    plainCadIds,
-    remoteCadTombstones,
-  );
-  const sessPlanFresh = buildSyncPlan(
-    'sessoes',
-    ownerUid,
-    localSessFresh,
-    remoteSess,
-    remoteToSessaoRecord,
-    plainSessIds,
-    remoteSessTombstones,
-  );
-  const appPlanFresh = buildSyncPlan(
-    'aplicadores',
-    ownerUid,
-    localAppFresh,
-    remoteApp,
-    remoteToAplicadorRecord,
-    plainAppIds,
-    remoteAppTombstones,
-  );
+    const cadPlanFresh = buildSyncPlan(
+      'cadastros',
+      ownerUid,
+      localCadFresh,
+      remoteCad,
+      remoteToCadastroRecord,
+      plainCadIds,
+      remoteCadTombstones,
+      fetchMode,
+    );
+    const sessPlanFresh = buildSyncPlan(
+      'sessoes',
+      ownerUid,
+      localSessFresh,
+      remoteSess,
+      remoteToSessaoRecord,
+      plainSessIds,
+      remoteSessTombstones,
+      fetchMode,
+    );
+    const appPlanFresh = buildSyncPlan(
+      'aplicadores',
+      ownerUid,
+      localAppFresh,
+      remoteApp,
+      remoteToAplicadorRecord,
+      plainAppIds,
+      remoteAppTombstones,
+      fetchMode,
+    );
+
+    return { cadPlanFresh, sessPlanFresh, appPlanFresh, localCadFresh, localSessFresh, localAppFresh };
+  };
+
+  let planned = await runReconcileAndPlan(remoteSnapshot.fetchMode);
+
+  // Incremental viu ids sincronizados ausentes na nuvem → full fetch imediato (nuvem = SoT).
+  const missingHint =
+    planned.cadPlanFresh.syncedMissingOnCloud +
+    planned.sessPlanFresh.syncedMissingOnCloud +
+    planned.appPlanFresh.syncedMissingOnCloud;
+  if (remoteSnapshot.fetchMode === 'incremental' && missingHint > 0) {
+    await syncLogger.info(
+      'sync-lww',
+      `Full fetch: ${missingHint} registro(s) sincronizado(s) ausente(s) no snapshot incremental`,
+    );
+    await forceNextFullRemoteFetch(ownerUid);
+    invalidateRemoteSnapshotCache();
+    remoteSnapshot = await fetchRemoteCollectionsSnapshot(ownerUid, true);
+    ({
+      remoteCad,
+      remoteSess,
+      remoteApp,
+      remoteCadTombstones = [],
+      remoteSessTombstones = [],
+      remoteAppTombstones = [],
+    } = remoteSnapshot);
+    planned = await runReconcileAndPlan(remoteSnapshot.fetchMode);
+  }
+
+  const { cadPlanFresh, sessPlanFresh, appPlanFresh, localCadFresh, localSessFresh, localAppFresh } =
+    planned;
 
   const fullPlan = [...cadPlanFresh.plan, ...sessPlanFresh.plan, ...appPlanFresh.plan];
   const plannedDownloadItems = fullPlan.filter((p) => p.action === 'download');
@@ -919,9 +1020,9 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     plannedUploads: uploadItems.length,
     plannedDownloads: downloadItems.length,
     totalIgnored: cadPlanFresh.ignored + sessPlanFresh.ignored + appPlanFresh.ignored + alignedDownloads,
-    localCad,
-    localSess,
-    localApp,
+    localCad: localCadFresh,
+    localSess: localSessFresh,
+    localApp: localAppFresh,
     localPre,
     remoteCad,
     remoteSess,

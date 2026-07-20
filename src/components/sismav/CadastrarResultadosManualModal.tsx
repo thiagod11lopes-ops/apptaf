@@ -34,6 +34,7 @@ import {
   validarEdicaoResultadoTaf,
   type EdicaoResultadoTafInput,
 } from '../../utils/atualizarResultadoTaf';
+import { idadeFromDataNascimento } from '../../utils/idadeFromDataNascimento';
 import { PREMIUM } from '../../theme/premium';
 
 type Etapa = 'form' | 'rubricaMilitar' | 'aplicador';
@@ -53,6 +54,23 @@ function permanenciaInicial(c: CadastroItemPersist): 'aprovado' | 'reprovado' | 
   return null;
 }
 
+function formatDateInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  const dd = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  const yyyy = digits.slice(4, 8);
+  if (digits.length <= 2) return dd;
+  if (digits.length <= 4) return `${dd}/${mm}`;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function dataNascimentoValida(value: string): boolean {
+  const t = value.trim();
+  if (!t) return true;
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(t)) return false;
+  return idadeFromDataNascimento(t) != null;
+}
+
 export function CadastrarResultadosManualModal({
   visible,
   cadastros,
@@ -70,6 +88,7 @@ export function CadastrarResultadosManualModal({
   const [tempoCorrida, setTempoCorrida] = useState('');
   const [tempoNatacao, setTempoNatacao] = useState('');
   const [permanencia, setPermanencia] = useState<'aprovado' | 'reprovado' | null>(null);
+  const [dataNascimento, setDataNascimento] = useState('');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [rubricaMilitarSvg, setRubricaMilitarSvg] = useState('');
@@ -83,6 +102,7 @@ export function CadastrarResultadosManualModal({
     setTempoCorrida('');
     setTempoNatacao('');
     setPermanencia(null);
+    setDataNascimento('');
     setErro('');
     setSalvando(false);
     setRubricaMilitarSvg('');
@@ -115,8 +135,24 @@ export function CadastrarResultadosManualModal({
     setTempoCorrida(tempoParaExibicao(encontrado.tempoCorrida));
     setTempoNatacao(tempoParaExibicao(encontrado.tempoNatacao));
     setPermanencia(permanenciaInicial(encontrado));
+    setDataNascimento((encontrado.dataNascimento || '').trim());
     setAvisoBusca('');
   }, []);
+
+  const idadePreview = useMemo(() => {
+    const t = dataNascimento.trim();
+    if (!t || !dataNascimentoValida(t)) return null;
+    return idadeFromDataNascimento(t);
+  }, [dataNascimento]);
+
+  const cadastroComData = useMemo((): CadastroItemPersist | null => {
+    if (!cadastro) return null;
+    const dn = dataNascimento.trim();
+    return {
+      ...cadastro,
+      dataNascimento: dn,
+    };
+  }, [cadastro, dataNascimento]);
 
   const resolverMilitarPorNip = useCallback(
     (nipRaw: string, opts?: { formatarNip?: boolean; exigirCompleto?: boolean }) => {
@@ -124,6 +160,7 @@ export function CadastrarResultadosManualModal({
       const digits = nipDigitos(nipRaw);
       if (!digits) {
         setCadastro(null);
+        setDataNascimento('');
         setAvisoBusca('');
         return;
       }
@@ -144,12 +181,14 @@ export function CadastrarResultadosManualModal({
         }
         if (prefixos.length > 1) {
           setCadastro(null);
+          setDataNascimento('');
           setAvisoBusca('');
           return;
         }
       }
 
       setCadastro(null);
+      setDataNascimento('');
       if (opts?.exigirCompleto || digits.length >= 8) {
         setAvisoBusca(
           res.kind === 'ambiguous'
@@ -193,20 +232,28 @@ export function CadastrarResultadosManualModal({
   );
 
   const participanteRubrica = useMemo((): ResultadoCorridaItem | null => {
-    if (!cadastro) return null;
+    if (!cadastroComData) return null;
     return {
       corredor: 1,
-      nome: cadastro.nome,
-      nip: cadastro.nip,
+      nome: cadastroComData.nome,
+      nip: cadastroComData.nip,
       tempoMs: 0,
       prova: 'corrida',
       notaTexto: undefined,
     };
-  }, [cadastro]);
+  }, [cadastroComData]);
 
   const irParaRubricaMilitar = useCallback(() => {
-    if (!cadastro) {
+    if (!cadastroComData) {
       setErro('Busque e selecione o militar pelo NIP.');
+      return;
+    }
+    if (!dataNascimentoValida(dataNascimento)) {
+      setErro('Data de nascimento inválida. Use DD/MM/AAAA.');
+      return;
+    }
+    if ((tempoCorrida.trim() || tempoNatacao.trim()) && !dataNascimento.trim()) {
+      setErro('Informe a data de nascimento para calcular a nota da corrida/natação.');
       return;
     }
     const validacao = validarEdicaoResultadoTaf(inputResultados);
@@ -216,7 +263,7 @@ export function CadastrarResultadosManualModal({
     }
     setErro('');
     setEtapa('rubricaMilitar');
-  }, [cadastro, inputResultados]);
+  }, [cadastroComData, dataNascimento, tempoCorrida, tempoNatacao, inputResultados]);
 
   const onRubricaMilitar = useCallback((svg: string) => {
     setRubricaMilitarSvg(svg);
@@ -225,12 +272,12 @@ export function CadastrarResultadosManualModal({
 
   const concluirComAplicador = useCallback(
     async (assinatura: AplicadorAssinaturaResumo) => {
-      if (!cadastro || salvando) return;
+      if (!cadastroComData || salvando) return;
       setSalvando(true);
       setErro('');
       try {
         const atualizado = await cadastrarResultadosManual({
-          cadastro,
+          cadastro: cadastroComData,
           input: inputResultados,
           dataAplicacaoBr,
           rubricaMilitarSvg,
@@ -246,7 +293,7 @@ export function CadastrarResultadosManualModal({
       }
     },
     [
-      cadastro,
+      cadastroComData,
       salvando,
       inputResultados,
       dataAplicacaoBr,
@@ -345,6 +392,50 @@ export function CadastrarResultadosManualModal({
               {avisoBusca ? (
                 <Text style={[theme.textStyles.caption, { color: theme.loss, marginBottom: 8 }]}>
                   {avisoBusca}
+                </Text>
+              ) : null}
+
+              <Text style={[theme.textStyles.label, styles.fieldLabel, { color: ui.text }]}>
+                Data de nascimento
+              </Text>
+              <TextInput
+                value={dataNascimento}
+                onChangeText={(t) => {
+                  setErro('');
+                  setDataNascimento(formatDateInput(t));
+                }}
+                placeholder="DD/MM/AAAA"
+                placeholderTextColor={ui.placeholder}
+                style={[
+                  styles.input,
+                  {
+                    borderColor: theme.border,
+                    color: ui.text,
+                    backgroundColor: theme.cardBg,
+                    opacity: cadastro ? 1 : 0.75,
+                  },
+                ]}
+                keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                maxLength={10}
+                editable={!salvando && !!cadastro}
+              />
+              {idadePreview != null ? (
+                <Text
+                  style={[
+                    theme.textStyles.caption,
+                    { color: theme.gain, marginTop: -4, marginBottom: 8, fontWeight: '700' },
+                  ]}
+                >
+                  Idade: {idadePreview} anos
+                </Text>
+              ) : cadastro && !dataNascimento.trim() ? (
+                <Text
+                  style={[
+                    theme.textStyles.caption,
+                    { color: theme.textMuted, marginTop: -4, marginBottom: 8 },
+                  ]}
+                >
+                  Informe a data para calcular a nota corretamente.
                 </Text>
               ) : null}
 

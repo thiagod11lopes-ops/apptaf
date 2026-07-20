@@ -21,6 +21,7 @@ import {
   salvarResultadosTafEditados,
   type EdicaoResultadoTafInput,
 } from '../../utils/atualizarResultadoTaf';
+import { idadeFromDataNascimento } from '../../utils/idadeFromDataNascimento';
 import { PREMIUM } from '../../theme/premium';
 
 type Props = {
@@ -36,12 +37,30 @@ function permanenciaInicial(c: CadastroItemPersist): 'aprovado' | 'reprovado' | 
   return null;
 }
 
+function formatDateInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  const dd = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  const yyyy = digits.slice(4, 8);
+  if (digits.length <= 2) return dd;
+  if (digits.length <= 4) return `${dd}/${mm}`;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function dataNascimentoValida(value: string): boolean {
+  const t = value.trim();
+  if (!t) return true;
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(t)) return false;
+  return idadeFromDataNascimento(t) != null;
+}
+
 export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }: Props) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const [tempoCorrida, setTempoCorrida] = useState('');
   const [tempoNatacao, setTempoNatacao] = useState('');
   const [permanencia, setPermanencia] = useState<'aprovado' | 'reprovado' | null>(null);
+  const [dataNascimento, setDataNascimento] = useState('');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
 
@@ -50,9 +69,16 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
     setTempoCorrida(tempoParaExibicao(cadastro.tempoCorrida));
     setTempoNatacao(tempoParaExibicao(cadastro.tempoNatacao));
     setPermanencia(permanenciaInicial(cadastro));
+    setDataNascimento((cadastro.dataNascimento || '').trim());
     setErro('');
     setSalvando(false);
   }, [visible, cadastro]);
+
+  const idadePreview = useMemo(() => {
+    const t = dataNascimento.trim();
+    if (!t || !dataNascimentoValida(t)) return null;
+    return idadeFromDataNascimento(t);
+  }, [dataNascimento]);
 
   const fechar = useCallback(() => {
     if (salvando) return;
@@ -61,6 +87,14 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
 
   const salvar = useCallback(async () => {
     if (!cadastro || salvando) return;
+    if (!dataNascimentoValida(dataNascimento)) {
+      setErro('Data de nascimento inválida. Use DD/MM/AAAA.');
+      return;
+    }
+    if ((tempoCorrida.trim() || tempoNatacao.trim()) && !dataNascimento.trim()) {
+      setErro('Informe a data de nascimento para calcular a nota da corrida/natação.');
+      return;
+    }
     const input: EdicaoResultadoTafInput = {
       tempoCorrida,
       tempoNatacao,
@@ -69,7 +103,11 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
     setSalvando(true);
     setErro('');
     try {
-      const atualizado = await salvarResultadosTafEditados(cadastro, input);
+      const base: CadastroItemPersist = {
+        ...cadastro,
+        dataNascimento: dataNascimento.trim(),
+      };
+      const atualizado = await salvarResultadosTafEditados(base, input);
       onSalvo(atualizado);
       onClose();
     } catch (e) {
@@ -77,7 +115,16 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
     } finally {
       setSalvando(false);
     }
-  }, [cadastro, tempoCorrida, tempoNatacao, permanencia, salvando, onSalvo, onClose]);
+  }, [
+    cadastro,
+    tempoCorrida,
+    tempoNatacao,
+    permanencia,
+    dataNascimento,
+    salvando,
+    onSalvo,
+    onClose,
+  ]);
 
   if (!cadastro) return null;
 
@@ -103,6 +150,45 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
           <Text style={[theme.textStyles.caption, styles.hint, { color: theme.textMuted }]}>
             Tempos em MM:SS. Deixe vazio para remover o resultado da modalidade.
           </Text>
+
+          <Text style={[theme.textStyles.label, styles.fieldLabel, { color: ui.text }]}>
+            Data de nascimento
+          </Text>
+          <TextInput
+            value={dataNascimento}
+            onChangeText={(t) => {
+              setErro('');
+              setDataNascimento(formatDateInput(t));
+            }}
+            placeholder="DD/MM/AAAA"
+            placeholderTextColor={ui.placeholder}
+            style={[
+              styles.input,
+              { borderColor: theme.border, color: ui.text, backgroundColor: theme.cardBg },
+            ]}
+            keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+            maxLength={10}
+            editable={!salvando}
+          />
+          {idadePreview != null ? (
+            <Text
+              style={[
+                theme.textStyles.caption,
+                { color: theme.gain, marginTop: -4, marginBottom: 8, fontWeight: '700' },
+              ]}
+            >
+              Idade: {idadePreview} anos
+            </Text>
+          ) : !dataNascimento.trim() ? (
+            <Text
+              style={[
+                theme.textStyles.caption,
+                { color: theme.textMuted, marginTop: -4, marginBottom: 8 },
+              ]}
+            >
+              Informe ou edite a data para calcular a nota corretamente.
+            </Text>
+          ) : null}
 
           <Text style={[theme.textStyles.label, styles.fieldLabel, { color: ui.text }]}>Corrida</Text>
           <TextInput

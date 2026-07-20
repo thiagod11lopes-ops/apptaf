@@ -213,6 +213,9 @@ export function BackupTafCsvBlock() {
         conflito pelo mesmo registro, prevalece o updatedAt mais recente (o aparelho não perde edições mais
         novas). “Backup em CSV” salva na pasta Downloads; “Salvar backup na pasta…” escolhe outra pasta.
         {isAuthenticated ? ' Com login ativo, os dados são gravados na nuvem.' : ''}
+        {' '}
+        Se um backup antigo (Firebase) não mostrar cadastros, carregue o CSV de novo após atualizar o app — a sessão
+        atual é preservada.
       </Text>
 
       {exportMsg ? (

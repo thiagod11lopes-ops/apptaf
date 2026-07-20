@@ -16,10 +16,12 @@ import {
   applyCsvCadastroLww,
   applyCsvSessaoLww,
   resolveOwnerUid,
+  ANONYMOUS_OWNER,
 } from '../offline-first/db/localDb';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { acknowledgeTeamWipeAfterLocalRestore } from '../offline-first/sync/syncTeamWipe';
-import { resolveStorageOwnerUid } from '../services/firebase/authUid';
+import { resolveStorageOwnerUid, getCachedLoginUid, setAuthUidState } from '../services/firebase/authUid';
+import { isCloudOwnerUid } from './cloudOwnerUid';
 import { readUpdatedAt } from '../offline-first/sync/recordMeta';
 import {
   gatherSystemBackupData,
@@ -31,14 +33,38 @@ import { buildBackupApptafFilename } from './backupNaming';
 
 const BACKUP_VERSION = '2';
 
-/** Não restaurar — evita pular o backup diário após importação. */
-const DAILY_BACKUP_META_KEY = 'backup:lastDailyDateBr';
+/** Metadados de sessão/dispositivo — restaurar quebraria o vínculo com a conta atual. */
+const SKIP_APP_META_EXACT = new Set([
+  'backup:lastDailyDateBr',
+  'session:dataOwnerUid',
+  'session:loginUid',
+  'auth:profile',
+  'device:id',
+  'systemSyncMode',
+  'demo:modoAtivo',
+  'demo:backupId',
+  'sync:pendingResumeAt',
+  'sync:resumeMessage',
+]);
 
-/** Não restaurar — evita rearmar wipe remoto e apagar o CSV na próxima sync. */
-const TEAM_WIPE_ACK_META_PREFIX = 'teamWipeAck:';
+const SKIP_APP_META_PREFIXES = [
+  'teamWipeAck:',
+  'lastPull:',
+  'migrated:',
+  'sync:remoteWatermark:',
+  'sync:lastFullFetch:',
+];
 
 function shouldSkipAppMetaRestore(key: string): boolean {
-  return key === DAILY_BACKUP_META_KEY || key.startsWith(TEAM_WIPE_ACK_META_PREFIX);
+  if (SKIP_APP_META_EXACT.has(key)) return true;
+  return SKIP_APP_META_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+/** Remapeia chaves de fatores de risco amarradas a outro ownerUid. */
+function remapAppMetaKeyForOwner(key: string, ownerUid: string): string {
+  if (key === 'fatoresRisco:registros') return key;
+  if (key.startsWith('fatoresRisco:')) return `fatoresRisco:${ownerUid}`;
+  return key;
 }
 
 type BackupSection =
@@ -882,9 +908,14 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
   let emailsAutorizadosImportados = 0;
   let mantidosLocais = 0;
 
-  if (db) {
-    const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
+  const loginUid = getCachedLoginUid();
+  let ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
+  // CSV legado (Firebase) pode ter sobrescrito session:dataOwnerUid — com login Supabase, use a conta atual.
+  if (loginUid && isCloudOwnerUid(loginUid) && !isCloudOwnerUid(ownerUid)) {
+    ownerUid = loginUid;
+  }
 
+  if (db) {
     for (const item of cadastros) {
       const result = await applyCsvCadastroLww(item, ownerUid);
       if (result === 'kept_local') mantidosLocais += 1;
@@ -919,17 +950,35 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
     }
 
     for (const email of authorizedEmails) {
-      const local = await db.authorizedEmails.get(email.id);
-      if (local && readUpdatedAt(local) >= readUpdatedAt(email)) {
+      const remapped: LocalAuthorizedEmail = {
+        ...email,
+        ownerUid,
+        id: email.id.includes(':')
+          ? `${ownerUid}:${email.email}`
+          : email.id,
+        syncStatus: email.syncStatus === 'deleted' ? 'deleted' : 'local',
+      };
+      const local = await db.authorizedEmails.get(remapped.id);
+      if (local && readUpdatedAt(local) >= readUpdatedAt(remapped)) {
         mantidosLocais += 1;
         continue;
       }
-      await db.authorizedEmails.put(email);
+      await db.authorizedEmails.put(remapped);
       emailsAutorizadosImportados += 1;
     }
 
     if (syncQueueEntries.length > 0) {
-      await db.syncQueue.bulkPut(syncQueueEntries);
+      // Fila antiga de outro owner/Firebase não deve ir para a nuvem atual.
+      const remappedQueue = syncQueueEntries
+        .filter((entry) => entry.ownerUid === ownerUid || !isCloudOwnerUid(entry.ownerUid))
+        .map((entry) => ({
+          ...entry,
+          ownerUid,
+          status: entry.status === 'completed' ? entry.status : ('pending' as const),
+        }));
+      if (remappedQueue.length > 0) {
+        await db.syncQueue.bulkPut(remappedQueue);
+      }
     }
 
     notifyDataChanged();
@@ -954,11 +1003,18 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
   }
 
   for (const meta of appMetaEntries) {
-    await writeAppMeta(meta.key, meta.value);
+    const key = remapAppMetaKeyForOwner(meta.key, ownerUid);
+    await writeAppMeta(key, meta.value);
+  }
+
+  // Garante que a sessão atual não fique apontando para UID legado do CSV (Firebase).
+  if (loginUid) {
+    setAuthUidState(loginUid, ownerUid, true);
+  } else if (ownerUid && ownerUid !== ANONYMOUS_OWNER) {
+    await writeAppMeta('session:dataOwnerUid', ownerUid);
   }
 
   // Reconhecer wipe remoto sem apagar o local — próxima sync sobe o CSV em vez de limpar IndexedDB.
-  const ownerUid = await resolveStorageOwnerUid();
   if (ownerUid) {
     await acknowledgeTeamWipeAfterLocalRestore(ownerUid);
   }

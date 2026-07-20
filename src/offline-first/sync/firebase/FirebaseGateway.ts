@@ -65,6 +65,22 @@ export async function probeFirestoreConnectivityDetailed(
   const sb = getSupabase();
   if (!sb) return { ok: false, reason: 'Supabase indisponível.' };
 
+  // Garante JWT fresco — request sem token cai no role anon e gera "permission denied".
+  try {
+    const { data: refreshed, error: refreshError } = await sb.auth.refreshSession();
+    if (refreshError || !refreshed.session?.user) {
+      const { data: sessionData } = await sb.auth.getSession();
+      if (!sessionData.session?.user) {
+        return { ok: false, reason: 'Sessão não encontrada. Entre com e-mail e senha.' };
+      }
+    }
+  } catch {
+    const { data: sessionData } = await sb.auth.getSession();
+    if (!sessionData.session?.user) {
+      return { ok: false, reason: 'Sessão não encontrada. Entre com e-mail e senha.' };
+    }
+  }
+
   const { data: sessionData } = await sb.auth.getSession();
   const user = sessionData.session?.user;
   if (!user) return { ok: false, reason: 'Sessão não encontrada. Entre com e-mail e senha.' };
@@ -86,15 +102,17 @@ export async function probeFirestoreConnectivityDetailed(
       lastReason =
         /invalid input syntax for type uuid/i.test(msg)
           ? `UID inválido na nuvem (${targetUid}). Saia e entre novamente com a conta Supabase; se persistir, limpe os dados locais e reimporte o CSV.`
-          : /permission denied for (table|schema|relation)|must be owner|not granted/i.test(msg)
-          ? 'Tabelas sem permissão na API. No SQL Editor, execute os GRANTs do schema (authenticated).'
-          : msg.includes('JWT') || /auth/i.test(msg)
-            ? 'Token de autenticação expirado. Entre novamente com e-mail e senha.'
-            : msg.includes('permission') || msg.includes('RLS') || msg.includes('policy')
-              ? targetUid !== user.id
-                ? 'Permissão negada na nuvem. Confirme que entrou com o e-mail autorizado pelo chefe.'
-                : 'Permissão negada na nuvem. Verifique se as policies RLS do Supabase foram aplicadas.'
-              : msg || lastReason;
+          : /permission denied for function/i.test(msg)
+            ? 'Funções de permissão sem GRANT. No SQL Editor, execute supabase/fix_sync_permissions.sql.'
+            : /permission denied for (table|schema|relation)|must be owner|not granted/i.test(msg)
+              ? 'Tabelas sem permissão na API. No SQL Editor, execute supabase/fix_sync_permissions.sql.'
+              : msg.includes('JWT') || /auth/i.test(msg)
+                ? 'Token de autenticação expirado. Entre novamente com e-mail e senha.'
+                : msg.includes('permission') || msg.includes('RLS') || msg.includes('policy')
+                  ? targetUid !== user.id
+                    ? 'Permissão negada na nuvem. Confirme que entrou com o e-mail autorizado pelo chefe.'
+                    : 'Permissão negada na nuvem. No SQL Editor, execute supabase/fix_sync_permissions.sql e entre novamente.'
+                  : msg || lastReason;
       await sleep(300 * (attempt + 1));
     }
   }

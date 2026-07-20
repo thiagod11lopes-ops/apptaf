@@ -7,11 +7,9 @@
    - `anon` `public` key → `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 3. Cole no arquivo `.env` (veja `.env.example`).
 
-## 2. Schema e RLS
-No **SQL Editor**, execute o arquivo:
-`supabase/schema.sql`
+## Se a sync falhar em «Validando permissões»
+No SQL Editor, execute `supabase/fix_sync_permissions.sql` e faça logout/login no app.
 
-Isso cria as tabelas (JSONB), lookups de membro e as policies (chefe / membro autorizado).
 
 ## 3. Auth por e-mail e senha
 1. Supabase → **Authentication → Providers → Email** → ativar.

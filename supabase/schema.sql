@@ -1,7 +1,7 @@
--- TAF App â€” schema Supabase (substitui Firestore)
+-- TAF App ? schema Supabase (substitui Firestore)
 -- Execute no SQL Editor do projeto Supabase.
--- Ordem: tabelas primeiro, depois funÃ§Ãµes e policies.
--- Painel admin de e-mails: tambÃ©m execute admin_directory.sql.
+-- Ordem: tabelas primeiro, depois funções e policies.
+-- Painel admin de e-mails: também execute admin_directory.sql.
 
 -- Lookups de membros autorizados
 create table if not exists public.member_lookup (
@@ -32,7 +32,7 @@ create table if not exists public.authorized_emails (
   primary key (owner_uid, id)
 );
 
--- Entidades de negÃ³cio (documento JSON)
+-- Entidades de negócio (documento JSON)
 create table if not exists public.cadastros (
   id text not null,
   owner_uid uuid not null,
@@ -108,7 +108,7 @@ create table if not exists public.team_e2e_meta (
   updated_at timestamptz default now()
 );
 
--- Ãndices
+-- Índices
 create index if not exists idx_cadastros_owner_updated on public.cadastros (owner_uid, updated_at);
 create index if not exists idx_sessoes_owner_updated on public.sessoes (owner_uid, updated_at);
 create index if not exists idx_aplicadores_owner_updated on public.aplicadores (owner_uid, updated_at);
@@ -116,11 +116,13 @@ create index if not exists idx_pre_cadastros_owner_updated on public.pre_cadastr
 create index if not exists idx_member_lookup_boss on public.member_lookup (boss_uid);
 create index if not exists idx_member_uid_lookup_boss on public.member_uid_lookup (boss_uid);
 
--- Helpers de autorizaÃ§Ã£o (chefe ou membro ativo) â€” apÃ³s as tabelas
+-- Helpers de autorização (chefe ou membro ativo) ? após as tabelas
 create or replace function public.is_boss(owner uuid)
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select auth.uid() is not null and auth.uid() = owner;
 $$;
@@ -129,6 +131,8 @@ create or replace function public.is_active_member_of(owner uuid)
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select auth.uid() is not null and (
     exists (
@@ -150,11 +154,13 @@ create or replace function public.can_access_owner(owner uuid)
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select public.is_boss(owner) or public.is_active_member_of(owner);
 $$;
 
--- Privileges for Data API (necessÃ¡rio quando "Automatically expose new tables" estÃ¡ off)
+-- Privileges for Data API (necessário quando "Automatically expose new tables" está off)
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on
   public.member_lookup,
@@ -170,9 +176,9 @@ grant select, insert, update, delete on
   public.team_wipe,
   public.team_e2e_meta
 to authenticated;
-grant execute on function public.is_boss(uuid) to authenticated;
-grant execute on function public.is_active_member_of(uuid) to authenticated;
-grant execute on function public.can_access_owner(uuid) to authenticated;
+grant execute on function public.is_boss(uuid) to authenticated, anon;
+grant execute on function public.is_active_member_of(uuid) to authenticated, anon;
+grant execute on function public.can_access_owner(uuid) to authenticated, anon;
 
 -- RLS
 alter table public.member_lookup enable row level security;
@@ -234,7 +240,7 @@ create policy member_uid_lookup_upsert on public.member_uid_lookup
   using (member_uid = auth.uid() or boss_uid = auth.uid())
   with check (member_uid = auth.uid() or boss_uid = auth.uid());
 
--- authorized_emails: sÃ³ chefe
+-- authorized_emails: só chefe
 drop policy if exists authorized_emails_boss on public.authorized_emails;
 create policy authorized_emails_boss on public.authorized_emails
   for all to authenticated
@@ -272,7 +278,7 @@ create policy aplicadores_access on public.aplicadores
   using (public.can_access_owner(owner_uid))
   with check (public.can_access_owner(owner_uid));
 
--- Senhas: chefe lÃª/escreve; membro sÃ³ escreve
+-- Senhas: chefe lê/escreve; membro só escreve
 drop policy if exists aplicador_senhas_select on public.aplicador_senhas;
 create policy aplicador_senhas_select on public.aplicador_senhas
   for select to authenticated
@@ -327,10 +333,10 @@ create policy team_e2e_meta_update on public.team_e2e_meta
 
 
 -- ---------------------------------------------------------------------------
--- Numeracao de bancos (BNC001...) â€” ver tambem supabase/database_registry.sql
+-- Numeracao de bancos (BNC001...) ? ver tambem supabase/database_registry.sql
 -- ---------------------------------------------------------------------------
--- NumeraÃ§Ã£o sequencial de bancos TAF (BNC001, BNC002, â€¦)
--- Execute no SQL Editor do Supabase (projetos novos: jÃ¡ incluso em schema.sql).
+-- Numeração sequencial de bancos TAF (BNC001, BNC002, ?)
+-- Execute no SQL Editor do Supabase (projetos novos: já incluso em schema.sql).
 
 create sequence if not exists public.database_bank_number_seq;
 
@@ -360,7 +366,7 @@ create policy database_registry_insert on public.database_registry
   with check (public.is_boss(owner_uid));
 
 /**
- * Garante cÃ³digo do banco para o owner (chefe cria; chefe/membro leem).
+ * Garante código do banco para o owner (chefe cria; chefe/membro leem).
  * Retorna ex.: BNC001
  */
 create or replace function public.ensure_database_bank_code(p_owner uuid)
@@ -376,13 +382,13 @@ declare
   email text;
 begin
   if p_owner is null then
-    raise exception 'owner obrigatÃ³rio';
+    raise exception 'owner obrigatório';
   end if;
   if auth.uid() is null then
-    raise exception 'nÃ£o autenticado';
+    raise exception 'não autenticado';
   end if;
   if not public.can_access_owner(p_owner) then
-    raise exception 'sem permissÃ£o para este banco';
+    raise exception 'sem permissão para este banco';
   end if;
 
   select r.bank_code into existing
@@ -393,7 +399,7 @@ begin
     return existing;
   end if;
 
-  -- SÃ³ o chefe aloca nÃºmero novo; membro aguarda o chefe.
+  -- Só o chefe aloca número novo; membro aguarda o chefe.
   if not public.is_boss(p_owner) then
     return null;
   end if;
@@ -418,7 +424,7 @@ $$;
 
 grant execute on function public.ensure_database_bank_code(uuid) to authenticated;
 
--- Backfill: bancos que jÃ¡ tÃªm chave E2E recebem nÃºmero pela ordem de criaÃ§Ã£o.
+-- Backfill: bancos que já têm chave E2E recebem número pela ordem de criação.
 do $$
 declare
   max_n int;
@@ -439,7 +445,7 @@ begin
   perform setval('public.database_bank_number_seq', greatest(max_n, 1), max_n > 0);
 end $$;
 
--- Atualiza lista de chefes com created_at (fallback de numeraÃ§Ã£o no app).
+-- Atualiza lista de chefes com created_at (fallback de numeração no app).
 drop function if exists public.admin_list_boss_emails();
 create or replace function public.admin_list_boss_emails()
 returns table (

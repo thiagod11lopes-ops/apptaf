@@ -140,6 +140,8 @@ create or replace function public.is_boss(owner uuid)
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select auth.uid() is not null and auth.uid() = owner;
 $$;
@@ -148,6 +150,8 @@ create or replace function public.is_active_member_of(owner uuid)
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select auth.uid() is not null and (
     exists (
@@ -169,6 +173,8 @@ create or replace function public.can_access_owner(owner uuid)
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select public.is_boss(owner) or public.is_active_member_of(owner);
 $$;
@@ -197,9 +203,9 @@ to authenticated;
 grant select, insert on public.database_registry to authenticated;
 grant usage, select on sequence public.database_bank_number_seq to authenticated;
 
-grant execute on function public.is_boss(uuid) to authenticated;
-grant execute on function public.is_active_member_of(uuid) to authenticated;
-grant execute on function public.can_access_owner(uuid) to authenticated;
+grant execute on function public.is_boss(uuid) to authenticated, anon;
+grant execute on function public.is_active_member_of(uuid) to authenticated, anon;
+grant execute on function public.can_access_owner(uuid) to authenticated, anon;
 
 -- ---------------------------------------------------------------------------
 -- RLS

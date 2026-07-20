@@ -60,9 +60,17 @@ export async function prepareSyncSession(
       );
     }
   }
-  await applyTeamWipeIfNeeded(access.dataOwnerUid, loginUid);
+  try {
+    await applyTeamWipeIfNeeded(access.dataOwnerUid, loginUid);
+  } catch (error) {
+    console.warn('[sync] applyTeamWipeIfNeeded falhou (seguindo sync):', error);
+  }
   if (!access.isAuthorizedMember) {
-    await pullAuthorizedEmailsToLocal(access.dataOwnerUid);
+    try {
+      await pullAuthorizedEmailsToLocal(access.dataOwnerUid);
+    } catch (error) {
+      console.warn('[sync] pullAuthorizedEmailsToLocal falhou (seguindo sync):', error);
+    }
   }
   return access;
 }

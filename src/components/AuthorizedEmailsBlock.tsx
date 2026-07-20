@@ -13,6 +13,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import type { AuthorizedEmailEntry } from '../offline-first/sync/firebase/FirebaseGateway';
 import { authorizedEmailRepository } from '../offline-first/repositories/AuthorizedEmailRepository';
+import { pushPendingAuthorizedEmails } from '../offline-first/sync/syncAuthorizedEmails';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { isAllowedAuthEmail, authEmailDomainErrorMessage, normalizeAuthEmail } from '../utils/normalizeAuthEmail';
 import { PREMIUM } from '../theme/premium';
@@ -65,8 +66,17 @@ export function AuthorizedEmailsBlock() {
     setMsg(null);
     try {
       await authorizedEmailRepository.addLocal(user.uid, email);
+      const pushErrors = await pushPendingAuthorizedEmails(user.uid);
       setInput('');
-      setMsg(`E-mail ${email} autorizado localmente. Será enviado na próxima sincronização.`);
+      if (pushErrors.length > 0) {
+        setMsg(
+          `E-mail ${email} autorizado localmente. Envio à nuvem pendente — sincronize para o colega poder entrar no seu banco.`,
+        );
+      } else {
+        setMsg(
+          `E-mail ${email} autorizado na nuvem. O colega já pode entrar e usar o seu banco de dados.`,
+        );
+      }
       await recarregar();
       notifyDataChanged();
     } catch (e) {
@@ -84,7 +94,14 @@ export function AuthorizedEmailsBlock() {
       setMsg(null);
       try {
         await authorizedEmailRepository.removeLocal(user.uid, email);
-        setMsg(`Acesso de ${email} removido localmente. Será aplicado na próxima sincronização.`);
+        const pushErrors = await pushPendingAuthorizedEmails(user.uid);
+        if (pushErrors.length > 0) {
+          setMsg(
+            `Acesso de ${email} removido localmente. Será aplicado na próxima sincronização.`,
+          );
+        } else {
+          setMsg(`Acesso de ${email} removido na nuvem.`);
+        }
         await recarregar();
         notifyDataChanged();
       } catch (e) {
@@ -101,7 +118,8 @@ export function AuthorizedEmailsBlock() {
   return (
     <View>
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
-        Pessoas autorizadas entram com o Google delas e acessam seus cadastros e resultados TAF.
+        Pessoas autorizadas entram com o e-mail/senha delas e acessam seus cadastros e resultados TAF.
+        Ao autorizar, o e-mail é enviado à nuvem na hora (quando online) para o colega já poder entrar no seu banco.
       </Text>
 
       <View style={styles.addRow}>

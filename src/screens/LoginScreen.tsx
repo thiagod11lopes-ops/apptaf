@@ -151,7 +151,7 @@ export default function LoginScreen() {
                 <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
                   {passwordRecoveryPending
                     ? 'Escolha uma nova senha para a conta'
-                    : 'Dados locais no dispositivo · sincronize na tela inicial'}
+                    : 'Na nuvem: e-mail autorizado usa o banco do chefe; demais e-mails usam banco próprio'}
                 </Text>
               </View>
             )}
@@ -192,7 +192,8 @@ export default function LoginScreen() {
               {trocarSenhaContaAberto ? (
                 <View style={styles.trocarSenhaBox}>
                   <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 18 }]}>
-                    Senha de login da conta (chefe ou autorizado). Não é a senha de aplicador do TAF.
+                    Senha de login da conta. E-mail autorizado pelo chefe: use a mesma senha de
+                    criptografia do chefe (a senha com que o chefe entra) para desbloquear o banco.
                   </Text>
                   <AlterarSenhaContaForm
                     onSuccess={() => {

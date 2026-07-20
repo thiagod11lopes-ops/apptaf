@@ -31,6 +31,24 @@ function fallbackMemberAccessFromPersistedSession(loginUid: string): MemberAcces
   return { dataOwnerUid: loginUid, isAuthorizedMember: false };
 }
 
+function memberAccessFromBoss(
+  loginUid: string,
+  bossUid: string | null | undefined,
+): MemberAccess | null {
+  if (
+    bossUid &&
+    isCloudOwnerUid(bossUid) &&
+    bossUid !== loginUid
+  ) {
+    return { dataOwnerUid: bossUid, isAuthorizedMember: true };
+  }
+  return null;
+}
+
+/**
+ * Consulta na nuvem se o e-mail/UID é membro autorizado (banco do chefe)
+ * ou conta própria (banco do próprio login).
+ */
 export async function resolveMemberAccess(
   loginUid: string,
   email: string | null | undefined,
@@ -40,40 +58,56 @@ export async function resolveMemberAccess(
   }
   const sb = getSupabase();
   if (!sb) return fallbackMemberAccessFromPersistedSession(loginUid);
+
   try {
     if (email?.trim()) {
       const emailKey = normalizeAuthEmail(email);
-      const { data } = await sb
+
+      // Preferência: RPC SECURITY DEFINER (confiável mesmo com RLS restritivo).
+      const { data: rpcBoss, error: rpcError } = await sb.rpc('resolve_member_boss', {
+        p_email: emailKey,
+      });
+      if (!rpcError) {
+        const fromRpc = memberAccessFromBoss(loginUid, rpcBoss as string | null);
+        if (fromRpc) return fromRpc;
+      } else if (!/could not find the function|schema cache|404/i.test(rpcError.message)) {
+        console.warn('[auth] resolve_member_boss:', rpcError.message);
+      }
+
+      const { data, error } = await sb
         .from('member_lookup')
         .select('boss_uid, ativo')
         .eq('email_key', emailKey)
         .maybeSingle();
-      if (
-        data?.ativo === true &&
-        data.boss_uid &&
-        isCloudOwnerUid(data.boss_uid) &&
-        data.boss_uid !== loginUid
-      ) {
-        return { dataOwnerUid: data.boss_uid, isAuthorizedMember: true };
+      if (error) {
+        console.warn('[auth] member_lookup:', error.message);
+      } else {
+        const fromEmail = memberAccessFromBoss(
+          loginUid,
+          data?.ativo === true ? (data.boss_uid as string) : null,
+        );
+        if (fromEmail) return fromEmail;
       }
     }
+
     if (loginUid.trim()) {
-      const { data } = await sb
+      const { data, error } = await sb
         .from('member_uid_lookup')
         .select('boss_uid, ativo')
         .eq('member_uid', loginUid)
         .maybeSingle();
-      if (
-        data &&
-        data.ativo !== false &&
-        data.boss_uid &&
-        isCloudOwnerUid(data.boss_uid) &&
-        data.boss_uid !== loginUid
-      ) {
-        return { dataOwnerUid: data.boss_uid, isAuthorizedMember: true };
+      if (error) {
+        console.warn('[auth] member_uid_lookup:', error.message);
+      } else {
+        const fromUid = memberAccessFromBoss(
+          loginUid,
+          data && data.ativo !== false ? (data.boss_uid as string) : null,
+        );
+        if (fromUid) return fromUid;
       }
     }
-  } catch {
+  } catch (error) {
+    console.warn('[auth] resolveMemberAccess falhou:', error);
     return fallbackMemberAccessFromPersistedSession(loginUid);
   }
   return fallbackMemberAccessFromPersistedSession(loginUid);
@@ -87,6 +121,24 @@ export async function registerAuthorizedMemberLogin(
   if (!memberUid.trim() || memberUid === bossUid) return { ok: true };
   const sb = requireSupabase();
   const emailKey = normalizeAuthEmail(email);
+
+  // Preferência: RPC (evita falha de INSERT RLS no upsert de member_lookup pelo membro).
+  const { data: rpcOk, error: rpcError } = await sb.rpc('register_authorized_member_login', {
+    p_boss_uid: bossUid,
+    p_email: emailKey,
+    p_member_uid: memberUid,
+  });
+  if (!rpcError) {
+    return rpcOk === false
+      ? { ok: false, error: 'E-mail não está autorizado na nuvem do chefe.' }
+      : { ok: true };
+  }
+  if (!/could not find the function|schema cache|404/i.test(rpcError.message)) {
+    // RPC existe mas falhou — não mascara com upsert legado.
+    return { ok: false, error: rpcError.message };
+  }
+
+  // Fallback legado (projetos sem fix_member_login.sql).
   const now = new Date().toISOString();
   const { error: e1 } = await sb.from('member_lookup').upsert({
     email_key: emailKey,
@@ -96,7 +148,19 @@ export async function registerAuthorizedMemberLogin(
     member_uid: memberUid,
     last_login_at: now,
   });
-  if (e1) return { ok: false, error: e1.message };
+  if (e1) {
+    // UPDATE parcial: membro pode atualizar a própria linha por e-mail.
+    const { error: updErr } = await sb
+      .from('member_lookup')
+      .update({
+        member_uid: memberUid,
+        last_login_at: now,
+        ativo: true,
+      })
+      .eq('email_key', emailKey)
+      .eq('boss_uid', bossUid);
+    if (updErr) return { ok: false, error: e1.message };
+  }
   const { error: e2 } = await sb.from('member_uid_lookup').upsert({
     member_uid: memberUid,
     boss_uid: bossUid,

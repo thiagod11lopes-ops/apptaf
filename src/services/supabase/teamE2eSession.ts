@@ -121,14 +121,22 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
 export async function activateE2eFromLoginPassword(
   ownerUid: string,
   password: string,
+  options?: { createIfMissing?: boolean },
 ): Promise<void> {
   if (!ownerUid.trim() || !password) {
     clearE2eSession();
     return;
   }
 
+  const createIfMissing = options?.createIfMissing !== false;
+
   let meta = await fetchTeamE2eMeta(ownerUid);
   if (!meta) {
+    if (!createIfMissing) {
+      throw new Error(
+        'A criptografia do banco do chefe ainda não foi ativada. Peça ao chefe para entrar com a senha dele e sincronizar uma vez.',
+      );
+    }
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const saltB64 = toBase64(salt);
     const teamKey = await crypto.subtle.generateKey(
@@ -141,9 +149,16 @@ export async function activateE2eFromLoginPassword(
     meta = { owner_uid: ownerUid, salt_b64: saltB64, wrapped_key_b64: wrapped, key_version: 1 };
   }
 
-  const teamKey = await unwrapTeamKeyRaw(meta.wrapped_key_b64, password, meta.salt_b64);
-  setActiveTeamKey(teamKey);
-  await persistSessionKey(ownerUid, teamKey);
+  try {
+    const teamKey = await unwrapTeamKeyRaw(meta.wrapped_key_b64, password, meta.salt_b64);
+    setActiveTeamKey(teamKey);
+    await persistSessionKey(ownerUid, teamKey);
+  } catch {
+    throw new Error(
+      'Não foi possível desbloquear a criptografia do banco. ' +
+        'Use a mesma senha com que o chefe entra na conta (senha de criptografia da equipe).',
+    );
+  }
 }
 
 export const E2E_KEY_REQUIRED = 'e2e_key_required';

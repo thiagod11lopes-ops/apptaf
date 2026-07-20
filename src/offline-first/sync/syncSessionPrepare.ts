@@ -54,9 +54,11 @@ export async function prepareSyncSession(
   if (access.isAuthorizedMember && email) {
     const registered = await registerAuthorizedMemberLogin(access.dataOwnerUid, email, loginUid);
     if (!registered.ok) {
-      throw new Error(
+      // Não bloqueia sync: RLS já libera por e-mail em member_lookup.
+      console.warn(
+        '[sync] registerAuthorizedMemberLogin (seguindo sync):',
         registered.error ??
-          'Não foi possível registrar seu acesso à nuvem do chefe. Entre novamente com o e-mail autorizado.',
+          'Não foi possível registrar member_uid_lookup; acesso por e-mail continua válido.',
       );
     }
   }

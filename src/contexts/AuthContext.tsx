@@ -116,11 +116,13 @@ async function restoreE2eForOwner(ownerUid: string): Promise<void> {
 async function activateE2eWithPassword(
   ownerUid: string,
   password: string,
-  options?: { strict?: boolean },
+  options?: { strict?: boolean; createIfMissing?: boolean },
 ): Promise<void> {
   if (!ownerUid.trim() || !password) return;
   try {
-    await activateE2eFromLoginPassword(ownerUid, password);
+    await activateE2eFromLoginPassword(ownerUid, password, {
+      createIfMissing: options?.createIfMissing,
+    });
   } catch (error) {
     console.warn('[e2e] ativação com senha de login falhou:', error);
     if (options?.strict) throw error;
@@ -526,14 +528,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRecoveryPending(false);
 
         // E2E com a senha de login antes da finalização (onAuthStateChange só restaura sessionStorage).
+        // Consulta a nuvem: e-mail autorizado → banco do chefe; senão → banco próprio.
         const access = await resolveMemberAccess(signedIn.uid, signedIn.email);
-        const ownerUid =
+        const isMember =
           access.isAuthorizedMember &&
           isCloudOwnerUid(access.dataOwnerUid) &&
-          access.dataOwnerUid !== signedIn.uid
-            ? access.dataOwnerUid
-            : signedIn.uid;
-        await activateE2eWithPassword(ownerUid, password, { strict: true });
+          access.dataOwnerUid !== signedIn.uid;
+        const ownerUid = isMember ? access.dataOwnerUid : signedIn.uid;
+        await activateE2eWithPassword(ownerUid, password, {
+          strict: true,
+          // Membro nunca cria chave própria no UID do chefe.
+          createIfMissing: !isMember,
+        });
 
         // Termos + migração: uma única finalização (SIGNED_IN foi ignorado durante este fluxo).
         const ok = await finalizeAuthenticatedSession(signedIn);
@@ -541,6 +547,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
         }
         await waitForAuthenticatedUid(20_000);
+        if (supabaseEnabled) {
+          void syncManager.tryBackgroundSync().catch((err) => {
+            console.warn('[auth] sync pós-login:', err);
+          });
+        }
       } finally {
         emailPasswordAuthInFlightRef.current = false;
       }
@@ -561,18 +572,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result.user && !result.needsEmailConfirmation) {
           setRecoveryPending(false);
           const access = await resolveMemberAccess(result.user.uid, result.user.email);
-          const ownerUid =
+          const isMember =
             access.isAuthorizedMember &&
             isCloudOwnerUid(access.dataOwnerUid) &&
-            access.dataOwnerUid !== result.user.uid
-              ? access.dataOwnerUid
-              : result.user.uid;
-          await activateE2eWithPassword(ownerUid, password, { strict: true });
+            access.dataOwnerUid !== result.user.uid;
+          const ownerUid = isMember ? access.dataOwnerUid : result.user.uid;
+          await activateE2eWithPassword(ownerUid, password, {
+            strict: true,
+            createIfMissing: !isMember,
+          });
           const ok = await finalizeAuthenticatedSession(result.user);
           if (!ok) {
             throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
           }
           await waitForAuthenticatedUid(20_000);
+          if (supabaseEnabled) {
+            void syncManager.tryBackgroundSync().catch((err) => {
+              console.warn('[auth] sync pós-cadastro:', err);
+            });
+          }
         }
         return { needsEmailConfirmation: result.needsEmailConfirmation };
       } finally {

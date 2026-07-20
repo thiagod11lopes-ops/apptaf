@@ -31,9 +31,21 @@ export async function pushPendingAuthorizedEmails(ownerUid: string): Promise<str
   for (const row of pending) {
     try {
       if (row.syncStatus === 'deleted') {
-        await removeAuthorizedEmail(ownerUid, row.email);
+        const removed = await removeAuthorizedEmail(ownerUid, row.email);
+        if (!removed.ok) {
+          errors.push(
+            `authorizedEmails/${row.email}: ${removed.error ?? 'falha ao remover na nuvem'}`,
+          );
+          continue;
+        }
       } else {
-        await addAuthorizedEmail(ownerUid, row.email);
+        const added = await addAuthorizedEmail(ownerUid, row.email);
+        if (!added.ok) {
+          errors.push(
+            `authorizedEmails/${row.email}: ${added.error ?? 'falha ao autorizar na nuvem'}`,
+          );
+          continue;
+        }
       }
       if (db) {
         await db.authorizedEmails.put({

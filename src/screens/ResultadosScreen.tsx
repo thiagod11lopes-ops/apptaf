@@ -259,7 +259,11 @@ export default function ResultadosScreen() {
             ) : null}
 
             {sessoesHistoricoVisiveis.map((sessao) => {
-              const titulo = tituloTipoProva(sessao.tipoProva);
+              const tituloProva = tituloTipoProva(sessao.tipoProva);
+              const nomeAplicador = sessao.aplicadorAssinatura?.nome?.trim();
+              const titulo = nomeAplicador
+                ? `${tituloProva} - Aplicador (${nomeAplicador})`
+                : tituloProva;
               const qtd = sessao.resultados.length;
               const virtualRegistrador = isSessaoVirtualRegistrador(sessao);
               const registradorPersistido = isSessaoPersistidaRegistrador(sessao);

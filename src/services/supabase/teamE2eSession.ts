@@ -15,6 +15,12 @@ const SESSION_STORAGE_KEY = 'taf:e2e:teamKey';
 /** Persiste junto com o login (localStorage) para F5 / PWA manter escudo verde. */
 const LOCAL_STORAGE_KEY = 'taf:e2e:teamKey:durable';
 
+/**
+ * true após desbloqueio com senha / access_secret (chave canônica).
+ * false após restore de storage — se a nuvem rejeitar, pode limpar a DEK.
+ */
+let trustActiveTeamKey = false;
+
 type StoredE2eSession = {
   ownerUid: string;
   keyJwk: JsonWebKey;
@@ -165,6 +171,7 @@ async function persistSessionKey(
 }
 
 export function clearE2eSession(): void {
+  trustActiveTeamKey = false;
   setActiveTeamKey(null);
   try {
     if (typeof sessionStorage !== 'undefined') {
@@ -189,6 +196,7 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
   const stored = readStoredE2eSession();
   if (!stored || stored.ownerUid !== ownerUid || !stored.keyJwk) return false;
 
+  let versionMatchesMeta = false;
   // Se a meta na nuvem mudou (wipe / nova senha), descarta DEK local antiga.
   try {
     const meta = await withTimeout(fetchTeamE2eMeta(ownerUid), 2_500, null);
@@ -196,6 +204,9 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
       if (stored.keyVersion != null && meta.key_version !== stored.keyVersion) {
         clearE2eSession();
         return false;
+      }
+      if (stored.keyVersion != null && meta.key_version === stored.keyVersion) {
+        versionMatchesMeta = true;
       }
     }
   } catch {
@@ -205,6 +216,8 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
   const key = await importStoredTeamKey(stored);
   if (!key) return false;
   setActiveTeamKey(key);
+  // Mesma versão da meta = chave canônica (não derrubar o escudo no probe).
+  if (versionMatchesMeta) trustActiveTeamKey = true;
   writeStoredE2eSession(stored);
   // Probe na nuvem em background — não segura "Concluindo login…".
   void verifyStoredKeyInBackground(ownerUid);
@@ -229,10 +242,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 async function verifyStoredKeyInBackground(ownerUid: string): Promise<void> {
   try {
     const ok = await withTimeout(probeStoredKeyAgainstCloud(ownerUid), 3_000, true);
-    if (!ok) {
-      clearE2eSession();
-      console.warn('[e2e] DEK local rejeitada pela nuvem — escudo vermelho até novo login com senha');
+    if (ok) return;
+
+    // Senha / access_secret: chave canônica — limpa lixo antigo e MANTÉM o escudo verde.
+    if (trustActiveTeamKey && getActiveTeamKey()) {
+      console.warn(
+        '[e2e] nuvem tem registros de chave antiga; mantendo chave da sessão e limpando órfãos',
+      );
+      void healCloudAfterUnlock(ownerUid);
+      return;
     }
+
+    // Restore de storage sem confiança: descarta DEK stale.
+    clearE2eSession();
+    console.warn('[e2e] DEK local rejeitada pela nuvem — escudo vermelho até novo login com senha');
   } catch {
     /* ignore */
   }
@@ -444,6 +467,7 @@ export async function activateE2eFromLoginPassword(
   try {
     const teamKey = await unwrapTeamKeyRaw(meta.wrapped_key_b64, password, meta.salt_b64);
     setActiveTeamKey(teamKey);
+    trustActiveTeamKey = true;
     await persistSessionKey(ownerUid, teamKey, meta.key_version ?? 1);
   } catch {
     throw new Error(
@@ -505,6 +529,7 @@ export async function activateE2eForAuthorizedMember(
         memberWrap.salt_b64,
       );
       setActiveTeamKey(teamKey);
+      trustActiveTeamKey = true;
       await persistSessionKey(bossUid, teamKey, memberWrap.key_version ?? 1);
       void healCloudAfterUnlock(bossUid);
       return;
@@ -522,6 +547,7 @@ export async function activateE2eForAuthorizedMember(
         memberWrap.salt_b64,
       );
       setActiveTeamKey(teamKey);
+      trustActiveTeamKey = true;
       await persistSessionKey(bossUid, teamKey, memberWrap.key_version ?? 1);
       void healCloudAfterUnlock(bossUid);
       return;
@@ -570,6 +596,7 @@ export async function activateE2eForAuthorizedMember(
   }
 
   setActiveTeamKey(teamKey);
+  trustActiveTeamKey = true;
   await persistSessionKey(bossUid, teamKey, meta.key_version ?? 1);
   void healCloudAfterUnlock(bossUid);
   // Preferência: gravar acesso automático daqui pra frente.

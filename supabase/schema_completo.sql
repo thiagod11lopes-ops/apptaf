@@ -51,15 +51,7 @@ exception
     null;
 end $$;
 
-drop function if exists public.admin_list_boss_emails();
-drop function if exists public.admin_list_authorized_emails(uuid);
-drop function if exists public.ensure_database_bank_code(uuid);
-drop function if exists public.resolve_member_boss(text);
-drop function if exists public.register_authorized_member_login(uuid, text, uuid);
-drop function if exists public.can_access_owner(uuid);
-drop function if exists public.is_active_member_of(uuid);
-drop function if exists public.is_boss(uuid);
-
+-- 1) Tabelas primeiro (CASCADE remove policies que dependem das funções)
 drop table if exists public.team_e2e_member_wraps cascade;
 drop table if exists public.team_e2e_meta cascade;
 drop table if exists public.team_wipe cascade;
@@ -76,6 +68,16 @@ drop table if exists public.member_uid_lookup cascade;
 drop table if exists public.member_lookup cascade;
 
 drop sequence if exists public.database_bank_number_seq;
+
+-- 2) Funções depois (já sem policies dependentes)
+drop function if exists public.admin_list_boss_emails();
+drop function if exists public.admin_list_authorized_emails(uuid);
+drop function if exists public.ensure_database_bank_code(uuid);
+drop function if exists public.resolve_member_boss(text);
+drop function if exists public.register_authorized_member_login(uuid, text, uuid);
+drop function if exists public.can_access_owner(uuid) cascade;
+drop function if exists public.is_active_member_of(uuid) cascade;
+drop function if exists public.is_boss(uuid) cascade;
 
 -- ---------------------------------------------------------------------------
 -- 1) Tabelas

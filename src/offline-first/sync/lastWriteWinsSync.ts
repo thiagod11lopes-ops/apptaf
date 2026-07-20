@@ -239,9 +239,25 @@ function syntheticRemoteDeletionFromLocal(local: SyncRecord, ownerUid: string): 
       updatedBy: local.updatedBy,
       deviceId: local.deviceId ?? 'cloud-sot',
       deletedBy: local.updatedBy,
-    },
+      /** Ausência no snapshot — não é exclusão explícita do usuário. */
+      syntheticCloudAbsence: true,
+    } as Record<string, unknown>,
     ownerUid,
   );
+}
+
+/**
+ * Nuvem vazia ou bem menor que o local: não tratar ids sincronizados ausentes como wipe.
+ * (Evita apagar IndexedDB e rebaixar tudo após Aplicar TAF / fetch parcial.)
+ */
+function remoteSnapshotLooksSparse(
+  localRows: SyncRecord[],
+  remoteRows: Array<{ id: string }>,
+): boolean {
+  const localActive = localRows.filter((r) => r.deleted !== true).length;
+  if (localActive <= 0) return false;
+  if (remoteRows.length === 0) return true;
+  return remoteRows.length < Math.max(3, Math.floor(localActive * 0.5));
 }
 
 function buildRemoteMapForLww<TRemote extends { id: string }>(
@@ -327,6 +343,7 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
 
     // Nuvem = base verdadeira: id já sincronizado que sumiu no full fetch → aplica exclusão.
     // No incremental, não ressuscita (baseline local pode mascarar exclusão) — pede full fetch.
+    // Exceção: snapshot remoto vazio/esparso → reenviar local (não wipe IndexedDB).
     if (
       decision.action === 'upload' &&
       decision.reason === 'somente_local' &&
@@ -334,7 +351,10 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       !isUnsyncedLocalStatus(local.syncStatus) &&
       !forceUploadIds?.has(id)
     ) {
-      if (fetchMode === 'full') {
+      const hasRealTombstone = remoteTombstones?.some((t) => t.id === id) === true;
+      const sparseRemote = remoteSnapshotLooksSparse(localRows, remoteRows);
+
+      if (fetchMode === 'full' && (hasRealTombstone || !sparseRemote)) {
         plan.push({
           collection,
           id,
@@ -342,6 +362,17 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
           local,
           remote: syntheticRemoteDeletionFromLocal(local, ownerUid),
           hasRemote: true,
+        });
+        continue;
+      }
+      if (fetchMode === 'full' && sparseRemote) {
+        plan.push({
+          collection,
+          id,
+          action: 'upload',
+          local,
+          remote: undefined,
+          hasRemote: false,
         });
         continue;
       }
@@ -719,13 +750,13 @@ async function downloadRecord(
     }
   }
 
-  // Exclusão remota de sessão: limpa cadastro com base no conteúdo local ainda ativo,
-  // para não recriar card virtual no Histórico neste aparelho.
+  // Exclusão remota de sessão: limpa cadastro só para tombstone real (não ausência sintética).
   if (
     collection === 'sessoes' &&
     remote.deleted === true &&
     localFresh &&
-    (localFresh as SessaoRecord).deleted !== true
+    (localFresh as SessaoRecord).deleted !== true &&
+    (remote as SyncRecord & { syntheticCloudAbsence?: boolean }).syntheticCloudAbsence !== true
   ) {
     try {
       const { clearCadastrosForSessaoHistorico } = await import(

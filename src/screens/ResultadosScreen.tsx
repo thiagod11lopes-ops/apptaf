@@ -83,6 +83,9 @@ export default function ResultadosScreen() {
           unificarSessoesComCadastroRegistrador(sessoesLista, cadastrosLista, sessoesExcluidas),
         );
       })
+      .catch((error) => {
+        console.warn('[historico] falha ao carregar sessões:', error);
+      })
       .finally(() => setCarregando(false));
   }, []);
 

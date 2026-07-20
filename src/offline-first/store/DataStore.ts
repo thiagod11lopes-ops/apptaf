@@ -10,6 +10,7 @@ import {
   listAplicadoresForDisplay,
   listSessoes,
   listSessoesForDisplay,
+  listSessoesForSync,
   resolveOwnerUid,
   saveCadastro,
   saveAplicador,
@@ -29,6 +30,7 @@ import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { notifyDataChanged, subscribeDataChanged } from '../sync/SyncEngine';
 import { syncQueue } from '../sync/SyncQueue';
 import { sanitizeAplicadorForDisplay } from '../../utils/aplicadorSyncPolicy';
+import { getTafDatabase } from '../db/tafDatabase';
 
 export class DataStore {
   async getCadastros(ownerUid: string | null): Promise<CadastroItemPersist[]> {
@@ -50,6 +52,12 @@ export class DataStore {
 
   /** Soft-deletes locais (ainda no Dexie) — bloqueiam recriação de sessões virtuais. */
   async getDeletedSessoes(ownerUid: string | null): Promise<SessaoAplicacaoTaf[]> {
+    const db = getTafDatabase();
+    if (db) {
+      // Todos os owners do aparelho — evita falhar o Histórico se a sessão mudou de UID.
+      const rows = await db.sessoes.filter((r) => r.deleted === true).toArray();
+      return rows.map(stripMeta);
+    }
     const rows = await listSessoesForSync(resolveOwnerUid(ownerUid), true);
     return rows.filter((r) => r.deleted === true).map(stripMeta);
   }

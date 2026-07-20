@@ -13,6 +13,31 @@
     font-family: var(--font-body);
     background: var(--bg);
     color: var(--text);
+    /* PWA / mobile web: sem zoom por pinch ou double-tap */
+    touch-action: manipulation;
+    -ms-touch-action: manipulation;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    touch-action: manipulation;
+    -ms-touch-action: manipulation;
+    overscroll-behavior: none;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   * {
@@ -22,6 +47,13 @@
   *:focus-visible {
     outline: 2px solid var(--primary-500);
     outline-offset: 2px;
+  }
+
+  /* Modais web: sempre enquadrados e centralizados no viewport */
+  [role='dialog'],
+  [aria-modal='true'] {
+    max-width: 100vw;
+    max-height: 100dvh;
   }
 }
 

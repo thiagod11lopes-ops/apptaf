@@ -34,10 +34,16 @@ export function AppModal({ visible, children, ...rest }: ModalProps) {
     return null;
   }
 
+  const content = (
+    <View style={styles.modalFill} pointerEvents="box-none">
+      {children}
+    </View>
+  );
+
   const tabletOverlay = (
     <View style={styles.tabletHost} pointerEvents="box-none">
       <View style={styles.tabletLayer} pointerEvents="box-none">
-        {children}
+        {content}
       </View>
     </View>
   );
@@ -52,12 +58,24 @@ export function AppModal({ visible, children, ...rest }: ModalProps) {
 
   return (
     <Modal visible animationType="fade" {...rest}>
-      {children}
+      {content}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalFill: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    ...Platform.select({
+      web: {
+        minHeight: '100%' as unknown as number,
+        maxHeight: '100dvh' as unknown as number,
+      } as object,
+      default: {},
+    }),
+  },
   tabletHost: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 8000,

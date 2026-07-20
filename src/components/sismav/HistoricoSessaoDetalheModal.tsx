@@ -1312,9 +1312,18 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
+    ...Platform.select({
+      web: {
+        minHeight: '100%' as unknown as number,
+        maxHeight: '100dvh' as unknown as number,
+      } as object,
+      default: {},
+    }),
   },
   card: {
     width: '100%',
@@ -1323,6 +1332,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     overflow: 'hidden',
+    alignSelf: 'center',
   },
   glow: {
     position: 'absolute',

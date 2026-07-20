@@ -18,15 +18,67 @@ let html = fs.readFileSync(indexPath, 'utf8');
 html = html.replace(/<title>[^<]*<\/title>/, '<title>TAF · Teste de Aptidão Física</title>');
 html = html.replace(/<html lang="en">/, '<html lang="pt-BR">');
 
+// PWA: sem zoom — app sempre enquadrado na tela
+const viewportContent =
+  'width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover';
+if (/<meta\s+name="viewport"[^>]*>/i.test(html)) {
+  html = html.replace(
+    /<meta\s+name="viewport"[^>]*>/i,
+    `<meta name="viewport" content="${viewportContent}" />`,
+  );
+} else {
+  html = html.replace('<head>', `<head>\n    <meta name="viewport" content="${viewportContent}" />`);
+}
+
 const headInject = `
     <meta name="description" content="Sistema TAF — Teste de Aptidão Física" />
     <meta name="theme-color" content="#1C1C22" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="${prefix}/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="${prefix}/assets/icon.png" />
+    <style id="taf-pwa-no-zoom">
+      html, body, #root {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        overflow: hidden;
+        touch-action: manipulation;
+        -ms-touch-action: manipulation;
+        overscroll-behavior: none;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      body {
+        position: fixed;
+        inset: 0;
+        height: 100dvh;
+      }
+    </style>
 `;
 
 if (!html.includes('manifest.webmanifest')) {
   html = html.replace('</head>', `${headInject}\n  </head>`);
+} else if (!html.includes('taf-pwa-no-zoom')) {
+  html = html.replace('</head>', `    <style id="taf-pwa-no-zoom">
+      html, body, #root {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        overflow: hidden;
+        touch-action: manipulation;
+        -ms-touch-action: manipulation;
+        overscroll-behavior: none;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      body {
+        position: fixed;
+        inset: 0;
+        height: 100dvh;
+      }
+    </style>\n  </head>`);
 }
 
 const faviconPng = path.join(distDir, 'assets', 'icon.png');
@@ -44,6 +96,8 @@ const manifest = {
   start_url: `${prefix}/`,
   scope: `${prefix}/`,
   display: 'standalone',
+  display_override: ['standalone', 'fullscreen'],
+  orientation: 'any',
   background_color: '#1C1C22',
   theme_color: '#1C1C22',
   lang: 'pt-BR',

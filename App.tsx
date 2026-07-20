@@ -18,6 +18,7 @@ import { AdminHistoricoApp } from './src/admin/AdminHistoricoApp';
 import { isAdminHistoricoAccess } from './src/utils/adminHistoricoAccess';
 import { useAppFonts } from './src/hooks/useAppFonts';
 import { PREMIUM } from './src/theme/premium';
+import { lockWebViewportZoom } from './src/utils/lockWebViewportZoom';
 
 function AppRoot() {
   const { isDark, theme, themeMode } = useTheme();
@@ -25,6 +26,7 @@ function AppRoot() {
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const unlockZoom = lockWebViewportZoom();
     const html = document.documentElement;
     const body = document.body;
     const root = document.getElementById('root');
@@ -56,6 +58,7 @@ function AppRoot() {
     }
     body.style.backgroundColor = theme.tokens.bg;
     html.classList.toggle('dark', isDark);
+    return unlockZoom;
   }, [isDark, themeMode, theme.tokens.bg]);
 
   if (adminHistorico) {

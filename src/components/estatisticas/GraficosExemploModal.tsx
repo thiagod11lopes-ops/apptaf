@@ -120,11 +120,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.48)',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 16,
   },
   card: {
     width: '100%',
     maxWidth: 560,
+    alignSelf: 'center',
     maxHeight: '92%',
     alignSelf: 'center',
     borderRadius: PREMIUM.radiusLg + 4,

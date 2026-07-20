@@ -62,41 +62,41 @@ export function ModernModal({
           ) : null}
         </Pressable>
         <View style={styles.center} pointerEvents="box-none">
-        <View
-          style={[
-            styles.shell,
-            { backgroundColor: theme.surface },
-            Platform.OS === 'web' ? ({ boxShadow: t.shadowModal } as object) : { elevation: 16 },
-          ]}
-        >
-          <LinearGradient
-            colors={[...t.gradientHeader]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.header}
+          <View
+            style={[
+              styles.shell,
+              { backgroundColor: theme.surface },
+              Platform.OS === 'web' ? ({ boxShadow: t.shadowModal } as object) : { elevation: 16 },
+            ]}
           >
-            {icon ? <View style={styles.iconBox}>{icon}</View> : null}
-            <Text style={styles.headerTitle}>{title}</Text>
-            {dismissable ? (
-              <PressableScale onPress={onClose} style={styles.closeBtn} accessibilityLabel="Fechar">
-                <X size={18} color="#FFFFFF" strokeWidth={2.5} />
-              </PressableScale>
-            ) : (
-              <View style={styles.closeBtn} />
-            )}
-          </LinearGradient>
-          <LinearGradient
-            colors={[...t.gradientPanelBody]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={[styles.body, { maxHeight: maxBodyHeight }]}
-          >
-            <ScrollView showsVerticalScrollIndicator={false}>{children}</ScrollView>
-          </LinearGradient>
-          {footer ? (
-            <View style={[styles.footer, { borderTopColor: theme.border }]}>{footer}</View>
-          ) : null}
-        </View>
+            <LinearGradient
+              colors={[...t.gradientHeader]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.header}
+            >
+              {icon ? <View style={styles.iconBox}>{icon}</View> : null}
+              <Text style={styles.headerTitle}>{title}</Text>
+              {dismissable ? (
+                <PressableScale onPress={onClose} style={styles.closeBtn} accessibilityLabel="Fechar">
+                  <X size={18} color="#FFFFFF" strokeWidth={2.5} />
+                </PressableScale>
+              ) : (
+                <View style={styles.closeBtn} />
+              )}
+            </LinearGradient>
+            <LinearGradient
+              colors={[...t.gradientPanelBody]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={[styles.body, { maxHeight: maxBodyHeight }]}
+            >
+              <ScrollView showsVerticalScrollIndicator={false}>{children}</ScrollView>
+            </LinearGradient>
+            {footer ? (
+              <View style={[styles.footer, { borderTopColor: theme.border }]}>{footer}</View>
+            ) : null}
+          </View>
         </View>
       </View>
     </AppModal>
@@ -106,12 +106,23 @@ export function ModernModal({
 const styles = StyleSheet.create({
   modalRoot: {
     flex: 1,
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      web: {
+        minHeight: '100%' as unknown as number,
+        maxHeight: '100dvh' as unknown as number,
+      } as object,
+      default: {},
+    }),
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
   },
   center: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -119,6 +130,7 @@ const styles = StyleSheet.create({
   shell: {
     width: '100%',
     maxWidth: 520,
+    maxHeight: '100%',
     borderRadius: 20,
     overflow: 'hidden',
   },

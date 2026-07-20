@@ -8,6 +8,12 @@ export type LocalAuthorizedEmail = AuthorizedEmailEntry & {
   syncStatus: 'local' | 'synced' | 'deleted';
 };
 
+/** Item da lista do chefe com status de nuvem (banco do chefe). */
+export type AuthorizedEmailListItem = AuthorizedEmailEntry & {
+  /** true = registro já está na nuvem do banco do chefe. */
+  cloudSynced: boolean;
+};
+
 function rowId(ownerUid: string, email: string): string {
   return `${ownerUid}:${email.toLowerCase()}`;
 }
@@ -19,15 +25,22 @@ function normalizeEmail(email: string): string {
 /** Repository local — e-mails autorizados (sync via Sync Engine). */
 export const authorizedEmailRepository = {
   async listLocal(ownerUid: string): Promise<AuthorizedEmailEntry[]> {
+    const items = await this.listLocalWithCloudStatus(ownerUid);
+    return items.map(({ email, ativo, criadoEm }) => ({ email, ativo, criadoEm }));
+  },
+
+  /** Lista ativa com flag de sincronização na nuvem do chefe. */
+  async listLocalWithCloudStatus(ownerUid: string): Promise<AuthorizedEmailListItem[]> {
     const db = getTafDatabase();
     if (!db) return [];
     const rows = await db.authorizedEmails.where('ownerUid').equals(ownerUid).toArray();
     return rows
       .filter((r) => r.syncStatus !== 'deleted' && r.ativo !== false)
-      .map(({ email, ativo, criadoEm }) => ({
+      .map(({ email, ativo, criadoEm, syncStatus }) => ({
         email,
         ativo,
         criadoEm,
+        cloudSynced: syncStatus === 'synced',
       }));
   },
 
@@ -50,11 +63,6 @@ export const authorizedEmailRepository = {
     }
 
     const now = Date.now();
-    const remoteByEmail = new Map<string, AuthorizedEmailEntry>();
-    for (const entry of remote) {
-      remoteByEmail.set(normalizeEmail(entry.email), entry);
-    }
-
     const nextRows: LocalAuthorizedEmail[] = [];
 
     for (const entry of remote) {

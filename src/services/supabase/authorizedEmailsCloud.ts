@@ -233,6 +233,12 @@ export async function removeAuthorizedEmail(
       .eq('member_uid', lookup.member_uid)
       .eq('boss_uid', ownerUid);
   }
+  try {
+    const { removeMemberE2eWrap } = await import('./teamE2eSession');
+    await removeMemberE2eWrap(ownerUid, emailKey);
+  } catch (error) {
+    console.warn('[auth] removeMemberE2eWrap:', error);
+  }
   return { ok: true };
 }
 

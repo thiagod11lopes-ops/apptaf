@@ -4,6 +4,12 @@ import {
   getActiveTeamKey,
 } from './e2eCrypto';
 import { fetchTeamE2eMeta, upsertTeamE2eMeta } from './teamE2eCloud';
+import {
+  deleteTeamE2eMemberWrap,
+  fetchTeamE2eMemberWrap,
+  upsertTeamE2eMemberWrap,
+} from './teamE2eMemberWrapsCloud';
+import { normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
 
 const SESSION_STORAGE_KEY = 'taf:e2e:teamKey';
 
@@ -67,7 +73,6 @@ async function unwrapTeamKeyRaw(
     kek,
     fromBase64(payload.ct) as BufferSource,
   );
-  // extractable: true — preciso exportar JWK para sessionStorage entre reloads
   return crypto.subtle.importKey(
     'raw',
     raw,
@@ -91,7 +96,6 @@ export function clearE2eSession(): void {
   }
 }
 
-/** Restaura chave da sessão do navegador (recarregar página sem pedir senha de novo). */
 export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<boolean> {
   if (getActiveTeamKey()) return true;
   if (typeof sessionStorage === 'undefined') return false;
@@ -114,9 +118,22 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
   }
 }
 
+async function persistMemberWrap(
+  ownerUid: string,
+  email: string,
+  teamKey: CryptoKey,
+  memberPassword: string,
+  keyVersion = 1,
+): Promise<void> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const saltB64 = toBase64(salt);
+  const wrapped = await wrapTeamKeyRaw(teamKey, memberPassword, saltB64);
+  await upsertTeamE2eMemberWrap(ownerUid, email, saltB64, wrapped, keyVersion);
+}
+
 /**
  * Ativa criptografia E2E com a senha de login.
- * Chefe: cria chave de equipe na primeira vez; membros usam a mesma senha de criptografia do chefe.
+ * Chefe: cria chave de equipe na primeira vez.
  */
 export async function activateE2eFromLoginPassword(
   ownerUid: string,
@@ -155,10 +172,107 @@ export async function activateE2eFromLoginPassword(
     await persistSessionKey(ownerUid, teamKey);
   } catch {
     throw new Error(
-      'Não foi possível desbloquear a criptografia do banco. ' +
-        'Use a mesma senha com que o chefe entra na conta (senha de criptografia da equipe).',
+      'Não foi possível desbloquear a criptografia do banco. Confira a senha e tente de novo.',
     );
   }
+}
+
+export const E2E_MEMBER_NEEDS_BOOTSTRAP = 'e2e_member_needs_bootstrap';
+
+export const E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE =
+  'Na primeira entrada neste banco, informe também a senha de criptografia do chefe (campo extra). Depois o app guarda o acesso com a sua senha.';
+
+/**
+ * Membro autorizado: desbloqueia a DEK do chefe com a própria senha (wrap por e-mail).
+ * Na 1ª vez (sem wrap), tenta a senha do membro; se falhar, usa bootstrapBossPassword
+ * uma vez e grava o wrap para os próximos logins.
+ */
+export async function activateE2eForAuthorizedMember(
+  bossUid: string,
+  memberEmail: string,
+  memberPassword: string,
+  options?: { bootstrapBossPassword?: string },
+): Promise<void> {
+  if (!bossUid.trim() || !memberPassword || !memberEmail.trim()) {
+    clearE2eSession();
+    throw new Error('Dados insuficientes para desbloquear a criptografia do banco do chefe.');
+  }
+
+  const emailKey = normalizeAuthEmail(memberEmail);
+  const memberWrap = await fetchTeamE2eMemberWrap(bossUid, emailKey);
+  if (memberWrap) {
+    try {
+      const teamKey = await unwrapTeamKeyRaw(
+        memberWrap.wrapped_key_b64,
+        memberPassword,
+        memberWrap.salt_b64,
+      );
+      setActiveTeamKey(teamKey);
+      await persistSessionKey(bossUid, teamKey);
+      return;
+    } catch {
+      throw new Error(
+        'Senha incorreta para a criptografia deste banco. Use a senha da sua conta (a mesma do login).',
+      );
+    }
+  }
+
+  const meta = await fetchTeamE2eMeta(bossUid);
+  if (!meta) {
+    throw new Error(
+      'A criptografia do banco do chefe ainda não foi ativada. Peça ao chefe para entrar e sincronizar uma vez.',
+    );
+  }
+
+  const bootstrap = options?.bootstrapBossPassword?.trim() || '';
+  const candidates =
+    bootstrap && bootstrap !== memberPassword ? [memberPassword, bootstrap] : [memberPassword];
+
+  let teamKey: CryptoKey | null = null;
+  for (const candidate of candidates) {
+    try {
+      teamKey = await unwrapTeamKeyRaw(meta.wrapped_key_b64, candidate, meta.salt_b64);
+      break;
+    } catch {
+      /* tenta próximo */
+    }
+  }
+
+  if (!teamKey) {
+    if (!bootstrap) {
+      const err = new Error(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
+      (err as Error & { code?: string }).code = E2E_MEMBER_NEEDS_BOOTSTRAP;
+      throw err;
+    }
+    throw new Error(
+      'Não foi possível desbloquear com a senha informada. Confira a senha de criptografia do chefe.',
+    );
+  }
+
+  setActiveTeamKey(teamKey);
+  await persistSessionKey(bossUid, teamKey);
+  try {
+    await persistMemberWrap(bossUid, emailKey, teamKey, memberPassword, meta.key_version ?? 1);
+  } catch (error) {
+    console.warn('[e2e] falha ao gravar wrap do membro (seguindo com sessão):', error);
+  }
+}
+
+/** Reembrulha o wrap do membro com a nova senha (DEK já desbloqueada). */
+export async function rewrapMemberE2eWithNewPassword(
+  bossUid: string,
+  memberEmail: string,
+  newPassword: string,
+): Promise<void> {
+  if (!bossUid.trim() || !memberEmail.trim() || !newPassword) return;
+  const teamKey = await ensureTeamKeyUnlocked(bossUid);
+  const existing = await fetchTeamE2eMemberWrap(bossUid, memberEmail);
+  const nextVersion = Math.max(1, (existing?.key_version ?? 0) + 1);
+  await persistMemberWrap(bossUid, memberEmail, teamKey, newPassword, nextVersion);
+}
+
+export async function removeMemberE2eWrap(bossUid: string, memberEmail: string): Promise<void> {
+  await deleteTeamE2eMemberWrap(bossUid, memberEmail);
 }
 
 export const E2E_KEY_REQUIRED = 'e2e_key_required';
@@ -174,11 +288,9 @@ export const E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE =
 export const E2E_REWRAP_NEEDS_ACTIVE_KEY_MESSAGE =
   'Para trocar a senha sem perder a criptografia, a chave da equipe precisa estar desbloqueada (escudo verde). Use Conta → Trocar senha com a senha atual.';
 
-/** Recuperação por e-mail sem DEK na sessão — não pede senha atual (fluxo diferente de trocar senha). */
 export const E2E_RECOVERY_NEEDS_UNLOCKED_SESSION_MESSAGE =
   'Recuperação de senha: neste aparelho a criptografia não está desbloqueada. Abra o mesmo link no navegador/aparelho onde o escudo já estava verde (mesma sessão). Se lembrar da senha, entre normalmente e use Conta → Trocar senha.';
 
-/** Garante DEK em memória (ou restaura do sessionStorage). Não grava nada na nuvem. */
 export async function ensureTeamKeyUnlocked(ownerUid: string): Promise<CryptoKey> {
   if (!ownerUid.trim()) {
     throw new Error(E2E_REWRAP_NEEDS_ACTIVE_KEY_MESSAGE);
@@ -194,11 +306,6 @@ export async function ensureTeamKeyUnlocked(ownerUid: string): Promise<CryptoKey
   return teamKey;
 }
 
-/**
- * Reembrulha a mesma chave de equipe (DEK) com a nova senha do chefe.
- * Não gera chave nova — os dados já cifrados na nuvem continuam legíveis.
- * Exige DEK ativa (memória ou sessionStorage).
- */
 export async function rewrapTeamKeyWithNewPassword(
   ownerUid: string,
   newPassword: string,
@@ -218,10 +325,6 @@ export async function rewrapTeamKeyWithNewPassword(
   await persistSessionKey(ownerUid, teamKey);
 }
 
-/**
- * Garante chave E2E antes de enviar dados à nuvem.
- * Nunca libera sync sem chave — evita texto plano na nuvem.
- */
 export async function ensureE2eKeyForCloudSync(ownerUid: string): Promise<void> {
   if (!ownerUid.trim()) {
     throw new Error(E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE);

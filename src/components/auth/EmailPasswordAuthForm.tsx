@@ -24,6 +24,10 @@ import {
   filterRecentAuthEmailSuggestions,
   RECENT_AUTH_EMAILS_SUGGEST_LIMIT,
 } from '../../offline-first/auth/knownAuthEmails';
+import {
+  E2E_MEMBER_NEEDS_BOOTSTRAP,
+  E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE,
+} from '../../services/supabase/teamE2eSession';
 
 type Mode = 'login' | 'register' | 'forgot' | 'recovery';
 
@@ -41,6 +45,14 @@ function isReturningLocalEmail(email: string): boolean {
   return normalizeAuthEmail(profile.email) === normalizeAuthEmail(email);
 }
 
+function isBootstrapRequiredError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if ((error as { code?: string }).code === E2E_MEMBER_NEEDS_BOOTSTRAP) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return message === E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE
+    || message.includes('senha de criptografia do chefe');
+}
+
 export function EmailPasswordAuthForm({
   onSuccess,
   onError,
@@ -55,6 +67,8 @@ export function EmailPasswordAuthForm({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
+  const [bossCryptoPassword, setBossCryptoPassword] = useState('');
+  const [needBossCryptoPassword, setNeedBossCryptoPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -109,6 +123,8 @@ export function EmailPasswordAuthForm({
       setInfo(null);
       setPassword('');
       setPassword2('');
+      setBossCryptoPassword('');
+      setNeedBossCryptoPassword(false);
       if (next === 'register') {
         if (!termsAccepted) setTermsModalVisible(true);
       } else if (next === 'login') {
@@ -223,23 +239,61 @@ export function EmailPasswordAuthForm({
         refreshRecentEmails();
       }
       if (mode === 'login') {
-        await signInWithEmail(email, password);
-        onSuccess?.();
-        return;
+        try {
+          await signInWithEmail(
+            email,
+            password,
+            needBossCryptoPassword && bossCryptoPassword.trim()
+              ? { bootstrapBossPassword: bossCryptoPassword.trim() }
+              : undefined,
+          );
+          setNeedBossCryptoPassword(false);
+          setBossCryptoPassword('');
+          onSuccess?.();
+          return;
+        } catch (e) {
+          if (isBootstrapRequiredError(e)) {
+            setNeedBossCryptoPassword(true);
+            setInfo(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
+            onError?.(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
+            return;
+          }
+          throw e;
+        }
       }
       if (mode === 'register') {
         setDatabaseTermsPreAcceptedForEmail(email);
-        const result = await signUpWithEmail(email, password);
-        if (result.needsEmailConfirmation) {
-          setInfo('Conta criada. Confirme o e-mail pelo link enviado e depois faça login.');
-          setMode('login');
-          setPassword('');
-          setPassword2('');
-          resetTermsState();
+        try {
+          const result = await signUpWithEmail(
+            email,
+            password,
+            needBossCryptoPassword && bossCryptoPassword.trim()
+              ? { bootstrapBossPassword: bossCryptoPassword.trim() }
+              : undefined,
+          );
+          if (result.needsEmailConfirmation) {
+            setInfo('Conta criada. Confirme o e-mail pelo link enviado e depois faça login.');
+            setMode('login');
+            setPassword('');
+            setPassword2('');
+            setBossCryptoPassword('');
+            setNeedBossCryptoPassword(false);
+            resetTermsState();
+            return;
+          }
+          setNeedBossCryptoPassword(false);
+          setBossCryptoPassword('');
+          onSuccess?.();
           return;
+        } catch (e) {
+          if (isBootstrapRequiredError(e)) {
+            setNeedBossCryptoPassword(true);
+            setInfo(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
+            onError?.(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
+            return;
+          }
+          throw e;
         }
-        onSuccess?.();
-        return;
       }
       if (mode === 'forgot') {
         await requestPasswordReset(email);
@@ -258,8 +312,10 @@ export function EmailPasswordAuthForm({
       setLoading(false);
     }
   }, [
+    bossCryptoPassword,
     email,
     mode,
+    needBossCryptoPassword,
     onError,
     onRecoveryDone,
     onSuccess,
@@ -379,6 +435,21 @@ export function EmailPasswordAuthForm({
           autoComplete="new-password"
           textContentType="newPassword"
         />
+      ) : null}
+
+      {needBossCryptoPassword && (mode === 'login' || mode === 'register') ? (
+        <>
+          <Text style={[ts.caption, { color: theme.textSecondary, lineHeight: 18 }]}>
+            E-mail autorizado: na 1ª vez informe a senha de criptografia do chefe. Depois use só a sua.
+          </Text>
+          <PasswordInput
+            value={bossCryptoPassword}
+            onChangeText={setBossCryptoPassword}
+            placeholder="Senha de criptografia do chefe (1ª vez)"
+            autoComplete="off"
+            textContentType="password"
+          />
+        </>
       ) : null}
 
       {mode === 'register' ? (

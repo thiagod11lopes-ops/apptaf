@@ -57,10 +57,13 @@ import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate
 import { clearPendingSyncResume } from '../offline-first/sync/syncResume';
 import {
   activateE2eFromLoginPassword,
+  activateE2eForAuthorizedMember,
   clearE2eSession,
   ensureTeamKeyUnlocked,
+  E2E_MEMBER_NEEDS_BOOTSTRAP,
   E2E_RECOVERY_NEEDS_UNLOCKED_SESSION_MESSAGE,
   restoreE2eFromSessionStorage,
+  rewrapMemberE2eWithNewPassword,
   rewrapTeamKeyWithNewPassword,
 } from '../services/supabase/teamE2eSession';
 import { fetchTeamE2eMeta } from '../services/supabase/teamE2eCloud';
@@ -83,10 +86,15 @@ type AuthContextType = {
   isBoss: boolean;
   /** Entrou com e-mail autorizado pelo chefe — usa banco do chefe. */
   isAuthorizedMember: boolean;
-  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signInWithEmail: (
+    email: string,
+    password: string,
+    options?: { bootstrapBossPassword?: string },
+  ) => Promise<void>;
   signUpWithEmail: (
     email: string,
     password: string,
+    options?: { bootstrapBossPassword?: string },
   ) => Promise<{ needsEmailConfirmation: boolean }>;
   requestPasswordReset: (email: string) => Promise<void>;
   /**
@@ -127,6 +135,14 @@ async function activateE2eWithPassword(
     console.warn('[e2e] ativação com senha de login falhou:', error);
     if (options?.strict) throw error;
   }
+}
+
+function isMemberBootstrapNeeded(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as { code?: string }).code;
+  if (code === E2E_MEMBER_NEEDS_BOOTSTRAP) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('senha de criptografia do chefe');
 }
 
 function hydrateInitialUser(): AppAuthUser | null {
@@ -516,7 +532,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithEmail = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string, options?: { bootstrapBossPassword?: string }) => {
       if (!supabaseEnabled) {
         throw new Error(
           'Configure o Supabase no arquivo .env (veja .env.example) antes de entrar.',
@@ -527,7 +543,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const signedIn = await signInWithEmailPassword(email, password);
         setRecoveryPending(false);
 
-        // E2E com a senha de login antes da finalização (onAuthStateChange só restaura sessionStorage).
         // Consulta a nuvem: e-mail autorizado → banco do chefe; senão → banco próprio.
         const access = await resolveMemberAccess(signedIn.uid, signedIn.email);
         const isMember =
@@ -535,13 +550,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isCloudOwnerUid(access.dataOwnerUid) &&
           access.dataOwnerUid !== signedIn.uid;
         const ownerUid = isMember ? access.dataOwnerUid : signedIn.uid;
-        await activateE2eWithPassword(ownerUid, password, {
-          strict: true,
-          // Membro nunca cria chave própria no UID do chefe.
-          createIfMissing: !isMember,
-        });
 
-        // Termos + migração: uma única finalização (SIGNED_IN foi ignorado durante este fluxo).
+        if (isMember) {
+          try {
+            await activateE2eForAuthorizedMember(ownerUid, signedIn.email ?? email, password, {
+              bootstrapBossPassword: options?.bootstrapBossPassword,
+            });
+          } catch (error) {
+            if (isMemberBootstrapNeeded(error) && !options?.bootstrapBossPassword) {
+              throw error;
+            }
+            throw error;
+          }
+        } else {
+          await activateE2eWithPassword(ownerUid, password, {
+            strict: true,
+            createIfMissing: true,
+          });
+        }
+
         const ok = await finalizeAuthenticatedSession(signedIn);
         if (!ok) {
           throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
@@ -560,7 +587,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signUpWithEmail = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string, options?: { bootstrapBossPassword?: string }) => {
       if (!supabaseEnabled) {
         throw new Error(
           'Configure o Supabase no arquivo .env (veja .env.example) antes de criar conta.',
@@ -577,10 +604,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isCloudOwnerUid(access.dataOwnerUid) &&
             access.dataOwnerUid !== result.user.uid;
           const ownerUid = isMember ? access.dataOwnerUid : result.user.uid;
-          await activateE2eWithPassword(ownerUid, password, {
-            strict: true,
-            createIfMissing: !isMember,
-          });
+          if (isMember) {
+            await activateE2eForAuthorizedMember(
+              ownerUid,
+              result.user.email ?? email,
+              password,
+              { bootstrapBossPassword: options?.bootstrapBossPassword },
+            );
+          } else {
+            await activateE2eWithPassword(ownerUid, password, {
+              strict: true,
+              createIfMissing: true,
+            });
+          }
           const ok = await finalizeAuthenticatedSession(result.user);
           if (!ok) {
             throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
@@ -626,8 +662,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const isBossAccount = Boolean(loginUid && ownerUid && loginUid === ownerUid);
       const currentPasswordForE2e = options?.currentPasswordForE2e?.trim() ?? '';
 
-      // Chefe com E2E: exige DEK desbloqueada → troca senha Auth → reembrulha meta.
-      let mustRewrapE2e = false;
+      // Chefe: reembrulha team_e2e_meta. Membro: reembrulha wrap próprio.
+      let mustRewrapBossE2e = false;
+      let mustRewrapMemberE2e = false;
+      const memberEmail = user?.email?.trim() || '';
+
       if (isBossAccount && ownerUid) {
         let meta: Awaited<ReturnType<typeof fetchTeamE2eMeta>> = null;
         try {
@@ -651,7 +690,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               );
             }
           } else {
-            // Recuperação: só segue se a chave já estiver na sessão (mesmo aparelho / escudo verde).
             try {
               await ensureTeamKeyUnlocked(ownerUid);
             } catch {
@@ -659,13 +697,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
           await ensureTeamKeyUnlocked(ownerUid);
-          mustRewrapE2e = true;
+          mustRewrapBossE2e = true;
         }
+      } else if (ownerUid && loginUid && ownerUid !== loginUid && memberEmail) {
+        if (mode === 'change') {
+          if (!currentPasswordForE2e) {
+            throw new Error('Informe a senha atual para trocar a senha com criptografia ativa.');
+          }
+          try {
+            await activateE2eForAuthorizedMember(ownerUid, memberEmail, currentPasswordForE2e);
+          } catch {
+            throw new Error(
+              'Senha atual incorreta ou não desbloqueia a criptografia. Confira e tente de novo.',
+            );
+          }
+        } else {
+          try {
+            await ensureTeamKeyUnlocked(ownerUid);
+          } catch {
+            throw new Error(E2E_RECOVERY_NEEDS_UNLOCKED_SESSION_MESSAGE);
+          }
+        }
+        mustRewrapMemberE2e = true;
       }
 
       await updateAccountPassword(newPassword);
 
-      if (mustRewrapE2e && ownerUid) {
+      if (mustRewrapBossE2e && ownerUid) {
         try {
           await rewrapTeamKeyWithNewPassword(ownerUid, newPassword);
         } catch (error) {
@@ -673,6 +731,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error(
             `Senha da conta atualizada, mas falhou ao reproteger a criptografia: ${detail}. ` +
               'Permaneça logado (escudo verde) e tente Conta → Trocar senha.',
+          );
+        }
+      }
+      if (mustRewrapMemberE2e && ownerUid && memberEmail) {
+        try {
+          await rewrapMemberE2eWithNewPassword(ownerUid, memberEmail, newPassword);
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `Senha da conta atualizada, mas falhou ao reproteger seu acesso ao banco: ${detail}. ` +
+              'Permaneça logado e tente Conta → Trocar senha.',
           );
         }
       }

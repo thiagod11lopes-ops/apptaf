@@ -8,11 +8,14 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Trash2, UserPlus } from 'lucide-react-native';
+import { Cloud, Trash2, UserPlus } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import type { AuthorizedEmailEntry } from '../offline-first/sync/firebase/FirebaseGateway';
-import { authorizedEmailRepository } from '../offline-first/repositories/AuthorizedEmailRepository';
+import { listAuthorizedEmails } from '../offline-first/sync/firebase/FirebaseGateway';
+import {
+  authorizedEmailRepository,
+  type AuthorizedEmailListItem,
+} from '../offline-first/repositories/AuthorizedEmailRepository';
 import { pushPendingAuthorizedEmails } from '../offline-first/sync/syncAuthorizedEmails';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { isAllowedAuthEmail, authEmailDomainErrorMessage, normalizeAuthEmail } from '../utils/normalizeAuthEmail';
@@ -22,7 +25,7 @@ export function AuthorizedEmailsBlock() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const { user, isBoss } = useAuth();
-  const [emails, setEmails] = useState<AuthorizedEmailEntry[]>([]);
+  const [emails, setEmails] = useState<AuthorizedEmailListItem[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,7 +41,19 @@ export function AuthorizedEmailsBlock() {
     setLoading(true);
     setErro(null);
     try {
-      setEmails(await authorizedEmailRepository.listLocal(user.uid));
+      let items = await authorizedEmailRepository.listLocalWithCloudStatus(user.uid);
+      // Confere com a nuvem do banco do chefe (quando online).
+      try {
+        const remote = await listAuthorizedEmails(user.uid);
+        const remoteKeys = new Set(remote.map((e) => normalizeAuthEmail(e.email)));
+        items = items.map((item) => ({
+          ...item,
+          cloudSynced: remoteKeys.has(normalizeAuthEmail(item.email)),
+        }));
+      } catch {
+        // Offline / falha: mantém status local (synced = verde).
+      }
+      setEmails(items);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível carregar os e-mails.');
     } finally {
@@ -119,7 +134,7 @@ export function AuthorizedEmailsBlock() {
     <View>
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
         Pessoas autorizadas entram com o e-mail/senha delas e acessam seus cadastros e resultados TAF.
-        Ao autorizar, o e-mail é enviado à nuvem na hora (quando online) para o colega já poder entrar no seu banco.
+        Nuvem verde = e-mail no seu banco na nuvem; vermelha = ainda não sincronizado.
       </Text>
 
       <View style={styles.addRow}>
@@ -137,7 +152,6 @@ export function AuthorizedEmailsBlock() {
               color: theme.text,
               borderColor: theme.border,
               backgroundColor: theme.backgroundSecondary,
-              fontFamily: theme.fontFamily,
             },
           ]}
         />
@@ -169,24 +183,40 @@ export function AuthorizedEmailsBlock() {
         </Text>
       ) : (
         <View style={styles.list}>
-          {emails.map((entry) => (
-            <View
-              key={entry.email}
-              style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
-            >
-              <Text style={[ts.body, { color: theme.text, flex: 1 }]} numberOfLines={1}>
-                {entry.email}
-              </Text>
-              <TouchableOpacity
-                onPress={() => void handleRemove(entry.email)}
-                disabled={saving}
-                accessibilityLabel={`Remover ${entry.email}`}
-                style={styles.removeBtn}
+          {emails.map((entry) => {
+            const cloudColor = entry.cloudSynced ? theme.gain : theme.loss;
+            const cloudLabel = entry.cloudSynced
+              ? `${entry.email} sincronizado com o banco na nuvem`
+              : `${entry.email} ainda não sincronizado com a nuvem`;
+            return (
+              <View
+                key={entry.email}
+                style={[
+                  styles.listItem,
+                  { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
+                ]}
               >
-                <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
-              </TouchableOpacity>
-            </View>
-          ))}
+                <Text style={[ts.body, { color: theme.text, flex: 1 }]} numberOfLines={1}>
+                  {entry.email}
+                </Text>
+                <View
+                  accessibilityRole="image"
+                  accessibilityLabel={cloudLabel}
+                  style={styles.cloudIcon}
+                >
+                  <Cloud size={16} color={cloudColor} strokeWidth={2.2} />
+                </View>
+                <TouchableOpacity
+                  onPress={() => void handleRemove(entry.email)}
+                  disabled={saving}
+                  accessibilityLabel={`Remover ${entry.email}`}
+                  style={styles.removeBtn}
+                >
+                  <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                </TouchableOpacity>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -228,6 +258,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  removeBtn: { padding: 6, marginLeft: 4 },
+  cloudIcon: { padding: 6, marginLeft: 4 },
+  removeBtn: { padding: 6, marginLeft: 2 },
   feedback: { marginTop: 10, textAlign: 'center', lineHeight: 18 },
 });

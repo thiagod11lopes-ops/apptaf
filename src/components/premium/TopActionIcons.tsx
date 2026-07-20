@@ -3,6 +3,8 @@ import { Platform, StyleSheet, View, ActivityIndicator } from 'react-native';
 import {
   BookOpen,
   ClipboardList,
+  Cloud,
+  CloudOff,
   Settings,
   Shield,
   User,
@@ -11,6 +13,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useOfflineSyncState } from '../../contexts/OfflineSyncContext';
 import { navigateTab } from '../../navigation/navigationRef';
 import type { RootStackParamList } from '../../navigation/types';
 import { useE2eEncryptionStatus } from '../../hooks/useE2eEncryptionStatus';
@@ -91,7 +94,9 @@ export function TopActionIcons({
 }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss, firebaseEnabled } = useAuth();
+  const { connectivity } = useOfflineSyncState();
   const { e2eActive } = useE2eEncryptionStatus();
+  const cloudOnline = connectivity === 'ONLINE';
   const [e2eModalVisible, setE2eModalVisible] = useState(false);
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [demoCarregando, setDemoCarregando] = useState(false);
@@ -156,10 +161,43 @@ export function TopActionIcons({
     ? 'NIP e nome vão cifrados para a nuvem. Toque para detalhes.'
     : 'Chave inativa nesta sessão. Toque para ver como ativar.';
   const showE2eShield = firebaseEnabled && isAuthenticated;
+  const cloudColor = cloudOnline ? theme.gain : theme.loss;
+  const cloudTooltipTitle = cloudOnline ? 'Online · nuvem' : 'Offline · local';
+  const cloudTooltipDescription = cloudOnline
+    ? 'Conectado: o sistema usa os dados da nuvem como fonte.'
+    : 'Sem internet: o sistema usa o cache local (IndexedDB) neste aparelho.';
 
   return (
     <>
     <View style={[styles.row, inline && styles.rowInline, centered && styles.rowCentered]}>
+      {showE2eShield
+        ? wrapTooltip(
+            inline,
+            cloudTooltipTitle,
+            cloudTooltipDescription,
+            <View
+              style={[
+                btnStyle,
+                {
+                  borderColor: cloudColor,
+                  backgroundColor: cloudOnline ? theme.gainMuted : 'rgba(220, 38, 38, 0.1)',
+                },
+              ]}
+              accessibilityRole="image"
+              accessibilityLabel={
+                cloudOnline
+                  ? 'Online: usando dados da nuvem'
+                  : 'Offline: usando dados locais IndexedDB'
+              }
+            >
+              {cloudOnline ? (
+                <Cloud size={iconSize} color={cloudColor} strokeWidth={strokeWidth} />
+              ) : (
+                <CloudOff size={iconSize} color={cloudColor} strokeWidth={strokeWidth} />
+              )}
+            </View>,
+          )
+        : null}
       {showE2eShield
         ? wrapTooltip(
             inline,

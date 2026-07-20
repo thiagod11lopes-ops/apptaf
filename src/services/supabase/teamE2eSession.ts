@@ -541,14 +541,17 @@ export async function rewrapTeamKeyWithNewPassword(
   await persistSessionKey(ownerUid, teamKey);
 }
 
-export async function ensureE2eKeyForCloudSync(ownerUid: string): Promise<void> {
+export async function ensureE2eKeyForCloudSync(
+  ownerUid: string,
+  email?: string | null,
+): Promise<void> {
   if (!ownerUid.trim()) {
     throw new Error(E2E_ENCRYPTION_NOT_ACTIVATED_MESSAGE);
   }
   if (getActiveTeamKey()) return;
 
-  await restoreE2eFromSessionStorage(ownerUid);
-  if (getActiveTeamKey()) return;
+  const unlocked = await ensureE2eUnlockedForSession(ownerUid, email);
+  if (unlocked || getActiveTeamKey()) return;
 
   let meta: Awaited<ReturnType<typeof fetchTeamE2eMeta>> = null;
   try {

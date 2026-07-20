@@ -50,7 +50,7 @@ import {
 import { isCloudOwnerUid, legacyFirebaseUidMessage } from '../../utils/cloudOwnerUid';
 import {
   ensureE2eKeyForCloudSync,
-  restoreE2eFromSessionStorage,
+  ensureE2eUnlockedForSession,
 } from '../../services/supabase/teamE2eSession';
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 import {
@@ -136,6 +136,10 @@ let recordSyncStartedAt = 0;
 let storedEnsureAuth: EnsureAuthenticatedFn | null = null;
 let backgroundSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let backgroundSyncRunning = false;
+/** Evita tempestade de retries quando chega evento durante sync. */
+let backgroundSyncRetryAfterBusy = false;
+/** Após falha silenciosa, evita martelar a nuvem. */
+let backgroundSyncCooldownUntil = 0;
 let syncAuthAvailable = false;
 let queueEstimateInFlight = false;
 let queueEstimateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -584,7 +588,11 @@ function scheduleReturnToOffline(delayMs: number): void {
   }, delayMs);
 }
 
-async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
+async function runSyncPipeline(
+  ensureAuth: EnsureAuthenticatedFn,
+  options?: { silent?: boolean },
+): Promise<{ ok: boolean; error?: string }> {
+  const silent = options?.silent === true;
   if (isModoDemonstracaoAtivo()) {
     return { ok: false, error: DEMO_SYNC_BLOCKED_MESSAGE };
   }
@@ -681,7 +689,7 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
     completeStep('validate_permissions');
 
     setUiProgress(0, 'Verificando criptografia da equipe…');
-    await ensureE2eKeyForCloudSync(ownerUid);
+    await ensureE2eKeyForCloudSync(ownerUid, authUser.email);
     if (!getActiveTeamKey()) {
       throw new Error(
         'Criptografia da equipe não está ativa nesta sessão. Saia da conta e entre novamente com e-mail e senha para desbloquear antes de sincronizar.',
@@ -860,25 +868,45 @@ async function runSyncPipeline(ensureAuth: EnsureAuthenticatedFn): Promise<{ ok:
   } catch (error) {
     const rawError = error instanceof Error ? error.message : String(error);
     const detail = parseSyncError(rawError);
+    await syncLogger.error('sync-manager', rawError);
+    await systemState.setOfflineMode();
+    syncEngine.deactivateOnlineMode();
+    await syncEngine.shutdownSession();
+    stopEtaTimer();
+    mode = 'OFFLINE';
+    await refreshPendingSummary();
+
+    if (silent) {
+      // Auto-sync: não trava a UI em "Falha"; agenda nova tentativa com cooldown.
+      backgroundSyncCooldownUntil = Date.now() + 45_000;
+      if (uiPhase !== 'success' && uiPhase !== 'already_up_to_date') {
+        uiPhase = 'offline';
+        uploadError = null;
+        uploadErrorDetail = null;
+        syncMessage = '';
+        syncSteps = createInitialSyncSteps();
+        errorStepId = null;
+      }
+      notifyListeners();
+      return { ok: false, error: detail.message };
+    }
+
     uploadError = detail.message;
     uploadErrorDetail = detail;
     uiPhase = 'error';
     errorStepId = currentStep;
     syncSteps = markStepError(syncSteps, currentStep);
     syncMessage = uploadError;
-    mode = 'OFFLINE';
-    await syncLogger.error('sync-manager', rawError);
-    await systemState.setOfflineMode();
-    syncEngine.deactivateOnlineMode();
-    await syncEngine.shutdownSession();
-    stopEtaTimer();
-    await refreshPendingSummary();
     notifyListeners();
     return { ok: false, error: uploadError };
   } finally {
     uploading = false;
     syncInFlight = false;
     notifyListeners();
+    if (backgroundSyncRetryAfterBusy) {
+      backgroundSyncRetryAfterBusy = false;
+      syncManager.scheduleBackgroundSync(1_200);
+    }
   }
 }
 
@@ -999,9 +1027,11 @@ export const syncManager = {
   /** Sync silenciosa — sem modal; erros de E2E/offline são ignorados (não atrapalham UI). */
   async tryBackgroundSync(): Promise<{ ok: boolean; skipped?: string }> {
     if (backgroundSyncRunning || syncInFlight) {
-      // Não perde pull remoto / flush local se chegou evento no meio do sync.
-      this.scheduleBackgroundSync(1_500);
+      backgroundSyncRetryAfterBusy = true;
       return { ok: false, skipped: 'busy' };
+    }
+    if (Date.now() < backgroundSyncCooldownUntil) {
+      return { ok: false, skipped: 'cooldown' };
     }
     if (isModoDemonstracaoAtivo()) {
       return { ok: false, skipped: 'demo' };
@@ -1030,9 +1060,10 @@ export const syncManager = {
       }
 
       const uid = ownerUid ?? getCachedDataOwnerUid();
+      const email = getFirebaseAuth()?.currentUser?.email ?? null;
       if (uid && !getActiveTeamKey()) {
         try {
-          await restoreE2eFromSessionStorage(uid);
+          await ensureE2eUnlockedForSession(uid, email);
         } catch {
           // ignore
         }
@@ -1049,7 +1080,10 @@ export const syncManager = {
         pendingUploads,
         pendingDownloads,
       });
-      const result = await runSyncPipeline(authFn);
+      const result = await runSyncPipeline(authFn, { silent: true });
+      if (result.ok) {
+        backgroundSyncCooldownUntil = 0;
+      }
       return { ok: result.ok, skipped: result.ok ? undefined : result.error };
     } finally {
       backgroundSyncRunning = false;

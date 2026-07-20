@@ -55,13 +55,23 @@ function selectColumns(table: string): string {
 }
 
 async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
-  return Promise.all(
-    rows.map(async (row) => ({
-      ...row,
-      deleted: row.deleted ?? false,
-      data: await maybeDecryptFromCloud(row.data ?? {}),
-    })),
-  );
+  const out: CloudDocRow[] = [];
+  for (const row of rows) {
+    try {
+      out.push({
+        ...row,
+        deleted: row.deleted ?? false,
+        data: await maybeDecryptFromCloud(row.data ?? {}),
+      });
+    } catch (error) {
+      // Documento cifrado com outra chave / corrompido — não derruba a sync inteira.
+      console.warn(
+        `[e2e] não foi possível descriptografar ${row.id}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+  return out;
 }
 
 /** Lista todos os docs do owner (paginado — evita corte em 1000). */

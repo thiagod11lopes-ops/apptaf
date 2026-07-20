@@ -14,6 +14,10 @@ import { PenLine, Pencil, Sparkles, Trash2, X } from 'lucide-react-native';
 import { AppModal } from '../premium/AppModal';
 import { RubricaCaptureModal } from '../RubricaCaptureModal';
 import { ConfirmacaoExcluirResultadoModal } from './ConfirmacaoExcluirResultadoModal';
+import {
+  DataNascimentoAtencaoModal,
+  type DataNascimentoAtencaoInfo,
+} from './DataNascimentoAtencaoModal';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import {
@@ -310,6 +314,8 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
   const [salvando, setSalvando] = useState(false);
   const [excluirIdx, setExcluirIdx] = useState<number | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [dnInfo, setDnInfo] = useState<DataNascimentoAtencaoInfo | null>(null);
+  const [salvandoDn, setSalvandoDn] = useState(false);
 
   const modoTafNaval = sessao?.normaTaf === 'cfn';
   const tipo = sessao?.tipoProva ?? 'corrida';
@@ -324,6 +330,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
       setRubricaIdx(null);
       setErro('');
       setExcluirIdx(null);
+      setDnInfo(null);
       return;
     }
     setLinhas(sessao.resultados.map((r) => ({ ...r })));
@@ -338,6 +345,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
     setRubricaIdx(null);
     setErro('');
     setExcluirIdx(null);
+    setDnInfo(null);
     void getAllCadastros()
       .then(setCadastros)
       .catch(() => setCadastros([]));
@@ -451,6 +459,19 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
     });
   }, [tipo]);
 
+  const solicitarDataNascimento = useCallback(
+    (idx: number, cadastro: CadastroItemPersist, nomeFallback?: string) => {
+      if ((cadastro.dataNascimento || '').trim()) return;
+      setDnInfo({
+        linhaIdx: idx,
+        nome: (cadastro.nome || nomeFallback || '').trim() || 'Militar',
+        nip: (cadastro.nip || '').trim(),
+        cadastroId: cadastro.id,
+      });
+    },
+    [],
+  );
+
   const aplicarNipNaLinha = useCallback(
     (idx: number, nipRaw: string) => {
       const nipFmt = formatNipInput(nipRaw);
@@ -539,8 +560,10 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         };
         return next;
       });
+
+      solicitarDataNascimento(idx, c);
     },
-    [cadastros, tipo, desempenhoDraft, modoTafNaval],
+    [cadastros, tipo, desempenhoDraft, modoTafNaval, solicitarDataNascimento],
   );
 
   // Se o cadastro carregar depois do NIP digitado, resolve e recalcula a nota.
@@ -568,6 +591,14 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
           : formatMinutosSegundosInput(raw);
       setDesempenhoDraft((prev) => ({ ...prev, [idx]: valor }));
 
+      const nipAtual = (nipDraft[idx] ?? '').trim();
+      const precisaDnParaNota =
+        tipo === 'permanencia'
+          ? false
+          : provaEhReps(tipo)
+            ? Number.isFinite(parseInt(valor.replace(/\D/g, ''), 10))
+            : tempoStringParaMsProva(valor) != null;
+
       setLinhas((prev) => {
         const next = [...prev];
         const atual = next[idx];
@@ -585,11 +616,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         if (!meta?.editavel) return prev;
         const nip = (nipDraft[idx] ?? '').trim();
         const metaFb = metaFromCadastro(cadastros, nip, meta);
-        const tempoValido =
-          tipo !== 'permanencia' &&
-          !provaEhReps(tipo) &&
-          tempoStringParaMsProva(valor) != null;
-        const faltaDn = tempoValido && !(metaFb.dataNascimento || '').trim();
+        const faltaDn = precisaDnParaNota && !(metaFb.dataNascimento || '').trim();
         const avisoAtual = meta.avisoNip;
         const avisoNovo = faltaDn
           ? 'Cadastro sem data de nascimento — nota indisponível'
@@ -611,8 +638,15 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         };
         return next;
       });
+
+      if (precisaDnParaNota) {
+        const busca = buscarCadastroPorNomeOuNip(cadastros, nipAtual);
+        if (busca.kind === 'found') {
+          solicitarDataNascimento(idx, busca.cadastro);
+        }
+      }
     },
-    [tipo, metas, modoTafNaval, cadastros, nipDraft],
+    [tipo, metas, modoTafNaval, cadastros, nipDraft, solicitarDataNascimento],
   );
 
   const salvarLinhaSePronta = useCallback(
@@ -721,6 +755,8 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
     (idx: number) => {
       const r = linhas[idx];
       if (!r) return;
+      const busca = buscarCadastroPorNomeOuNip(cadastros, r.nip || r.nome || '');
+
       setMetas((prev) => {
         const next = [...prev];
         if (!next[idx]) {
@@ -728,7 +764,6 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         } else {
           next[idx] = { ...next[idx], editavel: true };
         }
-        const busca = buscarCadastroPorNomeOuNip(cadastros, r.nip || r.nome || '');
         if (busca.kind === 'found') {
           next[idx] = {
             ...next[idx],
@@ -747,8 +782,92 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         ...prev,
         [idx]: valorDesempenhoExibido(tipo, r, undefined),
       }));
+
+      if (busca.kind === 'found') {
+        solicitarDataNascimento(idx, busca.cadastro, r.nome);
+      }
     },
-    [linhas, cadastros, tipo],
+    [linhas, cadastros, tipo, solicitarDataNascimento],
+  );
+
+  const salvarDataNascimentoInformada = useCallback(
+    async (dataNascimento: string) => {
+      if (!dnInfo) return;
+      const { linhaIdx: idx, cadastroId } = dnInfo;
+      const cadastro = cadastros.find((c) => c.id === cadastroId);
+      if (!cadastro) {
+        setErro('Cadastro do militar não encontrado.');
+        setDnInfo(null);
+        return;
+      }
+
+      setSalvandoDn(true);
+      setErro('');
+      try {
+        const atualizado: CadastroItemPersist = {
+          ...cadastro,
+          dataNascimento,
+          updatedAt: Date.now(),
+        };
+        await addCadastro(atualizado);
+        setCadastros((prev) => prev.map((c) => (c.id === atualizado.id ? atualizado : c)));
+
+        const metaOk: MetaLinha = {
+          editavel: true,
+          dataNascimento,
+          sexo: atualizado.sexo,
+          avisoNip: undefined,
+        };
+        const nextMetas = [...metas];
+        if (!nextMetas[idx]) {
+          nextMetas[idx] = metaOk;
+        } else {
+          nextMetas[idx] = { ...nextMetas[idx], ...metaOk, editavel: true };
+        }
+        setMetas(nextMetas);
+
+        const atual = linhas[idx];
+        if (atual) {
+          const valorRaw = valorDesempenhoExibido(tipo, atual, desempenhoDraft[idx]);
+          const valor =
+            tipo === 'permanencia' || provaEhReps(tipo)
+              ? valorRaw
+              : formatMinutosSegundosInput(valorRaw);
+          const calc = valor.trim()
+            ? calcularCamposDesempenho(tipo, valor, metaOk, modoTafNaval)
+            : {};
+          const nextLinhas = [...linhas];
+          nextLinhas[idx] = {
+            ...atual,
+            ...calc,
+            nome: (atualizado.nome || atual.nome || '').trim() || '—',
+            nip: atualizado.nip || atual.nip,
+            prova: tipo,
+          };
+          setLinhas(nextLinhas);
+          if (valor.trim()) {
+            setDesempenhoDraft((prev) => ({ ...prev, [idx]: valor }));
+            salvarLinhaSePronta(idx, nextLinhas, nextMetas);
+          }
+        }
+
+        setDnInfo(null);
+      } catch (e) {
+        setErro(e instanceof Error ? e.message : 'Não foi possível salvar a data de nascimento.');
+      } finally {
+        setSalvandoDn(false);
+      }
+    },
+    [
+      dnInfo,
+      cadastros,
+      metas,
+      linhas,
+      desempenhoDraft,
+      tipo,
+      modoTafNaval,
+      salvarLinhaSePronta,
+    ],
   );
 
   const confirmarExclusaoLinha = useCallback(async () => {
@@ -1176,6 +1295,15 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
           if (!excluindo) setExcluirIdx(null);
         }}
         onConfirm={() => void confirmarExclusaoLinha()}
+      />
+
+      <DataNascimentoAtencaoModal
+        info={dnInfo}
+        loading={salvandoDn}
+        onClose={() => {
+          if (!salvandoDn) setDnInfo(null);
+        }}
+        onSalvar={(data) => void salvarDataNascimentoInformada(data)}
       />
     </AppModal>
   );

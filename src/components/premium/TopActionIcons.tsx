@@ -96,7 +96,7 @@ export function TopActionIcons({
   const { isAuthenticated, isBoss, firebaseEnabled } = useAuth();
   const { connectivity } = useOfflineSyncState();
   const { e2eActive } = useE2eEncryptionStatus();
-  const cloudOnline = connectivity === 'ONLINE';
+  const cloudOnline = connectivity === 'ONLINE' || connectivity === 'SYNCING';
   const [e2eModalVisible, setE2eModalVisible] = useState(false);
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [demoCarregando, setDemoCarregando] = useState(false);

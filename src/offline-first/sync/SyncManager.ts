@@ -35,7 +35,7 @@ import {
 } from './syncUiState';
 import { estimateSyncQueueCounts } from './lastWriteWinsSync';
 import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
-import { markFullFetchDone, setRemoteSyncWatermark } from './syncWatermark';
+import { markFullFetchDone, setRemoteSyncWatermark, forceNextFullRemoteFetch } from './syncWatermark';
 import { commitAllCollectionCheckpoints } from './syncCheckpoint';
 import { syncQueue } from './SyncQueue';
 import { peekRemoteSnapshotCache } from './remoteSnapshotCache';
@@ -142,6 +142,9 @@ let backgroundSyncRunning = false;
 let backgroundSyncRetryAfterBusy = false;
 /** Após falha silenciosa, evita martelar a nuvem. */
 let backgroundSyncCooldownUntil = 0;
+/** Dono para o qual o espelho nuvem→local já rodou nesta sessão online. */
+let cloudMirrorDoneOwner: string | null = null;
+let cloudMirrorPromise: Promise<{ ok: boolean; error?: string }> | null = null;
 let syncAuthAvailable = false;
 let queueEstimateInFlight = false;
 let queueEstimateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -445,6 +448,7 @@ function onRealtimeRemoteChange(): void {
       try {
         const wiped = await applyTeamWipeIfNeeded(uid, getCachedLoginUid());
         if (wiped) {
+          cloudMirrorDoneOwner = null;
           await refreshPendingSummary();
           notifyListeners();
         }
@@ -458,6 +462,72 @@ function onRealtimeRemoteChange(): void {
     void refreshCloudQueueEstimate(true);
     syncManager.scheduleBackgroundSync(REALTIME_PULL_DEBOUNCE_MS);
   })();
+}
+
+/**
+ * Espelho autoritativo: full fetch + LWW (prune de locais synced ausentes na nuvem).
+ * Chefe e autorizado — UI Dexie passa a refletir só a nuvem.
+ */
+async function runCloudAuthoritativeMirror(options?: {
+  silent?: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (cloudMirrorPromise) return cloudMirrorPromise;
+
+  const silent = options?.silent !== false;
+  const uid = (ownerUid ?? getCachedDataOwnerUid() ?? '').trim();
+  if (!uid) return { ok: false, error: 'no_owner' };
+  if (!syncAuthAvailable || !getFirebaseAuth()?.currentUser) {
+    return { ok: false, error: 'auth' };
+  }
+  if (getConnectivityState() !== 'ONLINE') {
+    return { ok: false, error: 'offline' };
+  }
+  const authFn = storedEnsureAuth;
+  if (!authFn) return { ok: false, error: 'auth_handler' };
+
+  if (cloudMirrorDoneOwner === uid && !syncInFlight) {
+    return { ok: true };
+  }
+
+  cloudMirrorPromise = (async () => {
+    try {
+      if (isModoDemonstracaoAtivo()) {
+        return { ok: false, error: DEMO_SYNC_BLOCKED_MESSAGE };
+      }
+
+      try {
+        await applyTeamWipeIfNeeded(uid, getCachedLoginUid());
+      } catch {
+        // segue o espelho
+      }
+
+      const email = getFirebaseAuth()?.currentUser?.email ?? null;
+      if (!getActiveTeamKey()) {
+        try {
+          await ensureE2eUnlockedForSession(uid, email);
+        } catch {
+          // ignore
+        }
+      }
+      if (!getActiveTeamKey()) {
+        await syncLogger.info('sync', 'Espelho nuvem adiado: E2E inativo');
+        return { ok: false, error: 'e2e' };
+      }
+
+      await forceNextFullRemoteFetch(uid);
+      await syncLogger.info('sync', 'Espelho autoritativo nuvem→local', { ownerUid: uid });
+      const result = await runSyncPipeline(authFn, { silent });
+      if (result.ok) {
+        cloudMirrorDoneOwner = uid;
+        backgroundSyncCooldownUntil = 0;
+      }
+      return result;
+    } finally {
+      cloudMirrorPromise = null;
+    }
+  })();
+
+  return cloudMirrorPromise;
 }
 
 function ensureRealtimeBridge(uid: string | null | undefined): void {
@@ -886,6 +956,8 @@ async function runSyncPipeline(
     );
 
     scheduleReturnToOffline(SUCCESS_DISPLAY_MS);
+    const successUid = ownerUid ?? getCachedDataOwnerUid();
+    if (successUid) cloudMirrorDoneOwner = successUid;
     return { ok: true };
   } catch (error) {
     const rawError = error instanceof Error ? error.message : String(error);
@@ -942,6 +1014,7 @@ async function runSyncPipeline(
 async function refreshAfterSystemWipe(dataOwnerUid: string): Promise<void> {
   invalidateRemoteSnapshotCache();
   ownerUid = dataOwnerUid || null;
+  cloudMirrorDoneOwner = null;
   pendingSummary = EMPTY_SUMMARY;
   counters = {
     pendingUploads: 0,
@@ -986,9 +1059,12 @@ export const syncManager = {
       startCloudDiffWatch();
       ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
       this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
+      // Espelho nuvem na sessão online (não bloqueia aqui — Auth pode await).
+      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 20_000, silent: true });
     } else {
       stopCloudDiffWatch();
       stopRealtimeBridge();
+      cloudMirrorDoneOwner = null;
       counters = { ...counters, pendingDownloads: null };
     }
     notifyListeners();
@@ -1022,6 +1098,7 @@ export const syncManager = {
       startCloudDiffWatch();
       ensureRealtimeBridge(dataOwnerUid);
       this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
+      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 20_000, silent: true });
     }
     notifyListeners();
   },
@@ -1041,12 +1118,43 @@ export const syncManager = {
         // ignore
       }
     }
+    cloudMirrorDoneOwner = null;
     await refreshPendingSummary();
     await refreshCloudQueueEstimate(true);
     notifyListeners();
     this.scheduleBackgroundSync(AUTO_SYNC_RECONNECT_MS);
+    void this.awaitCloudAuthoritativeMirror({ timeoutMs: 20_000, silent: true });
   },
 
+  /**
+   * Aguarda espelho nuvem→local (online). Timeout → resolve sem travar login.
+   */
+  async awaitCloudAuthoritativeMirror(options?: {
+    timeoutMs?: number;
+    silent?: boolean;
+  }): Promise<{ ok: boolean; error?: string; timedOut?: boolean }> {
+    const timeoutMs = options?.timeoutMs ?? 18_000;
+    const silent = options?.silent !== false;
+    if (getConnectivityState() !== 'ONLINE') {
+      return { ok: false, error: 'offline' };
+    }
+    const uid = (ownerUid ?? getCachedDataOwnerUid() ?? '').trim();
+    if (uid && cloudMirrorDoneOwner === uid) {
+      return { ok: true };
+    }
+
+    let timedOut = false;
+    const result = await Promise.race([
+      runCloudAuthoritativeMirror({ silent }),
+      new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        setTimeout(() => {
+          timedOut = true;
+          resolve({ ok: false, error: 'timeout' });
+        }, timeoutMs);
+      }),
+    ]);
+    return { ...result, timedOut };
+  },
   /**
    * Agenda sync automática em segundo plano (debounce).
    * Só dispara com internet, login, chave E2E e pendências.
@@ -1100,6 +1208,7 @@ export const syncManager = {
         try {
           const wiped = await applyTeamWipeIfNeeded(uid, getCachedLoginUid());
           if (wiped) {
+            cloudMirrorDoneOwner = null;
             await refreshPendingSummary();
             notifyListeners();
             // Wipe aplicado — não precisa LWW se a nuvem/local estão vazios alinhados.
@@ -1116,9 +1225,19 @@ export const syncManager = {
       await refreshCloudQueueEstimate(true);
       const pendingUploads = pendingSummary.total;
       const pendingDownloads = counters.pendingDownloads ?? 0;
-      if (pendingUploads <= 0 && pendingDownloads <= 0) {
+      const needsMirror = Boolean(uid && cloudMirrorDoneOwner !== uid);
+
+      if (pendingUploads <= 0 && pendingDownloads <= 0 && !needsMirror) {
         notifyListeners();
         return { ok: false, skipped: 'nothing_pending' };
+      }
+
+      if (needsMirror && pendingUploads <= 0 && pendingDownloads <= 0) {
+        const mirror = await runCloudAuthoritativeMirror({ silent: true });
+        return {
+          ok: mirror.ok,
+          skipped: mirror.ok ? undefined : mirror.error,
+        };
       }
 
       const email = getFirebaseAuth()?.currentUser?.email ?? null;
@@ -1137,13 +1256,19 @@ export const syncManager = {
         return { ok: false, skipped: 'e2e' };
       }
 
+      if (needsMirror && uid) {
+        await forceNextFullRemoteFetch(uid);
+      }
+
       await syncLogger.info('sync', 'Auto-sync em segundo plano', {
         pendingUploads,
         pendingDownloads,
+        needsMirror,
       });
       const result = await runSyncPipeline(authFn, { silent: true });
       if (result.ok) {
         backgroundSyncCooldownUntil = 0;
+        if (uid) cloudMirrorDoneOwner = uid;
       }
       return { ok: result.ok, skipped: result.ok ? undefined : result.error };
     } finally {
@@ -1268,6 +1393,8 @@ export const syncManager = {
     this.cancelScheduledBackgroundSync();
     stopCloudDiffWatch();
     stopRealtimeBridge();
+    cloudMirrorDoneOwner = null;
+    cloudMirrorPromise = null;
     await returnToOfflineMode();
     ownerUid = null;
     pendingSummary = EMPTY_SUMMARY;

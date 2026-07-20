@@ -40,6 +40,7 @@ import {
 import { clearMemoryCloudCache } from '../services/cloudDataCache';
 import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { syncManager } from '../offline-first/sync/SyncManager';
+import { getConnectivityState } from '../offline-first/sync/ConnectivityMonitor';
 import { resolveLocalSessionAfterLogin } from '../offline-first/sync/syncSessionPrepare';
 import { resolveMemberAccess } from '../offline-first/sync/firebase/FirebaseGateway';
 import {
@@ -288,7 +289,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (supabaseEnabled) {
       await syncManager.bindSession(ownerUid);
       syncManager.setAuthAvailable(true);
-      // Diff da nuvem não deve bloquear a entrada no app.
+      if (getConnectivityState() === 'ONLINE') {
+        await syncManager.awaitCloudAuthoritativeMirror({ timeoutMs: 18_000, silent: true });
+        notifyDataChanged();
+      }
       void syncManager.refreshCloudDiff().catch((err) => {
         console.warn('[auth] refreshCloudDiff (fallback) falhou:', err);
       });
@@ -308,6 +312,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         syncManager.setAuthAvailable(true);
         const owner = getCachedDataOwnerUid() ?? mapped.uid;
         void restoreE2eForOwner(owner, mapped.email);
+        if (getConnectivityState() === 'ONLINE') {
+          void syncManager.awaitCloudAuthoritativeMirror({ timeoutMs: 18_000, silent: true });
+        }
         return true;
       }
 
@@ -340,18 +347,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           void rememberKnownAuthEmailOnDevice(mapped.email);
           clearPendingSyncResume();
           setAuthReady(true);
-          notifyDataChanged();
 
           if (supabaseEnabled) {
             await syncManager.bindSession(session.dataOwnerUid);
             syncManager.setAuthAvailable(true);
-            // Estimativa de fila na nuvem é secundária — não segurar a Home.
+            // Online: espelha a nuvem no IndexedDB antes da UI confiar nos dados locais.
+            if (getConnectivityState() === 'ONLINE') {
+              await syncManager.awaitCloudAuthoritativeMirror({
+                timeoutMs: 18_000,
+                silent: true,
+              });
+            }
+            notifyDataChanged();
             void syncManager.refreshCloudDiff().catch((err) => {
               console.warn('[auth] refreshCloudDiff falhou:', err);
             });
             void ensureDatabaseBankCode(session.dataOwnerUid).catch((err) => {
               console.warn('[auth] ensureDatabaseBankCode falhou:', err);
             });
+          } else {
+            notifyDataChanged();
           }
           return true;
         } catch (error) {

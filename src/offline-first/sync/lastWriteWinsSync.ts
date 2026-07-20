@@ -277,7 +277,8 @@ function countActivePresenceDrift(
     const remoteActive = remote != null && remote.deleted !== true;
     if (localActive === remoteActive) continue;
     if (remoteActive && !localActive) extraDownloads += 1;
-    if (localActive && !remoteActive) extraUploads += 1;
+    // Ausência na nuvem: espelho autoritativo baixa/prune — não conta como upload.
+    if (localActive && !remoteActive) extraDownloads += 1;
   }
 
   return { extraDownloads, extraUploads };
@@ -306,10 +307,9 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
     const hasRemote = remoteMap.has(id);
     const decision = decideLastWriteWins(local, remote);
 
-    // Id só no local (já synced): NUNCA apagar por ausência no snapshot.
-    // Remoção real só via tombstone (já mesclado em remoteMap → decide download).
-    // Remigração / IDs novos / fetch parcial faziam "baixar tudo de novo".
-    // Full fetch → reenviar; incremental → marca para full fetch depois.
+    // Id só no local (já synced):
+    // - full fetch (nuvem autoritativa): remover local — ausência na nuvem = verdade.
+    // - incremental: não apagar (snapshot parcial); marca para full fetch depois.
     if (
       decision.action === 'upload' &&
       decision.reason === 'somente_local' &&
@@ -318,12 +318,19 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       !forceUploadIds?.has(id)
     ) {
       if (fetchMode === 'full') {
+        const pruneAt = Math.max(readUpdatedAt(local) + 1, Date.now());
         plan.push({
           collection,
           id,
-          action: 'upload',
+          action: 'download',
           local,
-          remote: undefined,
+          remote: {
+            ...local,
+            deleted: true,
+            updatedAt: pruneAt,
+            syncStatus: 'synced',
+            syntheticCloudAbsence: true,
+          } as SyncRecord,
           hasRemote: false,
         });
         continue;

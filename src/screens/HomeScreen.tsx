@@ -27,6 +27,15 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   semTeste: 0,
 };
 
+/** Parte local do e-mail + "@" — ex.: lopes.thiago.oliveira@marinha.mil.br → lopes.thiago.oliveira@ */
+function emailPrefixoExibicao(email: string | null | undefined): string | null {
+  const raw = (email ?? '').trim().toLowerCase();
+  if (!raw) return null;
+  const at = raw.indexOf('@');
+  if (at <= 0) return null;
+  return `${raw.slice(0, at)}@`;
+}
+
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { isNarrowPhone } = useAplicarTafLayout();
@@ -34,6 +43,11 @@ export default function HomeScreen() {
   const { syncUi, pendingCount, startSyncFromToggle } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
+
+  const emailPrefixo = useMemo(
+    () => (isAuthenticated ? emailPrefixoExibicao(user?.email) : null),
+    [isAuthenticated, user?.email],
+  );
 
   const syncPendingTotal = useMemo(() => {
     const uploads = syncUi.counters.pendingUploads ?? pendingCount;
@@ -94,6 +108,15 @@ export default function HomeScreen() {
           <Text style={[styles.subtitleCenter, { color: theme.textSecondary }]}>
             Teste de Aptidão Física
           </Text>
+          {emailPrefixo ? (
+            <Text
+              style={[styles.emailPrefix, { color: theme.textMuted }]}
+              numberOfLines={1}
+              accessibilityLabel={`Conta ${emailPrefixo}`}
+            >
+              {emailPrefixo}
+            </Text>
+          ) : null}
         </View>
         <TopActionIcons
           activeRoute="Home"
@@ -197,6 +220,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
     marginTop: 4,
+  },
+  emailPrefix: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+    textAlign: 'center',
+    width: '100%',
+    marginTop: 2,
+    letterSpacing: 0.2,
   },
   statsPanel: {
     flexShrink: 0,

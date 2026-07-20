@@ -4,6 +4,7 @@ import {
   removeAppMetaSync,
   writeAppMetaSync,
 } from '../../offline-first/db/appMeta';
+import { isCloudOwnerUid } from '../../utils/cloudOwnerUid';
 
 const META_DATA_OWNER_KEY = 'session:dataOwnerUid';
 const META_LOGIN_UID_KEY = 'session:loginUid';
@@ -16,6 +17,8 @@ let authReady = false;
 let loginUid: string | null = null;
 let dataOwnerUid: string | null = null;
 const waiters = new Set<(ownerUid: string | null) => void>();
+/** Evita re-migrar owners legados a cada getAllCadastros (caro com milhares de linhas). */
+let legacyOwnerMigrationDoneFor: string | null = null;
 
 function readPersistedDataOwnerUid(): string | null {
   return readAppMetaCache(META_DATA_OWNER_KEY);
@@ -112,6 +115,12 @@ export function resetAuthUidStateForTests(): void {
   loginUid = null;
   dataOwnerUid = null;
   authReady = false;
+  legacyOwnerMigrationDoneFor = null;
+}
+
+/** Força nova migração de owners legados (ex.: após importar CSV). */
+export function invalidateLegacyOwnerMigrationCache(): void {
+  legacyOwnerMigrationDoneFor = null;
 }
 
 function resolveUidFromFirebase(): string | null {
@@ -123,6 +132,7 @@ export function setAuthUidState(
   nextDataOwnerUid: string | null,
   ready: boolean,
 ): void {
+  const prevOwner = dataOwnerUid;
   if (nextLoginUid != null) {
     loginUid = nextLoginUid;
     dataOwnerUid = nextDataOwnerUid ?? nextLoginUid;
@@ -137,6 +147,9 @@ export function setAuthUidState(
     } else {
       dataOwnerUid = readPersistedDataOwnerUid() ?? dataOwnerUid;
     }
+  }
+  if (prevOwner !== dataOwnerUid) {
+    legacyOwnerMigrationDoneFor = null;
   }
   authReady = ready;
   notifyWaiters();
@@ -181,12 +194,38 @@ export async function resolveStorageOwnerUid(): Promise<string | null> {
   const { hydrateAppMetaFromIndexedDb } = await import('../../offline-first/db/appMeta');
   await hydrateAppMetaFromIndexedDb();
   await hydrateAuthUidFromIndexedDb();
-  const owner = getCachedDataOwnerUid();
-  if (owner) return owner;
-  if (!authReady) {
-    await waitForAuthUid();
+
+  let owner = getCachedDataOwnerUid();
+  const login = getCachedLoginUid();
+
+  // Backup CSV legado (Firebase) pode ter sobrescrito session:dataOwnerUid.
+  // Com login Supabase (UUID), realinha a sessão para a conta atual.
+  if (login && isCloudOwnerUid(login) && owner && !isCloudOwnerUid(owner)) {
+    setAuthUidState(login, login, true);
+    owner = login;
+    legacyOwnerMigrationDoneFor = null;
   }
-  return getCachedDataOwnerUid();
+
+  if (!owner) {
+    if (!authReady) {
+      await waitForAuthUid();
+    }
+    owner = getCachedDataOwnerUid();
+  }
+
+  if (owner && isCloudOwnerUid(owner) && legacyOwnerMigrationDoneFor !== owner) {
+    try {
+      const { migrateLegacyFirebaseOwnersToCloudUid } = await import(
+        '../../offline-first/db/migration'
+      );
+      await migrateLegacyFirebaseOwnersToCloudUid(owner);
+      legacyOwnerMigrationDoneFor = owner;
+    } catch (error) {
+      console.warn('[auth] migrateLegacyFirebaseOwnersToCloudUid falhou:', error);
+    }
+  }
+
+  return owner;
 }
 
 /** @deprecated use getCachedDataOwnerUid */

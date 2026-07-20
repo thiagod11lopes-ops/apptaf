@@ -148,35 +148,38 @@ function resolveDisplayOwnerUid(ownerUid: string | null): string {
   return ANONYMOUS_OWNER;
 }
 
-/** Lista cadastros para exibição — inclui owner persistido e __local__ (modo offline). */
+/** Lista cadastros para exibição — inclui owner persistido, login e __local__ (modo offline). */
 export async function listCadastrosForDisplay(ownerUid: string | null): Promise<CadastroRecord[]> {
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
-  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted);
+  const loginUid = getCachedLoginUid();
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
   const batches = await Promise.all(sources.map((uid) => listCadastros(uid)));
   const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
   const merged = mergeRecordsById(mergeTarget, batches);
   return dedupeCadastrosByNipNewest(merged) as CadastroRecord[];
 }
 
-/** Lista sessões para exibição — inclui owner persistido e __local__ (modo offline). */
+/** Lista sessões para exibição — inclui owner persistido, login e __local__ (modo offline). */
 export async function listSessoesForDisplay(ownerUid: string | null): Promise<SessaoRecord[]> {
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
-  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted);
+  const loginUid = getCachedLoginUid();
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
   const batches = await Promise.all(sources.map((uid) => listSessoes(uid)));
   const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
   return mergeRecordsById(mergeTarget, batches).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 
-/** Lista aplicadores para exibição — inclui owner persistido e __local__ (modo offline). */
+/** Lista aplicadores para exibição — inclui owner persistido, login e __local__ (modo offline). */
 export async function listAplicadoresForDisplay(ownerUid: string | null): Promise<AplicadorRecord[]> {
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
-  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted);
+  const loginUid = getCachedLoginUid();
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
   const batches = await Promise.all(sources.map((uid) => listAplicadores(uid)));
   const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
   return mergeRecordsById(mergeTarget, batches);

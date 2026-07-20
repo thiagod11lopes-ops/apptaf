@@ -20,8 +20,9 @@ import {
 } from '../offline-first/db/localDb';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { acknowledgeTeamWipeAfterLocalRestore } from '../offline-first/sync/syncTeamWipe';
-import { resolveStorageOwnerUid, getCachedLoginUid, setAuthUidState } from '../services/firebase/authUid';
+import { resolveStorageOwnerUid, getCachedLoginUid, setAuthUidState, invalidateLegacyOwnerMigrationCache } from '../services/firebase/authUid';
 import { isCloudOwnerUid } from './cloudOwnerUid';
+import { migrateLegacyFirebaseOwnersToCloudUid } from '../offline-first/db/migration';
 import { readUpdatedAt } from '../offline-first/sync/recordMeta';
 import {
   gatherSystemBackupData,
@@ -1012,6 +1013,15 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
     setAuthUidState(loginUid, ownerUid, true);
   } else if (ownerUid && ownerUid !== ANONYMOUS_OWNER) {
     await writeAppMeta('session:dataOwnerUid', ownerUid);
+  }
+
+  if (isCloudOwnerUid(ownerUid)) {
+    invalidateLegacyOwnerMigrationCache();
+    try {
+      await migrateLegacyFirebaseOwnersToCloudUid(ownerUid);
+    } catch (error) {
+      console.warn('[backup-csv] migrateLegacyFirebaseOwnersToCloudUid falhou:', error);
+    }
   }
 
   // Reconhecer wipe remoto sem apagar o local — próxima sync sobe o CSV em vez de limpar IndexedDB.

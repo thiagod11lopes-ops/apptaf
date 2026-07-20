@@ -8,15 +8,8 @@ import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { SyncLiveStatusModal } from '../components/sismav/SyncLiveStatusModal';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
-import { getAllCadastros } from '../services/cadastrosIndexedDb';
-import {
-  getAllSessoesAplicacao,
-  getDeletedSessoesAplicacao,
-} from '../services/resultadosAplicadosIndexedDb';
-import {
-  calcularResumoInicioTafFromHistorico,
-  type ResumoInicioTafHistorico,
-} from '../utils/resultadoGeralHistorico';
+import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
+import { loadResumoInicioFromIndexedDb } from '../utils/homeResumoIndexedDb';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 import { TafGlassPanel } from '../components/mobile/TafTabChrome';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
@@ -99,16 +92,13 @@ export default function HomeScreen() {
     return 'idle';
   }, [syncUi.phase, syncUi.isSyncing, syncPendingTotal]);
 
+  /** Cards = espelho do IndexedDB local (não da API da nuvem). */
   const recarregarResumo = useCallback(async () => {
     try {
-      const [cadastros, sessoes, sessoesExcluidas] = await Promise.all([
-        getAllCadastros(),
-        getAllSessoesAplicacao(),
-        getDeletedSessoesAplicacao(),
-      ]);
-      setResumo(calcularResumoInicioTafFromHistorico(sessoes, cadastros, sessoesExcluidas));
+      const next = await loadResumoInicioFromIndexedDb();
+      setResumo(next);
     } catch (error) {
-      console.warn('[home] falha ao recalcular cards:', error);
+      console.warn('[home] falha ao recalcular cards do IndexedDB:', error);
     }
     if (isAuthenticated && dataOwnerUid) {
       try {
@@ -118,9 +108,22 @@ export default function HomeScreen() {
         // mantém código anterior
       }
     }
-  }, [isAuthenticated, user?.uid, dataOwnerUid]);
+  }, [isAuthenticated, dataOwnerUid]);
 
   useAuthDataReload(recarregarResumo);
+
+  // Após sync (sucesso, já atualizado ou erro), relê o IndexedDB — não depende da nuvem ter respondido.
+  useEffect(() => {
+    const phase = syncUi.phase;
+    if (
+      phase === 'success' ||
+      phase === 'already_up_to_date' ||
+      phase === 'error' ||
+      phase === 'offline'
+    ) {
+      void recarregarResumo();
+    }
+  }, [syncUi.phase, recarregarResumo]);
 
   return (
     <MobileScreenScaffold scroll={false} style={styles.page} contentContainerStyle={styles.pageContent}>

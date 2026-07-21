@@ -11,6 +11,7 @@ import {
   setRealtimeListening,
 } from '../../services/offline/cloudSyncActivity';
 import { syncLogger } from './SyncLogger';
+import { REALTIME_PULL_DEBOUNCE_MS } from './memberCloudWatch';
 
 const REALTIME_TABLES = [
   'cadastros',
@@ -25,7 +26,7 @@ const REALTIME_TABLES = [
   'team_wipe',
 ] as const;
 
-const DEBOUNCE_MS = 2_000;
+const DEBOUNCE_MS = REALTIME_PULL_DEBOUNCE_MS;
 
 type RemoteChangeHandler = () => void;
 

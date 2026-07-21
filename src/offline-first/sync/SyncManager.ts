@@ -66,6 +66,11 @@ import {
   stopRealtimeBridge,
   suppressRealtimeEcho,
 } from './RealtimeBridge';
+import {
+  handleRealtimeRemoteChange,
+  startMemberCloudPoll,
+  stopMemberCloudPoll,
+} from './memberCloudWatch';
 import { isAuthorizedMemberSession } from '../../utils/aplicadorSyncPolicy';
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
@@ -101,18 +106,12 @@ const EMPTY_SUMMARY: PendingSyncSummary = {
 
 const SUCCESS_DISPLAY_MS = 3000;
 const ALREADY_UP_TO_DATE_MS = 2000;
-/** Debounce após edições locais — push rápido para a nuvem. */
+/** Após edições locais — push rápido para a nuvem. */
 export const AUTO_SYNC_DEBOUNCE_MS = 400;
 /** Ao voltar a internet / foco. */
 export const AUTO_SYNC_RECONNECT_MS = 1_000;
-/** Após evento realtime remoto — coalesce lotes (CSV) antes do pull. */
-const REALTIME_PULL_DEBOUNCE_MS = 2_000;
 /** Pull inicial ao carregar / autenticar no banco. */
 const SESSION_START_SYNC_MS = 600;
-/** Membro autorizado: varredura periódica (rede lenta / Realtime falhou). */
-const MEMBER_CLOUD_POLL_MS = 8_000;
-/** A cada N ticks do poll do membro: força full fetch (~96s). */
-const MEMBER_FULL_FETCH_EVERY_TICKS = 12;
 
 type Listener = (state: SyncManagerState) => void;
 
@@ -164,8 +163,6 @@ let cloudDiffCyclePauseTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudDiffCountdownSec = 45;
 let cloudDiffCyclePaused = false;
 let cloudDiffCompareInFlight = false;
-let memberCloudPollTimer: ReturnType<typeof setInterval> | null = null;
-let memberCloudPollTick = 0;
 /** Fallback quando Realtime cair — ainda compara IndexedDB × nuvem. */
 export const CLOUD_DIFF_COUNTDOWN_SEC = 8;
 const CLOUD_DIFF_CYCLE_PAUSE_SYNCED_MS = 1_500;
@@ -402,47 +399,6 @@ function scheduleCloudQueueEstimate(force = false): void {
   }, 600);
 }
 
-function stopMemberCloudPoll(): void {
-  if (memberCloudPollTimer) {
-    clearInterval(memberCloudPollTimer);
-    memberCloudPollTimer = null;
-  }
-  memberCloudPollTick = 0;
-}
-
-/**
- * No e-mail autorizado, varre a nuvem periodicamente — cobre Realtime atrasado
- * ou rede instável sem depender só do evento postgres_changes.
- */
-function startMemberCloudPoll(): void {
-  stopMemberCloudPoll();
-  if (!syncAuthAvailable || !isAuthorizedMemberSession()) return;
-
-  memberCloudPollTimer = setInterval(() => {
-    if (!syncAuthAvailable || syncInFlight || backgroundSyncRunning) return;
-    if (getConnectivityState() !== 'ONLINE') return;
-    if (!isAuthorizedMemberSession()) return;
-
-    memberCloudPollTick += 1;
-    void (async () => {
-      const uid = ownerUid ?? getCachedDataOwnerUid();
-      if (!uid) return;
-      realtimeForcePull = true;
-      backgroundSyncCooldownUntil = 0;
-      // Full fetch periódico — evita martelar full a cada poucos segundos durante CSV do chefe.
-      if (memberCloudPollTick % MEMBER_FULL_FETCH_EVERY_TICKS === 0) {
-        invalidateRemoteSnapshotCache();
-        try {
-          await forceNextFullRemoteFetch(uid);
-        } catch {
-          // segue
-        }
-      }
-      syncManager.scheduleBackgroundSync(0);
-    })();
-  }, MEMBER_CLOUD_POLL_MS);
-}
-
 function stopCloudDiffWatch(): void {
   if (cloudDiffWatchTimer) {
     clearInterval(cloudDiffWatchTimer);
@@ -456,6 +412,21 @@ function stopCloudDiffWatch(): void {
   cloudDiffCompareInFlight = false;
   cloudDiffCountdownSec = CLOUD_DIFF_COUNTDOWN_SEC;
   stopMemberCloudPoll();
+}
+
+function startMemberCloudPollFromManager(): void {
+  startMemberCloudPoll({
+    isAuthAvailable: () => syncAuthAvailable,
+    isSyncBusy: () => syncInFlight || backgroundSyncRunning,
+    getOwnerUid: () => ownerUid ?? getCachedDataOwnerUid(),
+    requestForcePull: () => {
+      realtimeForcePull = true;
+    },
+    clearBackgroundCooldown: () => {
+      backgroundSyncCooldownUntil = 0;
+    },
+    scheduleBackgroundSync: (delayMs) => syncManager.scheduleBackgroundSync(delayMs),
+  });
 }
 
 /** Pausa o cronômetro entre ciclos sem exibir mensagem na UI. */
@@ -495,41 +466,28 @@ async function runCloudDiffCycle(): Promise<void> {
 }
 
 function onRealtimeRemoteChange(): void {
-  if (!syncAuthAvailable) return;
-  // team_wipe e demais mudanças: aplica wipe mesmo sem pendências na fila.
-  void (async () => {
-    const uid = ownerUid ?? getCachedDataOwnerUid();
-    if (uid) {
-      try {
-        const wiped = await applyTeamWipeIfNeeded(uid, getCachedLoginUid());
-        if (wiped) {
-          cloudMirrorDoneOwner = null;
-          await refreshPendingSummary();
-          notifyListeners();
-        }
-      } catch (error) {
-        await syncLogger.warn(
-          'realtime',
-          `applyTeamWipeIfNeeded falhou: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      // Mudanças remotas: invalida cache e puxa. Full fetch fica a cargo do
-      // watermark / poll do membro — forçar full a cada linha do CSV gerava
-      // snapshots incompletos e loop de prune no autorizado.
-      invalidateRemoteSnapshotCache();
-      if (!isAuthorizedMemberSession()) {
-        try {
-          await forceNextFullRemoteFetch(uid);
-        } catch {
-          // segue o pull
-        }
-      }
-    }
-    realtimeForcePull = true;
-    backgroundSyncCooldownUntil = 0;
-    void refreshCloudQueueEstimate(true);
-    syncManager.scheduleBackgroundSync(REALTIME_PULL_DEBOUNCE_MS);
-  })();
+  handleRealtimeRemoteChange({
+    isAuthAvailable: () => syncAuthAvailable,
+    getOwnerUid: () => ownerUid ?? getCachedDataOwnerUid(),
+    onTeamWiped: async () => {
+      cloudMirrorDoneOwner = null;
+      await refreshPendingSummary();
+      notifyListeners();
+    },
+    requestForcePull: () => {
+      realtimeForcePull = true;
+    },
+    clearBackgroundCooldown: () => {
+      backgroundSyncCooldownUntil = 0;
+    },
+    refreshQueueEstimate: () => {
+      void refreshCloudQueueEstimate(true);
+    },
+    scheduleBackgroundSync: (delayMs) => syncManager.scheduleBackgroundSync(delayMs),
+    logWipeError: async (detail) => {
+      await syncLogger.warn('realtime', detail);
+    },
+  });
 }
 
 /**
@@ -636,7 +594,7 @@ function startCloudDiffWatch(): void {
   cloudDiffCountdownSec = CLOUD_DIFF_COUNTDOWN_SEC;
   void refreshCloudQueueEstimate(true);
   cloudDiffWatchTimer = setInterval(tickCloudDiffCountdown, 1000);
-  startMemberCloudPoll();
+  startMemberCloudPollFromManager();
   notifyListeners();
 }
 

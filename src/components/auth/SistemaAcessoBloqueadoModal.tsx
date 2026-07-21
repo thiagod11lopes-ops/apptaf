@@ -114,10 +114,6 @@ export function SistemaAcessoBloqueadoModal({ visible, onClose }: Props) {
 
             <Text style={styles.kicker}>ACESSO NEGADO</Text>
             <Text style={styles.title}>{SYSTEM_ACCESS_BLOCKED_MESSAGE}</Text>
-            <Text style={styles.subtitle}>
-              Somente o e-mail do administrador ou e-mails por ele autorizados podem usar o
-              sistema.
-            </Text>
 
             <PressableScale onPress={onClose} style={styles.btnOuter}>
               <View
@@ -217,14 +213,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 28,
     letterSpacing: 0.2,
-  },
-  subtitle: {
-    marginTop: 12,
-    color: 'rgba(255,255,255,0.88)',
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: 'center',
-    fontWeight: '500',
   },
   btnOuter: {
     width: '100%',

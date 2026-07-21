@@ -1,0 +1,847 @@
+-- =============================================================================
+-- TAF App — SCHEMA COMPLETO + CHEFE CANÔNICO
+--
+-- Como usar no Supabase → SQL Editor:
+--   1) ALTERE a linha do e-mail chefe (procure CANONICAL_BOSS_EMAIL abaixo)
+--   2) Selecione TODO este arquivo (Ctrl+A) e cole no SQL Editor
+--   3) Clique em Run
+--
+-- ATENÇÃO:
+--   - Apaga DADOS e recria tabelas/policies do AppTAF
+--   - NÃO apaga auth.users (contas de login)
+--   - Só o e-mail canônico pode ser chefe e cadastrar autorizados
+--   - Outros e-mails só entram se forem autorizados por esse chefe
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 0) LIMPEZA — remove objetos antigos do AppTAF (idempotente)
+-- ---------------------------------------------------------------------------
+
+do $$
+declare
+  tbl text;
+  tables text[] := array[
+    'cadastros',
+    'cadastro_rubricas',
+    'sessoes',
+    'sessao_rubricas',
+    'aplicadores',
+    'aplicador_senhas',
+    'pre_cadastros',
+    'authorized_emails',
+    'team_wipe',
+    'team_e2e_member_wraps',
+    'team_e2e_meta',
+    'database_registry',
+    'member_lookup',
+    'member_uid_lookup',
+    'app_config'
+  ];
+begin
+  foreach tbl in array tables loop
+    if exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = tbl
+    ) then
+      execute format('alter publication supabase_realtime drop table public.%I', tbl);
+    end if;
+  end loop;
+exception
+  when undefined_object then
+    null;
+end $$;
+
+drop table if exists public.team_e2e_member_wraps cascade;
+drop table if exists public.team_e2e_meta cascade;
+drop table if exists public.team_wipe cascade;
+drop table if exists public.pre_cadastros cascade;
+drop table if exists public.aplicador_senhas cascade;
+drop table if exists public.aplicadores cascade;
+drop table if exists public.sessao_rubricas cascade;
+drop table if exists public.sessoes cascade;
+drop table if exists public.cadastro_rubricas cascade;
+drop table if exists public.cadastros cascade;
+drop table if exists public.authorized_emails cascade;
+drop table if exists public.database_registry cascade;
+drop table if exists public.member_uid_lookup cascade;
+drop table if exists public.member_lookup cascade;
+drop table if exists public.app_config cascade;
+
+drop sequence if exists public.database_bank_number_seq;
+
+drop function if exists public.admin_list_boss_emails();
+drop function if exists public.admin_list_authorized_emails(uuid);
+drop function if exists public.ensure_database_bank_code(uuid);
+drop function if exists public.resolve_member_boss(text);
+drop function if exists public.register_authorized_member_login(uuid, text, uuid);
+drop function if exists public.can_access_owner(uuid) cascade;
+drop function if exists public.is_active_member_of(uuid) cascade;
+drop function if exists public.is_boss(uuid) cascade;
+drop function if exists public.is_canonical_boss() cascade;
+drop function if exists public.canonical_boss_email() cascade;
+
+-- ---------------------------------------------------------------------------
+-- 1) Tabelas
+-- ---------------------------------------------------------------------------
+
+create table public.app_config (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz not null default now()
+);
+
+create table public.member_lookup (
+  email_key text primary key,
+  email text not null,
+  boss_uid uuid not null,
+  ativo boolean not null default true,
+  member_uid uuid,
+  last_login_at timestamptz,
+  criado_em timestamptz default now()
+);
+
+create table public.member_uid_lookup (
+  member_uid uuid primary key,
+  boss_uid uuid not null,
+  ativo boolean not null default true,
+  email text not null,
+  last_login_at timestamptz
+);
+
+create table public.authorized_emails (
+  id text not null,
+  owner_uid uuid not null,
+  email text not null,
+  ativo boolean not null default true,
+  criado_em timestamptz default now(),
+  primary key (owner_uid, id)
+);
+
+create table public.cadastros (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  deleted boolean not null default false,
+  primary key (owner_uid, id)
+);
+
+create table public.cadastro_rubricas (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  primary key (owner_uid, id)
+);
+
+create table public.sessoes (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  deleted boolean not null default false,
+  primary key (owner_uid, id)
+);
+
+create table public.sessao_rubricas (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  primary key (owner_uid, id)
+);
+
+create table public.aplicadores (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  deleted boolean not null default false,
+  primary key (owner_uid, id)
+);
+
+create table public.aplicador_senhas (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  primary key (owner_uid, id)
+);
+
+create table public.pre_cadastros (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  deleted boolean not null default false,
+  primary key (owner_uid, id)
+);
+
+create table public.team_wipe (
+  owner_uid uuid primary key,
+  wiped_at bigint not null,
+  wiped_at_server timestamptz default now()
+);
+
+create table public.team_e2e_meta (
+  owner_uid uuid primary key,
+  salt_b64 text not null,
+  wrapped_key_b64 text not null,
+  key_version int not null default 1,
+  updated_at timestamptz default now()
+);
+
+create sequence public.database_bank_number_seq;
+
+create table public.database_registry (
+  owner_uid uuid primary key,
+  bank_number int not null unique,
+  bank_code text not null unique,
+  boss_email text,
+  created_at timestamptz not null default now()
+);
+
+create table public.team_e2e_member_wraps (
+  owner_uid uuid not null,
+  email_key text not null,
+  salt_b64 text not null,
+  wrapped_key_b64 text not null,
+  key_version int not null default 1,
+  access_secret_b64 text,
+  updated_at timestamptz not null default now(),
+  primary key (owner_uid, email_key)
+);
+
+-- ---------------------------------------------------------------------------
+-- 1b) E-mail do ÚNICO chefe — ALTERE AQUI antes de Run
+-- ---------------------------------------------------------------------------
+
+-- >>> CANONICAL_BOSS_EMAIL <<<
+insert into public.app_config (key, value)
+values ('canonical_boss_email', 'COLOQUE.AQUI.O.EMAIL.CHEFE@marinha.mil.br')
+on conflict (key) do update
+  set value = excluded.value,
+      updated_at = now();
+
+-- ---------------------------------------------------------------------------
+-- 2) Indices
+-- ---------------------------------------------------------------------------
+
+create index idx_cadastros_owner_updated on public.cadastros (owner_uid, updated_at);
+create index idx_sessoes_owner_updated on public.sessoes (owner_uid, updated_at);
+create index idx_aplicadores_owner_updated on public.aplicadores (owner_uid, updated_at);
+create index idx_pre_cadastros_owner_updated on public.pre_cadastros (owner_uid, updated_at);
+create index idx_member_lookup_boss on public.member_lookup (boss_uid);
+create index idx_member_uid_lookup_boss on public.member_uid_lookup (boss_uid);
+create index idx_database_registry_number on public.database_registry (bank_number);
+create index idx_team_e2e_member_wraps_email on public.team_e2e_member_wraps (email_key);
+
+alter table public.cadastros replica identity full;
+alter table public.cadastro_rubricas replica identity full;
+alter table public.sessoes replica identity full;
+alter table public.sessao_rubricas replica identity full;
+alter table public.aplicadores replica identity full;
+alter table public.aplicador_senhas replica identity full;
+alter table public.pre_cadastros replica identity full;
+alter table public.authorized_emails replica identity full;
+alter table public.team_wipe replica identity full;
+
+-- ---------------------------------------------------------------------------
+-- 3) Helpers de autorizacao (com chefe canônico)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.canonical_boss_email()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select lower(trim(value))
+  from public.app_config
+  where key = 'canonical_boss_email'
+  limit 1;
+$$;
+
+create or replace function public.is_canonical_boss()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth.uid() is not null
+    and lower(coalesce(auth.jwt() ->> 'email', '')) = public.canonical_boss_email();
+$$;
+
+-- Chefe = dono do banco E e-mail canônico (impede outros virarem chefe)
+create or replace function public.is_boss(owner uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth.uid() is not null
+    and auth.uid() = owner
+    and public.is_canonical_boss();
+$$;
+
+create or replace function public.is_active_member_of(owner uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth.uid() is not null and (
+    exists (
+      select 1 from public.member_uid_lookup m
+      where m.member_uid = auth.uid()
+        and m.boss_uid = owner
+        and m.ativo is distinct from false
+    )
+    or exists (
+      select 1 from public.member_lookup m
+      where m.email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+        and m.boss_uid = owner
+        and m.ativo = true
+    )
+  );
+$$;
+
+create or replace function public.can_access_owner(owner uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.is_boss(owner) or public.is_active_member_of(owner);
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 4) Privileges
+-- ---------------------------------------------------------------------------
+
+grant usage on schema public to anon, authenticated;
+
+grant select on public.app_config to authenticated, anon;
+
+grant select, insert, update, delete on
+  public.member_lookup,
+  public.member_uid_lookup,
+  public.authorized_emails,
+  public.cadastros,
+  public.cadastro_rubricas,
+  public.sessoes,
+  public.sessao_rubricas,
+  public.aplicadores,
+  public.aplicador_senhas,
+  public.pre_cadastros,
+  public.team_wipe,
+  public.team_e2e_meta,
+  public.team_e2e_member_wraps
+to authenticated;
+
+grant select, insert on public.database_registry to authenticated;
+grant usage, select on sequence public.database_bank_number_seq to authenticated;
+
+grant execute on function public.canonical_boss_email() to authenticated, anon;
+grant execute on function public.is_canonical_boss() to authenticated, anon;
+grant execute on function public.is_boss(uuid) to authenticated, anon;
+grant execute on function public.is_active_member_of(uuid) to authenticated, anon;
+grant execute on function public.can_access_owner(uuid) to authenticated, anon;
+
+-- ---------------------------------------------------------------------------
+-- 5) RLS
+-- ---------------------------------------------------------------------------
+
+alter table public.app_config enable row level security;
+alter table public.member_lookup enable row level security;
+alter table public.member_uid_lookup enable row level security;
+alter table public.authorized_emails enable row level security;
+alter table public.cadastros enable row level security;
+alter table public.cadastro_rubricas enable row level security;
+alter table public.sessoes enable row level security;
+alter table public.sessao_rubricas enable row level security;
+alter table public.aplicadores enable row level security;
+alter table public.aplicador_senhas enable row level security;
+alter table public.pre_cadastros enable row level security;
+alter table public.team_wipe enable row level security;
+alter table public.team_e2e_meta enable row level security;
+alter table public.database_registry enable row level security;
+alter table public.team_e2e_member_wraps enable row level security;
+
+-- app_config: só leitura (escrita via SQL Editor / service role)
+create policy app_config_read on public.app_config
+  for select to authenticated, anon
+  using (true);
+
+-- member_lookup
+create policy member_lookup_select on public.member_lookup
+  for select to authenticated
+  using (
+    email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+    or (public.is_canonical_boss() and boss_uid = auth.uid())
+  );
+
+create policy member_lookup_insert on public.member_lookup
+  for insert to authenticated
+  with check (public.is_canonical_boss() and boss_uid = auth.uid());
+
+create policy member_lookup_update on public.member_lookup
+  for update to authenticated
+  using (
+    (public.is_canonical_boss() and boss_uid = auth.uid())
+    or email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+  )
+  with check (
+    (public.is_canonical_boss() and boss_uid = auth.uid())
+    or (
+      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and boss_uid = (select m.boss_uid from public.member_lookup m where m.email_key = member_lookup.email_key)
+    )
+  );
+
+create policy member_lookup_delete on public.member_lookup
+  for delete to authenticated
+  using (public.is_canonical_boss() and boss_uid = auth.uid());
+
+-- member_uid_lookup
+create policy member_uid_lookup_select on public.member_uid_lookup
+  for select to authenticated
+  using (
+    member_uid = auth.uid()
+    or (public.is_canonical_boss() and boss_uid = auth.uid())
+  );
+
+create policy member_uid_lookup_upsert on public.member_uid_lookup
+  for all to authenticated
+  using (
+    member_uid = auth.uid()
+    or (public.is_canonical_boss() and boss_uid = auth.uid())
+  )
+  with check (
+    member_uid = auth.uid()
+    or (public.is_canonical_boss() and boss_uid = auth.uid())
+  );
+
+-- authorized_emails: SOMENTE chefe canônico
+create policy authorized_emails_canonical_boss on public.authorized_emails
+  for all to authenticated
+  using (public.is_canonical_boss() and owner_uid = auth.uid())
+  with check (public.is_canonical_boss() and owner_uid = auth.uid());
+
+-- Dados compartilhados
+create policy cadastros_access on public.cadastros
+  for all to authenticated
+  using (public.can_access_owner(owner_uid))
+  with check (public.can_access_owner(owner_uid));
+
+create policy cadastro_rubricas_access on public.cadastro_rubricas
+  for all to authenticated
+  using (public.can_access_owner(owner_uid))
+  with check (public.can_access_owner(owner_uid));
+
+create policy sessoes_access on public.sessoes
+  for all to authenticated
+  using (public.can_access_owner(owner_uid))
+  with check (public.can_access_owner(owner_uid));
+
+create policy sessao_rubricas_access on public.sessao_rubricas
+  for all to authenticated
+  using (public.can_access_owner(owner_uid))
+  with check (public.can_access_owner(owner_uid));
+
+create policy aplicadores_access on public.aplicadores
+  for all to authenticated
+  using (public.can_access_owner(owner_uid))
+  with check (public.can_access_owner(owner_uid));
+
+create policy aplicador_senhas_select on public.aplicador_senhas
+  for select to authenticated
+  using (public.is_boss(owner_uid));
+
+create policy aplicador_senhas_write on public.aplicador_senhas
+  for insert to authenticated
+  with check (public.can_access_owner(owner_uid));
+
+create policy aplicador_senhas_update on public.aplicador_senhas
+  for update to authenticated
+  using (public.can_access_owner(owner_uid))
+  with check (public.can_access_owner(owner_uid));
+
+create policy aplicador_senhas_delete on public.aplicador_senhas
+  for delete to authenticated
+  using (public.is_boss(owner_uid));
+
+create policy pre_cadastros_access on public.pre_cadastros
+  for all to authenticated
+  using (public.can_access_owner(owner_uid))
+  with check (public.can_access_owner(owner_uid));
+
+create policy team_wipe_access on public.team_wipe
+  for all to authenticated
+  using (public.can_access_owner(owner_uid))
+  with check (public.is_boss(owner_uid));
+
+create policy team_e2e_meta_select on public.team_e2e_meta
+  for select to authenticated
+  using (public.can_access_owner(owner_uid));
+
+create policy team_e2e_meta_insert on public.team_e2e_meta
+  for insert to authenticated
+  with check (public.is_boss(owner_uid));
+
+create policy team_e2e_meta_update on public.team_e2e_meta
+  for update to authenticated
+  using (public.is_boss(owner_uid))
+  with check (public.is_boss(owner_uid));
+
+create policy database_registry_select on public.database_registry
+  for select to authenticated
+  using (public.can_access_owner(owner_uid));
+
+create policy database_registry_insert on public.database_registry
+  for insert to authenticated
+  with check (public.is_boss(owner_uid));
+
+create policy team_e2e_member_wraps_select on public.team_e2e_member_wraps
+  for select to authenticated
+  using (
+    public.is_boss(owner_uid)
+    or (
+      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and public.is_active_member_of(owner_uid)
+    )
+  );
+
+create policy team_e2e_member_wraps_insert on public.team_e2e_member_wraps
+  for insert to authenticated
+  with check (
+    public.is_boss(owner_uid)
+    or (
+      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and public.is_active_member_of(owner_uid)
+    )
+  );
+
+create policy team_e2e_member_wraps_update on public.team_e2e_member_wraps
+  for update to authenticated
+  using (
+    public.is_boss(owner_uid)
+    or (
+      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and public.is_active_member_of(owner_uid)
+    )
+  )
+  with check (
+    public.is_boss(owner_uid)
+    or (
+      email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and public.is_active_member_of(owner_uid)
+    )
+  );
+
+create policy team_e2e_member_wraps_delete on public.team_e2e_member_wraps
+  for delete to authenticated
+  using (
+    public.is_boss(owner_uid)
+    or email_key = lower(coalesce(auth.jwt() ->> 'email', ''))
+  );
+
+-- ---------------------------------------------------------------------------
+-- 6) Codigo do banco (BNC001, BNC002, ...)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.ensure_database_bank_code(p_owner uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  existing text;
+  n int;
+  code text;
+  email text;
+begin
+  if p_owner is null then
+    raise exception 'owner obrigatorio';
+  end if;
+  if auth.uid() is null then
+    raise exception 'nao autenticado';
+  end if;
+  if not public.can_access_owner(p_owner) then
+    raise exception 'sem permissao para este banco';
+  end if;
+
+  select r.bank_code into existing
+  from public.database_registry r
+  where r.owner_uid = p_owner;
+
+  if existing is not null then
+    return existing;
+  end if;
+
+  -- Só o chefe canônico cria novo BNC
+  if not public.is_boss(p_owner) then
+    return null;
+  end if;
+
+  email := lower(coalesce(auth.jwt() ->> 'email', ''));
+  n := nextval('public.database_bank_number_seq')::int;
+  code := 'BNC' || lpad(n::text, 3, '0');
+
+  begin
+    insert into public.database_registry (owner_uid, bank_number, bank_code, boss_email)
+    values (p_owner, n, code, nullif(email, ''));
+    return code;
+  exception
+    when unique_violation then
+      select r.bank_code into existing
+      from public.database_registry r
+      where r.owner_uid = p_owner;
+      return existing;
+  end;
+end;
+$$;
+
+grant execute on function public.ensure_database_bank_code(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 7) Painel Admin (/admin/historico)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.admin_list_boss_emails()
+returns table (
+  owner_uid uuid,
+  email text,
+  authorized_count bigint,
+  created_at timestamptz
+)
+language sql
+security definer
+set search_path = public
+as $$
+  with bosses as (
+    select owner_uid as uid from public.team_e2e_meta
+    union
+    select owner_uid from public.authorized_emails
+    union
+    select distinct boss_uid from public.member_lookup
+  )
+  select
+    b.uid as owner_uid,
+    coalesce(nullif(lower(trim(u.email::text)), ''), b.uid::text) as email,
+    (
+      select count(*)::bigint
+      from public.authorized_emails ae
+      where ae.owner_uid = b.uid
+        and ae.ativo is distinct from false
+    ) as authorized_count,
+    coalesce(
+      u.created_at,
+      (select t.updated_at from public.team_e2e_meta t where t.owner_uid = b.uid),
+      now()
+    ) as created_at
+  from bosses b
+  left join auth.users u on u.id = b.uid
+  order by 4 nulls last, 2;
+$$;
+
+create or replace function public.admin_list_authorized_emails(p_boss uuid)
+returns table (
+  email text,
+  ativo boolean,
+  criado_em timestamptz
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    lower(trim(ae.email)) as email,
+    coalesce(ae.ativo, true) as ativo,
+    ae.criado_em
+  from public.authorized_emails ae
+  where ae.owner_uid = p_boss
+  order by 1;
+$$;
+
+revoke all on function public.admin_list_boss_emails() from public;
+revoke all on function public.admin_list_authorized_emails(uuid) from public;
+
+grant execute on function public.admin_list_boss_emails() to anon, authenticated;
+grant execute on function public.admin_list_authorized_emails(uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 8) Login membro autorizado
+-- ---------------------------------------------------------------------------
+
+create or replace function public.resolve_member_boss(p_email text)
+returns uuid
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_jwt text := lower(coalesce(auth.jwt() ->> 'email', ''));
+  v_boss uuid;
+begin
+  if auth.uid() is null then
+    return null;
+  end if;
+  if v_email = '' then
+    return null;
+  end if;
+  if v_email <> v_jwt then
+    return null;
+  end if;
+
+  -- Chefe canônico nunca é resolvido como "membro"
+  if v_email = public.canonical_boss_email() then
+    return null;
+  end if;
+
+  select m.boss_uid into v_boss
+  from public.member_lookup m
+  where m.email_key = v_email
+    and m.ativo = true
+  limit 1;
+
+  if v_boss is not null and v_boss is distinct from auth.uid() then
+    return v_boss;
+  end if;
+  return null;
+end;
+$$;
+
+create or replace function public.register_authorized_member_login(
+  p_boss_uid uuid,
+  p_email text,
+  p_member_uid uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_jwt text := lower(coalesce(auth.jwt() ->> 'email', ''));
+  v_ok boolean := false;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  if p_boss_uid is null or p_member_uid is null or v_email = '' then
+    return false;
+  end if;
+  if p_member_uid = p_boss_uid then
+    return true;
+  end if;
+  if auth.uid() is distinct from p_member_uid and auth.uid() is distinct from p_boss_uid then
+    raise exception 'forbidden';
+  end if;
+  if auth.uid() = p_member_uid and v_email <> v_jwt then
+    raise exception 'email mismatch';
+  end if;
+
+  -- Só o chefe canônico pode criar vínculo novo como "chefe"
+  if auth.uid() = p_boss_uid and not public.is_canonical_boss() then
+    raise exception 'apenas o chefe canonico pode registrar autorizados';
+  end if;
+
+  select exists (
+    select 1
+    from public.member_lookup m
+    where m.email_key = v_email
+      and m.boss_uid = p_boss_uid
+      and m.ativo = true
+  ) into v_ok;
+
+  if not v_ok and auth.uid() <> p_boss_uid then
+    return false;
+  end if;
+
+  if auth.uid() = p_boss_uid and not v_ok then
+    insert into public.member_lookup (email_key, email, boss_uid, ativo, member_uid, last_login_at)
+    values (v_email, v_email, p_boss_uid, true, p_member_uid, now())
+    on conflict (email_key) do update
+      set email = excluded.email,
+          boss_uid = excluded.boss_uid,
+          ativo = true,
+          member_uid = excluded.member_uid,
+          last_login_at = excluded.last_login_at;
+  else
+    update public.member_lookup
+    set member_uid = p_member_uid,
+        last_login_at = now(),
+        ativo = true,
+        email = v_email
+    where email_key = v_email
+      and boss_uid = p_boss_uid;
+  end if;
+
+  insert into public.member_uid_lookup (member_uid, boss_uid, ativo, email, last_login_at)
+  values (p_member_uid, p_boss_uid, true, v_email, now())
+  on conflict (member_uid) do update
+    set boss_uid = excluded.boss_uid,
+        ativo = true,
+        email = excluded.email,
+        last_login_at = excluded.last_login_at;
+
+  return true;
+end;
+$$;
+
+grant execute on function public.resolve_member_boss(text) to authenticated;
+grant execute on function public.register_authorized_member_login(uuid, text, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 9) Realtime
+-- ---------------------------------------------------------------------------
+
+do $$
+declare
+  tbl text;
+  tables text[] := array[
+    'cadastros',
+    'cadastro_rubricas',
+    'sessoes',
+    'sessao_rubricas',
+    'aplicadores',
+    'aplicador_senhas',
+    'pre_cadastros',
+    'authorized_emails',
+    'team_wipe'
+  ];
+begin
+  foreach tbl in array tables loop
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = tbl
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', tbl);
+    end if;
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 10) Conferência rápida
+-- ---------------------------------------------------------------------------
+
+select
+  public.canonical_boss_email() as email_chefe_canonico,
+  (select count(*) from public.cadastros) as cadastros,
+  (select count(*) from public.authorized_emails) as autorizados;

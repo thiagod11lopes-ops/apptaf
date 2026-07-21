@@ -75,6 +75,11 @@ import type { SyncStepId } from './syncSteps';
 import { getPendingSyncItems } from './pendingSyncItems';
 import { buildDownloadBreakdown, type SyncQueueBreakdown } from './syncQueueBreakdown';
 import {
+  decideSyncedLocalOnlyAbsence,
+  shouldAllowCloudAbsencePrune,
+  stripMassSyntheticPrune,
+} from './cloudAbsencePrune';
+import {
   buildDownloadRubricCaches,
   type DownloadRubricCaches,
 } from './downloadRubricCache';
@@ -319,7 +324,10 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       !isUnsyncedLocalStatus(local.syncStatus) &&
       !forceUploadIds?.has(id)
     ) {
-      if (fetchMode === 'full' && allowCloudAbsencePrune) {
+      if (
+        fetchMode === 'full' &&
+        decideSyncedLocalOnlyAbsence(allowCloudAbsencePrune) === 'prune'
+      ) {
         const pruneAt = Math.max(readUpdatedAt(local) + 1, Date.now());
         plan.push({
           collection,
@@ -980,14 +988,15 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     return { cadPlanFresh, sessPlanFresh, appPlanFresh, localCadFresh, localSessFresh, localAppFresh };
   };
 
-  const allowPruneThisCycle =
-    remoteSnapshot.fetchMode === 'full' &&
-    remoteSnapshot.trustworthyForPrune !== false &&
-    !isAuthorizedMemberSession();
+  const allowPruneThisCycle = shouldAllowCloudAbsencePrune({
+    fetchMode: remoteSnapshot.fetchMode,
+    trustworthyForPrune: remoteSnapshot.trustworthyForPrune !== false,
+    isAuthorizedMember: isAuthorizedMemberSession(),
+  });
 
   if (remoteSnapshot.fetchMode === 'full' && !allowPruneThisCycle) {
     await syncLogger.info(
-      'sync-lww',
+      'sync',
       isAuthorizedMemberSession()
         ? 'Membro autorizado: prune por ausência desativado (só tombstone real remove local)'
         : 'Snapshot remoto não confiável para prune (decrypt parcial) — ausência local preservada',
@@ -1017,35 +1026,16 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       remoteSessTombstones = [],
       remoteAppTombstones = [],
     } = remoteSnapshot);
-    const allowPruneAfterFull =
-      remoteSnapshot.fetchMode === 'full' &&
-      remoteSnapshot.trustworthyForPrune !== false &&
-      !isAuthorizedMemberSession();
+    const allowPruneAfterFull = shouldAllowCloudAbsencePrune({
+      fetchMode: remoteSnapshot.fetchMode,
+      trustworthyForPrune: remoteSnapshot.trustworthyForPrune !== false,
+      isAuthorizedMember: isAuthorizedMemberSession(),
+    });
     planned = await runReconcileAndPlan(remoteSnapshot.fetchMode, allowPruneAfterFull);
   }
 
   const { cadPlanFresh, sessPlanFresh, appPlanFresh, localCadFresh, localSessFresh, localAppFresh } =
     planned;
-
-  // Disjuntor: poda em massa num ciclo = snapshot suspeito (não aplicar).
-  const stripMassSyntheticPrune = (
-    plan: PlannedSyncItem[],
-    localCount: number,
-  ): { plan: PlannedSyncItem[]; stripped: number } => {
-    const prunes = plan.filter(
-      (p) =>
-        p.action === 'download' &&
-        (p.remote as SyncRecord & { syntheticCloudAbsence?: boolean })?.syntheticCloudAbsence ===
-          true,
-    );
-    const threshold = Math.max(50, Math.ceil(Math.max(localCount, 1) * 0.05));
-    if (prunes.length < threshold) return { plan, stripped: 0 };
-    const pruneIds = new Set(prunes.map((p) => `${p.collection}:${p.id}`));
-    return {
-      plan: plan.filter((p) => !pruneIds.has(`${p.collection}:${p.id}`)),
-      stripped: prunes.length,
-    };
-  };
 
   let cadPlan = cadPlanFresh.plan;
   let sessPlan = sessPlanFresh.plan;
@@ -1059,7 +1049,7 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
   const massStripped = massCad.stripped + massSess.stripped + massApp.stripped;
   if (massStripped > 0) {
     await syncLogger.warn(
-      'sync-lww',
+      'sync',
       `Prune em massa bloqueado (${massStripped} registro(s)) — snapshot tratado como incompleto`,
     );
   }

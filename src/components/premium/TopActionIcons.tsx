@@ -96,9 +96,16 @@ export function TopActionIcons({
 }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss, firebaseEnabled } = useAuth();
-  const { connectivity } = useOfflineSyncState();
+  const { connectivity, syncing, appMode } = useOfflineSyncState();
   const { e2eActive, status: e2eStatus, copy: e2eCopy } = useE2eEncryptionStatus();
   const cloudOnline = connectivity === 'ONLINE' || connectivity === 'SYNCING';
+  /** Envio ou recebimento ativo com a nuvem → ícone azul. */
+  const cloudTransferring =
+    cloudOnline &&
+    (syncing ||
+      connectivity === 'SYNCING' ||
+      appMode === 'ONLINE_SYNCING' ||
+      appMode === 'ONLINE_PREPARING');
   const [e2eModalVisible, setE2eModalVisible] = useState(false);
   const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
@@ -173,11 +180,26 @@ export function TopActionIcons({
   const e2eTooltipTitle = e2eCopy.tooltipTitle;
   const e2eTooltipDescription = e2eCopy.tooltipDescription;
   const showE2eShield = firebaseEnabled && isAuthenticated;
-  const cloudColor = cloudOnline ? theme.gain : theme.loss;
-  const cloudTooltipTitle = cloudOnline ? 'Online · nuvem' : 'Offline · local';
-  const cloudTooltipDescription = cloudOnline
-    ? 'Toque para ver o status: barras de recebimento e envio com a nuvem.'
-    : 'Sem internet — toque para ver o status. Alterações ficam no IndexedDB até reconectar.';
+  const cloudColor = !cloudOnline
+    ? theme.loss
+    : cloudTransferring
+      ? theme.primary
+      : theme.gain;
+  const cloudMutedBg = !cloudOnline
+    ? 'rgba(220, 38, 38, 0.1)'
+    : cloudTransferring
+      ? theme.accentMuted
+      : theme.gainMuted;
+  const cloudTooltipTitle = !cloudOnline
+    ? 'Offline · local'
+    : cloudTransferring
+      ? 'Sincronizando · nuvem'
+      : 'Online · nuvem';
+  const cloudTooltipDescription = !cloudOnline
+    ? 'Sem internet — toque para ver o status. Alterações ficam no IndexedDB até reconectar.'
+    : cloudTransferring
+      ? 'Enviando ou recebendo dados da nuvem. Toque para ver o progresso.'
+      : 'Toque para ver o status: barras de recebimento e envio com a nuvem.';
 
   const openSyncStatus = useCallback(() => {
     setSyncStatusModalVisible(true);
@@ -198,13 +220,15 @@ export function TopActionIcons({
                 btnStyle,
                 {
                   borderColor: cloudColor,
-                  backgroundColor: cloudOnline ? theme.gainMuted : 'rgba(220, 38, 38, 0.1)',
+                  backgroundColor: cloudMutedBg,
                 },
               ]}
               accessibilityLabel={
-                cloudOnline
-                  ? 'Online: usando dados da nuvem. Abrir status de sincronização.'
-                  : 'Offline: usando dados locais IndexedDB. Abrir status de sincronização.'
+                !cloudOnline
+                  ? 'Offline: usando dados locais IndexedDB. Abrir status de sincronização.'
+                  : cloudTransferring
+                    ? 'Sincronizando com a nuvem: enviando ou recebendo dados. Abrir status.'
+                    : 'Online: usando dados da nuvem. Abrir status de sincronização.'
               }
             >
               {cloudOnline ? (

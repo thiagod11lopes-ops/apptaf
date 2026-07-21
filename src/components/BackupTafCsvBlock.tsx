@@ -17,6 +17,7 @@ import {
   readBackupCsvFile,
   type ResultadoImportacaoBackupCsv,
 } from '../utils/backupTafCsv';
+import { getLastE2eWrapRenewalNotice } from '../services/supabase/e2eWrapRenewalNotice';
 import { PREMIUM } from '../theme/premium';
 
 export function BackupTafCsvBlock() {
@@ -254,6 +255,17 @@ export function BackupTafCsvBlock() {
               {msg}
             </Text>
           ))}
+          {(() => {
+            const notice = getLastE2eWrapRenewalNotice();
+            if (notice && Date.now() - notice.at < 60_000) {
+              return (
+                <Text style={[ts.caption, { color: theme.gain, marginTop: 6 }]}>
+                  {notice.message}
+                </Text>
+              );
+            }
+            return null;
+          })()}
         </View>
       ) : null}
 

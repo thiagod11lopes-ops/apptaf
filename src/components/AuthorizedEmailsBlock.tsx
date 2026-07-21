@@ -27,6 +27,7 @@ import {
   removeMemberE2eWrap,
 } from '../services/supabase/teamE2eSession';
 import { isE2eKeyActive } from '../services/supabase/e2eCrypto';
+import { subscribeE2eWrapRenewalNotice } from '../services/supabase/e2eWrapRenewalNotice';
 
 export function AuthorizedEmailsBlock() {
   const { theme } = useTheme();
@@ -39,6 +40,15 @@ export function AuthorizedEmailsBlock() {
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isBoss) return;
+    return subscribeE2eWrapRenewalNotice((notice) => {
+      if (!notice) return;
+      setErro(null);
+      setMsg(notice.message);
+    });
+  }, [isBoss]);
 
   const recarregar = useCallback(async () => {
     if (!user?.uid || !isBoss) {

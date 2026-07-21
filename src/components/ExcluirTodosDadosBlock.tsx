@@ -80,6 +80,13 @@ export function ExcluirTodosDadosBlock({ onWiped }: Props) {
       partes.push(
         'Se o escudo ficar vermelho: Conta → Sair → entre de novo com e-mail e senha.',
       );
+      const { getLastE2eWrapRenewalNotice } = await import(
+        '../services/supabase/e2eWrapRenewalNotice'
+      );
+      const wrapNotice = getLastE2eWrapRenewalNotice();
+      if (wrapNotice && Date.now() - wrapNotice.at < 60_000) {
+        partes.push(wrapNotice.message);
+      }
 
       const msg = partes.join(' ');
       setSucesso(msg);

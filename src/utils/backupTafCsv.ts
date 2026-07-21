@@ -1033,6 +1033,33 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
   if (ownerUid) {
     await acknowledgeTeamWipeAfterLocalRestore(ownerUid);
   }
+
+  // Dose 3: chefe com DEK — renova wraps dos autorizados após import CSV.
+  if (ownerUid && isCloudOwnerUid(ownerUid) && loginUid && loginUid === ownerUid) {
+    try {
+      const { authorizedEmailRepository } = await import(
+        '../offline-first/repositories/AuthorizedEmailRepository'
+      );
+      const { renewAuthorizedMemberWrapsForBoss } = await import(
+        '../services/supabase/teamE2eSession'
+      );
+      const emails = await authorizedEmailRepository.listLocal(ownerUid);
+      if (emails.length > 0) {
+        await renewAuthorizedMemberWrapsForBoss(
+          ownerUid,
+          emails.map((e) => e.email),
+          'csv',
+          { retries: 2, hardFail: false },
+        );
+      }
+    } catch (provErr) {
+      console.warn(
+        '[backup-csv] renovação de wraps autorizados:',
+        provErr instanceof Error ? provErr.message : provErr,
+      );
+    }
+  }
+
   notifyDataChanged();
 
   return {

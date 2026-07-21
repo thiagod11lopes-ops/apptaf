@@ -424,7 +424,7 @@ async function cryptoKeysEqual(a: CryptoKey, b: CryptoKey): Promise<boolean> {
 export async function provisionAuthorizedMemberE2eAccess(
   bossUid: string,
   email: string,
-): Promise<{ ok: boolean; skipped?: string; error?: string }> {
+): Promise<{ ok: boolean; renewed?: boolean; skipped?: string; error?: string }> {
   if (!bossUid.trim() || !email.trim()) {
     return { ok: false, error: 'owner/email inválidos' };
   }
@@ -454,7 +454,7 @@ export async function provisionAuthorizedMemberE2eAccess(
       );
       // Wrap pode abrir, mas apontar para DEK antiga (pré-wipe) — regenera.
       if (await cryptoKeysEqual(unwrapped, teamKey)) {
-        return { ok: true };
+        return { ok: true, renewed: false };
       }
     } catch {
       /* regenera abaixo */
@@ -466,7 +466,7 @@ export async function provisionAuthorizedMemberE2eAccess(
   const accessSecret = toBase64(crypto.getRandomValues(new Uint8Array(32)));
   try {
     await persistMemberWrap(bossUid, emailKey, teamKey, accessSecret, keyVersion, accessSecret);
-    return { ok: true };
+    return { ok: true, renewed: true };
   } catch (error) {
     return {
       ok: false,
@@ -475,19 +475,85 @@ export async function provisionAuthorizedMemberE2eAccess(
   }
 }
 
+export type ProvisionAllE2eResult = {
+  total: number;
+  renewed: number;
+  alreadyAligned: number;
+  dekLocked: boolean;
+  errors: string[];
+};
+
 /** Garante wrap automático para todos os e-mails autorizados locais (chefe + DEK ativa). */
 export async function provisionE2eAccessForAllAuthorizedEmails(
   bossUid: string,
   emails: string[],
-): Promise<string[]> {
-  const errors: string[] = [];
-  for (const email of emails) {
-    const result = await provisionAuthorizedMemberE2eAccess(bossUid, email);
-    if (!result.ok && result.skipped !== 'dek_locked') {
-      errors.push(`${email}: ${result.error ?? 'falha'}`);
+): Promise<ProvisionAllE2eResult> {
+  const unique = [...new Set(emails.map((e) => normalizeAuthEmail(e)).filter(Boolean))];
+  const result: ProvisionAllE2eResult = {
+    total: unique.length,
+    renewed: 0,
+    alreadyAligned: 0,
+    dekLocked: false,
+    errors: [],
+  };
+
+  for (const email of unique) {
+    const row = await provisionAuthorizedMemberE2eAccess(bossUid, email);
+    if (row.ok) {
+      if (row.renewed) result.renewed += 1;
+      else result.alreadyAligned += 1;
+      continue;
     }
+    if (row.skipped === 'dek_locked') {
+      result.dekLocked = true;
+      continue;
+    }
+    result.errors.push(`${email}: ${row.error ?? 'falha'}`);
   }
-  return errors;
+  return result;
+}
+
+/**
+ * Chefe: renovação obrigatória dos wraps (wipe/CSV/sync).
+ * Retry em falhas; publica confirmação na UI; lança se ainda houver erro (exceto dek_locked).
+ */
+export async function renewAuthorizedMemberWrapsForBoss(
+  bossUid: string,
+  emails: string[],
+  source: 'sync' | 'wipe' | 'csv' | 'manual',
+  options?: { retries?: number; hardFail?: boolean },
+): Promise<ProvisionAllE2eResult> {
+  const {
+    publishE2eWrapRenewalNotice,
+    buildE2eWrapRenewalMessage,
+  } = await import('./e2eWrapRenewalNotice');
+  const retries = Math.max(0, options?.retries ?? 2);
+  const hardFail = options?.hardFail !== false;
+
+  let last = await provisionE2eAccessForAllAuthorizedEmails(bossUid, emails);
+  for (let attempt = 0; attempt < retries && last.errors.length > 0; attempt += 1) {
+    last = await provisionE2eAccessForAllAuthorizedEmails(bossUid, emails);
+  }
+
+  publishE2eWrapRenewalNotice({
+    renewed: last.renewed,
+    alreadyAligned: last.alreadyAligned,
+    total: last.total,
+    source,
+    message: buildE2eWrapRenewalMessage({
+      renewed: last.renewed,
+      alreadyAligned: last.alreadyAligned,
+      total: last.total,
+      dekLocked: last.dekLocked,
+    }),
+  });
+
+  if (hardFail && last.errors.length > 0) {
+    throw new Error(
+      `Falha ao renovar acesso cifrado dos autorizados: ${last.errors.slice(0, 3).join('; ')}`,
+    );
+  }
+  return last;
 }
 
 /**

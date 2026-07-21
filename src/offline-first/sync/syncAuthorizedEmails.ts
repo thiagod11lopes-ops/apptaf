@@ -82,14 +82,21 @@ export async function pushPendingAuthorizedEmails(ownerUid: string): Promise<str
     }
   }
 
-  // Backfill E2E só quando houve pendência nesta rodada — evita trabalho/eco a cada auto-sync.
   if (pending.length > 0) {
     try {
       const all = await authorizedEmailRepository.listLocal(ownerUid);
-      await provisionE2eAccessForAllAuthorizedEmails(
+      const provisioned = await provisionE2eAccessForAllAuthorizedEmails(
         ownerUid,
         all.map((e) => e.email),
       );
+      for (const err of provisioned.errors) {
+        errors.push(`authorizedEmails/e2e: ${err}`);
+      }
+      if (provisioned.dekLocked) {
+        errors.push(
+          'authorizedEmails/e2e: criptografia bloqueada — sincronize com escudo verde para liberar o acesso dos membros.',
+        );
+      }
     } catch (error) {
       console.warn('[sync] provision E2E autorizados:', error);
     }

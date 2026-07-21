@@ -1001,24 +1001,19 @@ async function runSyncPipeline(
 
     completeStep('finalizing');
     await applyCountersAfterSuccessfulSync();
-    // Chefe: realinha wraps dos autorizados com a DEK atual (após wipe/CSV).
+    // Chefe: realinha wraps dos autorizados com a DEK atual (após wipe/CSV) — obrigatório.
     if (!isAuthorizedMemberSession() && ownerUid) {
-      try {
-        const { authorizedEmailRepository } = await import('../repositories/AuthorizedEmailRepository');
-        const { provisionE2eAccessForAllAuthorizedEmails } = await import(
-          '../../services/supabase/teamE2eSession'
-        );
-        const emails = await authorizedEmailRepository.listLocal(ownerUid);
-        if (emails.length > 0) {
-          await provisionE2eAccessForAllAuthorizedEmails(
-            ownerUid,
-            emails.map((e) => e.email),
-          );
-        }
-      } catch (provErr) {
-        await syncLogger.warn(
-          'e2e',
-          `Reprovision wraps autorizados: ${provErr instanceof Error ? provErr.message : String(provErr)}`,
+      const { authorizedEmailRepository } = await import('../repositories/AuthorizedEmailRepository');
+      const { renewAuthorizedMemberWrapsForBoss } = await import(
+        '../../services/supabase/teamE2eSession'
+      );
+      const emails = await authorizedEmailRepository.listLocal(ownerUid);
+      if (emails.length > 0) {
+        await renewAuthorizedMemberWrapsForBoss(
+          ownerUid,
+          emails.map((e) => e.email),
+          'sync',
+          { retries: 2, hardFail: true },
         );
       }
     }

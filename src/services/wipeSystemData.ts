@@ -262,6 +262,30 @@ export async function wipeSystemData(options: WipeSystemDataOptions): Promise<Wi
         console.warn(
           '[wipe] chave E2E inativa após exclusão — entre de novo com e-mail e senha para o escudo verde',
         );
+      } else {
+        // Dose 3: renovar wraps dos autorizados já na exclusão (não só no próximo sync).
+        try {
+          const { authorizedEmailRepository } = await import(
+            '../offline-first/repositories/AuthorizedEmailRepository'
+          );
+          const { renewAuthorizedMemberWrapsForBoss } = await import(
+            './supabase/teamE2eSession'
+          );
+          const emails = await authorizedEmailRepository.listLocal(uid);
+          if (emails.length > 0) {
+            await renewAuthorizedMemberWrapsForBoss(
+              uid,
+              emails.map((e) => e.email),
+              'wipe',
+              { retries: 2, hardFail: false },
+            );
+          }
+        } catch (provErr) {
+          console.warn(
+            '[wipe] renovação de wraps autorizados:',
+            provErr instanceof Error ? provErr.message : provErr,
+          );
+        }
       }
     }
 

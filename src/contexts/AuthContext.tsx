@@ -52,6 +52,11 @@ import { rememberKnownAuthEmailOnDevice } from '../offline-first/auth/knownAuthE
 import { ownerHasExistingCloudData } from '../services/supabase/ownerCloudPresence';
 import { isCloudOwnerUid } from '../utils/cloudOwnerUid';
 import { TermosCriacaoBancoModal } from '../components/auth/TermosCriacaoBancoModal';
+import { SistemaAcessoBloqueadoModal } from '../components/auth/SistemaAcessoBloqueadoModal';
+import {
+  assertSystemAccessAllowed,
+  isSystemAccessBlockedError,
+} from '../services/supabase/systemAccessGate';
 import { systemState } from '../offline-first/sync/SystemState';
 import { resetCloudSyncStatus } from '../services/offline/cloudSyncActivity';
 import { confirmCloudDisplayReady } from '../offline-first/sync/cloudDisplayGate';
@@ -166,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resolve: (accepted: boolean) => void;
   } | null>(null);
   const [termsBusy, setTermsBusy] = useState(false);
+  const [accessBlockedVisible, setAccessBlockedVisible] = useState(false);
   const supabaseEnabled = isSupabaseConfigured();
   const firebaseEnabled = supabaseEnabled;
   const authInitializedRef = useRef(false);
@@ -252,6 +258,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const rejectBlockedAccess = useCallback(async () => {
+    setAccessBlockedVisible(true);
+    await abortSessionWithoutTerms();
+  }, [abortSessionWithoutTerms]);
+
   const handleAcceptDatabaseTerms = useCallback(() => {
     const gate = termsGateRef.current;
     if (!gate) return;
@@ -326,6 +337,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         finalizingRef.current = true;
         finalizedUidRef.current = mapped.uid;
         try {
+          try {
+            await assertSystemAccessAllowed(mapped.uid, mapped.email);
+          } catch (error) {
+            if (isSystemAccessBlockedError(error)) {
+              await rejectBlockedAccess();
+              throw error;
+            }
+            throw error;
+          }
+
           // Termos antes do spinner — o modal precisa ficar usável (sem "Concluindo login…" por cima).
           const termsOk = await ensureNewDatabaseTermsAccepted(mapped.uid, mapped.email);
           if (!termsOk) {
@@ -381,6 +402,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           return true;
         } catch (error) {
+          if (isSystemAccessBlockedError(error)) {
+            throw error;
+          }
           console.warn('[auth] finalizeAuthenticatedSession falhou:', error);
           await applySignedInAppUserFallback(mapped);
           return true;
@@ -400,7 +424,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [abortSessionWithoutTerms, applySignedInAppUserFallback, ensureNewDatabaseTermsAccepted, supabaseEnabled],
+    [abortSessionWithoutTerms, applySignedInAppUserFallback, ensureNewDatabaseTermsAccepted, rejectBlockedAccess, supabaseEnabled],
   );
 
   const finalizeAuthenticatedSessionRef = useRef(finalizeAuthenticatedSession);
@@ -424,7 +448,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const applySignedIn = (uid: string, email: string | null, meta?: Record<string, unknown>) => {
       void finalizeAuthenticatedSessionRef.current(
         mapSupabaseUser({ id: uid, email, user_metadata: meta }),
-      );
+      ).catch((error) => {
+        if (isSystemAccessBlockedError(error)) return;
+        console.warn('[auth] finalize via onAuthStateChange falhou:', error);
+      });
     };
 
     const applyLocalOfflineSession = (): void => {
@@ -579,6 +606,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const signedIn = await signInWithEmailPassword(email, password);
         setRecoveryPending(false);
 
+        try {
+          await assertSystemAccessAllowed(signedIn.uid, signedIn.email);
+        } catch (error) {
+          if (isSystemAccessBlockedError(error)) {
+            await rejectBlockedAccess();
+            throw error;
+          }
+          throw error;
+        }
+
         // Consulta a nuvem: e-mail autorizado → banco do chefe; senão → banco próprio.
         const access = await resolveMemberAccess(signedIn.uid, signedIn.email);
         const isMember =
@@ -622,7 +659,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailPasswordAuthInFlightRef.current = false;
       }
     },
-    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
+    [finalizeAuthenticatedSession, rejectBlockedAccess, setRecoveryPending, supabaseEnabled],
   );
 
   const signUpWithEmail = useCallback(
@@ -637,6 +674,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await signUpWithEmailPassword(email, password);
         if (result.user && !result.needsEmailConfirmation) {
           setRecoveryPending(false);
+          try {
+            await assertSystemAccessAllowed(result.user.uid, result.user.email);
+          } catch (error) {
+            if (isSystemAccessBlockedError(error)) {
+              await rejectBlockedAccess();
+              throw error;
+            }
+            throw error;
+          }
           const access = await resolveMemberAccess(result.user.uid, result.user.email);
           const isMember =
             access.isAuthorizedMember &&
@@ -672,7 +718,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailPasswordAuthInFlightRef.current = false;
       }
     },
-    [finalizeAuthenticatedSession, setRecoveryPending, supabaseEnabled],
+    [finalizeAuthenticatedSession, rejectBlockedAccess, setRecoveryPending, supabaseEnabled],
   );
 
   const requestPasswordReset = useCallback(
@@ -881,6 +927,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading={termsBusy}
         onAccept={handleAcceptDatabaseTerms}
         onDecline={handleDeclineDatabaseTerms}
+      />
+      <SistemaAcessoBloqueadoModal
+        visible={accessBlockedVisible}
+        onClose={() => setAccessBlockedVisible(false)}
       />
     </AuthContext.Provider>
   );

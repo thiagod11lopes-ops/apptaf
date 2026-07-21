@@ -28,6 +28,7 @@ import {
   E2E_MEMBER_WRAP_MISSING,
   E2E_MEMBER_WRAP_MISSING_MESSAGE,
 } from '../../services/supabase/teamE2eSession';
+import { isSystemAccessBlockedError } from '../../services/supabase/systemAccessGate';
 
 type Mode = 'login' | 'register' | 'forgot' | 'recovery';
 
@@ -259,6 +260,10 @@ export function EmailPasswordAuthForm({
             onError?.(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
             return;
           }
+          // Modal de bloqueio é exibido pelo AuthContext.
+          if (isSystemAccessBlockedError(e)) {
+            return;
+          }
           throw e;
         }
       }
@@ -304,6 +309,9 @@ export function EmailPasswordAuthForm({
             onError?.(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
             return;
           }
+          if (isSystemAccessBlockedError(e)) {
+            return;
+          }
           throw e;
         }
       }
@@ -319,6 +327,9 @@ export function EmailPasswordAuthForm({
         onSuccess?.();
       }
     } catch (e) {
+      if (isSystemAccessBlockedError(e)) {
+        return;
+      }
       onError?.(e instanceof Error ? e.message : 'Não foi possível concluir.');
     } finally {
       setLoading(false);

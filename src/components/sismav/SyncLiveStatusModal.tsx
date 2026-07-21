@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Cloud, CloudOff, Radio, RefreshCw, ShieldCheck } from 'lucide-react-native';
 import Animated, {
@@ -15,11 +15,30 @@ import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useOfflineSyncState } from '../../contexts/OfflineSyncContext';
 import { useE2eEncryptionStatus } from '../../hooks/useE2eEncryptionStatus';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  fetchLocalCloudCounts,
+  formatLocalCloudRatio,
+  localCloudAlignment,
+  localCloudAlignmentLabel,
+  type LocalCloudCountsSnapshot,
+} from '../../services/localCloudCounts';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
 };
+
+function ratioColor(
+  local: number,
+  remote: number | null,
+  theme: { gain: string; loss: string; tokens: { warning500: string }; textMuted: string },
+): string {
+  const a = localCloudAlignment(local, remote);
+  if (a === 'aligned') return theme.gain;
+  if (a === 'ahead' || a === 'behind') return theme.tokens.warning500;
+  return theme.textMuted;
+}
 
 export function SyncLiveStatusModal({ visible, onClose }: Props) {
   const { theme } = useTheme();
@@ -27,6 +46,9 @@ export function SyncLiveStatusModal({ visible, onClose }: Props) {
   const ts = theme.textStyles;
   const { syncUi, connectivity, pendingCount, retrySync } = useOfflineSyncState();
   const { e2eActive } = useE2eEncryptionStatus();
+  const { dataOwnerUid } = useAuth();
+  const [counts, setCounts] = useState<LocalCloudCountsSnapshot | null>(null);
+  const [countsLoading, setCountsLoading] = useState(false);
 
   const spin = useSharedValue(0);
   useEffect(() => {
@@ -41,6 +63,30 @@ export function SyncLiveStatusModal({ visible, onClose }: Props) {
     );
   }, [visible, syncUi.isSyncing, spin]);
 
+  useEffect(() => {
+    if (!visible) return;
+    const uid = dataOwnerUid?.trim();
+    if (!uid) {
+      setCounts(null);
+      return;
+    }
+    let cancelled = false;
+    setCountsLoading(true);
+    void fetchLocalCloudCounts(uid)
+      .then((snap) => {
+        if (!cancelled) setCounts(snap);
+      })
+      .catch(() => {
+        if (!cancelled) setCounts(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCountsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, dataOwnerUid, syncUi.phase, syncUi.lastSyncAt]);
+
   const spinStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${spin.value}deg` }],
   }));
@@ -50,6 +96,10 @@ export function SyncLiveStatusModal({ visible, onClose }: Props) {
   const pendingTotal = uploads + (downloads || 0);
   const online = connectivity === 'ONLINE' || syncUi.isOnline;
 
+  const cadAlign = counts
+    ? localCloudAlignment(counts.cadastros.local, counts.cadastros.remote)
+    : 'unknown';
+
   const statusTitle = syncUi.isSyncing
     ? 'Sincronizando em segundo plano'
     : syncUi.phase === 'error'
@@ -58,7 +108,9 @@ export function SyncLiveStatusModal({ visible, onClose }: Props) {
         ? 'Nuvem atualizada'
         : pendingTotal > 0
           ? 'Atualizações pendentes'
-          : 'Pronto';
+          : cadAlign === 'behind' || cadAlign === 'ahead'
+            ? 'Contagem diferente da nuvem'
+            : 'Pronto';
 
   const statusHint = syncUi.isSyncing
     ? syncUi.syncMessage || 'Enviando e recebendo pela fila…'
@@ -68,7 +120,9 @@ export function SyncLiveStatusModal({ visible, onClose }: Props) {
         ? 'Escudo vermelho: entre com e-mail e senha para liberar a sync automática.'
         : pendingTotal > 0
           ? 'Com internet, a sync roda sozinha. Você pode acompanhar aqui.'
-          : 'Tudo alinhado com a nuvem.';
+          : counts
+            ? `Cadastros: ${localCloudAlignmentLabel(cadAlign)}.`
+            : 'Tudo alinhado com a nuvem.';
 
   const accent = syncUi.phase === 'error' ? theme.loss : syncUi.isSyncing ? theme.primary : theme.gain;
 
@@ -160,6 +214,47 @@ export function SyncLiveStatusModal({ visible, onClose }: Props) {
               </Text>
             </View>
           </View>
+
+          <View
+            style={[styles.mirrorBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
+          >
+            <Text style={[styles.mirrorTitle, { color: theme.textSecondary }]}>Aparelho / nuvem</Text>
+            {countsLoading && !counts ? (
+              <ActivityIndicator color={theme.primary} size="small" />
+            ) : counts ? (
+              <>
+                <Text
+                  style={[
+                    styles.mirrorLine,
+                    {
+                      color: ratioColor(counts.cadastros.local, counts.cadastros.remote, theme),
+                    },
+                  ]}
+                  accessibilityLabel={`Cadastros ${formatLocalCloudRatio(counts.cadastros.local, counts.cadastros.remote)}`}
+                >
+                  Cadastros{' '}
+                  {formatLocalCloudRatio(counts.cadastros.local, counts.cadastros.remote)}
+                </Text>
+                <Text
+                  style={[
+                    styles.mirrorSub,
+                    {
+                      color: ratioColor(counts.sessoes.local, counts.sessoes.remote, theme),
+                    },
+                  ]}
+                >
+                  Sessões {formatLocalCloudRatio(counts.sessoes.local, counts.sessoes.remote)}
+                  {' · '}
+                  Aplicadores{' '}
+                  {formatLocalCloudRatio(counts.aplicadores.local, counts.aplicadores.remote)}
+                </Text>
+              </>
+            ) : (
+              <Text style={[ts.caption, { color: theme.textMuted }]}>
+                Contagem indisponível neste momento.
+              </Text>
+            )}
+          </View>
         </LinearGradient>
 
         <SyncStatusBar embedded />
@@ -212,6 +307,30 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  mirrorBox: {
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  mirrorTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  mirrorLine: {
+    fontSize: 16,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  mirrorSub: {
+    fontSize: 12,
+    fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
   footerRow: {

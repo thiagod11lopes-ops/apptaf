@@ -28,7 +28,8 @@ import {
   E2E_MEMBER_WRAP_MISSING,
   E2E_MEMBER_WRAP_MISSING_MESSAGE,
 } from '../../services/supabase/teamE2eSession';
-import { isSystemAccessBlockedError } from '../../services/supabase/systemAccessGate';
+import { isSystemAccessBlockedError, probeEmailSystemAccess } from '../../services/supabase/systemAccessGate';
+import { SistemaAcessoBloqueadoModal } from './SistemaAcessoBloqueadoModal';
 
 type Mode = 'login' | 'register' | 'forgot' | 'recovery';
 
@@ -78,8 +79,11 @@ export function EmailPasswordAuthForm({
   const [termsModalVisible, setTermsModalVisible] = useState(false);
   const [recentEmails, setRecentEmails] = useState<string[]>([]);
   const [emailFocused, setEmailFocused] = useState(false);
+  const [accessBlockedVisible, setAccessBlockedVisible] = useState(false);
   const emailWasAllowedRef = useRef(false);
   const blurHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emailProbeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastBlockedEmailRef = useRef<string | null>(null);
 
   React.useEffect(() => {
     if (forceRecovery) setMode('recovery');
@@ -96,8 +100,31 @@ export function EmailPasswordAuthForm({
   useEffect(() => {
     return () => {
       if (blurHideTimerRef.current) clearTimeout(blurHideTimerRef.current);
+      if (emailProbeTimerRef.current) clearTimeout(emailProbeTimerRef.current);
     };
   }, []);
+
+  const scheduleEmailAccessProbe = useCallback((text: string) => {
+    if (forceRecovery || mode === 'recovery') return;
+    if (emailProbeTimerRef.current) clearTimeout(emailProbeTimerRef.current);
+
+    // Assim que houver "@", agenda a consulta (só decide com e-mail completo).
+    if (!text.includes('@')) {
+      lastBlockedEmailRef.current = null;
+      return;
+    }
+
+    emailProbeTimerRef.current = setTimeout(() => {
+      void (async () => {
+        const result = await probeEmailSystemAccess(text);
+        if (result !== 'blocked') return;
+        const key = normalizeAuthEmail(text);
+        if (lastBlockedEmailRef.current === key) return;
+        lastBlockedEmailRef.current = key;
+        setAccessBlockedVisible(true);
+      })();
+    }, 280);
+  }, [forceRecovery, mode]);
 
   const emailSuggestions = useMemo(
     () => filterRecentAuthEmailSuggestions(email, recentEmails),
@@ -146,6 +173,7 @@ export function EmailPasswordAuthForm({
   const applyEmailText = useCallback(
     (text: string) => {
       setEmail(text);
+      scheduleEmailAccessProbe(text);
       if (forceRecovery || mode === 'recovery' || mode === 'forgot') {
         emailWasAllowedRef.current = isAllowedAuthEmail(text);
         return;
@@ -167,7 +195,7 @@ export function EmailPasswordAuthForm({
         resetTermsState();
       }
     },
-    [forceRecovery, mode, resetTermsState],
+    [forceRecovery, mode, resetTermsState, scheduleEmailAccessProbe],
   );
 
   const handleEmailChange = useCallback(
@@ -545,6 +573,14 @@ export function EmailPasswordAuthForm({
         email={email}
         onAccept={handleAcceptTerms}
         onDecline={handleDeclineTerms}
+      />
+      <SistemaAcessoBloqueadoModal
+        visible={accessBlockedVisible}
+        onClose={() => {
+          setAccessBlockedVisible(false);
+          // Permite novo aviso se o usuário alterar o e-mail depois.
+          lastBlockedEmailRef.current = null;
+        }}
       />
     </View>
   );

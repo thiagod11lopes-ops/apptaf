@@ -2,7 +2,11 @@
  * Gate de acesso: só o e-mail chefe canônico ou e-mails autorizados entram.
  */
 import { getSupabase } from '../../config/supabase';
-import { normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
+import {
+  isAllowedAuthEmail,
+  isValidAuthEmail,
+  normalizeAuthEmail,
+} from '../../utils/normalizeAuthEmail';
 import { isCloudOwnerUid } from '../../utils/cloudOwnerUid';
 import { resolveMemberAccess, type MemberAccess } from './authorizedEmailsCloud';
 
@@ -47,6 +51,46 @@ async function isCurrentUserCanonicalBoss(): Promise<boolean> {
     // RPC ausente — cai no app_config
   }
   return false;
+}
+
+export type EmailAccessProbe = 'incomplete' | 'allowed' | 'blocked';
+
+/**
+ * Pré-checagem no campo de e-mail (sem login).
+ * incomplete = ainda digitando / não dá para decidir.
+ */
+export async function probeEmailSystemAccess(email: string): Promise<EmailAccessProbe> {
+  const normalized = normalizeAuthEmail(email);
+  if (!normalized.includes('@') || !isValidAuthEmail(normalized)) {
+    return 'incomplete';
+  }
+  if (!isAllowedAuthEmail(normalized)) {
+    return 'blocked';
+  }
+
+  const sb = getSupabase();
+  if (!sb) return 'incomplete';
+
+  try {
+    const { data, error } = await sb.rpc('is_system_access_email', {
+      p_email: normalized,
+    });
+    if (!error && data === true) return 'allowed';
+    if (!error && data === false) return 'blocked';
+
+    if (error && /could not find|schema cache|404/i.test(error.message)) {
+      const canonical = await fetchCanonicalBossEmail();
+      if (canonical && normalized === canonical) return 'allowed';
+      // Sem RPC: não bloqueia no digitar (login ainda valida).
+      return 'incomplete';
+    }
+  } catch {
+    const canonical = await fetchCanonicalBossEmail();
+    if (canonical && normalized === canonical) return 'allowed';
+    return 'incomplete';
+  }
+
+  return 'blocked';
 }
 
 /**

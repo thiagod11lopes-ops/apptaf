@@ -64,3 +64,39 @@ export function limparResultadoModalidadeCadastro(
 
   return next;
 }
+
+/** Remove resultados de todas as modalidades (mantém dados pessoais do cadastro). */
+export function limparTodosResultadosTafCadastro(c: CadastroItemPersist): CadastroItemPersist {
+  let next = c;
+  for (const modalidade of ['corrida', 'natacao', 'permanencia', 'caminhada'] as const) {
+    next = limparResultadoModalidadeCadastro(next, modalidade);
+  }
+  return next;
+}
+
+/** true se o cadastro ainda tem algum campo de resultado de TAF. */
+export function cadastroTemResultadoTaf(c: CadastroItemPersist): boolean {
+  const legado = c as CadastroItemPersist & { tempo?: string };
+  return Boolean(
+    (legado.tempo ?? '').trim() ||
+      (c.tempoCorrida ?? '').trim() ||
+      (c.notaCorrida ?? '').trim() ||
+      (c.dataTafCorrida ?? '').trim() ||
+      (c.rubricaCorridaSvg ?? '').trim() ||
+      (c.tempoNatacao ?? '').trim() ||
+      (c.notaNatacao ?? '').trim() ||
+      (c.resultadoNatacao ?? '').trim() ||
+      (c.dataTafNatacao ?? '').trim() ||
+      (c.rubricaNatacaoSvg ?? '').trim() ||
+      (c.tempoPermanencia ?? '').trim() ||
+      (c.resultadoPermanencia ?? '').trim() ||
+      (c.dataTafPermanencia ?? '').trim() ||
+      (c.rubricaPermanenciaSvg ?? '').trim() ||
+      (c.tempoCaminhada ?? '').trim() ||
+      (c.notaCaminhada ?? '').trim() ||
+      (c.dataTafCaminhada ?? '').trim() ||
+      (c.rubricaCaminhadaSvg ?? '').trim() ||
+      c.modalidadeDistanciaAtiva === 'corrida' ||
+      c.modalidadeDistanciaAtiva === 'caminhada',
+  );
+}

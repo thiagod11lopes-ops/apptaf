@@ -6,6 +6,7 @@ import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
 import { ExcluirTodosDadosBlock } from '../components/ExcluirTodosDadosBlock';
+import { ExclusoesEspecificasDangerBlock } from '../components/ExclusoesEspecificasDangerBlock';
 import { AuthorizedEmailsBlock } from '../components/AuthorizedEmailsBlock';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -56,10 +57,14 @@ export default function ConfiguracoesScreen() {
           <Card elevated>
             <Text style={[ts.h2, { color: theme.loss }]}>Zona de perigo</Text>
             <Text style={[ts.caption, styles.sectionHint, { color: theme.textSecondary }]}>
-              Exclua todos os cadastros e resultados para deixar o sistema vazio — na nuvem e nos e-mails
-              autorizados. Requer confirmação dupla.
+              Exclusões irreversíveis. Use as opções específicas para apagar só testes ou só fatores de
+              risco, ou a exclusão total para esvaziar o sistema. Sempre há confirmação antes de
+              apagar.
             </Text>
-            <ExcluirTodosDadosBlock />
+            <View style={styles.dangerStack}>
+              <ExclusoesEspecificasDangerBlock />
+              <ExcluirTodosDadosBlock />
+            </View>
           </Card>
         ) : null}
 
@@ -83,5 +88,6 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, paddingRight: 12 },
   gap: { marginTop: 6 },
   sectionHint: { marginTop: 6, marginBottom: 14, lineHeight: 18 },
+  dangerStack: { gap: 14 },
   footer: { textAlign: 'center', paddingHorizontal: 8, lineHeight: 20 },
 });

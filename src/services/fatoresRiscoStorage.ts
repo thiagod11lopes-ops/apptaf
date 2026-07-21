@@ -204,3 +204,28 @@ export async function deleteFatoresRiscoByNip(nip: string): Promise<boolean> {
   }
   return true;
 }
+
+/** Remove todos os fatores de risco (cadastros e demais dados permanecem). */
+export async function clearAllFatoresRisco(): Promise<number> {
+  const map = await readMap();
+  const count = Object.keys(map).length;
+  if (count === 0) return 0;
+
+  await writeMap({});
+
+  // Limpa bucket legado por owner, se existir.
+  try {
+    const { getCachedDataOwnerUid } = await import('./firebase/authUid');
+    const { removeAppMeta } = await import('../offline-first/db/appMeta');
+    const owner = getCachedDataOwnerUid() ?? '__local__';
+    await removeAppMeta(`${LEGACY_LS_PREFIX}${owner}`);
+  } catch {
+    // silencioso
+  }
+
+  const restante = Object.keys(await readMap()).length;
+  if (restante > 0) {
+    throw new Error('Falha ao confirmar exclusão de todos os fatores de risco.');
+  }
+  return count;
+}

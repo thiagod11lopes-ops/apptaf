@@ -3,7 +3,7 @@ import {
   setActiveTeamKey,
   getActiveTeamKey,
 } from './e2eCrypto';
-import { fetchTeamE2eMeta, upsertTeamE2eMeta } from './teamE2eCloud';
+import { fetchTeamE2eMeta, insertTeamE2eMetaIfAbsent, upsertTeamE2eMeta } from './teamE2eCloud';
 import {
   deleteTeamE2eMemberWrap,
   fetchTeamE2eMemberWrap,
@@ -316,16 +316,7 @@ async function verifyStoredKeyInBackground(
       return;
     }
 
-    // Senha / access_secret: chave canônica — limpa lixo antigo e MANTÉM o escudo verde.
-    if (trustActiveTeamKey && getActiveTeamKey()) {
-      console.warn(
-        '[e2e] nuvem tem registros de chave antiga; mantendo chave da sessão e limpando órfãos',
-      );
-      void healCloudAfterUnlock(ownerUid);
-      return;
-    }
-
-    // Restore de storage sem confiança: descarta DEK stale.
+    // Probe falhou: nunca manter DEK "trusted" errada (envenena a nuvem entre aparelhos).
     clearE2eSession();
     console.warn(
       `[e2e] DEK local rejeitada pela nuvem (fonte=${options?.source ?? 'unknown'}) — escudo vermelho até novo login com senha`,
@@ -646,7 +637,8 @@ export async function activateE2eFromLoginPassword(
     const wrapped = await wrapTeamKeyRaw(teamKey, password, saltB64);
     // Versão alta invalida DEK antiga guardada sem version / de outro aparelho.
     const keyVersion = Math.max(1, Math.floor(Date.now() / 1000));
-    await upsertTeamE2eMeta(ownerUid, saltB64, wrapped, keyVersion);
+    // INSERT (não upsert): se outro aparelho criou primeiro, usamos a meta dele.
+    await insertTeamE2eMetaIfAbsent(ownerUid, saltB64, wrapped, keyVersion);
   }
 
   // Sempre a meta canônica da nuvem (ganhador da corrida entre aparelhos).

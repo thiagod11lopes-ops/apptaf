@@ -52,7 +52,6 @@ import {
   ensureE2eKeyForCloudSync,
   ensureE2eUnlockedForSession,
   clearE2eSession,
-  isE2eSessionTrusted,
 } from '../../services/supabase/teamE2eSession';
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 import { applyTeamWipeIfNeeded } from './syncTeamWipe';
@@ -1027,11 +1026,10 @@ async function runSyncPipeline(
     mode = 'OFFLINE';
     await refreshPendingSummary();
 
-    // Não derruba escudo verde após login com senha (mismatch parcial em sync grande).
-    // Membro: limpa DEK stale e tenta wrap da nuvem de novo.
+    // Falha de chave entre aparelhos: limpa DEK local (chefe e membro) e tenta realinhar.
     if (/E2E_KEY_MISMATCH/i.test(rawError)) {
+      clearE2eSession();
       if (isAuthorizedMemberSession()) {
-        clearE2eSession();
         const email = getFirebaseAuth()?.currentUser?.email;
         const uid = ownerUid ?? getCachedDataOwnerUid();
         if (uid && email) {
@@ -1048,8 +1046,6 @@ async function runSyncPipeline(
             /* segue erro na UI */
           }
         }
-      } else if (!isE2eSessionTrusted()) {
-        clearE2eSession();
       }
     }
 

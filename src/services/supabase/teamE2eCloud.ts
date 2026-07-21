@@ -34,3 +34,31 @@ export async function upsertTeamE2eMeta(
   });
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Cria meta só se ainda não existir — evita corrida entre aparelhos
+ * sobrescrever a DEK do outro com upsert.
+ */
+export async function insertTeamE2eMetaIfAbsent(
+  ownerUid: string,
+  saltB64: string,
+  wrappedKeyB64: string,
+  keyVersion = 1,
+): Promise<'created' | 'exists'> {
+  const sb = requireSupabase();
+  const { error } = await sb.from('team_e2e_meta').insert({
+    owner_uid: ownerUid,
+    salt_b64: saltB64,
+    wrapped_key_b64: wrappedKeyB64,
+    key_version: keyVersion,
+    updated_at: new Date().toISOString(),
+  });
+  if (!error) return 'created';
+  if (
+    error.code === '23505' ||
+    /duplicate|unique|already exists/i.test(error.message)
+  ) {
+    return 'exists';
+  }
+  throw new Error(error.message);
+}

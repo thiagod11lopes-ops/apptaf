@@ -97,7 +97,7 @@ export function TopActionIcons({
   const { theme } = useTheme();
   const { isAuthenticated, isBoss, firebaseEnabled } = useAuth();
   const { connectivity } = useOfflineSyncState();
-  const { e2eActive } = useE2eEncryptionStatus();
+  const { e2eActive, status: e2eStatus, copy: e2eCopy } = useE2eEncryptionStatus();
   const cloudOnline = connectivity === 'ONLINE' || connectivity === 'SYNCING';
   const [e2eModalVisible, setE2eModalVisible] = useState(false);
   const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
@@ -158,11 +158,20 @@ export function TopActionIcons({
       : { elevation: 8 },
   ];
 
-  const e2eColor = e2eActive ? theme.gain : theme.loss;
-  const e2eTooltipTitle = e2eActive ? 'Criptografia ativa' : 'Criptografia inativa';
-  const e2eTooltipDescription = e2eActive
-    ? 'NIP e nome vão cifrados para a nuvem. Toque para detalhes.'
-    : 'Chave inativa nesta sessão. Toque para ver como ativar.';
+  const e2eColor =
+    e2eStatus === 'ready'
+      ? theme.gain
+      : e2eStatus === 'awaiting_boss_wrap' || e2eStatus === 'key_mismatch'
+        ? theme.tokens.warning500
+        : theme.loss;
+  const e2eMutedBg =
+    e2eStatus === 'ready'
+      ? theme.gainMuted
+      : e2eStatus === 'awaiting_boss_wrap' || e2eStatus === 'key_mismatch'
+        ? 'rgba(245, 158, 11, 0.14)'
+        : 'rgba(220, 38, 38, 0.1)';
+  const e2eTooltipTitle = e2eCopy.tooltipTitle;
+  const e2eTooltipDescription = e2eCopy.tooltipDescription;
   const showE2eShield = firebaseEnabled && isAuthenticated;
   const cloudColor = cloudOnline ? theme.gain : theme.loss;
   const cloudTooltipTitle = cloudOnline ? 'Online · nuvem' : 'Offline · local';
@@ -217,14 +226,10 @@ export function TopActionIcons({
                 btnStyle,
                 {
                   borderColor: e2eColor,
-                  backgroundColor: e2eActive ? theme.gainMuted : 'rgba(220, 38, 38, 0.1)',
+                  backgroundColor: e2eMutedBg,
                 },
               ]}
-              accessibilityLabel={
-                e2eActive
-                  ? 'Criptografia ativa: NIP e nome protegidos na nuvem. Abrir detalhes.'
-                  : 'Criptografia inativa. Abrir detalhes para ativar.'
-              }
+              accessibilityLabel={`${e2eCopy.tooltipTitle}. ${e2eCopy.tooltipDescription}`}
             >
               <Shield size={iconSize} color={e2eColor} strokeWidth={strokeWidth} />
             </PressableScale>,
@@ -335,6 +340,7 @@ export function TopActionIcons({
     <E2eEncryptionStatusModal
       visible={e2eModalVisible}
       e2eActive={e2eActive}
+      status={e2eStatus}
       onClose={() => setE2eModalVisible(false)}
     />
     <SyncLiveStatusModal

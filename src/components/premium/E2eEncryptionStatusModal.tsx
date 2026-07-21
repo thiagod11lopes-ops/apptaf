@@ -5,30 +5,54 @@ import { Shield, ShieldAlert, ShieldCheck } from 'lucide-react-native';
 import { ModernModal } from '../sismav/ModernModal';
 import { PressableScale } from './PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
+import {
+  getE2eUiStatusCopy,
+  type E2eUiStatus,
+} from '../../offline-first/sync/e2eUiStatus';
 
 type Props = {
   visible: boolean;
-  e2eActive: boolean;
+  /** @deprecated Prefer `status`. Mantido para callers antigos. */
+  e2eActive?: boolean;
+  status?: E2eUiStatus;
   onClose: () => void;
 };
 
-export function E2eEncryptionStatusModal({ visible, e2eActive, onClose }: Props) {
+function statusColorFor(
+  status: E2eUiStatus,
+  theme: { gain: string; loss: string; tokens: { warning500: string } },
+): string {
+  if (status === 'ready') return theme.gain;
+  if (status === 'awaiting_boss_wrap' || status === 'key_mismatch') {
+    return theme.tokens.warning500;
+  }
+  return theme.loss;
+}
+
+function statusMutedBg(status: E2eUiStatus, theme: { gainMuted: string }): string {
+  if (status === 'ready') return theme.gainMuted;
+  if (status === 'awaiting_boss_wrap' || status === 'key_mismatch') {
+    return 'rgba(245, 158, 11, 0.14)';
+  }
+  return 'rgba(220, 38, 38, 0.12)';
+}
+
+export function E2eEncryptionStatusModal({ visible, e2eActive, status: statusProp, onClose }: Props) {
   const { theme } = useTheme();
   const t = theme.tokens;
-  const statusColor = e2eActive ? theme.gain : theme.loss;
+  const status: E2eUiStatus =
+    statusProp ?? (e2eActive ? 'ready' : 'inactive');
+  const copy = getE2eUiStatusCopy(status);
+  const statusColor = statusColorFor(status, theme);
+
+  const Icon = status === 'ready' ? ShieldCheck : ShieldAlert;
 
   return (
     <ModernModal
       visible={visible}
       onClose={onClose}
       title="Criptografia dos cadastros"
-      icon={
-        e2eActive ? (
-          <ShieldCheck size={22} color="#FFFFFF" strokeWidth={2.4} />
-        ) : (
-          <ShieldAlert size={22} color="#FFFFFF" strokeWidth={2.4} />
-        )
-      }
+      icon={<Icon size={22} color="#FFFFFF" strokeWidth={2.4} />}
       footer={
         <View style={styles.footerRow}>
           <PressableScale onPress={onClose} style={styles.btnPrimaryOuter}>
@@ -54,46 +78,22 @@ export function E2eEncryptionStatusModal({ visible, e2eActive, onClose }: Props)
           style={[
             styles.statusChip,
             {
-              backgroundColor: e2eActive ? theme.gainMuted : 'rgba(220, 38, 38, 0.12)',
+              backgroundColor: statusMutedBg(status, theme),
               borderColor: statusColor,
             },
           ]}
         >
           <Shield size={18} color={statusColor} strokeWidth={2.4} />
-          <Text style={[styles.statusChipText, { color: statusColor }]}>
-            {e2eActive ? 'Criptografia ativa' : 'Criptografia inativa'}
-          </Text>
+          <Text style={[styles.statusChipText, { color: statusColor }]}>{copy.chip}</Text>
         </View>
 
-        {e2eActive ? (
-          <>
-            <Text style={[styles.paragraph, { color: theme.text }]}>
-              A chave da equipe está desbloqueada nesta sessão. Online, o{' '}
-              <Text style={styles.em}>NIP</Text> e o <Text style={styles.em}>nome</Text> dos
-              militares vão cifrados (AES-GCM) para a nuvem — quem olhar o banco remoto não lê esses
-              dados sem a chave.
-            </Text>
-            <Text style={[styles.paragraph, { color: theme.textSecondary }]}>
-              Sem internet, o app usa o cache local do aparelho para continuar funcionando.
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text style={[styles.paragraph, { color: theme.text }]}>
-              A chave de criptografia <Text style={styles.em}>não está ativa</Text> nesta sessão.
-              Enquanto isso, o sistema <Text style={styles.em}>não envia</Text> NIP e nome em texto
-              claro para a nuvem — o acesso cifrado fica bloqueado até desbloquear a chave.
-            </Text>
-            <Text style={[styles.paragraph, { color: theme.textSecondary }]}>
-              Para ativar: saia da conta e entre novamente com <Text style={styles.em}>e-mail e
-              senha</Text>. Depois disso, o ícone fica verde e os cadastros seguem cifrados na nuvem.
-            </Text>
-          </>
-        )}
+        {copy.body.map((paragraph) => (
+          <Text key={paragraph.slice(0, 24)} style={[styles.paragraph, { color: theme.text }]}>
+            {paragraph}
+          </Text>
+        ))}
 
-        <Text style={[styles.footnote, { color: theme.textMuted }]}>
-          Verde = NIP e nome protegidos na nuvem · Vermelho = chave inativa nesta sessão
-        </Text>
+        <Text style={[styles.footnote, { color: theme.textMuted }]}>{copy.footnote}</Text>
       </View>
     </ModernModal>
   );
@@ -121,9 +121,6 @@ const styles = StyleSheet.create({
   paragraph: {
     fontSize: 15,
     lineHeight: 22,
-  },
-  em: {
-    fontWeight: '700',
   },
   footnote: {
     fontSize: 12,

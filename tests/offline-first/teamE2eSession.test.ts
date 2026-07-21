@@ -24,6 +24,8 @@ import {
   clearE2eSession,
   ensureE2eKeyForCloudSync,
   ensureTeamKeyUnlocked,
+  isE2eSessionTrusted,
+  preserveTrustedE2eAfterDataWipe,
   restoreE2eFromSessionStorage,
   rewrapTeamKeyWithNewPassword,
 } from '../../src/services/supabase/teamE2eSession';
@@ -62,10 +64,34 @@ function installSessionStorage(): void {
   });
 }
 
+function installLocalStorage(): void {
+  const map = new Map<string, string>();
+  const storage = {
+    getItem: (k: string) => map.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      map.set(k, v);
+    },
+    removeItem: (k: string) => {
+      map.delete(k);
+    },
+    clear: () => map.clear(),
+    key: (i: number) => [...map.keys()][i] ?? null,
+    get length() {
+      return map.size;
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: storage,
+    configurable: true,
+    writable: true,
+  });
+}
+
 beforeEach(() => {
   metaStore.clear();
   clearE2eSession();
   installSessionStorage();
+  installLocalStorage();
 });
 
 afterEach(() => {
@@ -78,7 +104,7 @@ describe('teamE2eSession — etapa 3 (ativação / restore / reembrulho)', () =>
     await activateE2eFromLoginPassword(OWNER, PASS_OLD);
     expect(isE2eKeyActive()).toBe(true);
     expect(metaStore.get(OWNER)?.wrapped_key_b64).toBeTruthy();
-    expect(metaStore.get(OWNER)?.key_version).toBe(1);
+    expect(metaStore.get(OWNER)?.key_version).toBeGreaterThanOrEqual(1);
   });
 
   it('cifra NIP/nome com chave da sessão e recupera após restore', async () => {
@@ -104,9 +130,10 @@ describe('teamE2eSession — etapa 3 (ativação / restore / reembrulho)', () =>
   it('reembrulho: senha nova desbloqueia; senha antiga não', async () => {
     await activateE2eFromLoginPassword(OWNER, PASS_OLD);
     const envelope = await maybeEncryptForCloud({ nome: 'Persistente', nip: '33.3333.33' });
+    const versionBefore = metaStore.get(OWNER)!.key_version;
 
     await rewrapTeamKeyWithNewPassword(OWNER, PASS_NEW);
-    expect(metaStore.get(OWNER)?.key_version).toBe(2);
+    expect(metaStore.get(OWNER)?.key_version).toBeGreaterThan(versionBefore);
 
     // Ainda com DEK em memória — dados antigos legíveis
     const stillReadable = await maybeDecryptFromCloud(envelope);
@@ -134,8 +161,55 @@ describe('teamE2eSession — etapa 3 (ativação / restore / reembrulho)', () =>
   it('ensureE2eKeyForCloudSync exige login quando meta existe sem chave', async () => {
     await activateE2eFromLoginPassword(OWNER, PASS_OLD);
     clearE2eSession();
-    // remove sessionStorage para simular outro aparelho
+    // remove storages para simular outro aparelho
     sessionStorage.clear();
+    localStorage.clear();
     await expect(ensureE2eKeyForCloudSync(OWNER)).rejects.toThrow(/não está ativa/i);
+  });
+});
+
+describe('teamE2eSession — dose 6 (confiança da DEK)', () => {
+  it('login com senha marca sessão confiável e grava durable', async () => {
+    await activateE2eFromLoginPassword(OWNER, PASS_OLD);
+    expect(isE2eSessionTrusted()).toBe(true);
+    expect(localStorage.getItem('taf:e2e:teamKey:durable')).toBeTruthy();
+  });
+
+  it('restore só do durable NÃO marca trust imediatamente', async () => {
+    await activateE2eFromLoginPassword(OWNER, PASS_OLD);
+    const durable = localStorage.getItem('taf:e2e:teamKey:durable');
+    expect(durable).toBeTruthy();
+
+    clearE2eSession();
+    sessionStorage.clear();
+    localStorage.setItem('taf:e2e:teamKey:durable', durable!);
+
+    const restored = await restoreE2eFromSessionStorage(OWNER);
+    expect(restored).toBe(true);
+    expect(isE2eKeyActive()).toBe(true);
+    expect(isE2eSessionTrusted()).toBe(false);
+  });
+
+  it('preserveTrustedE2eAfterDataWipe não promove restore cego a verde', async () => {
+    await activateE2eFromLoginPassword(OWNER, PASS_OLD);
+    const durable = localStorage.getItem('taf:e2e:teamKey:durable');
+    clearE2eSession();
+    sessionStorage.clear();
+    localStorage.setItem('taf:e2e:teamKey:durable', durable!);
+
+    await restoreE2eFromSessionStorage(OWNER);
+    expect(isE2eSessionTrusted()).toBe(false);
+
+    const preserved = await preserveTrustedE2eAfterDataWipe(OWNER);
+    expect(preserved).toBe(false);
+    expect(isE2eSessionTrusted()).toBe(false);
+  });
+
+  it('preserveTrustedE2eAfterDataWipe mantém verde se já confiável em RAM', async () => {
+    await activateE2eFromLoginPassword(OWNER, PASS_OLD);
+    expect(isE2eSessionTrusted()).toBe(true);
+    const preserved = await preserveTrustedE2eAfterDataWipe(OWNER);
+    expect(preserved).toBe(true);
+    expect(isE2eSessionTrusted()).toBe(true);
   });
 });

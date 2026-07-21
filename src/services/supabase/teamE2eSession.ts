@@ -12,12 +12,15 @@ import {
 import { normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
 
 const SESSION_STORAGE_KEY = 'taf:e2e:teamKey';
-/** Persiste junto com o login (localStorage) para F5 / PWA manter escudo verde. */
+/**
+ * Cópia em localStorage só após unlock canônico (senha / access_secret / probe OK).
+ * Restore “só durable” não marca escudo verde sem validar.
+ */
 const LOCAL_STORAGE_KEY = 'taf:e2e:teamKey:durable';
 
 /**
- * true após desbloqueio com senha / access_secret (chave canônica).
- * false após restore de storage — se a nuvem rejeitar, pode limpar a DEK.
+ * true após desbloqueio com senha / access_secret / probe OK.
+ * false após restore cego de storage — UI não trata como verde confiável.
  */
 let trustActiveTeamKey = false;
 
@@ -27,6 +30,8 @@ type StoredE2eSession = {
   /** Alinha com team_e2e_meta.key_version — evita DEK antiga após wipe/recriação. */
   keyVersion?: number;
 };
+
+type StoredE2eSessionSource = 'session' | 'durable';
 
 function toBase64(bytes: Uint8Array): string {
   if (typeof btoa === 'function') {
@@ -92,7 +97,10 @@ async function unwrapTeamKeyRaw(
   );
 }
 
-function writeStoredE2eSession(stored: StoredE2eSession): void {
+function writeStoredE2eSession(
+  stored: StoredE2eSession,
+  options?: { allowDurable?: boolean },
+): void {
   const raw = JSON.stringify(stored);
   try {
     if (typeof sessionStorage !== 'undefined') {
@@ -101,6 +109,9 @@ function writeStoredE2eSession(stored: StoredE2eSession): void {
   } catch {
     /* quota / private mode */
   }
+  // Durable só com confiança — reduz DEK “cega” em disco.
+  const allowDurable = options?.allowDurable ?? trustActiveTeamKey;
+  if (!allowDurable) return;
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(LOCAL_STORAGE_KEY, raw);
@@ -121,23 +132,31 @@ function parseStoredE2eSession(raw: string | null): StoredE2eSession | null {
   return null;
 }
 
-function readStoredE2eSession(): StoredE2eSession | null {
+function readStoredE2eSessionDetailed(): {
+  stored: StoredE2eSession;
+  source: StoredE2eSessionSource;
+} | null {
   try {
     if (typeof sessionStorage !== 'undefined') {
       const fromSession = parseStoredE2eSession(sessionStorage.getItem(SESSION_STORAGE_KEY));
-      if (fromSession) return fromSession;
+      if (fromSession) return { stored: fromSession, source: 'session' };
     }
   } catch {
     /* ignore */
   }
   try {
     if (typeof localStorage !== 'undefined') {
-      return parseStoredE2eSession(localStorage.getItem(LOCAL_STORAGE_KEY));
+      const fromLocal = parseStoredE2eSession(localStorage.getItem(LOCAL_STORAGE_KEY));
+      if (fromLocal) return { stored: fromLocal, source: 'durable' };
     }
   } catch {
     /* ignore */
   }
   return null;
+}
+
+function readStoredE2eSession(): StoredE2eSession | null {
+  return readStoredE2eSessionDetailed()?.stored ?? null;
 }
 
 async function importStoredTeamKey(stored: StoredE2eSession): Promise<CryptoKey | null> {
@@ -196,59 +215,66 @@ export function isE2eSessionTrusted(): boolean {
 
 /**
  * Após "Excluir todos os dados": a DEK e team_e2e_meta devem permanecer.
- * Reafirma confiança na chave da sessão para o escudo não ficar vermelho.
+ * Só reafirma escudo verde se a sessão já era confiável (senha/access_secret).
+ * Restore cego de storage NÃO promove confiança.
  */
 export async function preserveTrustedE2eAfterDataWipe(ownerUid: string): Promise<boolean> {
   if (!ownerUid.trim()) return false;
 
   const current = getActiveTeamKey();
-  if (current) {
-    trustActiveTeamKey = true;
+  if (current && trustActiveTeamKey) {
     setActiveTeamKey(current); // reafirma UI (escudo verde)
     return true;
   }
 
-  const restored = await restoreE2eFromSessionStorage(ownerUid);
-  if (restored && getActiveTeamKey()) {
-    trustActiveTeamKey = true;
-    setActiveTeamKey(getActiveTeamKey());
-    return true;
+  if (current) {
+    // Chave em RAM sem confiança — mantém, mas escudo não fica verde falso.
+    return false;
   }
-  return Boolean(getActiveTeamKey());
+
+  const restored = await restoreE2eFromSessionStorage(ownerUid);
+  return restored && isE2eSessionTrusted();
 }
 
 export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<boolean> {
   if (getActiveTeamKey()) return true;
   if (!ownerUid.trim()) return false;
 
-  const stored = readStoredE2eSession();
-  if (!stored || stored.ownerUid !== ownerUid || !stored.keyJwk) return false;
+  const detailed = readStoredE2eSessionDetailed();
+  if (!detailed || detailed.stored.ownerUid !== ownerUid || !detailed.stored.keyJwk) {
+    return false;
+  }
+  const { stored, source } = detailed;
 
-  let versionMatchesMeta = false;
   // Se a meta na nuvem mudou (wipe / nova senha), descarta DEK local antiga.
   try {
     const meta = await withTimeout(fetchTeamE2eMeta(ownerUid), 2_500, null);
     if (meta) {
-      if (stored.keyVersion != null && meta.key_version !== stored.keyVersion) {
+      if (stored.keyVersion == null) {
+        // Payload antigo sem versão — não confiar às cegas com meta online.
         clearE2eSession();
         return false;
       }
-      if (stored.keyVersion != null && meta.key_version === stored.keyVersion) {
-        versionMatchesMeta = true;
+      if (meta.key_version !== stored.keyVersion) {
+        clearE2eSession();
+        return false;
       }
     }
   } catch {
-    /* offline — tenta usar a chave local mesmo assim */
+    /* offline — tenta usar a chave local mesmo assim (sem trust) */
   }
 
   const key = await importStoredTeamKey(stored);
   if (!key) return false;
   setActiveTeamKey(key);
-  // Mesma versão da meta = chave canônica (não derrubar o escudo no probe).
-  if (versionMatchesMeta) trustActiveTeamKey = true;
-  writeStoredE2eSession(stored);
-  // Probe na nuvem em background — não segura "Concluindo login…".
-  void verifyStoredKeyInBackground(ownerUid);
+  // Dose 6: NÃO marcar trust só por key_version / localStorage.
+  trustActiveTeamKey = false;
+  writeStoredE2eSession(stored, { allowDurable: false });
+  // Probe: se OK, concede trust e aí persiste durable.
+  void verifyStoredKeyInBackground(ownerUid, {
+    grantTrustOnSuccess: true,
+    source,
+  });
   return true;
 }
 
@@ -267,10 +293,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   });
 }
 
-async function verifyStoredKeyInBackground(ownerUid: string): Promise<void> {
+async function verifyStoredKeyInBackground(
+  ownerUid: string,
+  options?: { grantTrustOnSuccess?: boolean; source?: StoredE2eSessionSource },
+): Promise<void> {
   try {
-    const ok = await withTimeout(probeStoredKeyAgainstCloud(ownerUid), 3_000, true);
-    if (ok) return;
+    // Timeout: se já trusted, assume OK; se restore cego, timeout = falha (não promove verde).
+    const timeoutFallback = trustActiveTeamKey;
+    const ok = await withTimeout(
+      probeStoredKeyAgainstCloud(ownerUid),
+      3_000,
+      timeoutFallback,
+    );
+    if (ok) {
+      if (options?.grantTrustOnSuccess && getActiveTeamKey()) {
+        trustActiveTeamKey = true;
+        const key = getActiveTeamKey();
+        if (key) {
+          await persistSessionKey(ownerUid, key);
+        }
+      }
+      return;
+    }
 
     // Senha / access_secret: chave canônica — limpa lixo antigo e MANTÉM o escudo verde.
     if (trustActiveTeamKey && getActiveTeamKey()) {
@@ -283,7 +327,9 @@ async function verifyStoredKeyInBackground(ownerUid: string): Promise<void> {
 
     // Restore de storage sem confiança: descarta DEK stale.
     clearE2eSession();
-    console.warn('[e2e] DEK local rejeitada pela nuvem — escudo vermelho até novo login com senha');
+    console.warn(
+      `[e2e] DEK local rejeitada pela nuvem (fonte=${options?.source ?? 'unknown'}) — escudo vermelho até novo login com senha`,
+    );
   } catch {
     /* ignore */
   }
@@ -358,8 +404,18 @@ export async function ensureE2eUnlockedForSession(
   }
 
   if (await restoreE2eFromSessionStorage(ownerUid)) {
-    const ok = await withTimeout(probeStoredKeyAgainstCloud(ownerUid), 4_000, true);
-    if (ok) return true;
+    const ok = await withTimeout(
+      probeStoredKeyAgainstCloud(ownerUid),
+      4_000,
+      isE2eSessionTrusted(),
+    );
+    if (ok) {
+      if (getActiveTeamKey() && !isE2eSessionTrusted()) {
+        trustActiveTeamKey = true;
+        await persistSessionKey(ownerUid, getActiveTeamKey()!);
+      }
+      return true;
+    }
     // DEK local não abre a nuvem — descarta e tenta wrap do membro.
     clearE2eSession();
     if (emailKey) {

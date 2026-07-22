@@ -110,7 +110,8 @@ function escapeXml(text: string): string {
 
 export type BalancoPlanilhaTaf = {
   cadastrados: number;
-  realizaramTodos: number;
+  /** Militares que ainda não concluíram todos os testes (inclui sem início e parcial). */
+  testesPendentes: number;
   parcial: number;
   completo: number;
 };
@@ -120,7 +121,7 @@ export function calcularBalancoPlanilhaTaf(cadastros: CadastroItemPersist[]): Ba
   const completo = cadastros.filter(cadastroComTafCompleto).length;
   return {
     cadastrados: cadastros.length,
-    realizaramTodos: completo,
+    testesPendentes: cadastros.length - completo,
     parcial: cadastros.filter(cadastroComPendenciaParcialTaf).length,
     completo,
   };
@@ -160,8 +161,8 @@ export function buildBalancoXml(balanco: BalancoPlanilhaTaf, colsTotal: 11 | 17)
     `<table:table-row table:style-name="roBalanco">` +
     balancoCell('Militares cadastrados', 'ceBalancoLabel', 2) +
     balancoValorCell(balanco.cadastrados) +
-    balancoCell('Realizaram todos os testes', 'ceBalancoLabel', 3) +
-    balancoValorCell(balanco.realizaramTodos) +
+    balancoCell('Testes Pendentes', 'ceBalancoLabel', 3) +
+    balancoValorCell(balanco.testesPendentes) +
     balancoCell('Parcial', 'ceBalancoLabel', 1) +
     balancoValorCell(balanco.parcial) +
     balancoCell('Completo', 'ceBalancoLabel', 1) +

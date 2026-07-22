@@ -78,7 +78,6 @@ describe('backupTafOds (modelo HNMD)', () => {
     const balanco = calcularBalancoPlanilhaTaf(lista);
     expect(balanco).toEqual({
       cadastrados: 3,
-      testesPendentes: 2,
       parcial: 1,
       completo: 1,
     });
@@ -86,10 +85,10 @@ describe('backupTafOds (modelo HNMD)', () => {
     const xml = buildPlanilhaTafContentXml(lista);
     expect(xml).toContain('BALANÇO DE QUANTIDADE');
     expect(xml).toContain('Militares cadastrados');
-    expect(xml).toContain('Testes Pendentes');
-    expect(xml).not.toContain('Realizaram todos os testes');
     expect(xml).toContain('Parcial');
     expect(xml).toContain('Completo');
+    expect(xml).not.toContain('Testes Pendentes');
+    expect(xml).not.toContain('Realizaram todos os testes');
     expect(xml).toContain('ceBalancoTitulo');
     // título do balanço em 1 célula (formato 123.ods), sem span 11
     expect(xml).toContain(

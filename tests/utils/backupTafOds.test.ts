@@ -67,6 +67,23 @@ describe('backupTafOds (modelo HNMD)', () => {
     expect(xml).toContain('APROVADO');
   });
 
+  it('não inclui militar sem nenhum teste', () => {
+    const xml = buildPlanilhaTafContentXml([
+      cadastro({ id: 'sem', nip: '99998888', nome: 'Sem Teste Algum' }),
+      cadastro({
+        id: 'com',
+        nip: '11112222',
+        nome: 'Com Teste',
+        tempoCorrida: '11:00',
+        notaCorrida: '90',
+      }),
+    ]);
+    expect(xml).not.toContain('Sem Teste Algum');
+    expect(xml).not.toContain('99998888');
+    expect(xml).toContain('Com Teste');
+    expect(xml).toContain('11112222');
+  });
+
   it('preenche flexão na aba FN', () => {
     const xml = buildPlanilhaTafContentXml([
       cadastro({

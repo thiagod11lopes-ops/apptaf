@@ -10,6 +10,7 @@ import {
 import { compareByNomePtBr } from './compareNomePtBr';
 import { idadeFromDataNascimento } from './idadeFromDataNascimento';
 import {
+  cadastroComAlgumResultadoTaf,
   postoGradFromCadastro,
   temAvaliacaoCaminhada,
   temAvaliacaoCorrida,
@@ -146,8 +147,27 @@ function dataCell(value: string, styleName: string): string {
   );
 }
 
+/** Militar com ao menos um teste (Armada ou CFN) — só estes entram na planilha. */
+export function cadastroComAlgumTestePlanilha(c: CadastroItemPersist): boolean {
+  if (cadastroComAlgumResultadoTaf(c)) return true;
+  return !!(
+    c.repsFlexaoBarra != null ||
+    (c.notaFlexaoBarra || '').trim() ||
+    c.repsFlexaoSolo != null ||
+    (c.notaFlexaoSolo || '').trim() ||
+    c.repsAbdominalRemador != null ||
+    (c.notaAbdominalRemador || '').trim() ||
+    (c.tempoAbdominalPrancha || '').trim() ||
+    (c.notaAbdominalPrancha || '').trim()
+  );
+}
+
+export function filtrarCadastrosComTeste(cadastros: CadastroItemPersist[]): CadastroItemPersist[] {
+  return cadastros.filter(cadastroComAlgumTestePlanilha);
+}
+
 export function montarLinhasArmada(cadastros: CadastroItemPersist[]): LinhaPlanilhaArmada[] {
-  return [...cadastros].sort(compareByNomePtBr).map((c) => {
+  return filtrarCadastrosComTeste(cadastros).sort(compareByNomePtBr).map((c) => {
     const idade = idadeFromDataNascimento(c.dataNascimento);
     const pg = postoGradFromCadastro(c);
     return {
@@ -168,7 +188,7 @@ export function montarLinhasArmada(cadastros: CadastroItemPersist[]): LinhaPlani
 }
 
 export function montarLinhasFn(cadastros: CadastroItemPersist[]): LinhaPlanilhaFn[] {
-  return [...cadastros].sort(compareByNomePtBr).map((c) => {
+  return filtrarCadastrosComTeste(cadastros).sort(compareByNomePtBr).map((c) => {
     const idade = idadeFromDataNascimento(c.dataNascimento);
     const pg = postoGradFromCadastro(c);
     const abdominal =

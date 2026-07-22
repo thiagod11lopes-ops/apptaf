@@ -1,4 +1,12 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import {
+  PLANILHA_TAF_MODELO_CONTENT_XML,
+  PLANILHA_TAF_MODELO_MANIFEST_XML,
+  PLANILHA_TAF_MODELO_META_XML,
+  PLANILHA_TAF_MODELO_MIMETYPE,
+  PLANILHA_TAF_MODELO_SETTINGS_XML,
+  PLANILHA_TAF_MODELO_STYLES_XML,
+} from '../assets/planilhaTafModelo/modeloEmbedded';
 import { compareByNomePtBr } from './compareNomePtBr';
 import { idadeFromDataNascimento } from './idadeFromDataNascimento';
 import {
@@ -12,50 +20,52 @@ import { buildZipStoreOnly, utf8Bytes } from './zipStoreOnly';
 
 const ODS_MIME = 'application/vnd.oasis.opendocument.spreadsheet';
 
-export type PlanilhaTafColuna =
-  | 'pg'
-  | 'nip'
-  | 'nome'
-  | 'idade'
-  | 'corridaTempo'
-  | 'corridaPontos'
-  | 'caminhadaTempo'
-  | 'caminhadaPontos'
-  | 'natacaoTempo'
-  | 'natacaoPontos'
-  | 'permanencia'
-  | 'flexaoBarra'
-  | 'flexaoBarraPontos'
-  | 'flexaoSolo'
-  | 'flexaoSoloPontos'
-  | 'abdominal'
-  | 'abdominalPontos'
-  | 'geral'
-  | 'rubrica';
+/** Bloco de linhas vazias da aba Armada (após cabeçalho). */
+const BLOCO_VAZIO_ARMADA =
+  '<table:table-row table:style-name="ro3"><table:table-cell table:number-columns-repeated="10"/>' +
+  '<table:table-cell table:style-name="ce32"/><table:table-cell table:style-name="ce33"/></table:table-row>' +
+  '<table:table-row table:style-name="ro3" table:number-rows-repeated="14">' +
+  '<table:table-cell table:number-columns-repeated="11"/><table:table-cell table:style-name="ce33"/></table:table-row>';
 
-const COLUNA_LABEL: Record<PlanilhaTafColuna, string> = {
-  pg: 'P/G',
-  nip: 'NIP',
-  nome: 'NOME',
-  idade: 'IDADE',
-  corridaTempo: 'CORRIDA TEMPO',
-  corridaPontos: 'CORRIDA PONTOS',
-  caminhadaTempo: 'CAMINHADA TEMPO',
-  caminhadaPontos: 'CAMINHADA PONTOS',
-  natacaoTempo: 'NATAÇÃO TEMPO',
-  natacaoPontos: 'NATAÇÃO PONTOS',
-  permanencia: 'PERMANÊNCIA',
-  flexaoBarra: 'FLEXÃO BARRA',
-  flexaoBarraPontos: 'FLEXÃO BARRA PONTOS',
-  flexaoSolo: 'FLEXÃO SOLO',
-  flexaoSoloPontos: 'FLEXÃO SOLO PONTOS',
-  abdominal: 'ABDOMINAL',
-  abdominalPontos: 'ABDOMINAL PONTOS',
-  geral: 'APROVADO OU REPROVADO',
-  rubrica: 'RUBRICA',
+/** Bloco de linhas vazias da aba FN (após subcabeçalho BARRA/SOLO). */
+const BLOCO_VAZIO_FN =
+  '<table:table-row table:style-name="ro3" table:number-rows-repeated="14">' +
+  '<table:table-cell table:number-columns-repeated="17"/></table:table-row>';
+
+export type LinhaPlanilhaArmada = {
+  pg: string;
+  nip: string;
+  nome: string;
+  idade: string;
+  corridaTempo: string;
+  corridaPontos: string;
+  natacaoTempo: string;
+  natacaoPontos: string;
+  permanencia: string;
+  permanenciaPontos: string;
+  geral: string;
+  rubrica: string;
 };
 
-type LinhaPlanilha = Record<PlanilhaTafColuna, string>;
+export type LinhaPlanilhaFn = {
+  pg: string;
+  nip: string;
+  nome: string;
+  idade: string;
+  permanencia: string;
+  permanenciaPontos: string;
+  natacaoTempo: string;
+  natacaoPontos: string;
+  flexaoBarra: string;
+  flexaoSolo: string;
+  flexaoPontos: string;
+  abdominal: string;
+  abdominalPontos: string;
+  corrida: string;
+  corridaPontos: string;
+  geral: string;
+  rubrica: string;
+};
 
 function escapeXml(text: string): string {
   return text
@@ -63,14 +73,6 @@ function escapeXml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function cellXml(value: string): string {
-  const v = value.trim();
-  if (!v) {
-    return '<table:table-cell/>';
-  }
-  return `<table:table-cell office:value-type="string"><text:p>${escapeXml(v)}</text:p></table:table-cell>`;
 }
 
 function hasRubrica(c: CadastroItemPersist): boolean {
@@ -90,8 +92,8 @@ function situacaoDeNota(nota: string | undefined): 'aprovado' | 'reprovado' | nu
 }
 
 function situacaoPermanencia(c: CadastroItemPersist): string {
-  if (c.resultadoPermanencia === 'aprovado') return 'Aprovado';
-  if (c.resultadoPermanencia === 'reprovado') return 'Reprovado';
+  if (c.resultadoPermanencia === 'aprovado') return 'APROVADO';
+  if (c.resultadoPermanencia === 'reprovado') return 'REPROVADO';
   return '';
 }
 
@@ -118,13 +120,12 @@ function situacaoGeral(c: CadastroItemPersist): string {
     resultados.push(c.resultadoPermanencia);
   }
 
-  const flexoes: Array<string | undefined> = [
+  for (const nota of [
     c.notaFlexaoBarra,
     c.notaFlexaoSolo,
     c.notaAbdominalRemador,
     c.notaAbdominalPrancha,
-  ];
-  for (const nota of flexoes) {
+  ]) {
     const s = situacaoDeNota(nota);
     if (s) resultados.push(s);
   }
@@ -134,162 +135,184 @@ function situacaoGeral(c: CadastroItemPersist): string {
   return 'APROVADO';
 }
 
-function linhaFromCadastro(c: CadastroItemPersist): LinhaPlanilha {
-  const idade = idadeFromDataNascimento(c.dataNascimento);
-  const pg = postoGradFromCadastro(c);
-  const abdominalReps =
-    c.repsAbdominalRemador != null
-      ? String(c.repsAbdominalRemador)
-      : (c.tempoAbdominalPrancha || '').trim();
-  const abdominalNota = (c.notaAbdominalRemador || c.notaAbdominalPrancha || '').trim();
-
-  return {
-    pg: pg === '—' ? '' : pg,
-    nip: (c.nip || '').trim(),
-    nome: (c.nome || '').trim(),
-    idade: idade == null ? '' : String(idade),
-    corridaTempo: (c.tempoCorrida || '').trim(),
-    corridaPontos: (c.notaCorrida || '').trim(),
-    caminhadaTempo: (c.tempoCaminhada || '').trim(),
-    caminhadaPontos: (c.notaCaminhada || '').trim(),
-    natacaoTempo: (c.tempoNatacao || '').trim(),
-    natacaoPontos: (c.notaNatacao || '').trim(),
-    permanencia: situacaoPermanencia(c),
-    flexaoBarra: c.repsFlexaoBarra != null ? String(c.repsFlexaoBarra) : '',
-    flexaoBarraPontos: (c.notaFlexaoBarra || '').trim(),
-    flexaoSolo: c.repsFlexaoSolo != null ? String(c.repsFlexaoSolo) : '',
-    flexaoSoloPontos: (c.notaFlexaoSolo || '').trim(),
-    abdominal: abdominalReps,
-    abdominalPontos: abdominalNota,
-    geral: situacaoGeral(c),
-    rubrica: hasRubrica(c) ? 'Assinado' : '',
-  };
+function dataCell(value: string, styleName: string): string {
+  const v = value.trim();
+  if (!v) {
+    return `<table:table-cell table:style-name="${styleName}"/>`;
+  }
+  return (
+    `<table:table-cell table:style-name="${styleName}" office:value-type="string" calcext:value-type="string">` +
+    `<text:p>${escapeXml(v)}</text:p></table:table-cell>`
+  );
 }
 
-const ORDEM_COLUNAS: PlanilhaTafColuna[] = [
-  'pg',
-  'nip',
-  'nome',
-  'idade',
-  'corridaTempo',
-  'corridaPontos',
-  'caminhadaTempo',
-  'caminhadaPontos',
-  'natacaoTempo',
-  'natacaoPontos',
-  'permanencia',
-  'flexaoBarra',
-  'flexaoBarraPontos',
-  'flexaoSolo',
-  'flexaoSoloPontos',
-  'abdominal',
-  'abdominalPontos',
-  'geral',
-  'rubrica',
-];
-
-/** Colunas com pelo menos um valor não vazio nas linhas. */
-export function colunasComConteudo(linhas: LinhaPlanilha[]): PlanilhaTafColuna[] {
-  return ORDEM_COLUNAS.filter((col) => linhas.some((row) => row[col].trim()));
+export function montarLinhasArmada(cadastros: CadastroItemPersist[]): LinhaPlanilhaArmada[] {
+  return [...cadastros].sort(compareByNomePtBr).map((c) => {
+    const idade = idadeFromDataNascimento(c.dataNascimento);
+    const pg = postoGradFromCadastro(c);
+    return {
+      pg: pg === '—' ? '' : pg,
+      nip: (c.nip || '').trim(),
+      nome: (c.nome || '').trim(),
+      idade: idade == null ? '' : String(idade),
+      corridaTempo: (c.tempoCorrida || '').trim(),
+      corridaPontos: (c.notaCorrida || '').trim(),
+      natacaoTempo: (c.tempoNatacao || '').trim(),
+      natacaoPontos: (c.notaNatacao || '').trim(),
+      permanencia: situacaoPermanencia(c),
+      permanenciaPontos: '',
+      geral: situacaoGeral(c),
+      rubrica: hasRubrica(c) ? 'Assinado' : '',
+    };
+  });
 }
 
-export function montarLinhasPlanilhaTaf(cadastros: CadastroItemPersist[]): LinhaPlanilha[] {
-  return [...cadastros].sort(compareByNomePtBr).map(linhaFromCadastro);
+export function montarLinhasFn(cadastros: CadastroItemPersist[]): LinhaPlanilhaFn[] {
+  return [...cadastros].sort(compareByNomePtBr).map((c) => {
+    const idade = idadeFromDataNascimento(c.dataNascimento);
+    const pg = postoGradFromCadastro(c);
+    const abdominal =
+      c.repsAbdominalRemador != null
+        ? String(c.repsAbdominalRemador)
+        : (c.tempoAbdominalPrancha || '').trim();
+    const abdominalPontos = (c.notaAbdominalRemador || c.notaAbdominalPrancha || '').trim();
+    const flexaoPontos = (c.notaFlexaoBarra || c.notaFlexaoSolo || '').trim();
+
+    return {
+      pg: pg === '—' ? '' : pg,
+      nip: (c.nip || '').trim(),
+      nome: (c.nome || '').trim(),
+      idade: idade == null ? '' : String(idade),
+      permanencia: situacaoPermanencia(c),
+      permanenciaPontos: '',
+      natacaoTempo: (c.tempoNatacao || '').trim(),
+      natacaoPontos: (c.notaNatacao || '').trim(),
+      flexaoBarra: c.repsFlexaoBarra != null ? String(c.repsFlexaoBarra) : '',
+      flexaoSolo: c.repsFlexaoSolo != null ? String(c.repsFlexaoSolo) : '',
+      flexaoPontos,
+      abdominal,
+      abdominalPontos,
+      corrida: (c.tempoCorrida || '').trim(),
+      corridaPontos: (c.notaCorrida || '').trim(),
+      geral: situacaoGeral(c),
+      rubrica: hasRubrica(c) ? 'Assinado' : '',
+    };
+  });
 }
 
-function buildContentXml(linhas: LinhaPlanilha[], colunas: PlanilhaTafColuna[]): string {
-  const colCount = Math.max(colunas.length, 1);
-  const title =
-    '<table:table-row>' +
-    `<table:table-cell office:value-type="string" table:number-columns-spanned="${colCount}">` +
-    '<text:p>TESTE DE APTIDÃO FÍSICA (TAF) — AppTAF</text:p>' +
-    '</table:table-cell>' +
-    (colCount > 1
-      ? `<table:covered-table-cell table:number-columns-repeated="${colCount - 1}"/>`
-      : '') +
-    '</table:table-row>';
+function rowArmadaXml(row: LinhaPlanilhaArmada): string {
+  const s = 'ce9';
+  return (
+    `<table:table-row table:style-name="ro3">` +
+    dataCell(row.pg, s) +
+    dataCell(row.nip, s) +
+    dataCell(row.nome, s) +
+    dataCell(row.idade, s) +
+    dataCell(row.corridaTempo, s) +
+    dataCell(row.corridaPontos, s) +
+    dataCell(row.natacaoTempo, s) +
+    dataCell(row.natacaoPontos, s) +
+    dataCell(row.permanencia, s) +
+    dataCell(row.permanenciaPontos, s) +
+    dataCell(row.geral, 'ce25') +
+    dataCell(row.rubrica, s) +
+    `</table:table-row>`
+  );
+}
 
-  let header = '<table:table-row>';
-  let body = '';
+function rowFnXml(row: LinhaPlanilhaFn): string {
+  const s = 'ce36';
+  return (
+    `<table:table-row table:style-name="ro3">` +
+    dataCell(row.pg, s) +
+    dataCell(row.nip, s) +
+    dataCell(row.nome, s) +
+    dataCell(row.idade, s) +
+    dataCell(row.permanencia, s) +
+    dataCell(row.permanenciaPontos, s) +
+    dataCell(row.natacaoTempo, s) +
+    dataCell(row.natacaoPontos, s) +
+    dataCell(row.flexaoBarra, s) +
+    dataCell(row.flexaoSolo, s) +
+    dataCell(row.flexaoPontos, s) +
+    dataCell(row.abdominal, s) +
+    dataCell(row.abdominalPontos, s) +
+    dataCell(row.corrida, s) +
+    dataCell(row.corridaPontos, s) +
+    dataCell(row.geral, 'ce25') +
+    dataCell(row.rubrica, s) +
+    `</table:table-row>`
+  );
+}
 
-  if (colunas.length === 0) {
-    header += cellXml('Sem dados de cadastro');
-    header += '</table:table-row>';
-  } else {
-    for (const col of colunas) {
-      header += cellXml(COLUNA_LABEL[col]);
-    }
-    header += '</table:table-row>';
+function linhaVaziaArmada(): string {
+  return (
+    `<table:table-row table:style-name="ro3">` +
+    `<table:table-cell table:style-name="ce9" table:number-columns-repeated="10"/>` +
+    `<table:table-cell table:style-name="ce32"/>` +
+    `<table:table-cell table:style-name="ce33"/>` +
+    `</table:table-row>`
+  );
+}
 
-    for (const row of linhas) {
-      body += '<table:table-row>';
-      for (const col of colunas) {
-        body += cellXml(row[col]);
-      }
-      body += '</table:table-row>';
-    }
+function linhaVaziaFn(): string {
+  return (
+    `<table:table-row table:style-name="ro3">` +
+    `<table:table-cell table:style-name="ce36" table:number-columns-repeated="17"/>` +
+    `</table:table-row>`
+  );
+}
+
+function preencherBlocoArmada(linhas: LinhaPlanilhaArmada[]): string {
+  const minLinhas = 15;
+  const parts = linhas.map(rowArmadaXml);
+  const faltam = Math.max(0, minLinhas - parts.length);
+  for (let i = 0; i < faltam; i++) parts.push(linhaVaziaArmada());
+  return parts.join('');
+}
+
+function preencherBlocoFn(linhas: LinhaPlanilhaFn[]): string {
+  const minLinhas = 14;
+  const parts = linhas.map(rowFnXml);
+  const faltam = Math.max(0, minLinhas - parts.length);
+  for (let i = 0; i < faltam; i++) parts.push(linhaVaziaFn());
+  return parts.join('');
+}
+
+/** Injeta cadastros no content.xml do modelo HNMD TAF 2026. */
+export function buildPlanilhaTafContentXml(cadastros: CadastroItemPersist[]): string {
+  const ano = String(new Date().getFullYear());
+  let xml = PLANILHA_TAF_MODELO_CONTENT_XML.replace(
+    /TESTE DE APTIDÃO FÍSICA \(TAF\) 2026/g,
+    `TESTE DE APTIDÃO FÍSICA (TAF) ${ano}`,
+  );
+
+  const armada = montarLinhasArmada(cadastros);
+  const fn = montarLinhasFn(cadastros);
+
+  if (!xml.includes(BLOCO_VAZIO_ARMADA)) {
+    throw new Error('Modelo ODS Armada inválido: bloco de linhas não encontrado.');
+  }
+  if (!xml.includes(BLOCO_VAZIO_FN)) {
+    throw new Error('Modelo ODS FN inválido: bloco de linhas não encontrado.');
   }
 
-  return (
-    `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ` +
-    `xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" ` +
-    `xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" ` +
-    `xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" ` +
-    `office:version="1.2">` +
-    `<office:body><office:spreadsheet>` +
-    `<table:table table:name="TAF">` +
-    `<table:table-column table:number-columns-repeated="${colCount}"/>` +
-    title +
-    header +
-    body +
-    `</table:table></office:spreadsheet></office:body></office:document-content>`
-  );
+  xml = xml.replace(BLOCO_VAZIO_ARMADA, preencherBlocoArmada(armada));
+  xml = xml.replace(BLOCO_VAZIO_FN, preencherBlocoFn(fn));
+  return xml;
 }
 
-function buildStylesXml(): string {
-  return (
-    `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:version="1.2">` +
-    `<office:styles/>` +
-    `</office:document-styles>`
-  );
-}
-
-function buildMetaXml(): string {
-  return (
-    `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ` +
-    `xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" office:version="1.2">` +
-    `<office:meta><meta:generator>AppTAF</meta:generator></office:meta>` +
-    `</office:document-meta>`
-  );
-}
-
-function buildManifestXml(): string {
-  return (
-    `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">` +
-    `<manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="${ODS_MIME}"/>` +
-    `<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>` +
-    `<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>` +
-    `<manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>` +
-    `</manifest:manifest>`
-  );
-}
-
-/** Gera bytes do arquivo ODS (planilha TAF) a partir dos cadastros. */
+/** Gera bytes do arquivo ODS no formato da planilha HNMD anexada. */
 export function buildBackupOdsBytes(cadastros: CadastroItemPersist[]): Uint8Array {
-  const linhas = montarLinhasPlanilhaTaf(cadastros);
-  const colunas = colunasComConteudo(linhas);
-  const contentXml = buildContentXml(linhas, colunas);
+  const contentXml = buildPlanilhaTafContentXml(cadastros);
 
   return buildZipStoreOnly([
-    { name: 'mimetype', data: utf8Bytes(ODS_MIME) },
+    { name: 'mimetype', data: utf8Bytes(PLANILHA_TAF_MODELO_MIMETYPE.trim()) },
     { name: 'content.xml', data: utf8Bytes(contentXml) },
-    { name: 'styles.xml', data: utf8Bytes(buildStylesXml()) },
-    { name: 'meta.xml', data: utf8Bytes(buildMetaXml()) },
-    { name: 'META-INF/manifest.xml', data: utf8Bytes(buildManifestXml()) },
+    { name: 'styles.xml', data: utf8Bytes(PLANILHA_TAF_MODELO_STYLES_XML) },
+    { name: 'meta.xml', data: utf8Bytes(PLANILHA_TAF_MODELO_META_XML) },
+    { name: 'settings.xml', data: utf8Bytes(PLANILHA_TAF_MODELO_SETTINGS_XML) },
+    { name: 'META-INF/manifest.xml', data: utf8Bytes(PLANILHA_TAF_MODELO_MANIFEST_XML) },
   ]);
 }
 

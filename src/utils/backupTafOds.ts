@@ -31,8 +31,15 @@ import { buildZipStoreOnly, utf8Bytes, type ZipStoreEntry } from './zipStoreOnly
 
 const ODS_MIME = 'application/vnd.oasis.opendocument.spreadsheet';
 
-/** Bloco de linhas vazias da aba Armada (após cabeçalho). */
+/** Bloco de linhas vazias da aba Armada (após cabeçalho) — 11 colunas (sem nota de permanência). */
 const BLOCO_VAZIO_ARMADA =
+  '<table:table-row table:style-name="ro3"><table:table-cell table:number-columns-repeated="9"/>' +
+  '<table:table-cell table:style-name="ce32"/><table:table-cell table:style-name="ce33"/></table:table-row>' +
+  '<table:table-row table:style-name="ro3" table:number-rows-repeated="14">' +
+  '<table:table-cell table:number-columns-repeated="10"/><table:table-cell table:style-name="ce33"/></table:table-row>';
+
+/** Bloco vazio original do modelo HNMD (12 colunas, com nota de permanência). */
+const BLOCO_VAZIO_ARMADA_MODELO =
   '<table:table-row table:style-name="ro3"><table:table-cell table:number-columns-repeated="10"/>' +
   '<table:table-cell table:style-name="ce32"/><table:table-cell table:style-name="ce33"/></table:table-row>' +
   '<table:table-row table:style-name="ro3" table:number-rows-repeated="14">' +
@@ -200,7 +207,6 @@ export type LinhaPlanilhaArmada = {
   natacaoTempo: string;
   natacaoPontos: string;
   permanencia: string;
-  permanenciaPontos: string;
   geral: string;
   rubricaSvg?: string;
   rubricaPictureName?: string;
@@ -475,7 +481,6 @@ export function montarLinhasArmada(
         natacaoTempo: (c.tempoNatacao || '').trim(),
         natacaoPontos: (c.notaNatacao || '').trim(),
         permanencia: situacaoPermanencia(c),
-        permanenciaPontos: '',
         geral: situacaoGeralPlanilha(c),
         rubricaSvg,
         rubricaPictureName: registrarRubrica(pictures, picturePrefix, index, rubricaSvg),
@@ -538,7 +543,6 @@ function rowArmadaXml(row: LinhaPlanilhaArmada): string {
     dataCell(row.natacaoTempo, s) +
     dataCell(row.natacaoPontos, estiloPontos(row.natacaoPontos)) +
     dataCell(row.permanencia, estiloPermanencia(row.permanencia)) +
-    dataCell(row.permanenciaPontos, estiloPontos(row.permanenciaPontos)) +
     dataCell(row.geral, estiloGeral(row.geral)) +
     rubricaCell(row.rubricaPictureName, s) +
     `</table:table-row>`
@@ -574,7 +578,7 @@ function rowFnXml(row: LinhaPlanilhaFn): string {
 function linhaVaziaArmada(): string {
   return (
     `<table:table-row table:style-name="ro3">` +
-    `<table:table-cell table:style-name="ce9" table:number-columns-repeated="10"/>` +
+    `<table:table-cell table:style-name="ce9" table:number-columns-repeated="9"/>` +
     `<table:table-cell table:style-name="ce32"/>` +
     `<table:table-cell table:style-name="ce33"/>` +
     `</table:table-row>`
@@ -611,35 +615,31 @@ function injetarEstilos(xml: string): string {
 }
 
 /**
- * Larguras da planilha "Planilha TAF apptaf Atualizada.ods" (jul/2026).
- * Armada: co1–co12 (uma estilo por coluna). FN: co14–co25 (+ co10/co12 compartilhados).
+ * Larguras da planilha "Planilha TAF apptaf Real.ods".
+ * Armada: 11 cols (co1–co10, sem nota de permanência). FN: co12–co21.
  */
 export const LARGURAS_COLUNAS_REFERENCIA_CM: Record<string, string> = {
-  co1: '5.476875cm',
-  co2: '1.74625cm',
+  co1: '5.08cm',
+  co2: '3.22791666666667cm',
   co3: '9.04875cm',
-  co4: '1.29645833333333cm',
-  co5: '3.413125cm',
-  co6: '2.19604166666667cm',
-  co7: '2.43416666666667cm',
-  co8: '2.24895833333333cm',
-  co9: '5.50333333333333cm',
-  co10: '2.40770833333333cm',
-  co11: '5.715cm',
-  co12: '2.88395833333333cm',
-  co13: '1.69333333333333cm',
-  co14: '1.21708333333333cm',
-  co15: '1.16416666666667cm',
-  co16: '3.91583333333333cm',
-  co17: '1.71979166666667cm',
-  co18: '3.730625cm',
-  co19: '2.38125cm',
-  co20: '3.12208333333333cm',
-  co21: '3.46604166666667cm',
-  co22: '1.87854166666667cm',
-  co23: '1.5875cm',
-  co24: '3.30729166666667cm',
-  co25: '3.33375cm',
+  co4: '1.71979166666667cm',
+  co5: '3.59833333333333cm',
+  co6: '3.12208333333333cm',
+  co7: '3.46604166666667cm',
+  co8: '5.50333333333333cm',
+  co9: '5.76791666666667cm',
+  co10: '2.88395833333333cm',
+  co11: '1.69333333333333cm',
+  co12: '1.21708333333333cm',
+  co13: '1.16416666666667cm',
+  co14: '3.91583333333333cm',
+  co15: '3.730625cm',
+  co16: '2.38125cm',
+  co17: '1.87854166666667cm',
+  co18: '1.5875cm',
+  co19: '2.40770833333333cm',
+  co20: '3.30729166666667cm',
+  co21: '3.33375cm',
 };
 
 const COLUNAS_ARMADA_MODELO =
@@ -655,20 +655,18 @@ const COLUNAS_ARMADA_MODELO =
   `<table:table-column table:style-name="co10" table:default-cell-style-name="ce9"/>` +
   `<table:table-column table:style-name="co11" table:default-cell-style-name="Default"/>`;
 
-/** Armada: 12 estilos distintos (co1–co12), como na planilha Atualizada. */
+/** Armada Real.ods: 11 colunas (sem nota de permanência). */
 const COLUNAS_ARMADA_REFERENCIA =
   `<table:table-column table:style-name="co1" table:default-cell-style-name="ce9"/>` +
   `<table:table-column table:style-name="co2" table:default-cell-style-name="ce9"/>` +
   `<table:table-column table:style-name="co3" table:default-cell-style-name="ce9"/>` +
   `<table:table-column table:style-name="co4" table:default-cell-style-name="ce9"/>` +
   `<table:table-column table:style-name="co5" table:default-cell-style-name="ce9"/>` +
-  `<table:table-column table:style-name="co6" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co6" table:number-columns-repeated="2" table:default-cell-style-name="ce9"/>` +
   `<table:table-column table:style-name="co7" table:default-cell-style-name="ce9"/>` +
   `<table:table-column table:style-name="co8" table:default-cell-style-name="ce9"/>` +
   `<table:table-column table:style-name="co9" table:default-cell-style-name="ce9"/>` +
-  `<table:table-column table:style-name="co10" table:default-cell-style-name="ce9"/>` +
-  `<table:table-column table:style-name="co11" table:default-cell-style-name="ce9"/>` +
-  `<table:table-column table:style-name="co12" table:default-cell-style-name="Default"/>`;
+  `<table:table-column table:style-name="co10" table:default-cell-style-name="Default"/>`;
 
 const COLUNAS_FN_MODELO =
   `<table:table-column table:style-name="co12" table:default-cell-style-name="ce36"/>` +
@@ -687,23 +685,23 @@ const COLUNAS_FN_MODELO =
   `<table:table-column table:style-name="co20" table:default-cell-style-name="ce32"/>` +
   `<table:table-column table:style-name="co11" table:default-cell-style-name="ce33"/>`;
 
-/** FN: estilos da planilha Atualizada (preserva default-cell-style do modelo). */
+/** FN Real.ods (preserva default-cell-style do modelo). */
 const COLUNAS_FN_REFERENCIA =
+  `<table:table-column table:style-name="co12" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co13" table:default-cell-style-name="ce36"/>` +
   `<table:table-column table:style-name="co14" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co4" table:default-cell-style-name="ce36"/>` +
   `<table:table-column table:style-name="co15" table:default-cell-style-name="ce36"/>` +
   `<table:table-column table:style-name="co16" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co6" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co7" table:default-cell-style-name="ce36"/>` +
   `<table:table-column table:style-name="co17" table:default-cell-style-name="ce36"/>` +
   `<table:table-column table:style-name="co18" table:default-cell-style-name="ce36"/>` +
   `<table:table-column table:style-name="co19" table:default-cell-style-name="ce36"/>` +
-  `<table:table-column table:style-name="co20" table:default-cell-style-name="ce36"/>` +
-  `<table:table-column table:style-name="co21" table:default-cell-style-name="ce36"/>` +
-  `<table:table-column table:style-name="co22" table:default-cell-style-name="ce36"/>` +
-  `<table:table-column table:style-name="co23" table:default-cell-style-name="ce36"/>` +
-  `<table:table-column table:style-name="co10" table:default-cell-style-name="ce36"/>` +
-  `<table:table-column table:style-name="co24" table:default-cell-style-name="ce32"/>` +
-  `<table:table-column table:style-name="co12" table:number-columns-repeated="3" table:default-cell-style-name="ce32"/>` +
-  `<table:table-column table:style-name="co25" table:default-cell-style-name="ce32"/>` +
-  `<table:table-column table:style-name="co12" table:default-cell-style-name="ce33"/>`;
+  `<table:table-column table:style-name="co20" table:default-cell-style-name="ce32"/>` +
+  `<table:table-column table:style-name="co10" table:number-columns-repeated="3" table:default-cell-style-name="ce32"/>` +
+  `<table:table-column table:style-name="co21" table:default-cell-style-name="ce32"/>` +
+  `<table:table-column table:style-name="co10" table:default-cell-style-name="ce33"/>`;
 
 function estiloColunaXml(name: string, width: string): string {
   return (
@@ -713,7 +711,14 @@ function estiloColunaXml(name: string, width: string): string {
   );
 }
 
-/** Garante estilos co21–co25 e alinha listas de colunas Armada/FN à referência. */
+/** Célula de cabeçalho "PONTOS" logo após PERMANÊNCIA (Armada) — removida na Real.ods. */
+const CABECALHO_PONTOS_PERM_ARMADA =
+  `<table:table-cell table:style-name="ce22" office:value-type="string" calcext:value-type="string">` +
+  `<text:p>PONTOS</text:p></table:table-cell>`;
+
+/**
+ * Alinha colunas Armada/FN e remove a nota de permanência da Armada (Real.ods).
+ */
 export function normalizarEstruturaColunasReferencia(xml: string): string {
   let out = xml;
   if (!out.includes(COLUNAS_ARMADA_MODELO)) {
@@ -725,9 +730,32 @@ export function normalizarEstruturaColunasReferencia(xml: string): string {
   out = out.replace(COLUNAS_ARMADA_MODELO, COLUNAS_ARMADA_REFERENCIA);
   out = out.replace(COLUNAS_FN_MODELO, COLUNAS_FN_REFERENCIA);
 
+  if (!out.includes(BLOCO_VAZIO_ARMADA_MODELO)) {
+    throw new Error('Modelo ODS Armada inválido: bloco vazio não encontrado.');
+  }
+  out = out.replace(BLOCO_VAZIO_ARMADA_MODELO, BLOCO_VAZIO_ARMADA);
+
+  // Remove só o 1º "PONTOS" após PERMANÊNCIA na Armada (aba antes de FN).
+  const fnMark = 'table:name="FN"';
+  const fnIdx = out.indexOf(fnMark);
+  if (fnIdx > 0) {
+    const armada = out.slice(0, fnIdx);
+    const rest = out.slice(fnIdx);
+    const permIdx = armada.indexOf('>PERMANÊNCIA</text:p>');
+    if (permIdx >= 0) {
+      const pontosIdx = armada.indexOf(CABECALHO_PONTOS_PERM_ARMADA, permIdx);
+      if (pontosIdx >= 0) {
+        out =
+          armada.slice(0, pontosIdx) +
+          armada.slice(pontosIdx + CABECALHO_PONTOS_PERM_ARMADA.length) +
+          rest;
+      }
+    }
+  }
+
   const extras: string[] = [];
-  for (const name of ['co21', 'co22', 'co23', 'co24', 'co25'] as const) {
-    if (!out.includes(`style:name="${name}"`)) {
+  for (const name of ['co21'] as const) {
+    if (!out.includes(`style:name="${name}" style:family="table-column"`)) {
       extras.push(estiloColunaXml(name, LARGURAS_COLUNAS_REFERENCIA_CM[name]));
     }
   }
@@ -735,16 +763,10 @@ export function normalizarEstruturaColunasReferencia(xml: string): string {
     out = out.replace('</office:automatic-styles>', `${extras.join('')}</office:automatic-styles>`);
   }
 
-  // Cabeçalho Armada/FN: uma linha, como na planilha Atualizada.
-  out = out.replace(
-    /<text:p>APROVADO<\/text:p><text:p>OU<\/text:p><text:p>REPROVADO<\/text:p>/g,
-    '<text:p>APROVADO OU REPROVADO</text:p>',
-  );
-
   return out;
 }
 
-/** Aplica as larguras da planilha de referência. */
+/** Aplica as larguras da planilha Real.ods. */
 export function ajustarLargurasColunasComFolga(xml: string): string {
   let out = xml;
   for (const [styleName, width] of Object.entries(LARGURAS_COLUNAS_REFERENCIA_CM)) {
@@ -755,7 +777,7 @@ export function ajustarLargurasColunasComFolga(xml: string): string {
     );
     if (re.test(out)) {
       out = out.replace(re, `$1${width}$3`);
-    } else if (!out.includes(`style:name="${styleName}"`)) {
+    } else if (!out.includes(`style:name="${styleName}" style:family="table-column"`)) {
       out = out.replace(
         '</office:automatic-styles>',
         `${estiloColunaXml(styleName, width)}</office:automatic-styles>`,

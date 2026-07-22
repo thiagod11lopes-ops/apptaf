@@ -100,25 +100,27 @@ describe('backupTafOds (modelo HNMD)', () => {
     // duas abas → título do balanço duas vezes
     expect(xml.split('BALANÇO DE QUANTIDADE').length - 1).toBe(2);
 
-    // Larguras da planilha de referência (Atualizada.ods)
+    // Larguras da planilha Real.ods
     expect(xml).toMatch(
-      /style:name="co1" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.476875cm"/,
-    );
-    expect(xml).toMatch(
-      /style:name="co5" style:family="table-column"><style:table-column-properties[^>]*style:column-width="3\.413125cm"/,
+      /style:name="co1" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.08cm"/,
     );
     expect(xml).toMatch(
-      /style:name="co9" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.50333333333333cm"/,
+      /style:name="co5" style:family="table-column"><style:table-column-properties[^>]*style:column-width="3\.59833333333333cm"/,
     );
     expect(xml).toMatch(
-      /style:name="co11" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.715cm"/,
+      /style:name="co8" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.50333333333333cm"/,
     );
-    // Armada: uma estilo por coluna (sem co6 repetido)
-    expect(xml).toContain(
-      'table:style-name="co6" table:default-cell-style-name="ce9"/><table:table-column table:style-name="co7"',
+    expect(xml).toMatch(
+      /style:name="co9" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.76791666666667cm"/,
     );
-    expect(xml).not.toContain('co6" table:number-columns-repeated="2"');
-    expect(xml).toContain('APROVADO OU REPROVADO');
+    // Armada: 11 colunas, sem nota de permanência no cabeçalho
+    expect(xml).toContain('co6" table:number-columns-repeated="2"');
+    expect(xml).toContain('<text:p>APROVADO</text:p><text:p>OU</text:p><text:p>REPROVADO</text:p>');
+    const armadaXml = xml.slice(0, xml.indexOf('table:name="FN"'));
+    expect(armadaXml).toMatch(/PERMANÊNCIA[\s\S]*?APROVADO\/REPROVADO[\s\S]*?APROVADO<\/text:p><text:p>OU/);
+    expect(armadaXml).not.toMatch(
+      /PERMANÊNCIA[\s\S]*?APROVADO\/REPROVADO[\s\S]*?<text:p>PONTOS<\/text:p>[\s\S]*?APROVADO<\/text:p><text:p>OU/,
+    );
   });
 
   it('não inclui militar sem nenhum teste', () => {
@@ -342,7 +344,7 @@ describe('backupTafOds (modelo HNMD)', () => {
   it('aplica larguras da planilha de referência', () => {
     const base =
       'style:name="co5" style:family="table-column"><style:table-column-properties fo:break-before="auto" style:column-width="1.000cm"/>';
-    expect(ajustarLargurasColunasComFolga(base)).toContain('style:column-width="3.413125cm"');
+    expect(ajustarLargurasColunasComFolga(base)).toContain('style:column-width="3.59833333333333cm"');
 
     const xml = buildPlanilhaTafContentXml([
       cadastro({
@@ -353,9 +355,9 @@ describe('backupTafOds (modelo HNMD)', () => {
         notaCorrida: '80',
       }),
     ]);
-    expect(xml).toContain('style:column-width="5.476875cm"');
+    expect(xml).toContain('style:column-width="5.08cm"');
     expect(xml).toContain('style:column-width="5.50333333333333cm"');
-    expect(xml).toContain('style:column-width="5.715cm"');
+    expect(xml).toContain('style:column-width="5.76791666666667cm"');
     expect(xml).not.toContain('style:column-width="7.654cm"');
   });
 });

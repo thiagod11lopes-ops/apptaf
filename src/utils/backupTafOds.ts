@@ -12,6 +12,7 @@ import { idadeFromDataNascimento } from './idadeFromDataNascimento';
 import { normalizarRubricaSvgDataUrl } from './rubricaSvgNormalize';
 import {
   cadastroComAlgumResultadoTaf,
+  cadastroComPendenciaParcialTaf,
   cadastroComTafCompleto,
   postoGradFromCadastro,
   temAvaliacaoCaminhada,
@@ -36,9 +37,28 @@ const BLOCO_VAZIO_FN =
   '<table:table-row table:style-name="ro3" table:number-rows-repeated="14">' +
   '<table:table-cell table:number-columns-repeated="17"/></table:table-row>';
 
+/** Espaço vazio sob o título — aba Armada (2 linhas). */
+const BLOCO_ESPACO_TITULO_ARMADA =
+  '<table:table-row table:style-name="ro3"><table:table-cell table:style-name="ce6" table:number-columns-spanned="11" table:number-rows-spanned="1"/>' +
+  '<table:covered-table-cell table:number-columns-repeated="10" table:style-name="ce19"/><table:table-cell/></table:table-row>' +
+  '<table:table-row table:style-name="ro3"><table:table-cell table:style-name="ce6" table:number-columns-spanned="11" table:number-rows-spanned="1"/>' +
+  '<table:covered-table-cell table:number-columns-repeated="10" table:style-name="ce19"/><table:table-cell/></table:table-row>';
+
+/** Espaço vazio sob o título — aba FN (2 linhas). */
+const BLOCO_ESPACO_TITULO_FN =
+  '<table:table-row table:style-name="ro3"><table:table-cell table:style-name="ce6" table:number-columns-spanned="11" table:number-rows-spanned="1"/>' +
+  '<table:covered-table-cell table:number-columns-repeated="10" table:style-name="ce19"/>' +
+  '<table:table-cell table:style-name="Default" table:number-columns-repeated="6"/></table:table-row>' +
+  '<table:table-row table:style-name="ro3"><table:table-cell table:style-name="ce6" table:number-columns-spanned="11" table:number-rows-spanned="1"/>' +
+  '<table:covered-table-cell table:number-columns-repeated="10" table:style-name="ce19"/>' +
+  '<table:table-cell table:style-name="Default" table:number-columns-repeated="6"/></table:table-row>';
+
 const ESTILOS_EXTRA =
   `<style:style style:name="roRubrica" style:family="table-row">` +
   `<style:table-row-properties style:row-height="1.15cm" fo:break-before="auto" style:use-optimal-row-height="false"/>` +
+  `</style:style>` +
+  `<style:style style:name="roBalanco" style:family="table-row">` +
+  `<style:table-row-properties style:row-height="0.62cm" fo:break-before="auto" style:use-optimal-row-height="false"/>` +
   `</style:style>` +
   `<style:style style:name="grRubrica" style:family="graphic">` +
   `<style:graphic-properties draw:stroke="none" draw:fill="none" draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>` +
@@ -49,7 +69,25 @@ const ESTILOS_EXTRA =
   estiloCelulaCor('cePermReprovado', '#dc2626') +
   estiloCelulaCor('ceTestePendente', '#ea580c') +
   estiloCelulaCor('ceGeralAprovado', '#15803d') +
-  estiloCelulaCor('ceGeralReprovado', '#dc2626');
+  estiloCelulaCor('ceGeralReprovado', '#dc2626') +
+  `<style:style style:name="ceBalancoTitulo" style:family="table-cell" style:parent-style-name="Default">` +
+  `<style:table-cell-properties fo:background-color="#1e3a5f" fo:border="0.06pt solid #1e3a5f" style:vertical-align="middle"/>` +
+  `<style:paragraph-properties fo:text-align="center"/>` +
+  `<style:text-properties style:font-name="Calibri" fo:color="#ffffff" fo:font-size="11pt" fo:font-weight="bold" ` +
+  `style:font-size-asian="11pt" style:font-weight-asian="bold" style:font-size-complex="11pt" style:font-weight-complex="bold"/>` +
+  `</style:style>` +
+  `<style:style style:name="ceBalancoLabel" style:family="table-cell" style:parent-style-name="Default">` +
+  `<style:table-cell-properties fo:background-color="#e8eef5" fo:border="0.06pt solid #94a3b8" style:vertical-align="middle"/>` +
+  `<style:paragraph-properties fo:text-align="center"/>` +
+  `<style:text-properties style:font-name="Calibri" fo:color="#1e293b" fo:font-size="9pt" fo:font-weight="bold" ` +
+  `style:font-size-asian="9pt" style:font-weight-asian="bold" style:font-size-complex="9pt" style:font-weight-complex="bold"/>` +
+  `</style:style>` +
+  `<style:style style:name="ceBalancoValor" style:family="table-cell" style:parent-style-name="Default">` +
+  `<style:table-cell-properties fo:background-color="#ffffff" fo:border="0.06pt solid #94a3b8" style:vertical-align="middle"/>` +
+  `<style:paragraph-properties fo:text-align="center"/>` +
+  `<style:text-properties style:font-name="Calibri" fo:color="#0f172a" fo:font-size="12pt" fo:font-weight="bold" ` +
+  `style:font-size-asian="12pt" style:font-weight-asian="bold" style:font-size-complex="12pt" style:font-weight-complex="bold"/>` +
+  `</style:style>`;
 
 function estiloCelulaCor(name: string, color: string): string {
   return (
@@ -60,6 +98,87 @@ function estiloCelulaCor(name: string, color: string): string {
     `style:font-weight-asian="bold" style:font-weight-complex="bold"/>` +
     `</style:style>`
   );
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export type BalancoPlanilhaTaf = {
+  cadastrados: number;
+  realizaramTodos: number;
+  parcial: number;
+  completo: number;
+};
+
+/** Totais do balanço sob o título da planilha. */
+export function calcularBalancoPlanilhaTaf(cadastros: CadastroItemPersist[]): BalancoPlanilhaTaf {
+  const completo = cadastros.filter(cadastroComTafCompleto).length;
+  return {
+    cadastrados: cadastros.length,
+    realizaramTodos: completo,
+    parcial: cadastros.filter(cadastroComPendenciaParcialTaf).length,
+    completo,
+  };
+}
+
+function balancoCell(text: string, style: string, span = 1): string {
+  const spanAttr = span > 1 ? ` table:number-columns-spanned="${span}"` : '';
+  const covered =
+    span > 1
+      ? `<table:covered-table-cell table:number-columns-repeated="${span - 1}" table:style-name="${style}"/>`
+      : '';
+  return (
+    `<table:table-cell table:style-name="${style}" office:value-type="string" calcext:value-type="string"${spanAttr}>` +
+    `<text:p>${escapeXml(text)}</text:p></table:table-cell>${covered}`
+  );
+}
+
+function balancoValorCell(n: number): string {
+  return balancoCell(String(n), 'ceBalancoValor', 1);
+}
+
+function padColsFn(extra: number): string {
+  if (extra <= 0) return '';
+  return `<table:table-cell table:style-name="Default" table:number-columns-repeated="${extra}"/>`;
+}
+
+/** Bloco visual do balanço (11 colunas base; FN completa com 6 vazias). */
+export function buildBalancoXml(balanco: BalancoPlanilhaTaf, colsTotal: 11 | 17): string {
+  const extra = colsTotal - 11;
+  const titulo =
+    `<table:table-row table:style-name="roBalanco">` +
+    balancoCell('BALANÇO DE QUANTIDADE', 'ceBalancoTitulo', 11) +
+    padColsFn(extra) +
+    `</table:table-row>`;
+
+  const metricas =
+    `<table:table-row table:style-name="roBalanco">` +
+    balancoCell('Militares cadastrados', 'ceBalancoLabel', 2) +
+    balancoValorCell(balanco.cadastrados) +
+    balancoCell('Realizaram todos os testes', 'ceBalancoLabel', 3) +
+    balancoValorCell(balanco.realizaramTodos) +
+    balancoCell('Parcial', 'ceBalancoLabel', 1) +
+    balancoValorCell(balanco.parcial) +
+    balancoCell('Completo', 'ceBalancoLabel', 1) +
+    balancoValorCell(balanco.completo) +
+    padColsFn(extra) +
+    `</table:table-row>`;
+
+  const espaco =
+    `<table:table-row table:style-name="ro3">` +
+    `<table:table-cell table:style-name="ce6" table:number-columns-spanned="11" table:number-rows-spanned="1"/>` +
+    `<table:covered-table-cell table:number-columns-repeated="10" table:style-name="ce19"/>` +
+    (extra > 0
+      ? `<table:table-cell table:style-name="Default" table:number-columns-repeated="${extra}"/>`
+      : `<table:table-cell/>`) +
+    `</table:table-row>`;
+
+  return titulo + metricas + espaco;
 }
 
 export type LinhaPlanilhaArmada = {
@@ -103,14 +222,6 @@ export type OdsPicture = {
   path: string;
   data: Uint8Array;
 };
-
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 function situacaoDeNota(nota: string | undefined): 'aprovado' | 'reprovado' | null {
   const n = (nota || '').trim();
@@ -454,6 +565,16 @@ export function buildPlanilhaTafPackage(cadastros: CadastroItemPersist[]): Plani
     `TESTE DE APTIDÃO FÍSICA (TAF) ${ano}`,
   );
   xml = injetarEstilos(xml);
+
+  const balanco = calcularBalancoPlanilhaTaf(cadastros);
+  if (!xml.includes(BLOCO_ESPACO_TITULO_ARMADA)) {
+    throw new Error('Modelo ODS Armada inválido: espaço sob o título não encontrado.');
+  }
+  if (!xml.includes(BLOCO_ESPACO_TITULO_FN)) {
+    throw new Error('Modelo ODS FN inválido: espaço sob o título não encontrado.');
+  }
+  xml = xml.replace(BLOCO_ESPACO_TITULO_ARMADA, buildBalancoXml(balanco, 11));
+  xml = xml.replace(BLOCO_ESPACO_TITULO_FN, buildBalancoXml(balanco, 17));
 
   const pictures: OdsPicture[] = [];
   const armada = montarLinhasArmada(cadastros, pictures, 'rubrica_a');

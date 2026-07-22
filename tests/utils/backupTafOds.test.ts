@@ -4,6 +4,7 @@ import {
   buildBackupOdsBytes,
   buildPlanilhaTafContentXml,
   buildPlanilhaTafPackage,
+  calcularBalancoPlanilhaTaf,
   estiloPontos,
   montarLinhasArmada,
   primeiraRubricaSvgDoCadastro,
@@ -51,6 +52,46 @@ describe('backupTafOds (modelo HNMD)', () => {
     expect(xml).toContain('<text:p>HOSPITAL NAVAL MARCÍLIO DIAS</text:p>');
     expect(xml).toContain('<text:p>CORRIDA</text:p>');
     expect(xml).toContain('ceTestePendente');
+  });
+
+  it('insere balanço de quantidade abaixo do título', () => {
+    const lista = [
+      cadastro({ id: 'a', nip: '1', nome: 'Sem' }),
+      cadastro({
+        id: 'b',
+        nip: '2',
+        nome: 'Parcial',
+        tempoCorrida: '12:00',
+        notaCorrida: '80',
+      }),
+      cadastro({
+        id: 'c',
+        nip: '3',
+        nome: 'Completo',
+        tempoCorrida: '12:00',
+        notaCorrida: '80',
+        tempoNatacao: '01:00',
+        notaNatacao: '90',
+        resultadoPermanencia: 'aprovado',
+      }),
+    ];
+    const balanco = calcularBalancoPlanilhaTaf(lista);
+    expect(balanco).toEqual({
+      cadastrados: 3,
+      realizaramTodos: 1,
+      parcial: 1,
+      completo: 1,
+    });
+
+    const xml = buildPlanilhaTafContentXml(lista);
+    expect(xml).toContain('BALANÇO DE QUANTIDADE');
+    expect(xml).toContain('Militares cadastrados');
+    expect(xml).toContain('Realizaram todos os testes');
+    expect(xml).toContain('Parcial');
+    expect(xml).toContain('Completo');
+    expect(xml).toContain('ceBalancoTitulo');
+    // duas abas → título do balanço duas vezes
+    expect(xml.split('BALANÇO DE QUANTIDADE').length - 1).toBe(2);
   });
 
   it('não inclui militar sem nenhum teste', () => {

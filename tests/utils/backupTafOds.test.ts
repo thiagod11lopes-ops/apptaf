@@ -8,6 +8,7 @@ import {
   estiloPontos,
   ajustarLargurasColunasComFolga,
   montarLinhasArmada,
+  montarLinhasFn,
   primeiraRubricaSvgDoCadastro,
   situacaoGeralPlanilha,
 } from '../../src/utils/backupTafOds';
@@ -325,6 +326,62 @@ describe('backupTafOds (modelo HNMD)', () => {
     expect(xml).toContain('Beltrano');
     expect(xml).toContain('>8<');
     expect(xml).toContain('cePontosVerde');
+  });
+
+  it('não mistura militares Armada e FN entre as abas', () => {
+    const xml = buildPlanilhaTafContentXml([
+      cadastro({
+        id: 'a',
+        nip: '11111111',
+        nome: 'SoArmada',
+        tempoCorrida: '12:00',
+        notaCorrida: '80',
+      }),
+      cadastro({
+        id: 'f',
+        nip: '22222222',
+        nome: 'SoFn',
+        repsFlexaoBarra: 8,
+        notaFlexaoBarra: '70',
+      }),
+    ]);
+    const fnIdx = xml.indexOf('table:name="FN"');
+    const armadaXml = xml.slice(0, fnIdx);
+    const fnXml = xml.slice(fnIdx);
+    expect(armadaXml).toContain('SoArmada');
+    expect(armadaXml).not.toContain('SoFn');
+    expect(fnXml).toContain('SoFn');
+    expect(fnXml).not.toContain('SoArmada');
+  });
+
+  it('sessão CFN não coloca o militar na aba Armada', () => {
+    const lista = [
+      cadastro({
+        id: 'cfn1',
+        nip: '33333333',
+        nome: 'MilitarCfn',
+        tempoCorrida: '12:00',
+        notaCorrida: '80',
+        repsFlexaoBarra: 10,
+      }),
+    ];
+    const sessoes = [
+      {
+        id: 's-cfn',
+        criadoEm: '2026-02-01T12:00:00.000Z',
+        dataAplicacao: '01/02/2026',
+        tipoProva: 'corrida' as const,
+        normaTaf: 'cfn' as const,
+        resultados: [
+          { corredor: 1, nip: '33333333', nome: 'MilitarCfn', tempoMs: 1, prova: 'corrida' as const },
+        ],
+      },
+    ];
+    const armada = montarLinhasArmada(lista, [], 'rubrica_a', sessoes);
+    const fn = montarLinhasFn(lista, [], 'rubrica_fn', sessoes);
+    expect(armada).toHaveLength(0);
+    expect(fn).toHaveLength(1);
+    expect(fn[0]?.nome).toBe('MilitarCfn');
   });
 
   it('montarLinhasArmada marca pendente sem rúbrica texto', () => {

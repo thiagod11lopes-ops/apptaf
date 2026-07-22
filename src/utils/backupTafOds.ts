@@ -26,6 +26,12 @@ import {
   temAvaliacaoNatacao,
   temAvaliacaoPermanencia,
 } from './resultadoTafCadastro';
+import {
+  cadastroTemResultadoArmada,
+  cadastroTemResultadoCfn,
+  filtrarSessoesPorNorma,
+  type NormaTafVista,
+} from './normaTafResultados';
 import { dataBrParaIso } from './tafRegistro';
 import { buildZipStoreOnly, utf8Bytes, type ZipStoreEntry } from './zipStoreOnly';
 
@@ -400,6 +406,51 @@ export function filtrarCadastrosComTeste(cadastros: CadastroItemPersist[]): Cada
   return cadastros.filter(cadastroComAlgumTestePlanilha);
 }
 
+function nipPresenteNasSessoes(
+  sessoes: SessaoAplicacaoTaf[],
+  norma: NormaTafVista,
+  nip: string | undefined,
+): boolean {
+  const key = nipDigitos(nip);
+  if (!key) return false;
+  for (const s of filtrarSessoesPorNorma(sessoes, norma)) {
+    for (const r of s.resultados ?? []) {
+      if (nipDigitos(r.nip) === key) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Armada: sessão Armada, ou (sem sessão CFN) resultado Armada no cadastro.
+ * Não inclui quem só tem teste/sessão CFN.
+ */
+export function cadastroNaPlanilhaArmada(
+  c: CadastroItemPersist,
+  sessoes: SessaoAplicacaoTaf[] = [],
+): boolean {
+  const emArmada = nipPresenteNasSessoes(sessoes, 'armada', c.nip);
+  const emCfn = nipPresenteNasSessoes(sessoes, 'cfn', c.nip);
+  if (emArmada) return true;
+  if (emCfn) return false;
+  return cadastroTemResultadoArmada(c);
+}
+
+/**
+ * FN: sessão CFN, ou (sem sessão Armada) resultado CFN no cadastro.
+ * Não inclui quem só tem teste/sessão Armada.
+ */
+export function cadastroNaPlanilhaFn(
+  c: CadastroItemPersist,
+  sessoes: SessaoAplicacaoTaf[] = [],
+): boolean {
+  const emArmada = nipPresenteNasSessoes(sessoes, 'armada', c.nip);
+  const emCfn = nipPresenteNasSessoes(sessoes, 'cfn', c.nip);
+  if (emCfn) return true;
+  if (emArmada) return false;
+  return cadastroTemResultadoCfn(c);
+}
+
 function registrarRubrica(
   pictures: OdsPicture[],
   prefix: string,
@@ -464,8 +515,10 @@ export function montarLinhasArmada(
   cadastros: CadastroItemPersist[],
   pictures: OdsPicture[] = [],
   picturePrefix = 'rubrica_a',
+  sessoes: SessaoAplicacaoTaf[] = [],
 ): LinhaPlanilhaArmada[] {
-  return filtrarCadastrosComTeste(cadastros)
+  return cadastros
+    .filter((c) => cadastroNaPlanilhaArmada(c, sessoes))
     .sort(compareByNomePtBr)
     .map((c, index) => {
       const idade = idadeFromDataNascimento(c.dataNascimento);
@@ -492,8 +545,10 @@ export function montarLinhasFn(
   cadastros: CadastroItemPersist[],
   pictures: OdsPicture[] = [],
   picturePrefix = 'rubrica_fn',
+  sessoes: SessaoAplicacaoTaf[] = [],
 ): LinhaPlanilhaFn[] {
-  return filtrarCadastrosComTeste(cadastros)
+  return cadastros
+    .filter((c) => cadastroNaPlanilhaFn(c, sessoes))
     .sort(compareByNomePtBr)
     .map((c, index) => {
       const idade = idadeFromDataNascimento(c.dataNascimento);
@@ -817,8 +872,8 @@ export function buildPlanilhaTafPackage(
 
   const comRubricas = enriquecerCadastrosComRubricasDasSessoes(cadastros, sessoes);
   const pictures: OdsPicture[] = [];
-  const armada = montarLinhasArmada(comRubricas, pictures, 'rubrica_a');
-  const fn = montarLinhasFn(comRubricas, pictures, 'rubrica_fn');
+  const armada = montarLinhasArmada(comRubricas, pictures, 'rubrica_a', sessoes);
+  const fn = montarLinhasFn(comRubricas, pictures, 'rubrica_fn', sessoes);
 
   if (!xml.includes(BLOCO_VAZIO_ARMADA)) {
     throw new Error('Modelo ODS Armada inválido: bloco de linhas não encontrado.');

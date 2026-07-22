@@ -1,4 +1,5 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import {
   PLANILHA_TAF_MODELO_CONTENT_XML,
   PLANILHA_TAF_MODELO_MANIFEST_XML,
@@ -9,7 +10,12 @@ import {
 } from '../assets/planilhaTafModelo/modeloEmbedded';
 import { compareByNomePtBr } from './compareNomePtBr';
 import { idadeFromDataNascimento } from './idadeFromDataNascimento';
+import { nipDigitos } from './nipFormat';
 import { normalizarRubricaSvgDataUrl } from './rubricaSvgNormalize';
+import {
+  rubricasDoCadastro,
+  type RubricasPorNip,
+} from './rubricasDasSessoes';
 import {
   cadastroComAlgumResultadoTaf,
   cadastroComPendenciaParcialTaf,
@@ -60,11 +66,8 @@ const ESTILOS_EXTRA =
   `<style:style style:name="roBalanco" style:family="table-row">` +
   `<style:table-row-properties style:row-height="0.62cm" fo:break-before="auto" style:use-optimal-row-height="false"/>` +
   `</style:style>` +
-  `<style:style style:name="grRubrica" style:family="graphic" style:parent-style-name="Graphics">` +
-  `<style:graphic-properties draw:stroke="none" draw:fill="none" ` +
-  `style:horizontal-pos="center" style:horizontal-rel="paragraph" ` +
-  `style:vertical-pos="middle" style:vertical-rel="paragraph" ` +
-  `draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>` +
+  `<style:style style:name="grRubrica" style:family="graphic">` +
+  `<style:graphic-properties draw:stroke="none" draw:fill="none"/>` +
   `</style:style>` +
   `<style:style style:name="ceRubrica" style:family="table-cell" style:parent-style-name="Default">` +
   `<style:table-cell-properties fo:border="0.06pt solid #000000" style:vertical-align="middle"/>` +
@@ -359,15 +362,15 @@ function rubricaCell(pictureName: string | undefined, _baseStyle: string): strin
   if (!pictureName) {
     return `<table:table-cell table:style-name="ceRubrica"/>`;
   }
+  // Mesmo layout do ODS de referência: frame filho direto da célula + offsets svg:x/y.
   return (
     `<table:table-cell table:style-name="ceRubrica">` +
-    `<text:p>` +
     `<draw:frame draw:style-name="grRubrica" draw:name="${escapeXml(pictureName)}" ` +
-    `text:anchor-type="paragraph" svg:width="2.4cm" svg:height="0.9cm" draw:z-index="1">` +
-    `<draw:image xlink:href="Pictures/${escapeXml(pictureName)}" xlink:type="simple" ` +
-    `xlink:show="embed" xlink:actuate="onLoad" draw:mime-type="image/svg+xml"/>` +
+    `svg:x="0.15cm" svg:y="0.05cm" svg:width="2.6cm" svg:height="0.95cm" draw:z-index="1" ` +
+    `style:rel-width="scale" style:rel-height="scale">` +
+    `<draw:image xlink:href="media/${escapeXml(pictureName)}" xlink:type="simple" ` +
+    `xlink:show="embed" xlink:actuate="onLoad"/>` +
     `</draw:frame>` +
-    `</text:p>` +
     `</table:table-cell>`
   );
 }
@@ -401,8 +404,54 @@ function registrarRubrica(
   const xml = svgDataUrlParaXml(svgDataUrl);
   if (!xml) return undefined;
   const name = `${prefix}_${index}.svg`;
-  pictures.push({ path: `Pictures/${name}`, data: utf8Bytes(xml) });
+  const bytes = utf8Bytes(xml);
+  // Pasta media/ (como no ODS de referência) — LibreOffice e Excel exibem melhor.
+  pictures.push({ path: `media/${name}`, data: bytes });
   return name;
+}
+
+/** Monta mapa NIP → rúbricas a partir das sessões do Histórico. */
+export function rubricasPorNipDasSessoes(sessoes: SessaoAplicacaoTaf[]): Map<string, RubricasPorNip> {
+  const map = new Map<string, RubricasPorNip>();
+  for (const sessao of sessoes) {
+    for (const r of sessao.resultados ?? []) {
+      const svg = r.rubricaCandidatoSvg?.trim();
+      if (!svg) continue;
+      const key = nipDigitos(r.nip);
+      if (!key) continue;
+      const prova = r.prova ?? sessao.tipoProva;
+      const atual = map.get(key) ?? {};
+      if (prova === 'natacao') atual.natacao = svg;
+      else if (prova === 'permanencia') atual.permanencia = svg;
+      else if (prova === 'caminhada') atual.caminhada = svg;
+      else atual.corrida = svg;
+      map.set(key, atual);
+    }
+  }
+  return map;
+}
+
+/** Completa rúbricas do cadastro com as das sessões quando faltarem no cadastro. */
+export function enriquecerCadastrosComRubricasDasSessoes(
+  cadastros: CadastroItemPersist[],
+  sessoes: SessaoAplicacaoTaf[],
+): CadastroItemPersist[] {
+  if (!sessoes.length) return cadastros;
+  const porNip = rubricasPorNipDasSessoes(sessoes);
+  return cadastros.map((c) => {
+    const key = nipDigitos(c.nip);
+    const daSessao = key ? porNip.get(key) : undefined;
+    if (!daSessao) return c;
+    const doCadastro = rubricasDoCadastro(c);
+    const pick = (a?: string, b?: string) => (a?.trim() ? a : b?.trim() ? b : a);
+    return {
+      ...c,
+      rubricaCorridaSvg: pick(doCadastro.corrida, daSessao.corrida) || c.rubricaCorridaSvg,
+      rubricaCaminhadaSvg: pick(doCadastro.caminhada, daSessao.caminhada) || c.rubricaCaminhadaSvg,
+      rubricaNatacaoSvg: pick(doCadastro.natacao, daSessao.natacao) || c.rubricaNatacaoSvg,
+      rubricaPermanenciaSvg: pick(doCadastro.permanencia, daSessao.permanencia) || c.rubricaPermanenciaSvg,
+    };
+  });
 }
 
 export function montarLinhasArmada(
@@ -567,7 +616,10 @@ export type PlanilhaTafBuild = {
 };
 
 /** Injeta cadastros no content.xml do modelo HNMD TAF 2026. */
-export function buildPlanilhaTafPackage(cadastros: CadastroItemPersist[]): PlanilhaTafBuild {
+export function buildPlanilhaTafPackage(
+  cadastros: CadastroItemPersist[],
+  sessoes: SessaoAplicacaoTaf[] = [],
+): PlanilhaTafBuild {
   const ano = String(new Date().getFullYear());
   let xml = PLANILHA_TAF_MODELO_CONTENT_XML.replace(
     /TESTE DE APTIDÃO FÍSICA \(TAF\) 2026/g,
@@ -585,9 +637,10 @@ export function buildPlanilhaTafPackage(cadastros: CadastroItemPersist[]): Plani
   xml = xml.replace(BLOCO_ESPACO_TITULO_ARMADA, buildBalancoXml(balanco, 11));
   xml = xml.replace(BLOCO_ESPACO_TITULO_FN, buildBalancoXml(balanco, 17));
 
+  const comRubricas = enriquecerCadastrosComRubricasDasSessoes(cadastros, sessoes);
   const pictures: OdsPicture[] = [];
-  const armada = montarLinhasArmada(cadastros, pictures, 'rubrica_a');
-  const fn = montarLinhasFn(cadastros, pictures, 'rubrica_fn');
+  const armada = montarLinhasArmada(comRubricas, pictures, 'rubrica_a');
+  const fn = montarLinhasFn(comRubricas, pictures, 'rubrica_fn');
 
   if (!xml.includes(BLOCO_VAZIO_ARMADA)) {
     throw new Error('Modelo ODS Armada inválido: bloco de linhas não encontrado.');
@@ -602,8 +655,11 @@ export function buildPlanilhaTafPackage(cadastros: CadastroItemPersist[]): Plani
 }
 
 /** Compat: só o XML (sem imagens embutidas no retorno). */
-export function buildPlanilhaTafContentXml(cadastros: CadastroItemPersist[]): string {
-  return buildPlanilhaTafPackage(cadastros).contentXml;
+export function buildPlanilhaTafContentXml(
+  cadastros: CadastroItemPersist[],
+  sessoes: SessaoAplicacaoTaf[] = [],
+): string {
+  return buildPlanilhaTafPackage(cadastros, sessoes).contentXml;
 }
 
 function buildManifestComPictures(pictures: OdsPicture[]): string {
@@ -618,8 +674,11 @@ function buildManifestComPictures(pictures: OdsPicture[]): string {
 }
 
 /** Gera bytes do arquivo ODS no formato da planilha HNMD anexada. */
-export function buildBackupOdsBytes(cadastros: CadastroItemPersist[]): Uint8Array {
-  const { contentXml, pictures } = buildPlanilhaTafPackage(cadastros);
+export function buildBackupOdsBytes(
+  cadastros: CadastroItemPersist[],
+  sessoes: SessaoAplicacaoTaf[] = [],
+): Uint8Array {
+  const { contentXml, pictures } = buildPlanilhaTafPackage(cadastros, sessoes);
 
   const entries: ZipStoreEntry[] = [
     { name: 'mimetype', data: utf8Bytes(PLANILHA_TAF_MODELO_MIMETYPE.trim()) },
@@ -637,8 +696,11 @@ export function buildBackupOdsBytes(cadastros: CadastroItemPersist[]): Uint8Arra
   return buildZipStoreOnly(entries);
 }
 
-export function buildBackupOdsBlob(cadastros: CadastroItemPersist[]): Blob {
-  const bytes = buildBackupOdsBytes(cadastros);
+export function buildBackupOdsBlob(
+  cadastros: CadastroItemPersist[],
+  sessoes: SessaoAplicacaoTaf[] = [],
+): Blob {
+  const bytes = buildBackupOdsBytes(cadastros, sessoes);
   return new Blob([bytes], { type: ODS_MIME });
 }
 

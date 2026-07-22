@@ -724,9 +724,10 @@ function delayMs(ms: number): Promise<void> {
 export async function downloadBackupOdsFile(
   cadastros: CadastroItemPersist[],
   filename = planilhaOdsFilename(),
+  sessoes: SessaoAplicacaoTaf[] = [],
 ): Promise<void> {
   const { baixarBinarioParaDownloads } = await import('./salvarArquivoNaPasta');
-  const bytes = buildBackupOdsBytes(cadastros);
+  const bytes = buildBackupOdsBytes(cadastros, sessoes);
   const resultado = await baixarBinarioParaDownloads({
     bytes,
     filename,
@@ -746,11 +747,12 @@ export async function downloadBackupCsvEOds(
   csvFilename: string,
   cadastros: CadastroItemPersist[],
   odsFilename = planilhaOdsFilename(),
+  sessoes: SessaoAplicacaoTaf[] = [],
 ): Promise<void> {
   await downloadBackupCsvFile(csvContent, csvFilename);
   // Navegadores costumam bloquear o 2º download se for imediato.
   await delayMs(450);
-  await downloadBackupOdsFile(cadastros, odsFilename);
+  await downloadBackupOdsFile(cadastros, odsFilename, sessoes);
 }
 
 export async function downloadBackupCsvFile(content: string, filename: string): Promise<void> {
@@ -793,7 +795,7 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   if (!resultado.ok) {
     throw new Error('Seleção de pasta cancelada.');
   }
-  const odsBytes = buildBackupOdsBytes(payload.cadastros);
+  const odsBytes = buildBackupOdsBytes(payload.cadastros, payload.sessoes);
   const odsResult = await salvarBinarioNaPastaEscolhida({
     bytes: odsBytes,
     filename: filenameOds,
@@ -839,7 +841,7 @@ export async function exportarBackupTafCsv(): Promise<{
     throw new Error('Seleção de pasta cancelada.');
   }
   await delayMs(450);
-  await downloadBackupOdsFile(payload.cadastros, filenameOds);
+  await downloadBackupOdsFile(payload.cadastros, filenameOds, payload.sessoes);
   return {
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,

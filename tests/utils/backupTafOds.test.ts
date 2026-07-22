@@ -230,9 +230,9 @@ describe('backupTafOds (modelo HNMD)', () => {
       }),
     ]);
     expect(pack.pictures.length).toBeGreaterThan(0);
-    expect(pack.contentXml).toContain('Pictures/rubrica_a_0.svg');
+    expect(pack.contentXml).toContain('media/rubrica_a_0.svg');
     expect(pack.contentXml).toContain('draw:image');
-    expect(pack.contentXml).toContain('style:horizontal-pos="center"');
+    expect(pack.contentXml).toContain('svg:x=');
     expect(pack.contentXml).toContain('ceRubrica');
 
     const bytes = buildBackupOdsBytes([
@@ -247,8 +247,44 @@ describe('backupTafOds (modelo HNMD)', () => {
       }),
     ]);
     const text = new TextDecoder().decode(bytes);
-    expect(text).toContain('Pictures/rubrica_a_0.svg');
+    expect(text).toContain('media/rubrica_a_0.svg');
     expect(text).toContain('<svg');
+  });
+
+  it('usa rúbrica das sessões quando o cadastro não tem', () => {
+    const pack = buildPlanilhaTafPackage(
+      [
+        cadastro({
+          id: '1',
+          nip: '12345678',
+          nome: 'Com Rubrica Sessao',
+          tempoCorrida: '12:00',
+          notaCorrida: '80',
+          dataTafCorrida: '01/02/2026',
+        }),
+      ],
+      [
+        {
+          id: 's1',
+          criadoEm: '2026-02-01T12:00:00.000Z',
+          dataAplicacao: '01/02/2026',
+          tipoProva: 'corrida',
+          resultados: [
+            {
+              corredor: 1,
+              nip: '12345678',
+              nome: 'Com Rubrica Sessao',
+              tempoMs: 1,
+              prova: 'corrida',
+              rubricaCandidatoSvg: RUBRICA_A,
+            },
+          ],
+        },
+      ],
+    );
+    expect(pack.pictures.length).toBeGreaterThan(0);
+    expect(pack.contentXml).toContain('media/rubrica_a_0.svg');
+    expect(pack.contentXml).toContain('draw:frame');
   });
 
   it('preenche flexão na aba FN', () => {

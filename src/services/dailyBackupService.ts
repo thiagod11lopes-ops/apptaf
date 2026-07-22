@@ -12,6 +12,7 @@ import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
 import { createLocalBackup } from '../offline-first/sync/localBackup';
 import type { CadastroItemPersist } from './cadastrosIndexedDb';
+import type { SessaoAplicacaoTaf } from './resultadosAplicadosIndexedDb';
 
 export const DAILY_BACKUP_META_KEY = 'backup:lastDailyDateBr';
 
@@ -26,6 +27,8 @@ export type DailyBackupPrepared = {
   filenameOds: string;
   /** Cadastros usados na planilha ODS. */
   cadastrosData: CadastroItemPersist[];
+  /** Sessões para rúbricas do Histórico na planilha ODS. */
+  sessoesData: SessaoAplicacaoTaf[];
   cadastros: number;
   sessoes: number;
   aplicadores: number;
@@ -84,6 +87,7 @@ export async function prepareDailySystemBackup(
     filename,
     filenameOds,
     cadastrosData: payload.cadastros,
+    sessoesData: payload.sessoes,
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
     aplicadores: payload.aplicadores.length,
@@ -97,6 +101,7 @@ export async function downloadPreparedDailyBackup(prepared: DailyBackupPrepared)
     prepared.filename,
     prepared.cadastrosData,
     prepared.filenameOds,
+    prepared.sessoesData,
   );
 }
 

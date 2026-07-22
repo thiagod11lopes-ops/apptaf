@@ -52,7 +52,7 @@ import { rememberKnownAuthEmailOnDevice } from '../offline-first/auth/knownAuthE
 import { ownerHasExistingCloudData } from '../services/supabase/ownerCloudPresence';
 import { isCloudOwnerUid } from '../utils/cloudOwnerUid';
 import { TermosCriacaoBancoModal } from '../components/auth/TermosCriacaoBancoModal';
-import { SistemaAcessoBloqueadoModal } from '../components/auth/SistemaAcessoBloqueadoModal';
+import { SistemaAcessoBloqueadoModal, type SistemaAcessoModalVariant } from '../components/auth/SistemaAcessoBloqueadoModal';
 import {
   assertSystemAccessAllowed,
   isSystemAccessBlockedError,
@@ -172,6 +172,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   } | null>(null);
   const [termsBusy, setTermsBusy] = useState(false);
   const [accessBlockedVisible, setAccessBlockedVisible] = useState(false);
+  const [accessModalVariant, setAccessModalVariant] =
+    useState<SistemaAcessoModalVariant>('unregistered');
   const supabaseEnabled = isSupabaseConfigured();
   const firebaseEnabled = supabaseEnabled;
   const authInitializedRef = useRef(false);
@@ -258,7 +260,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const rejectBlockedAccess = useCallback(async () => {
+  const rejectBlockedAccess = useCallback(async (variant: SistemaAcessoModalVariant = 'unregistered') => {
+    setAccessModalVariant(variant);
     setAccessBlockedVisible(true);
     await abortSessionWithoutTerms();
   }, [abortSessionWithoutTerms]);
@@ -341,7 +344,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await assertSystemAccessAllowed(mapped.uid, mapped.email);
           } catch (error) {
             if (isSystemAccessBlockedError(error)) {
-              await rejectBlockedAccess();
+              await rejectBlockedAccess('unregistered');
               throw error;
             }
             throw error;
@@ -610,7 +613,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await assertSystemAccessAllowed(signedIn.uid, signedIn.email);
         } catch (error) {
           if (isSystemAccessBlockedError(error)) {
-            await rejectBlockedAccess();
+            await rejectBlockedAccess('unregistered');
             throw error;
           }
           throw error;
@@ -678,7 +681,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await assertSystemAccessAllowed(result.user.uid, result.user.email);
           } catch (error) {
             if (isSystemAccessBlockedError(error)) {
-              await rejectBlockedAccess();
+              await rejectBlockedAccess('denied');
               throw error;
             }
             throw error;
@@ -930,6 +933,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       />
       <SistemaAcessoBloqueadoModal
         visible={accessBlockedVisible}
+        variant={accessModalVariant}
         onClose={() => setAccessBlockedVisible(false)}
       />
     </AuthContext.Provider>

@@ -13,6 +13,10 @@ import { resolveMemberAccess, type MemberAccess } from './authorizedEmailsCloud'
 export const SYSTEM_ACCESS_BLOCKED_MESSAGE =
   'Sistema Bloqueado. Email não cadastrado pelo administrador';
 
+/** Aviso no fluxo Entrar: e-mail ainda não cadastrado / não autorizado. */
+export const SYSTEM_EMAIL_UNREGISTERED_MESSAGE =
+  'Email não Cadastrado, clique em criar conta';
+
 export class SystemAccessBlockedError extends Error {
   constructor(message = SYSTEM_ACCESS_BLOCKED_MESSAGE) {
     super(message);

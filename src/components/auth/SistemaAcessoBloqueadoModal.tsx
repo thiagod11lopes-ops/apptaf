@@ -10,24 +10,63 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { ShieldBan } from 'lucide-react-native';
+import { ShieldBan, MailWarning } from 'lucide-react-native';
 import { AppModal } from '../premium/AppModal';
 import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
-import { SYSTEM_ACCESS_BLOCKED_MESSAGE } from '../../services/supabase/systemAccessGate';
+import {
+  SYSTEM_ACCESS_BLOCKED_MESSAGE,
+  SYSTEM_EMAIL_UNREGISTERED_MESSAGE,
+} from '../../services/supabase/systemAccessGate';
 import { PREMIUM } from '../../theme/premium';
+
+export type SistemaAcessoModalVariant = 'denied' | 'unregistered';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
+  /** denied = Criar conta (vermelho). unregistered = Entrar (laranja). */
+  variant?: SistemaAcessoModalVariant;
+  /** Texto do botão principal (padrão conforme a variante). */
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
-/** Modal de bloqueio — visual forte, animações suaves. */
-export function SistemaAcessoBloqueadoModal({ visible, onClose }: Props) {
+const VARIANT_UI = {
+  denied: {
+    kicker: 'ACESSO NEGADO',
+    message: SYSTEM_ACCESS_BLOCKED_MESSAGE,
+    colors: ['#7f1d1d', '#dc2626', '#9f1239'] as const,
+    shadow: '0 28px 64px rgba(127, 29, 29, 0.45)',
+    actionDefault: 'Entendi',
+    Icon: ShieldBan,
+    btnTextLight: '#7f1d1d',
+  },
+  unregistered: {
+    kicker: 'EMAIL NÃO CADASTRADO',
+    message: SYSTEM_EMAIL_UNREGISTERED_MESSAGE,
+    colors: ['#9a3412', '#ea580c', '#c2410c'] as const,
+    shadow: '0 28px 64px rgba(154, 52, 18, 0.45)',
+    actionDefault: 'Criar conta',
+    Icon: MailWarning,
+    btnTextLight: '#9a3412',
+  },
+} as const;
+
+/** Modal de bloqueio / e-mail não cadastrado — visual forte, animações suaves. */
+export function SistemaAcessoBloqueadoModal({
+  visible,
+  onClose,
+  variant = 'denied',
+  actionLabel,
+  onAction,
+}: Props) {
   const { theme, isDark } = useTheme();
   const scale = useRef(new Animated.Value(0.86)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(1)).current;
+  const ui = VARIANT_UI[variant];
+  const Icon = ui.Icon;
 
   useEffect(() => {
     if (!visible) {
@@ -72,6 +111,11 @@ export function SistemaAcessoBloqueadoModal({ visible, onClose }: Props) {
 
   if (!visible) return null;
 
+  const handleAction = () => {
+    if (onAction) onAction();
+    else onClose();
+  };
+
   return (
     <AppModal visible transparent animationType="fade" onRequestClose={onClose} accessibilityViewIsModal>
       <View style={styles.root}>
@@ -95,27 +139,27 @@ export function SistemaAcessoBloqueadoModal({ visible, onClose }: Props) {
           pointerEvents="box-none"
         >
           <LinearGradient
-            colors={['#7f1d1d', '#dc2626', '#9f1239']}
+            colors={[...ui.colors]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[
               styles.card,
               Platform.OS === 'web'
-                ? ({ boxShadow: '0 28px 64px rgba(127, 29, 29, 0.45)' } as object)
+                ? ({ boxShadow: ui.shadow } as object)
                 : { elevation: 24 },
             ]}
           >
             <View style={styles.glowRing} />
             <Animated.View style={[styles.iconHalo, { transform: [{ scale: pulse }] }]}>
               <View style={styles.iconInner}>
-                <ShieldBan size={36} color="#FFFFFF" strokeWidth={2.2} />
+                <Icon size={36} color="#FFFFFF" strokeWidth={2.2} />
               </View>
             </Animated.View>
 
-            <Text style={styles.kicker}>ACESSO NEGADO</Text>
-            <Text style={styles.title}>{SYSTEM_ACCESS_BLOCKED_MESSAGE}</Text>
+            <Text style={styles.kicker}>{ui.kicker}</Text>
+            <Text style={styles.title}>{ui.message}</Text>
 
-            <PressableScale onPress={onClose} style={styles.btnOuter}>
+            <PressableScale onPress={handleAction} style={styles.btnOuter}>
               <View
                 style={[
                   styles.btn,
@@ -125,8 +169,8 @@ export function SistemaAcessoBloqueadoModal({ visible, onClose }: Props) {
                   },
                 ]}
               >
-                <Text style={[styles.btnText, { color: isDark ? '#FFFFFF' : '#7f1d1d' }]}>
-                  Entendi
+                <Text style={[styles.btnText, { color: isDark ? '#FFFFFF' : ui.btnTextLight }]}>
+                  {actionLabel ?? ui.actionDefault}
                 </Text>
               </View>
             </PressableScale>

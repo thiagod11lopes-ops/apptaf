@@ -610,6 +610,20 @@ function injetarEstilos(xml: string): string {
   return xml.replace('</office:automatic-styles>', `${ESTILOS_EXTRA}</office:automatic-styles>`);
 }
 
+/** Folga além do conteúdo: ~14% + margem fixa (texto não cola na borda). */
+const COLUNA_FATOR_FOLGA = 1.14;
+const COLUNA_FOLGA_CM = 0.32;
+
+/** Amplia `style:column-width` para ficar um pouco maior que os caracteres. */
+export function ajustarLargurasColunasComFolga(xml: string): string {
+  return xml.replace(/style:column-width="([0-9.]+)(cm|in)"/gi, (full, num: string, unit: string) => {
+    const n = Number.parseFloat(num);
+    if (!Number.isFinite(n)) return full;
+    const cm = (unit.toLowerCase() === 'in' ? n * 2.54 : n) * COLUNA_FATOR_FOLGA + COLUNA_FOLGA_CM;
+    return `style:column-width="${cm.toFixed(3)}cm"`;
+  });
+}
+
 export type PlanilhaTafBuild = {
   contentXml: string;
   pictures: OdsPicture[];
@@ -651,6 +665,7 @@ export function buildPlanilhaTafPackage(
 
   xml = xml.replace(BLOCO_VAZIO_ARMADA, preencherBlocoArmada(armada));
   xml = xml.replace(BLOCO_VAZIO_FN, preencherBlocoFn(fn));
+  xml = ajustarLargurasColunasComFolga(xml);
   return { contentXml: xml, pictures };
 }
 

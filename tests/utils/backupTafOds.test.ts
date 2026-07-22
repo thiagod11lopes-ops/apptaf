@@ -6,6 +6,7 @@ import {
   buildPlanilhaTafPackage,
   calcularBalancoPlanilhaTaf,
   estiloPontos,
+  ajustarLargurasColunasComFolga,
   montarLinhasArmada,
   primeiraRubricaSvgDoCadastro,
   situacaoGeralPlanilha,
@@ -315,5 +316,23 @@ describe('backupTafOds (modelo HNMD)', () => {
       }),
     ]);
     expect(linhas[0]?.geral).toBe('TESTE PENDENTE');
+  });
+
+  it('amplia larguras das colunas com folga além do texto', () => {
+    const base = 'style:column-width="2.000cm"';
+    expect(ajustarLargurasColunasComFolga(base)).toBe('style:column-width="2.600cm"');
+
+    const xml = buildPlanilhaTafContentXml([
+      cadastro({
+        id: '1',
+        nip: '12345678',
+        nome: 'Fulano',
+        tempoCorrida: '12:00',
+        notaCorrida: '80',
+      }),
+    ]);
+    // Modelo: co3 (NOME) = 7.654cm → 7.654*1.14+0.32 = 9.046cm
+    expect(xml).toContain('style:column-width="9.046cm"');
+    expect(xml).not.toContain('style:column-width="7.654cm"');
   });
 });

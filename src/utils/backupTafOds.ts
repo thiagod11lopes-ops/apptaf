@@ -155,22 +155,21 @@ function padColsFn(extra: number): string {
 }
 
 /**
- * Balanço no formato da planilha de referência (123.ods):
- * título com span suficiente para o texto + métricas em pares rótulo|valor.
+ * Balanço no formato da planilha de referência (Atualizada.ods):
+ * título e métricas em células simples (sem span) — a coluna P/G já é larga o bastante.
  * Campos: Militares cadastrados | Parcial | Completo.
  */
 export function buildBalancoXml(balanco: BalancoPlanilhaTaf, colsTotal: 11 | 17): string {
-  const tituloSpan = 3; // P/G + NIP + NOME — cabe "BALANÇO DE QUANTIDADE" com folga
-  const metricCols = 7; // rótulo (span 2) + valor + 2×(rótulo|valor)
+  const metricCols = 6;
   const titulo =
     `<table:table-row table:style-name="roBalanco">` +
-    balancoCell('BALANÇO DE QUANTIDADE', 'ceBalancoTitulo', tituloSpan) +
-    padColsFn(colsTotal - tituloSpan) +
+    balancoCell('BALANÇO DE QUANTIDADE', 'ceBalancoTitulo', 1) +
+    padColsFn(colsTotal - 1) +
     `</table:table-row>`;
 
   const metricas =
     `<table:table-row table:style-name="roBalanco">` +
-    balancoCell('Militares cadastrados', 'ceBalancoLabel', 2) +
+    balancoCell('Militares cadastrados', 'ceBalancoLabel', 1) +
     balancoValorCell(balanco.cadastrados) +
     balancoCell('Parcial', 'ceBalancoLabel', 1) +
     balancoValorCell(balanco.parcial) +
@@ -363,11 +362,11 @@ function rubricaCell(pictureName: string | undefined, _baseStyle: string): strin
   if (!pictureName) {
     return `<table:table-cell table:style-name="ceRubrica"/>`;
   }
-  // Mesmo layout do ODS de referência: frame filho direto da célula + offsets svg:x/y.
+  // Mesmo layout da planilha de referência (Atualizada.ods).
   return (
     `<table:table-cell table:style-name="ceRubrica">` +
     `<draw:frame draw:style-name="grRubrica" draw:name="${escapeXml(pictureName)}" ` +
-    `svg:x="0.15cm" svg:y="0.05cm" svg:width="2.6cm" svg:height="0.95cm" draw:z-index="1" ` +
+    `svg:x="0.05906in" svg:y="0.01969in" svg:width="1.02362in" svg:height="0.37402in" draw:z-index="1" ` +
     `style:rel-width="scale" style:rel-height="scale">` +
     `<draw:image xlink:href="media/${escapeXml(pictureName)}" xlink:type="simple" ` +
     `xlink:show="embed" xlink:actuate="onLoad"/>` +
@@ -611,45 +610,45 @@ function injetarEstilos(xml: string): string {
   return xml.replace('</office:automatic-styles>', `${ESTILOS_EXTRA}</office:automatic-styles>`);
 }
 
-/** Folga além do conteúdo: ~14% + margem fixa (texto não cola na borda). */
-const COLUNA_FATOR_FOLGA = 1.14;
-const COLUNA_FOLGA_CM = 0.32;
-
 /**
- * Larguras mínimas (cm) para cabeçalhos longos do modelo Armada:
- * co5 = CORRIDA TEMPO, co8 = PERMANÊNCIA APROVADO/REPROVADO.
+ * Larguras da planilha "Planilha TAF apptaf Atualizada.ods" (cm).
+ * Armada: co1–co11. FN: co12–co20 alinhados ao significado (P/G, NIP, NOME…).
  */
-const LARGURA_MINIMA_POR_COLUNA_CM: Record<string, number> = {
-  co5: 3.6,
-  co8: 5.5,
+export const LARGURAS_COLUNAS_REFERENCIA_CM: Record<string, string> = {
+  co1: '5.476875cm', // P/G + título BALANÇO
+  co2: '3.22791666666667cm', // NIP
+  co3: '9.04875cm', // NOME
+  co4: '1.71979166666667cm', // IDADE
+  co5: '3.59833333333333cm', // CORRIDA TEMPO
+  co6: '3.12208333333333cm', // PONTOS / NATAÇÃO TEMPO
+  co7: '3.46604166666667cm', // PONTOS natação
+  co8: '5.50333333333333cm', // PERMANÊNCIA APROVADO/REPROVADO
+  co9: '2.40770833333333cm', // PONTOS permanência / flexão
+  co10: '4.365625cm', // APROVADO OU REPROVADO
+  co11: '2.88395833333333cm', // RÚBRICA / blocos FN
+  // FN — espelha P/G, NIP, NOME da Armada para o balanço caber na 1ª coluna
+  co12: '5.476875cm',
+  co13: '3.22791666666667cm',
+  co14: '9.04875cm',
+  co15: '3.730625cm', // permanência (ref)
+  co16: '2.38125cm',
+  co17: '1.87854166666667cm',
+  co18: '1.5875cm',
+  co19: '3.30729166666667cm',
+  co20: '3.33375cm',
 };
 
-function aplicarFolgaLarguraCm(cm: number): number {
-  return cm * COLUNA_FATOR_FOLGA + COLUNA_FOLGA_CM;
-}
-
-/** Amplia `style:column-width` e garante mínimos para cabeçalhos longos. */
+/** Aplica as larguras da planilha de referência (substitui qualquer folga genérica). */
 export function ajustarLargurasColunasComFolga(xml: string): string {
-  let out = xml.replace(/style:column-width="([0-9.]+)(cm|in)"/gi, (full, num: string, unit: string) => {
-    const n = Number.parseFloat(num);
-    if (!Number.isFinite(n)) return full;
-    const cm = aplicarFolgaLarguraCm(unit.toLowerCase() === 'in' ? n * 2.54 : n);
-    return `style:column-width="${cm.toFixed(3)}cm"`;
-  });
-
-  for (const [styleName, minCm] of Object.entries(LARGURA_MINIMA_POR_COLUNA_CM)) {
+  let out = xml;
+  for (const [styleName, width] of Object.entries(LARGURAS_COLUNAS_REFERENCIA_CM)) {
     const re = new RegExp(
       `(style:name="${styleName}" style:family="table-column">` +
-        `<style:table-column-properties[^>]*style:column-width=")([0-9.]+)(cm")`,
+        `<style:table-column-properties[^>]*style:column-width=")([^"]+)(")`,
       'i',
     );
-    out = out.replace(re, (_full, pre: string, width: string, suf: string) => {
-      const cur = Number.parseFloat(width);
-      const next = Number.isFinite(cur) ? Math.max(cur, minCm) : minCm;
-      return `${pre}${next.toFixed(3)}${suf}`;
-    });
+    out = out.replace(re, `$1${width}$3`);
   }
-
   return out;
 }
 

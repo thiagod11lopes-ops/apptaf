@@ -91,19 +91,24 @@ describe('backupTafOds (modelo HNMD)', () => {
     expect(xml).not.toContain('Testes Pendentes');
     expect(xml).not.toContain('Realizaram todos os testes');
     expect(xml).toContain('ceBalancoTitulo');
-    // título do balanço com span 3 (P/G+NIP+NOME) para caber o texto com folga
-    expect(xml).toMatch(/ceBalancoTitulo[^>]*number-columns-spanned="3"/);
-    expect(xml).toMatch(/ceBalancoLabel[^>]*number-columns-spanned="2"/);
-    expect(xml).not.toMatch(/ceBalancoTitulo[^>]*number-columns-spanned="11"/);
+    // título do balanço em 1 célula (planilha Atualizada.ods), sem span 11
+    expect(xml).toContain(
+      'table:style-name="ceBalancoTitulo" office:value-type="string" calcext:value-type="string"><text:p>BALANÇO DE QUANTIDADE</text:p>',
+    );
+    expect(xml).not.toMatch(/ceBalancoTitulo[^>]*number-columns-spanned=/);
+    expect(xml).not.toMatch(/ceBalancoLabel[^>]*number-columns-spanned=/);
     // duas abas → título do balanço duas vezes
     expect(xml.split('BALANÇO DE QUANTIDADE').length - 1).toBe(2);
 
-    // CORRIDA TEMPO (co5) e PERMANÊNCIA (co8) com largura mínima além da folga
+    // Larguras da planilha de referência (Atualizada.ods)
     expect(xml).toMatch(
-      /style:name="co5" style:family="table-column"><style:table-column-properties[^>]*style:column-width="3\.600cm"/,
+      /style:name="co1" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.476875cm"/,
     );
     expect(xml).toMatch(
-      /style:name="co8" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.500cm"/,
+      /style:name="co5" style:family="table-column"><style:table-column-properties[^>]*style:column-width="3\.59833333333333cm"/,
+    );
+    expect(xml).toMatch(
+      /style:name="co8" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.50333333333333cm"/,
     );
   });
 
@@ -240,7 +245,7 @@ describe('backupTafOds (modelo HNMD)', () => {
     expect(pack.pictures.length).toBeGreaterThan(0);
     expect(pack.contentXml).toContain('media/rubrica_a_0.svg');
     expect(pack.contentXml).toContain('draw:image');
-    expect(pack.contentXml).toContain('svg:x=');
+    expect(pack.contentXml).toContain('svg:x="0.05906in"');
     expect(pack.contentXml).toContain('ceRubrica');
 
     const bytes = buildBackupOdsBytes([
@@ -325,9 +330,10 @@ describe('backupTafOds (modelo HNMD)', () => {
     expect(linhas[0]?.geral).toBe('TESTE PENDENTE');
   });
 
-  it('amplia larguras das colunas com folga além do texto', () => {
-    const base = 'style:column-width="2.000cm"';
-    expect(ajustarLargurasColunasComFolga(base)).toBe('style:column-width="2.600cm"');
+  it('aplica larguras da planilha de referência', () => {
+    const base =
+      'style:name="co5" style:family="table-column"><style:table-column-properties fo:break-before="auto" style:column-width="1.000cm"/>';
+    expect(ajustarLargurasColunasComFolga(base)).toContain('style:column-width="3.59833333333333cm"');
 
     const xml = buildPlanilhaTafContentXml([
       cadastro({
@@ -338,8 +344,8 @@ describe('backupTafOds (modelo HNMD)', () => {
         notaCorrida: '80',
       }),
     ]);
-    // Modelo: co3 (NOME) = 7.654cm → 7.654*1.14+0.32 = 9.046cm
-    expect(xml).toContain('style:column-width="9.046cm"');
+    expect(xml).toContain('style:column-width="5.476875cm"');
+    expect(xml).toContain('style:column-width="5.50333333333333cm"');
     expect(xml).not.toContain('style:column-width="7.654cm"');
   });
 });

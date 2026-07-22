@@ -309,9 +309,6 @@ export default function ResultadosScreen() {
                                 : ' · Registrador de TAF'
                               : null}
                           </Text>
-                          <Text style={[ts.caption, styles.duploCliqueHint, { color: theme.textMuted }]}>
-                            Clique duas vezes para ver resultados
-                          </Text>
                         </View>
                       </PressableScale>
                       <TouchableOpacity
@@ -427,12 +424,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: PREMIUM.minTouch,
     gap: 10,
-  },
-  duploCliqueHint: {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: '600',
-    opacity: 0.85,
   },
   chevronBtn: {
     padding: 4,

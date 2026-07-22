@@ -9,15 +9,18 @@ import {
 } from '../assets/planilhaTafModelo/modeloEmbedded';
 import { compareByNomePtBr } from './compareNomePtBr';
 import { idadeFromDataNascimento } from './idadeFromDataNascimento';
+import { normalizarRubricaSvgDataUrl } from './rubricaSvgNormalize';
 import {
   cadastroComAlgumResultadoTaf,
+  cadastroComTafCompleto,
   postoGradFromCadastro,
   temAvaliacaoCaminhada,
   temAvaliacaoCorrida,
   temAvaliacaoNatacao,
   temAvaliacaoPermanencia,
 } from './resultadoTafCadastro';
-import { buildZipStoreOnly, utf8Bytes } from './zipStoreOnly';
+import { dataBrParaIso } from './tafRegistro';
+import { buildZipStoreOnly, utf8Bytes, type ZipStoreEntry } from './zipStoreOnly';
 
 const ODS_MIME = 'application/vnd.oasis.opendocument.spreadsheet';
 
@@ -33,6 +36,32 @@ const BLOCO_VAZIO_FN =
   '<table:table-row table:style-name="ro3" table:number-rows-repeated="14">' +
   '<table:table-cell table:number-columns-repeated="17"/></table:table-row>';
 
+const ESTILOS_EXTRA =
+  `<style:style style:name="roRubrica" style:family="table-row">` +
+  `<style:table-row-properties style:row-height="1.15cm" fo:break-before="auto" style:use-optimal-row-height="false"/>` +
+  `</style:style>` +
+  `<style:style style:name="grRubrica" style:family="graphic">` +
+  `<style:graphic-properties draw:stroke="none" draw:fill="none" draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>` +
+  `</style:style>` +
+  estiloCelulaCor('cePontosVerde', '#15803d') +
+  estiloCelulaCor('cePontosVermelho', '#dc2626') +
+  estiloCelulaCor('cePermAprovado', '#15803d') +
+  estiloCelulaCor('cePermReprovado', '#dc2626') +
+  estiloCelulaCor('ceTestePendente', '#ea580c') +
+  estiloCelulaCor('ceGeralAprovado', '#15803d') +
+  estiloCelulaCor('ceGeralReprovado', '#dc2626');
+
+function estiloCelulaCor(name: string, color: string): string {
+  return (
+    `<style:style style:name="${name}" style:family="table-cell" style:parent-style-name="Default">` +
+    `<style:table-cell-properties fo:border="0.06pt solid #000000" style:vertical-align="middle"/>` +
+    `<style:paragraph-properties fo:text-align="center"/>` +
+    `<style:text-properties style:font-name="Calibri" fo:color="${color}" fo:font-weight="bold" ` +
+    `style:font-weight-asian="bold" style:font-weight-complex="bold"/>` +
+    `</style:style>`
+  );
+}
+
 export type LinhaPlanilhaArmada = {
   pg: string;
   nip: string;
@@ -45,7 +74,8 @@ export type LinhaPlanilhaArmada = {
   permanencia: string;
   permanenciaPontos: string;
   geral: string;
-  rubrica: string;
+  rubricaSvg?: string;
+  rubricaPictureName?: string;
 };
 
 export type LinhaPlanilhaFn = {
@@ -65,7 +95,13 @@ export type LinhaPlanilhaFn = {
   corrida: string;
   corridaPontos: string;
   geral: string;
-  rubrica: string;
+  rubricaSvg?: string;
+  rubricaPictureName?: string;
+};
+
+export type OdsPicture = {
+  path: string;
+  data: Uint8Array;
 };
 
 function escapeXml(text: string): string {
@@ -76,15 +112,6 @@ function escapeXml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function hasRubrica(c: CadastroItemPersist): boolean {
-  return !!(
-    c.rubricaCorridaSvg?.trim() ||
-    c.rubricaCaminhadaSvg?.trim() ||
-    c.rubricaNatacaoSvg?.trim() ||
-    c.rubricaPermanenciaSvg?.trim()
-  );
-}
-
 function situacaoDeNota(nota: string | undefined): 'aprovado' | 'reprovado' | null {
   const n = (nota || '').trim();
   if (!n || n === '—') return null;
@@ -92,13 +119,19 @@ function situacaoDeNota(nota: string | undefined): 'aprovado' | 'reprovado' | nu
   return 'aprovado';
 }
 
-function situacaoPermanencia(c: CadastroItemPersist): string {
+export function situacaoPermanencia(c: CadastroItemPersist): string {
   if (c.resultadoPermanencia === 'aprovado') return 'APROVADO';
   if (c.resultadoPermanencia === 'reprovado') return 'REPROVADO';
   return '';
 }
 
-function situacaoGeral(c: CadastroItemPersist): string {
+/**
+ * Só APROVADO/REPROVADO com TAF completo (corrida/caminhada + natação + permanência).
+ * Caso contrário: TESTE PENDENTE.
+ */
+export function situacaoGeralPlanilha(c: CadastroItemPersist): string {
+  if (!cadastroComTafCompleto(c)) return 'TESTE PENDENTE';
+
   const resultados: Array<'aprovado' | 'reprovado'> = [];
 
   if (temAvaliacaoCorrida(c)) {
@@ -121,19 +154,77 @@ function situacaoGeral(c: CadastroItemPersist): string {
     resultados.push(c.resultadoPermanencia);
   }
 
-  for (const nota of [
-    c.notaFlexaoBarra,
-    c.notaFlexaoSolo,
-    c.notaAbdominalRemador,
-    c.notaAbdominalPrancha,
-  ]) {
-    const s = situacaoDeNota(nota);
-    if (s) resultados.push(s);
-  }
-
-  if (resultados.length === 0) return '';
   if (resultados.some((r) => r === 'reprovado')) return 'REPROVADO';
   return 'APROVADO';
+}
+
+/** Rúbrica SVG do primeiro teste (pela data de aplicação; desempate por ordem de modalidade). */
+export function primeiraRubricaSvgDoCadastro(c: CadastroItemPersist): string | undefined {
+  type Entry = { iso: string; tie: number; svg: string };
+  const entries: Entry[] = [];
+
+  const push = (dataBr: string | undefined, svg: string | undefined, tie: number) => {
+    const normalized = normalizarRubricaSvgDataUrl(svg);
+    if (!normalized) return;
+    const iso = dataBrParaIso(dataBr || '') || `9999-99-99-${tie}`;
+    entries.push({ iso, tie, svg: normalized });
+  };
+
+  push(c.dataTafCorrida, c.rubricaCorridaSvg, 1);
+  push(c.dataTafCaminhada, c.rubricaCaminhadaSvg, 2);
+  push(c.dataTafNatacao, c.rubricaNatacaoSvg, 3);
+  push(c.dataTafPermanencia, c.rubricaPermanenciaSvg, 4);
+
+  if (entries.length === 0) return undefined;
+  entries.sort((a, b) => a.iso.localeCompare(b.iso) || a.tie - b.tie);
+  return entries[0]?.svg;
+}
+
+export function svgDataUrlParaXml(svgDataUrl: string): string | null {
+  const raw = normalizarRubricaSvgDataUrl(svgDataUrl)?.trim();
+  if (!raw?.startsWith('data:image/svg')) return null;
+
+  const b64 = /^data:image\/svg\+xml;base64,(.+)$/i.exec(raw);
+  if (b64?.[1]) {
+    try {
+      if (typeof atob !== 'function') return null;
+      return atob(b64[1]);
+    } catch {
+      return null;
+    }
+  }
+
+  const comma = raw.indexOf(',');
+  if (comma < 0) return null;
+  try {
+    return decodeURIComponent(raw.slice(comma + 1));
+  } catch {
+    return null;
+  }
+}
+
+export function estiloPontos(nota: string): string {
+  const n = nota.trim();
+  if (!n) return 'ce9';
+  if (n.toUpperCase() === 'REPROVADO') return 'cePontosVermelho';
+  const num = Number.parseFloat(n.replace(',', '.'));
+  if (!Number.isFinite(num)) return 'ce9';
+  return num < 50 ? 'cePontosVermelho' : 'cePontosVerde';
+}
+
+export function estiloPermanencia(valor: string): string {
+  const v = valor.trim().toUpperCase();
+  if (v === 'APROVADO') return 'cePermAprovado';
+  if (v === 'REPROVADO') return 'cePermReprovado';
+  return 'ce9';
+}
+
+export function estiloGeral(valor: string): string {
+  const v = valor.trim().toUpperCase();
+  if (v === 'TESTE PENDENTE') return 'ceTestePendente';
+  if (v === 'APROVADO') return 'ceGeralAprovado';
+  if (v === 'REPROVADO') return 'ceGeralReprovado';
+  return 'ce25';
 }
 
 function dataCell(value: string, styleName: string): string {
@@ -144,6 +235,20 @@ function dataCell(value: string, styleName: string): string {
   return (
     `<table:table-cell table:style-name="${styleName}" office:value-type="string" calcext:value-type="string">` +
     `<text:p>${escapeXml(v)}</text:p></table:table-cell>`
+  );
+}
+
+function rubricaCell(pictureName: string | undefined, baseStyle: string): string {
+  if (!pictureName) {
+    return `<table:table-cell table:style-name="${baseStyle}"/>`;
+  }
+  return (
+    `<table:table-cell table:style-name="${baseStyle}">` +
+    `<draw:frame draw:style-name="grRubrica" draw:name="${escapeXml(pictureName)}" ` +
+    `text:anchor-type="paragraph" svg:width="2.6cm" svg:height="0.95cm" draw:z-index="1">` +
+    `<draw:image xlink:href="Pictures/${escapeXml(pictureName)}" xlink:type="simple" ` +
+    `xlink:show="embed" xlink:actuate="onLoad"/>` +
+    `</draw:frame></table:table-cell>`
   );
 }
 
@@ -166,101 +271,133 @@ export function filtrarCadastrosComTeste(cadastros: CadastroItemPersist[]): Cada
   return cadastros.filter(cadastroComAlgumTestePlanilha);
 }
 
-export function montarLinhasArmada(cadastros: CadastroItemPersist[]): LinhaPlanilhaArmada[] {
-  return filtrarCadastrosComTeste(cadastros).sort(compareByNomePtBr).map((c) => {
-    const idade = idadeFromDataNascimento(c.dataNascimento);
-    const pg = postoGradFromCadastro(c);
-    return {
-      pg: pg === '—' ? '' : pg,
-      nip: (c.nip || '').trim(),
-      nome: (c.nome || '').trim(),
-      idade: idade == null ? '' : String(idade),
-      corridaTempo: (c.tempoCorrida || '').trim(),
-      corridaPontos: (c.notaCorrida || '').trim(),
-      natacaoTempo: (c.tempoNatacao || '').trim(),
-      natacaoPontos: (c.notaNatacao || '').trim(),
-      permanencia: situacaoPermanencia(c),
-      permanenciaPontos: '',
-      geral: situacaoGeral(c),
-      rubrica: hasRubrica(c) ? 'Assinado' : '',
-    };
-  });
+function registrarRubrica(
+  pictures: OdsPicture[],
+  prefix: string,
+  index: number,
+  svgDataUrl: string | undefined,
+): string | undefined {
+  if (!svgDataUrl) return undefined;
+  const xml = svgDataUrlParaXml(svgDataUrl);
+  if (!xml) return undefined;
+  const name = `${prefix}_${index}.svg`;
+  pictures.push({ path: `Pictures/${name}`, data: utf8Bytes(xml) });
+  return name;
 }
 
-export function montarLinhasFn(cadastros: CadastroItemPersist[]): LinhaPlanilhaFn[] {
-  return filtrarCadastrosComTeste(cadastros).sort(compareByNomePtBr).map((c) => {
-    const idade = idadeFromDataNascimento(c.dataNascimento);
-    const pg = postoGradFromCadastro(c);
-    const abdominal =
-      c.repsAbdominalRemador != null
-        ? String(c.repsAbdominalRemador)
-        : (c.tempoAbdominalPrancha || '').trim();
-    const abdominalPontos = (c.notaAbdominalRemador || c.notaAbdominalPrancha || '').trim();
-    const flexaoPontos = (c.notaFlexaoBarra || c.notaFlexaoSolo || '').trim();
+export function montarLinhasArmada(
+  cadastros: CadastroItemPersist[],
+  pictures: OdsPicture[] = [],
+  picturePrefix = 'rubrica_a',
+): LinhaPlanilhaArmada[] {
+  return filtrarCadastrosComTeste(cadastros)
+    .sort(compareByNomePtBr)
+    .map((c, index) => {
+      const idade = idadeFromDataNascimento(c.dataNascimento);
+      const pg = postoGradFromCadastro(c);
+      const rubricaSvg = primeiraRubricaSvgDoCadastro(c);
+      return {
+        pg: pg === '—' ? '' : pg,
+        nip: (c.nip || '').trim(),
+        nome: (c.nome || '').trim(),
+        idade: idade == null ? '' : String(idade),
+        corridaTempo: (c.tempoCorrida || '').trim(),
+        corridaPontos: (c.notaCorrida || '').trim(),
+        natacaoTempo: (c.tempoNatacao || '').trim(),
+        natacaoPontos: (c.notaNatacao || '').trim(),
+        permanencia: situacaoPermanencia(c),
+        permanenciaPontos: '',
+        geral: situacaoGeralPlanilha(c),
+        rubricaSvg,
+        rubricaPictureName: registrarRubrica(pictures, picturePrefix, index, rubricaSvg),
+      };
+    });
+}
 
-    return {
-      pg: pg === '—' ? '' : pg,
-      nip: (c.nip || '').trim(),
-      nome: (c.nome || '').trim(),
-      idade: idade == null ? '' : String(idade),
-      permanencia: situacaoPermanencia(c),
-      permanenciaPontos: '',
-      natacaoTempo: (c.tempoNatacao || '').trim(),
-      natacaoPontos: (c.notaNatacao || '').trim(),
-      flexaoBarra: c.repsFlexaoBarra != null ? String(c.repsFlexaoBarra) : '',
-      flexaoSolo: c.repsFlexaoSolo != null ? String(c.repsFlexaoSolo) : '',
-      flexaoPontos,
-      abdominal,
-      abdominalPontos,
-      corrida: (c.tempoCorrida || '').trim(),
-      corridaPontos: (c.notaCorrida || '').trim(),
-      geral: situacaoGeral(c),
-      rubrica: hasRubrica(c) ? 'Assinado' : '',
-    };
-  });
+export function montarLinhasFn(
+  cadastros: CadastroItemPersist[],
+  pictures: OdsPicture[] = [],
+  picturePrefix = 'rubrica_fn',
+): LinhaPlanilhaFn[] {
+  return filtrarCadastrosComTeste(cadastros)
+    .sort(compareByNomePtBr)
+    .map((c, index) => {
+      const idade = idadeFromDataNascimento(c.dataNascimento);
+      const pg = postoGradFromCadastro(c);
+      const abdominal =
+        c.repsAbdominalRemador != null
+          ? String(c.repsAbdominalRemador)
+          : (c.tempoAbdominalPrancha || '').trim();
+      const abdominalPontos = (c.notaAbdominalRemador || c.notaAbdominalPrancha || '').trim();
+      const flexaoPontos = (c.notaFlexaoBarra || c.notaFlexaoSolo || '').trim();
+      const rubricaSvg = primeiraRubricaSvgDoCadastro(c);
+
+      return {
+        pg: pg === '—' ? '' : pg,
+        nip: (c.nip || '').trim(),
+        nome: (c.nome || '').trim(),
+        idade: idade == null ? '' : String(idade),
+        permanencia: situacaoPermanencia(c),
+        permanenciaPontos: '',
+        natacaoTempo: (c.tempoNatacao || '').trim(),
+        natacaoPontos: (c.notaNatacao || '').trim(),
+        flexaoBarra: c.repsFlexaoBarra != null ? String(c.repsFlexaoBarra) : '',
+        flexaoSolo: c.repsFlexaoSolo != null ? String(c.repsFlexaoSolo) : '',
+        flexaoPontos,
+        abdominal,
+        abdominalPontos,
+        corrida: (c.tempoCorrida || '').trim(),
+        corridaPontos: (c.notaCorrida || '').trim(),
+        geral: situacaoGeralPlanilha(c),
+        rubricaSvg,
+        rubricaPictureName: registrarRubrica(pictures, picturePrefix, index, rubricaSvg),
+      };
+    });
 }
 
 function rowArmadaXml(row: LinhaPlanilhaArmada): string {
   const s = 'ce9';
+  const rowStyle = row.rubricaPictureName ? 'roRubrica' : 'ro3';
   return (
-    `<table:table-row table:style-name="ro3">` +
+    `<table:table-row table:style-name="${rowStyle}">` +
     dataCell(row.pg, s) +
     dataCell(row.nip, s) +
     dataCell(row.nome, s) +
     dataCell(row.idade, s) +
     dataCell(row.corridaTempo, s) +
-    dataCell(row.corridaPontos, s) +
+    dataCell(row.corridaPontos, estiloPontos(row.corridaPontos)) +
     dataCell(row.natacaoTempo, s) +
-    dataCell(row.natacaoPontos, s) +
-    dataCell(row.permanencia, s) +
-    dataCell(row.permanenciaPontos, s) +
-    dataCell(row.geral, 'ce25') +
-    dataCell(row.rubrica, s) +
+    dataCell(row.natacaoPontos, estiloPontos(row.natacaoPontos)) +
+    dataCell(row.permanencia, estiloPermanencia(row.permanencia)) +
+    dataCell(row.permanenciaPontos, estiloPontos(row.permanenciaPontos)) +
+    dataCell(row.geral, estiloGeral(row.geral)) +
+    rubricaCell(row.rubricaPictureName, s) +
     `</table:table-row>`
   );
 }
 
 function rowFnXml(row: LinhaPlanilhaFn): string {
   const s = 'ce36';
+  const rowStyle = row.rubricaPictureName ? 'roRubrica' : 'ro3';
   return (
-    `<table:table-row table:style-name="ro3">` +
+    `<table:table-row table:style-name="${rowStyle}">` +
     dataCell(row.pg, s) +
     dataCell(row.nip, s) +
     dataCell(row.nome, s) +
     dataCell(row.idade, s) +
-    dataCell(row.permanencia, s) +
-    dataCell(row.permanenciaPontos, s) +
+    dataCell(row.permanencia, estiloPermanencia(row.permanencia)) +
+    dataCell(row.permanenciaPontos, estiloPontos(row.permanenciaPontos)) +
     dataCell(row.natacaoTempo, s) +
-    dataCell(row.natacaoPontos, s) +
+    dataCell(row.natacaoPontos, estiloPontos(row.natacaoPontos)) +
     dataCell(row.flexaoBarra, s) +
     dataCell(row.flexaoSolo, s) +
-    dataCell(row.flexaoPontos, s) +
+    dataCell(row.flexaoPontos, estiloPontos(row.flexaoPontos)) +
     dataCell(row.abdominal, s) +
-    dataCell(row.abdominalPontos, s) +
+    dataCell(row.abdominalPontos, estiloPontos(row.abdominalPontos)) +
     dataCell(row.corrida, s) +
-    dataCell(row.corridaPontos, s) +
-    dataCell(row.geral, 'ce25') +
-    dataCell(row.rubrica, s) +
+    dataCell(row.corridaPontos, estiloPontos(row.corridaPontos)) +
+    dataCell(row.geral, estiloGeral(row.geral)) +
+    rubricaCell(row.rubricaPictureName, s) +
     `</table:table-row>`
   );
 }
@@ -299,16 +436,28 @@ function preencherBlocoFn(linhas: LinhaPlanilhaFn[]): string {
   return parts.join('');
 }
 
+function injetarEstilos(xml: string): string {
+  if (xml.includes('style:name="ceTestePendente"')) return xml;
+  return xml.replace('</office:automatic-styles>', `${ESTILOS_EXTRA}</office:automatic-styles>`);
+}
+
+export type PlanilhaTafBuild = {
+  contentXml: string;
+  pictures: OdsPicture[];
+};
+
 /** Injeta cadastros no content.xml do modelo HNMD TAF 2026. */
-export function buildPlanilhaTafContentXml(cadastros: CadastroItemPersist[]): string {
+export function buildPlanilhaTafPackage(cadastros: CadastroItemPersist[]): PlanilhaTafBuild {
   const ano = String(new Date().getFullYear());
   let xml = PLANILHA_TAF_MODELO_CONTENT_XML.replace(
     /TESTE DE APTIDÃO FÍSICA \(TAF\) 2026/g,
     `TESTE DE APTIDÃO FÍSICA (TAF) ${ano}`,
   );
+  xml = injetarEstilos(xml);
 
-  const armada = montarLinhasArmada(cadastros);
-  const fn = montarLinhasFn(cadastros);
+  const pictures: OdsPicture[] = [];
+  const armada = montarLinhasArmada(cadastros, pictures, 'rubrica_a');
+  const fn = montarLinhasFn(cadastros, pictures, 'rubrica_fn');
 
   if (!xml.includes(BLOCO_VAZIO_ARMADA)) {
     throw new Error('Modelo ODS Armada inválido: bloco de linhas não encontrado.');
@@ -319,21 +468,43 @@ export function buildPlanilhaTafContentXml(cadastros: CadastroItemPersist[]): st
 
   xml = xml.replace(BLOCO_VAZIO_ARMADA, preencherBlocoArmada(armada));
   xml = xml.replace(BLOCO_VAZIO_FN, preencherBlocoFn(fn));
-  return xml;
+  return { contentXml: xml, pictures };
+}
+
+/** Compat: só o XML (sem imagens embutidas no retorno). */
+export function buildPlanilhaTafContentXml(cadastros: CadastroItemPersist[]): string {
+  return buildPlanilhaTafPackage(cadastros).contentXml;
+}
+
+function buildManifestComPictures(pictures: OdsPicture[]): string {
+  const base = PLANILHA_TAF_MODELO_MANIFEST_XML.replace(/\s*<\/manifest:manifest>\s*$/, '');
+  const extras = pictures
+    .map(
+      (p) =>
+        ` <manifest:file-entry manifest:full-path="${escapeXml(p.path)}" manifest:media-type="image/svg+xml"/>`,
+    )
+    .join('\n');
+  return `${base}\n${extras}\n</manifest:manifest>\n`;
 }
 
 /** Gera bytes do arquivo ODS no formato da planilha HNMD anexada. */
 export function buildBackupOdsBytes(cadastros: CadastroItemPersist[]): Uint8Array {
-  const contentXml = buildPlanilhaTafContentXml(cadastros);
+  const { contentXml, pictures } = buildPlanilhaTafPackage(cadastros);
 
-  return buildZipStoreOnly([
+  const entries: ZipStoreEntry[] = [
     { name: 'mimetype', data: utf8Bytes(PLANILHA_TAF_MODELO_MIMETYPE.trim()) },
     { name: 'content.xml', data: utf8Bytes(contentXml) },
     { name: 'styles.xml', data: utf8Bytes(PLANILHA_TAF_MODELO_STYLES_XML) },
     { name: 'meta.xml', data: utf8Bytes(PLANILHA_TAF_MODELO_META_XML) },
     { name: 'settings.xml', data: utf8Bytes(PLANILHA_TAF_MODELO_SETTINGS_XML) },
-    { name: 'META-INF/manifest.xml', data: utf8Bytes(PLANILHA_TAF_MODELO_MANIFEST_XML) },
-  ]);
+    { name: 'META-INF/manifest.xml', data: utf8Bytes(buildManifestComPictures(pictures)) },
+  ];
+
+  for (const pic of pictures) {
+    entries.push({ name: pic.path, data: pic.data });
+  }
+
+  return buildZipStoreOnly(entries);
 }
 
 export function buildBackupOdsBlob(cadastros: CadastroItemPersist[]): Blob {

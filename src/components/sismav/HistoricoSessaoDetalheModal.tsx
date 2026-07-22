@@ -975,9 +975,6 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
                 {` · ${linhas.length} participante${linhas.length !== 1 ? 's' : ''}`}
                 {salvando ? ' · Salvando…' : ''}
               </Text>
-              <Text style={[styles.hint, { color: theme.textMuted }]}>
-                Use Editar/Excluir na coluna Ações. Clique com o botão direito para inserir uma linha.
-              </Text>
             </View>
             <TouchableOpacity
               accessibilityLabel="Fechar"
@@ -1372,12 +1369,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 13,
     fontWeight: '600',
-  },
-  hint: {
-    marginTop: 6,
-    fontSize: 11,
-    fontWeight: '600',
-    lineHeight: 15,
   },
   erro: {
     marginHorizontal: 20,

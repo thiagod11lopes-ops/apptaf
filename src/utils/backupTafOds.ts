@@ -156,20 +156,21 @@ function padColsFn(extra: number): string {
 
 /**
  * Balanço no formato da planilha de referência (123.ods):
- * título em uma célula + métricas em pares sequenciais rótulo|valor.
+ * título com span suficiente para o texto + métricas em pares rótulo|valor.
  * Campos: Militares cadastrados | Parcial | Completo.
  */
 export function buildBalancoXml(balanco: BalancoPlanilhaTaf, colsTotal: 11 | 17): string {
-  const metricCols = 6;
+  const tituloSpan = 3; // P/G + NIP + NOME — cabe "BALANÇO DE QUANTIDADE" com folga
+  const metricCols = 7; // rótulo (span 2) + valor + 2×(rótulo|valor)
   const titulo =
     `<table:table-row table:style-name="roBalanco">` +
-    balancoCell('BALANÇO DE QUANTIDADE', 'ceBalancoTitulo', 1) +
-    padColsFn(colsTotal - 1) +
+    balancoCell('BALANÇO DE QUANTIDADE', 'ceBalancoTitulo', tituloSpan) +
+    padColsFn(colsTotal - tituloSpan) +
     `</table:table-row>`;
 
   const metricas =
     `<table:table-row table:style-name="roBalanco">` +
-    balancoCell('Militares cadastrados', 'ceBalancoLabel', 1) +
+    balancoCell('Militares cadastrados', 'ceBalancoLabel', 2) +
     balancoValorCell(balanco.cadastrados) +
     balancoCell('Parcial', 'ceBalancoLabel', 1) +
     balancoValorCell(balanco.parcial) +
@@ -614,14 +615,42 @@ function injetarEstilos(xml: string): string {
 const COLUNA_FATOR_FOLGA = 1.14;
 const COLUNA_FOLGA_CM = 0.32;
 
-/** Amplia `style:column-width` para ficar um pouco maior que os caracteres. */
+/**
+ * Larguras mínimas (cm) para cabeçalhos longos do modelo Armada:
+ * co5 = CORRIDA TEMPO, co8 = PERMANÊNCIA APROVADO/REPROVADO.
+ */
+const LARGURA_MINIMA_POR_COLUNA_CM: Record<string, number> = {
+  co5: 3.6,
+  co8: 5.5,
+};
+
+function aplicarFolgaLarguraCm(cm: number): number {
+  return cm * COLUNA_FATOR_FOLGA + COLUNA_FOLGA_CM;
+}
+
+/** Amplia `style:column-width` e garante mínimos para cabeçalhos longos. */
 export function ajustarLargurasColunasComFolga(xml: string): string {
-  return xml.replace(/style:column-width="([0-9.]+)(cm|in)"/gi, (full, num: string, unit: string) => {
+  let out = xml.replace(/style:column-width="([0-9.]+)(cm|in)"/gi, (full, num: string, unit: string) => {
     const n = Number.parseFloat(num);
     if (!Number.isFinite(n)) return full;
-    const cm = (unit.toLowerCase() === 'in' ? n * 2.54 : n) * COLUNA_FATOR_FOLGA + COLUNA_FOLGA_CM;
+    const cm = aplicarFolgaLarguraCm(unit.toLowerCase() === 'in' ? n * 2.54 : n);
     return `style:column-width="${cm.toFixed(3)}cm"`;
   });
+
+  for (const [styleName, minCm] of Object.entries(LARGURA_MINIMA_POR_COLUNA_CM)) {
+    const re = new RegExp(
+      `(style:name="${styleName}" style:family="table-column">` +
+        `<style:table-column-properties[^>]*style:column-width=")([0-9.]+)(cm")`,
+      'i',
+    );
+    out = out.replace(re, (_full, pre: string, width: string, suf: string) => {
+      const cur = Number.parseFloat(width);
+      const next = Number.isFinite(cur) ? Math.max(cur, minCm) : minCm;
+      return `${pre}${next.toFixed(3)}${suf}`;
+    });
+  }
+
+  return out;
 }
 
 export type PlanilhaTafBuild = {

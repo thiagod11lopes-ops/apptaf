@@ -91,13 +91,20 @@ describe('backupTafOds (modelo HNMD)', () => {
     expect(xml).not.toContain('Testes Pendentes');
     expect(xml).not.toContain('Realizaram todos os testes');
     expect(xml).toContain('ceBalancoTitulo');
-    // título do balanço em 1 célula (formato 123.ods), sem span 11
-    expect(xml).toContain(
-      'table:style-name="ceBalancoTitulo" office:value-type="string" calcext:value-type="string"><text:p>BALANÇO DE QUANTIDADE</text:p>',
-    );
+    // título do balanço com span 3 (P/G+NIP+NOME) para caber o texto com folga
+    expect(xml).toMatch(/ceBalancoTitulo[^>]*number-columns-spanned="3"/);
+    expect(xml).toMatch(/ceBalancoLabel[^>]*number-columns-spanned="2"/);
     expect(xml).not.toMatch(/ceBalancoTitulo[^>]*number-columns-spanned="11"/);
     // duas abas → título do balanço duas vezes
     expect(xml.split('BALANÇO DE QUANTIDADE').length - 1).toBe(2);
+
+    // CORRIDA TEMPO (co5) e PERMANÊNCIA (co8) com largura mínima além da folga
+    expect(xml).toMatch(
+      /style:name="co5" style:family="table-column"><style:table-column-properties[^>]*style:column-width="3\.600cm"/,
+    );
+    expect(xml).toMatch(
+      /style:name="co8" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.500cm"/,
+    );
   });
 
   it('não inclui militar sem nenhum teste', () => {

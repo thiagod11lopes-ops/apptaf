@@ -611,34 +611,140 @@ function injetarEstilos(xml: string): string {
 }
 
 /**
- * Larguras da planilha "Planilha TAF apptaf Atualizada.ods" (cm).
- * Armada: co1–co11. FN: co12–co20 alinhados ao significado (P/G, NIP, NOME…).
+ * Larguras da planilha "Planilha TAF apptaf Atualizada.ods" (jul/2026).
+ * Armada: co1–co12 (uma estilo por coluna). FN: co14–co25 (+ co10/co12 compartilhados).
  */
 export const LARGURAS_COLUNAS_REFERENCIA_CM: Record<string, string> = {
-  co1: '5.476875cm', // P/G + título BALANÇO
-  co2: '3.22791666666667cm', // NIP
-  co3: '9.04875cm', // NOME
-  co4: '1.71979166666667cm', // IDADE
-  co5: '3.59833333333333cm', // CORRIDA TEMPO
-  co6: '3.12208333333333cm', // PONTOS / NATAÇÃO TEMPO
-  co7: '3.46604166666667cm', // PONTOS natação
-  co8: '5.50333333333333cm', // PERMANÊNCIA APROVADO/REPROVADO
-  co9: '2.40770833333333cm', // PONTOS permanência / flexão
-  co10: '4.365625cm', // APROVADO OU REPROVADO
-  co11: '2.88395833333333cm', // RÚBRICA / blocos FN
-  // FN — espelha P/G, NIP, NOME da Armada para o balanço caber na 1ª coluna
-  co12: '5.476875cm',
-  co13: '3.22791666666667cm',
-  co14: '9.04875cm',
-  co15: '3.730625cm', // permanência (ref)
-  co16: '2.38125cm',
-  co17: '1.87854166666667cm',
-  co18: '1.5875cm',
-  co19: '3.30729166666667cm',
-  co20: '3.33375cm',
+  co1: '5.476875cm',
+  co2: '1.74625cm',
+  co3: '9.04875cm',
+  co4: '1.29645833333333cm',
+  co5: '3.413125cm',
+  co6: '2.19604166666667cm',
+  co7: '2.43416666666667cm',
+  co8: '2.24895833333333cm',
+  co9: '5.50333333333333cm',
+  co10: '2.40770833333333cm',
+  co11: '5.715cm',
+  co12: '2.88395833333333cm',
+  co13: '1.69333333333333cm',
+  co14: '1.21708333333333cm',
+  co15: '1.16416666666667cm',
+  co16: '3.91583333333333cm',
+  co17: '1.71979166666667cm',
+  co18: '3.730625cm',
+  co19: '2.38125cm',
+  co20: '3.12208333333333cm',
+  co21: '3.46604166666667cm',
+  co22: '1.87854166666667cm',
+  co23: '1.5875cm',
+  co24: '3.30729166666667cm',
+  co25: '3.33375cm',
 };
 
-/** Aplica as larguras da planilha de referência (substitui qualquer folga genérica). */
+const COLUNAS_ARMADA_MODELO =
+  `<table:table-column table:style-name="co1" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co2" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co3" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co4" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co5" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co6" table:number-columns-repeated="2" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co7" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co8" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co9" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co10" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co11" table:default-cell-style-name="Default"/>`;
+
+/** Armada: 12 estilos distintos (co1–co12), como na planilha Atualizada. */
+const COLUNAS_ARMADA_REFERENCIA =
+  `<table:table-column table:style-name="co1" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co2" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co3" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co4" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co5" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co6" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co7" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co8" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co9" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co10" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co11" table:default-cell-style-name="ce9"/>` +
+  `<table:table-column table:style-name="co12" table:default-cell-style-name="Default"/>`;
+
+const COLUNAS_FN_MODELO =
+  `<table:table-column table:style-name="co12" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co13" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co14" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co4" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co15" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co16" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co6" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co7" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co17" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co18" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co9" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co19" table:default-cell-style-name="ce32"/>` +
+  `<table:table-column table:style-name="co11" table:number-columns-repeated="3" table:default-cell-style-name="ce32"/>` +
+  `<table:table-column table:style-name="co20" table:default-cell-style-name="ce32"/>` +
+  `<table:table-column table:style-name="co11" table:default-cell-style-name="ce33"/>`;
+
+/** FN: estilos da planilha Atualizada (preserva default-cell-style do modelo). */
+const COLUNAS_FN_REFERENCIA =
+  `<table:table-column table:style-name="co14" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co15" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co16" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co17" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co18" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co19" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co20" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co21" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co22" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co23" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co10" table:default-cell-style-name="ce36"/>` +
+  `<table:table-column table:style-name="co24" table:default-cell-style-name="ce32"/>` +
+  `<table:table-column table:style-name="co12" table:number-columns-repeated="3" table:default-cell-style-name="ce32"/>` +
+  `<table:table-column table:style-name="co25" table:default-cell-style-name="ce32"/>` +
+  `<table:table-column table:style-name="co12" table:default-cell-style-name="ce33"/>`;
+
+function estiloColunaXml(name: string, width: string): string {
+  return (
+    `<style:style style:name="${name}" style:family="table-column">` +
+    `<style:table-column-properties fo:break-before="auto" style:column-width="${width}"/>` +
+    `</style:style>`
+  );
+}
+
+/** Garante estilos co21–co25 e alinha listas de colunas Armada/FN à referência. */
+export function normalizarEstruturaColunasReferencia(xml: string): string {
+  let out = xml;
+  if (!out.includes(COLUNAS_ARMADA_MODELO)) {
+    throw new Error('Modelo ODS Armada inválido: definição de colunas não encontrada.');
+  }
+  if (!out.includes(COLUNAS_FN_MODELO)) {
+    throw new Error('Modelo ODS FN inválido: definição de colunas não encontrada.');
+  }
+  out = out.replace(COLUNAS_ARMADA_MODELO, COLUNAS_ARMADA_REFERENCIA);
+  out = out.replace(COLUNAS_FN_MODELO, COLUNAS_FN_REFERENCIA);
+
+  const extras: string[] = [];
+  for (const name of ['co21', 'co22', 'co23', 'co24', 'co25'] as const) {
+    if (!out.includes(`style:name="${name}"`)) {
+      extras.push(estiloColunaXml(name, LARGURAS_COLUNAS_REFERENCIA_CM[name]));
+    }
+  }
+  if (extras.length) {
+    out = out.replace('</office:automatic-styles>', `${extras.join('')}</office:automatic-styles>`);
+  }
+
+  // Cabeçalho Armada/FN: uma linha, como na planilha Atualizada.
+  out = out.replace(
+    /<text:p>APROVADO<\/text:p><text:p>OU<\/text:p><text:p>REPROVADO<\/text:p>/g,
+    '<text:p>APROVADO OU REPROVADO</text:p>',
+  );
+
+  return out;
+}
+
+/** Aplica as larguras da planilha de referência. */
 export function ajustarLargurasColunasComFolga(xml: string): string {
   let out = xml;
   for (const [styleName, width] of Object.entries(LARGURAS_COLUNAS_REFERENCIA_CM)) {
@@ -647,7 +753,14 @@ export function ajustarLargurasColunasComFolga(xml: string): string {
         `<style:table-column-properties[^>]*style:column-width=")([^"]+)(")`,
       'i',
     );
-    out = out.replace(re, `$1${width}$3`);
+    if (re.test(out)) {
+      out = out.replace(re, `$1${width}$3`);
+    } else if (!out.includes(`style:name="${styleName}"`)) {
+      out = out.replace(
+        '</office:automatic-styles>',
+        `${estiloColunaXml(styleName, width)}</office:automatic-styles>`,
+      );
+    }
   }
   return out;
 }
@@ -668,6 +781,7 @@ export function buildPlanilhaTafPackage(
     `TESTE DE APTIDÃO FÍSICA (TAF) ${ano}`,
   );
   xml = injetarEstilos(xml);
+  xml = normalizarEstruturaColunasReferencia(xml);
 
   const balanco = calcularBalancoPlanilhaTaf(cadastros);
   if (!xml.includes(BLOCO_ESPACO_TITULO_ARMADA)) {

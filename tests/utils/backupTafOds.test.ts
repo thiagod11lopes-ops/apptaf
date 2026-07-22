@@ -105,11 +105,20 @@ describe('backupTafOds (modelo HNMD)', () => {
       /style:name="co1" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.476875cm"/,
     );
     expect(xml).toMatch(
-      /style:name="co5" style:family="table-column"><style:table-column-properties[^>]*style:column-width="3\.59833333333333cm"/,
+      /style:name="co5" style:family="table-column"><style:table-column-properties[^>]*style:column-width="3\.413125cm"/,
     );
     expect(xml).toMatch(
-      /style:name="co8" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.50333333333333cm"/,
+      /style:name="co9" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.50333333333333cm"/,
     );
+    expect(xml).toMatch(
+      /style:name="co11" style:family="table-column"><style:table-column-properties[^>]*style:column-width="5\.715cm"/,
+    );
+    // Armada: uma estilo por coluna (sem co6 repetido)
+    expect(xml).toContain(
+      'table:style-name="co6" table:default-cell-style-name="ce9"/><table:table-column table:style-name="co7"',
+    );
+    expect(xml).not.toContain('co6" table:number-columns-repeated="2"');
+    expect(xml).toContain('APROVADO OU REPROVADO');
   });
 
   it('não inclui militar sem nenhum teste', () => {
@@ -333,7 +342,7 @@ describe('backupTafOds (modelo HNMD)', () => {
   it('aplica larguras da planilha de referência', () => {
     const base =
       'style:name="co5" style:family="table-column"><style:table-column-properties fo:break-before="auto" style:column-width="1.000cm"/>';
-    expect(ajustarLargurasColunasComFolga(base)).toContain('style:column-width="3.59833333333333cm"');
+    expect(ajustarLargurasColunasComFolga(base)).toContain('style:column-width="3.413125cm"');
 
     const xml = buildPlanilhaTafContentXml([
       cadastro({
@@ -346,6 +355,7 @@ describe('backupTafOds (modelo HNMD)', () => {
     ]);
     expect(xml).toContain('style:column-width="5.476875cm"');
     expect(xml).toContain('style:column-width="5.50333333333333cm"');
+    expect(xml).toContain('style:column-width="5.715cm"');
     expect(xml).not.toContain('style:column-width="7.654cm"');
   });
 });

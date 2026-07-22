@@ -91,6 +91,11 @@ describe('backupTafOds (modelo HNMD)', () => {
     expect(xml).toContain('Parcial');
     expect(xml).toContain('Completo');
     expect(xml).toContain('ceBalancoTitulo');
+    // título do balanço em 1 célula (formato 123.ods), sem span 11
+    expect(xml).toContain(
+      'table:style-name="ceBalancoTitulo" office:value-type="string" calcext:value-type="string"><text:p>BALANÇO DE QUANTIDADE</text:p>',
+    );
+    expect(xml).not.toMatch(/ceBalancoTitulo[^>]*number-columns-spanned="11"/);
     // duas abas → título do balanço duas vezes
     expect(xml.split('BALANÇO DE QUANTIDADE').length - 1).toBe(2);
   });
@@ -228,6 +233,8 @@ describe('backupTafOds (modelo HNMD)', () => {
     expect(pack.pictures.length).toBeGreaterThan(0);
     expect(pack.contentXml).toContain('Pictures/rubrica_a_0.svg');
     expect(pack.contentXml).toContain('draw:image');
+    expect(pack.contentXml).toContain('style:horizontal-pos="center"');
+    expect(pack.contentXml).toContain('ceRubrica');
 
     const bytes = buildBackupOdsBytes([
       cadastro({

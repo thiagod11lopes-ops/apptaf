@@ -60,8 +60,15 @@ const ESTILOS_EXTRA =
   `<style:style style:name="roBalanco" style:family="table-row">` +
   `<style:table-row-properties style:row-height="0.62cm" fo:break-before="auto" style:use-optimal-row-height="false"/>` +
   `</style:style>` +
-  `<style:style style:name="grRubrica" style:family="graphic">` +
-  `<style:graphic-properties draw:stroke="none" draw:fill="none" draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>` +
+  `<style:style style:name="grRubrica" style:family="graphic" style:parent-style-name="Graphics">` +
+  `<style:graphic-properties draw:stroke="none" draw:fill="none" ` +
+  `style:horizontal-pos="center" style:horizontal-rel="paragraph" ` +
+  `style:vertical-pos="middle" style:vertical-rel="paragraph" ` +
+  `draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>` +
+  `</style:style>` +
+  `<style:style style:name="ceRubrica" style:family="table-cell" style:parent-style-name="Default">` +
+  `<style:table-cell-properties fo:border="0.06pt solid #000000" style:vertical-align="middle"/>` +
+  `<style:paragraph-properties fo:text-align="center"/>` +
   `</style:style>` +
   estiloCelulaCor('cePontosVerde', '#15803d') +
   estiloCelulaCor('cePontosVermelho', '#dc2626') +
@@ -148,34 +155,37 @@ function padColsFn(extra: number): string {
   return `<table:table-cell table:style-name="Default" table:number-columns-repeated="${extra}"/>`;
 }
 
-/** Bloco visual do balanço (11 colunas base; FN completa com 6 vazias). */
+/**
+ * Balanço no formato da planilha de referência (123.ods):
+ * título em uma célula + métricas em pares sequenciais rótulo|valor.
+ */
 export function buildBalancoXml(balanco: BalancoPlanilhaTaf, colsTotal: 11 | 17): string {
-  const extra = colsTotal - 11;
+  const metricCols = 8;
   const titulo =
     `<table:table-row table:style-name="roBalanco">` +
-    balancoCell('BALANÇO DE QUANTIDADE', 'ceBalancoTitulo', 11) +
-    padColsFn(extra) +
+    balancoCell('BALANÇO DE QUANTIDADE', 'ceBalancoTitulo', 1) +
+    padColsFn(colsTotal - 1) +
     `</table:table-row>`;
 
   const metricas =
     `<table:table-row table:style-name="roBalanco">` +
-    balancoCell('Militares cadastrados', 'ceBalancoLabel', 2) +
+    balancoCell('Militares cadastrados', 'ceBalancoLabel', 1) +
     balancoValorCell(balanco.cadastrados) +
-    balancoCell('Testes Pendentes', 'ceBalancoLabel', 3) +
+    balancoCell('Testes Pendentes', 'ceBalancoLabel', 1) +
     balancoValorCell(balanco.testesPendentes) +
     balancoCell('Parcial', 'ceBalancoLabel', 1) +
     balancoValorCell(balanco.parcial) +
     balancoCell('Completo', 'ceBalancoLabel', 1) +
     balancoValorCell(balanco.completo) +
-    padColsFn(extra) +
+    padColsFn(colsTotal - metricCols) +
     `</table:table-row>`;
 
   const espaco =
     `<table:table-row table:style-name="ro3">` +
     `<table:table-cell table:style-name="ce6" table:number-columns-spanned="11" table:number-rows-spanned="1"/>` +
     `<table:covered-table-cell table:number-columns-repeated="10" table:style-name="ce19"/>` +
-    (extra > 0
-      ? `<table:table-cell table:style-name="Default" table:number-columns-repeated="${extra}"/>`
+    (colsTotal > 11
+      ? `<table:table-cell table:style-name="Default" table:number-columns-repeated="${colsTotal - 11}"/>`
       : `<table:table-cell/>`) +
     `</table:table-row>`;
 
@@ -350,17 +360,20 @@ function dataCell(value: string, styleName: string): string {
   );
 }
 
-function rubricaCell(pictureName: string | undefined, baseStyle: string): string {
+function rubricaCell(pictureName: string | undefined, _baseStyle: string): string {
   if (!pictureName) {
-    return `<table:table-cell table:style-name="${baseStyle}"/>`;
+    return `<table:table-cell table:style-name="ceRubrica"/>`;
   }
   return (
-    `<table:table-cell table:style-name="${baseStyle}">` +
+    `<table:table-cell table:style-name="ceRubrica">` +
+    `<text:p>` +
     `<draw:frame draw:style-name="grRubrica" draw:name="${escapeXml(pictureName)}" ` +
-    `text:anchor-type="paragraph" svg:width="2.6cm" svg:height="0.95cm" draw:z-index="1">` +
+    `text:anchor-type="paragraph" svg:width="2.4cm" svg:height="0.9cm" draw:z-index="1">` +
     `<draw:image xlink:href="Pictures/${escapeXml(pictureName)}" xlink:type="simple" ` +
-    `xlink:show="embed" xlink:actuate="onLoad"/>` +
-    `</draw:frame></table:table-cell>`
+    `xlink:show="embed" xlink:actuate="onLoad" draw:mime-type="image/svg+xml"/>` +
+    `</draw:frame>` +
+    `</text:p>` +
+    `</table:table-cell>`
   );
 }
 

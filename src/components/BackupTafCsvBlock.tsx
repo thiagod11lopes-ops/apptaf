@@ -40,7 +40,7 @@ export function BackupTafCsvBlock() {
     try {
       const result = await exportarBackupTafCsv();
       setExportMsg(
-        `${result.mensagem} (${result.filename}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões de TAF (backup completo v2).`,
+        `${result.mensagem} (${result.filename} + ${result.filenameOds}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões de TAF (backup completo v2 + planilha ODS).`,
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao gerar backup CSV.';
@@ -58,7 +58,7 @@ export function BackupTafCsvBlock() {
     try {
       const result = await exportarBackupTafCsvNaPasta();
       setExportMsg(
-        `${result.mensagem} (${result.filename}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões.`,
+        `${result.mensagem} (${result.filename} + ${result.filenameOds}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões.`,
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao salvar backup CSV na pasta.';

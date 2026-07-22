@@ -30,7 +30,8 @@ import {
   type SystemBackupPayload,
 } from './gatherSystemBackupData';
 import { csvRow, parseCsvRecords, recordsToObjects } from './csvText';
-import { buildBackupApptafFilename } from './backupNaming';
+import { buildBackupApptafFilename, buildBackupPlanilhaOdsFilename } from './backupNaming';
+import { buildBackupOdsBytes, ODS_MIME_TYPE } from './backupTafOds';
 
 const BACKUP_VERSION = '2';
 
@@ -712,6 +713,46 @@ function backupFilename(): string {
   return buildBackupApptafFilename();
 }
 
+function planilhaOdsFilename(): string {
+  return buildBackupPlanilhaOdsFilename();
+}
+
+function delayMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function downloadBackupOdsFile(
+  cadastros: CadastroItemPersist[],
+  filename = planilhaOdsFilename(),
+): Promise<void> {
+  const { baixarBinarioParaDownloads } = await import('./salvarArquivoNaPasta');
+  const bytes = buildBackupOdsBytes(cadastros);
+  const resultado = await baixarBinarioParaDownloads({
+    bytes,
+    filename,
+    mimeType: ODS_MIME_TYPE,
+    uti: 'org.oasis-open.opendocument.spreadsheet',
+    dialogTitle: 'Salvar planilha TAF (ODS) em Downloads',
+    extensaoPadrao: '.ods',
+  });
+  if (!resultado.ok) {
+    throw new Error('Seleção de pasta cancelada.');
+  }
+}
+
+/** Baixa CSV e, em seguida, a planilha ODS (dois arquivos). */
+export async function downloadBackupCsvEOds(
+  csvContent: string,
+  csvFilename: string,
+  cadastros: CadastroItemPersist[],
+  odsFilename = planilhaOdsFilename(),
+): Promise<void> {
+  await downloadBackupCsvFile(csvContent, csvFilename);
+  // Navegadores costumam bloquear o 2º download se for imediato.
+  await delayMs(450);
+  await downloadBackupOdsFile(cadastros, odsFilename);
+}
+
 export async function downloadBackupCsvFile(content: string, filename: string): Promise<void> {
   const { baixarTextoParaDownloads } = await import('./salvarArquivoNaPasta');
   const resultado = await baixarTextoParaDownloads({
@@ -730,14 +771,18 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   cadastros: number;
   sessoes: number;
   filename: string;
+  filenameOds: string;
   mensagem: string;
 }> {
-  const { salvarConteudoTextoNaPastaEscolhida, mensagemSucessoSalvarNaPasta } = await import(
-    './salvarArquivoNaPasta'
-  );
+  const {
+    salvarConteudoTextoNaPastaEscolhida,
+    salvarBinarioNaPastaEscolhida,
+    mensagemSucessoSalvarNaPasta,
+  } = await import('./salvarArquivoNaPasta');
   const payload = await gatherSystemBackupData();
   const content = buildBackupCsvContent(payload);
   const filename = backupFilename();
+  const filenameOds = planilhaOdsFilename();
   const resultado = await salvarConteudoTextoNaPastaEscolhida({
     content,
     filename,
@@ -748,11 +793,24 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   if (!resultado.ok) {
     throw new Error('Seleção de pasta cancelada.');
   }
+  const odsBytes = buildBackupOdsBytes(payload.cadastros);
+  const odsResult = await salvarBinarioNaPastaEscolhida({
+    bytes: odsBytes,
+    filename: filenameOds,
+    mimeType: ODS_MIME_TYPE,
+    uti: 'org.oasis-open.opendocument.spreadsheet',
+    dialogTitle: 'Salvar planilha TAF (ODS) na pasta',
+    extensaoPadrao: '.ods',
+  });
+  if (!odsResult.ok) {
+    throw new Error('Seleção de pasta cancelada.');
+  }
   return {
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
     filename,
-    mensagem: mensagemSucessoSalvarNaPasta(resultado),
+    filenameOds,
+    mensagem: `${mensagemSucessoSalvarNaPasta(resultado)} Também salva a planilha ODS.`,
   };
 }
 
@@ -760,14 +818,16 @@ export async function exportarBackupTafCsv(): Promise<{
   cadastros: number;
   sessoes: number;
   filename: string;
+  filenameOds: string;
   mensagem: string;
 }> {
-  const { baixarTextoParaDownloads, mensagemSucessoSalvarNaPasta } = await import(
+  const { mensagemSucessoSalvarNaPasta, baixarTextoParaDownloads } = await import(
     './salvarArquivoNaPasta'
   );
   const payload = await gatherSystemBackupData();
   const content = buildBackupCsvContent(payload);
   const filename = backupFilename();
+  const filenameOds = planilhaOdsFilename();
   const resultado = await baixarTextoParaDownloads({
     content,
     filename,
@@ -778,11 +838,14 @@ export async function exportarBackupTafCsv(): Promise<{
   if (!resultado.ok) {
     throw new Error('Seleção de pasta cancelada.');
   }
+  await delayMs(450);
+  await downloadBackupOdsFile(payload.cadastros, filenameOds);
   return {
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
     filename,
-    mensagem: mensagemSucessoSalvarNaPasta(resultado),
+    filenameOds,
+    mensagem: `${mensagemSucessoSalvarNaPasta(resultado)} Também baixou a planilha ODS.`,
   };
 }
 

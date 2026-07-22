@@ -39,7 +39,9 @@ async function downloadWebBlob(
       ? '.pdf'
       : mimeType.includes('csv')
         ? '.csv'
-        : undefined;
+        : mimeType.includes('opendocument.spreadsheet') || mimeType.includes('ods')
+          ? '.ods'
+          : undefined;
   const safeName = sanitizarNomeArquivo(filename, ext);
   const blob =
     typeof content === 'string'
@@ -536,6 +538,160 @@ export async function baixarTextoParaDownloads(options: {
     mimeType,
     dialogTitle: options.dialogTitle ?? 'Salvar CSV em Downloads',
     UTI: options.uti ?? 'public.comma-separated-values-text',
+  });
+  return { ok: true, modo: 'compartilhar' };
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i]!;
+    const b = i + 1 < bytes.length ? bytes[i + 1]! : 0;
+    const c = i + 2 < bytes.length ? bytes[i + 2]! : 0;
+    const triple = (a << 16) | (b << 8) | c;
+    out += alphabet[(triple >> 18) & 63];
+    out += alphabet[(triple >> 12) & 63];
+    out += i + 1 < bytes.length ? alphabet[(triple >> 6) & 63]! : '=';
+    out += i + 2 < bytes.length ? alphabet[triple & 63]! : '=';
+  }
+  return out;
+}
+
+async function escreverBinarioNoDiretorioSaf(
+  directoryUri: string,
+  bytes: Uint8Array,
+  filename: string,
+  mimeType: string,
+): Promise<void> {
+  const FileSystem = await import('expo-file-system/legacy');
+  const destUri = await FileSystem.StorageAccessFramework.createFileAsync(
+    directoryUri,
+    filename,
+    mimeType,
+  );
+  await FileSystem.writeAsStringAsync(destUri, uint8ToBase64(bytes), {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+}
+
+/**
+ * Salva bytes binários (ex.: ODS) em Downloads — mesmo fluxo do CSV/PDF.
+ */
+export async function baixarBinarioParaDownloads(options: {
+  bytes: Uint8Array;
+  filename: string;
+  mimeType: string;
+  uti?: string;
+  dialogTitle?: string;
+  extensaoPadrao?: string;
+}): Promise<SalvarArquivoNaPastaResultado> {
+  const filename = sanitizarNomeArquivo(options.filename, options.extensaoPadrao);
+  const mimeType = options.mimeType;
+
+  if (Platform.OS === 'web') {
+    const blob = new Blob([options.bytes], { type: mimeType });
+    const file =
+      typeof File !== 'undefined' ? new File([blob], filename, { type: mimeType }) : null;
+
+    if (file && isIosWeb() && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        const payload: ShareData = { files: [file] };
+        if (typeof navigator.canShare !== 'function' || navigator.canShare(payload)) {
+          await navigator.share(payload);
+          return { ok: true, modo: 'compartilhar' };
+        }
+      } catch (e: unknown) {
+        if (e instanceof Error && e.name === 'AbortError') {
+          return { ok: true, modo: 'compartilhar' };
+        }
+      }
+    }
+
+    return downloadWebBlob(blob, filename, mimeType);
+  }
+
+  const FileSystem = await import('expo-file-system/legacy');
+  const cacheUri = `${FileSystem.cacheDirectory ?? ''}${filename}`;
+  await FileSystem.writeAsStringAsync(cacheUri, uint8ToBase64(options.bytes), {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+    const cached = await obterUriPastaAndroidPersistida();
+    if (cached) {
+      try {
+        await escreverBinarioNoDiretorioSaf(cached, options.bytes, filename, mimeType);
+        return { ok: true, modo: 'download' };
+      } catch {
+        // URI inválida — pede de novo
+      }
+    }
+
+    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (!permissions.granted) {
+      return { ok: false, cancelado: true };
+    }
+    await gravarUriPastaAndroid(permissions.directoryUri);
+    await escreverBinarioNoDiretorioSaf(permissions.directoryUri, options.bytes, filename, mimeType);
+    return { ok: true, modo: 'download' };
+  }
+
+  const canShare = await Sharing.isAvailableAsync();
+  if (!canShare) {
+    throw new Error('Não foi possível salvar o arquivo neste dispositivo.');
+  }
+  await Sharing.shareAsync(cacheUri, {
+    mimeType,
+    dialogTitle: options.dialogTitle ?? 'Salvar arquivo em Downloads',
+    UTI: options.uti,
+  });
+  return { ok: true, modo: 'compartilhar' };
+}
+
+/**
+ * Salva bytes binários na pasta escolhida (Android SAF / iOS share / web download).
+ */
+export async function salvarBinarioNaPastaEscolhida(options: {
+  bytes: Uint8Array;
+  filename: string;
+  mimeType: string;
+  uti?: string;
+  dialogTitle?: string;
+  extensaoPadrao?: string;
+}): Promise<SalvarArquivoNaPastaResultado> {
+  const filename = sanitizarNomeArquivo(options.filename, options.extensaoPadrao);
+  const mimeType = options.mimeType;
+
+  if (Platform.OS === 'web') {
+    return downloadWebBlob(new Blob([options.bytes], { type: mimeType }), filename, mimeType);
+  }
+
+  const FileSystem = await import('expo-file-system/legacy');
+
+  if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (!permissions.granted) {
+      return { ok: false, cancelado: true };
+    }
+    await escreverBinarioNoDiretorioSaf(permissions.directoryUri, options.bytes, filename, mimeType);
+    return { ok: true, modo: 'pasta' };
+  }
+
+  const uri = `${FileSystem.cacheDirectory}${filename}`;
+  await FileSystem.writeAsStringAsync(uri, uint8ToBase64(options.bytes), {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  const canShare = await Sharing.isAvailableAsync();
+  if (!canShare) {
+    throw new Error('Não foi possível abrir o seletor para salvar o arquivo neste dispositivo.');
+  }
+
+  await Sharing.shareAsync(uri, {
+    mimeType,
+    dialogTitle: options.dialogTitle ?? 'Salvar arquivo na pasta',
+    UTI: options.uti,
   });
   return { ok: true, modo: 'compartilhar' };
 }

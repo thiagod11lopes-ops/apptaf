@@ -35,3 +35,8 @@ export function formatBrTimeKey(date = new Date()): string {
 export function buildBackupApptafFilename(date = new Date()): string {
   return `Backup apptaf ${formatBrDateKey(date)}.csv`;
 }
+
+/** Nome da planilha ODS — ex.: Planilha TAF apptaf 03-07-2026.ods */
+export function buildBackupPlanilhaOdsFilename(date = new Date()): string {
+  return `Planilha TAF apptaf ${formatBrDateKey(date)}.ods`;
+}

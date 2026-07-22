@@ -1,9 +1,17 @@
-import { buildBackupCsvContent, downloadBackupCsvFile } from '../utils/backupTafCsv';
+import {
+  buildBackupCsvContent,
+  downloadBackupCsvEOds,
+} from '../utils/backupTafCsv';
 import { gatherSystemBackupData } from '../utils/gatherSystemBackupData';
-import { buildBackupApptafFilename, formatBrDateKey } from '../utils/backupNaming';
+import {
+  buildBackupApptafFilename,
+  buildBackupPlanilhaOdsFilename,
+  formatBrDateKey,
+} from '../utils/backupNaming';
 import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
 import { createLocalBackup } from '../offline-first/sync/localBackup';
+import type { CadastroItemPersist } from './cadastrosIndexedDb';
 
 export const DAILY_BACKUP_META_KEY = 'backup:lastDailyDateBr';
 
@@ -15,6 +23,9 @@ export type DailyBackupProgress = {
 export type DailyBackupPrepared = {
   content: string;
   filename: string;
+  filenameOds: string;
+  /** Cadastros usados na planilha ODS. */
+  cadastrosData: CadastroItemPersist[];
   cadastros: number;
   sessoes: number;
   aplicadores: number;
@@ -48,9 +59,13 @@ export async function prepareDailySystemBackup(
   const payload = await gatherSystemBackupData();
   await yieldToUi();
 
-  report(68, 'Gerando arquivo de backup…');
+  report(55, 'Gerando arquivo CSV…');
   const content = buildBackupCsvContent(payload);
   const filename = buildBackupApptafFilename();
+  const filenameOds = buildBackupPlanilhaOdsFilename();
+  await yieldToUi();
+
+  report(72, 'Gerando planilha ODS…');
   await yieldToUi();
 
   report(84, 'Salvando snapshot local…');
@@ -60,13 +75,15 @@ export async function prepareDailySystemBackup(
       await createLocalBackup(uid);
     }
   } catch {
-    // Backup CSV principal continua mesmo se o snapshot local falhar.
+    // Backup CSV/ODS principal continua mesmo se o snapshot local falhar.
   }
 
   report(95, 'Backup pronto para download');
   return {
     content,
     filename,
+    filenameOds,
+    cadastrosData: payload.cadastros,
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
     aplicadores: payload.aplicadores.length,
@@ -75,7 +92,12 @@ export async function prepareDailySystemBackup(
 }
 
 export async function downloadPreparedDailyBackup(prepared: DailyBackupPrepared): Promise<void> {
-  await downloadBackupCsvFile(prepared.content, prepared.filename);
+  await downloadBackupCsvEOds(
+    prepared.content,
+    prepared.filename,
+    prepared.cadastrosData,
+    prepared.filenameOds,
+  );
 }
 
 export async function runDailySystemBackup(
@@ -83,6 +105,6 @@ export async function runDailySystemBackup(
 ): Promise<DailyBackupPrepared> {
   const prepared = await prepareDailySystemBackup(onProgress);
   await downloadPreparedDailyBackup(prepared);
-  onProgress?.({ percent: 100, label: 'Backup concluído' });
+  onProgress?.({ percent: 100, label: 'Backup concluído (CSV + ODS)' });
   return prepared;
 }

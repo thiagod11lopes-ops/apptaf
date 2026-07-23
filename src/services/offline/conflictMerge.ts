@@ -1,4 +1,5 @@
 import type { CadastroItemPersist } from '../cadastrosIndexedDb';
+import type { AplicadorItemPersist } from '../aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
 import type { ResultadoCorridaItem } from '../../navigation/types';
 import { nipChaveCadastro, nipDigitos } from '../../utils/nipFormat';
@@ -123,6 +124,27 @@ export function mergeSessoes(
 export function dedupeCadastrosByNipNewest(items: CadastroItemPersist[]): CadastroItemPersist[] {
   const porNip = new Map<string, CadastroItemPersist>();
   const semNip: CadastroItemPersist[] = [];
+
+  for (const item of items) {
+    const key = nipChaveCadastro(item.nip);
+    if (!key) {
+      semNip.push(item);
+      continue;
+    }
+    const atual = porNip.get(key);
+    if (!atual || getRecordUpdatedAt(item) >= getRecordUpdatedAt(atual)) {
+      porNip.set(key, item);
+    }
+  }
+
+  return [...porNip.values(), ...semNip];
+}
+
+export function dedupeAplicadoresByNipNewest(
+  items: AplicadorItemPersist[],
+): AplicadorItemPersist[] {
+  const porNip = new Map<string, AplicadorItemPersist>();
+  const semNip: AplicadorItemPersist[] = [];
 
   for (const item of items) {
     const key = nipChaveCadastro(item.nip);

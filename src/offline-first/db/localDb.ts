@@ -13,7 +13,7 @@ import { syncLogger } from '../sync/SyncLogger';
 import { syncStatusForOperation } from '../sync/syncStatus';
 import { normalizeSessaoShape } from '../../utils/sessaoLight';
 import { nipChaveCadastro } from '../../utils/nipFormat';
-import { dedupeCadastrosByNipNewest } from '../../services/offline/conflictMerge';
+import { dedupeCadastrosByNipNewest, dedupeAplicadoresByNipNewest } from '../../services/offline/conflictMerge';
 import { readUpdatedAt } from '../sync/recordMeta';
 import { isModoDemonstracaoAtivo } from './appMeta';
 
@@ -199,7 +199,8 @@ export async function listAplicadoresForDisplay(ownerUid: string | null): Promis
   const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid, ...indexedOwners);
   const batches = await Promise.all(sources.map((uid) => listAplicadores(uid)));
   const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
-  return mergeRecordsById(mergeTarget, batches);
+  const merged = mergeRecordsById(mergeTarget, batches);
+  return dedupeAplicadoresByNipNewest(merged) as AplicadorRecord[];
 }
 
 /** Lista registros locais para sync — inclui __local__ e UID de login antes da migração. */
@@ -276,6 +277,23 @@ export async function findCadastroByNipDigits(
   return undefined;
 }
 
+export async function findAplicadorByNipDigits(
+  ownerUid: string,
+  nip: string,
+  excludeId?: string,
+): Promise<AplicadorRecord | undefined> {
+  const key = nipChaveCadastro(nip);
+  if (!key) return undefined;
+  const loginUid = getCachedLoginUid();
+  const sources = uniqueOwnerSources(ownerUid, ANONYMOUS_OWNER, loginUid);
+  for (const uid of sources) {
+    const rows = await listAplicadores(uid);
+    const found = rows.find((r) => r.id !== excludeId && nipChaveCadastro(r.nip) === key);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 /** Remove cadastros duplicados no IndexedDB (mesmo NIP, IDs diferentes). */
 export async function compactDuplicateCadastrosByNip(ownerUid: string): Promise<number> {
   const db = getTafDatabase();
@@ -315,6 +333,74 @@ export async function compactDuplicateCadastrosByNip(ownerUid: string): Promise<
     { ownerUid },
   );
   return toDelete.length;
+}
+
+/**
+ * Remove aplicadores duplicados (mesmo NIP, IDs diferentes).
+ * Mantém o mais recente (updatedAt); os demais viram tombstone e sobem no sync.
+ */
+export async function compactDuplicateAplicadoresByNip(ownerUid: string): Promise<number> {
+  const db = getTafDatabase();
+  if (!db || !ownerUid.trim()) return 0;
+  if (isAuthorizedMemberSession()) return 0;
+
+  const loginUid = getCachedLoginUid();
+  const sources = uniqueOwnerSources(ownerUid, ANONYMOUS_OWNER, loginUid);
+  const allRows: AplicadorRecord[] = [];
+  for (const uid of sources) {
+    allRows.push(...(await listAplicadores(uid, true)));
+  }
+
+  const porNip = new Map<string, AplicadorRecord>();
+  for (const row of allRows) {
+    const key = nipChaveCadastro(row.nip);
+    if (!key) continue;
+    const atual = porNip.get(key);
+    if (!atual) {
+      porNip.set(key, row);
+      continue;
+    }
+    const rowAt = readUpdatedAt(row);
+    const atualAt = readUpdatedAt(atual);
+    if (rowAt > atualAt) {
+      porNip.set(key, row);
+    } else if (rowAt === atualAt && !row.deleted && atual.deleted) {
+      porNip.set(key, row);
+    }
+  }
+
+  const keepIds = new Set([...porNip.values()].map((r) => r.id));
+  const losers = allRows.filter((r) => {
+    const key = nipChaveCadastro(r.nip);
+    return Boolean(key) && !keepIds.has(r.id);
+  });
+  if (losers.length === 0) return 0;
+
+  let removed = 0;
+  for (const row of losers) {
+    if (row.deleted) {
+      await db.aplicadores.delete(row.id);
+      await syncQueue.clearPendingForDocument(row.ownerUid, 'aplicadores', row.id);
+      removed += 1;
+      continue;
+    }
+    // Tombstone com LWW para a nuvem também eliminar o id duplicado.
+    try {
+      await softDeleteAplicador(row.id, row.ownerUid, loginUid);
+      removed += 1;
+    } catch {
+      await db.aplicadores.delete(row.id);
+      await syncQueue.clearPendingForDocument(row.ownerUid, 'aplicadores', row.id);
+      removed += 1;
+    }
+  }
+
+  await syncLogger.info(
+    'local-db',
+    `Removidos ${removed} aplicador(es) duplicado(s) por NIP`,
+    { ownerUid },
+  );
+  return removed;
 }
 
 export async function getSessaoById(ownerUid: string, id: string): Promise<SessaoRecord | null> {
@@ -522,10 +608,20 @@ export async function saveAplicador(
   if (isAuthorizedMemberSession()) {
     throw new Error('Cadastro de aplicador disponível apenas para o e-mail chefe.');
   }
-  const existing = await getAplicadorRaw(item.id);
-  const operation = existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
+  let payload = item;
+  let existing = await getAplicadorRaw(payload.id);
+  if (existing?.deleted) existing = undefined;
+
+  const byNip = await findAplicadorByNipDigits(ownerUid, payload.nip, payload.id);
+  if (byNip && !byNip.deleted && (!existing || byNip.id !== existing.id)) {
+    existing = byNip;
+    payload = { ...payload, id: byNip.id };
+  }
+
+  const operation =
+    existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
   const record = await toAplicadorRecord(
-    existing && existing.ownerUid === ownerUid ? { ...existing, ...item } : item,
+    existing && existing.ownerUid === ownerUid ? { ...existing, ...payload } : payload,
     ownerUid,
     userId,
     operation,
@@ -974,22 +1070,28 @@ export async function applyCsvAplicadorLww(
   const db = getTafDatabase();
   if (!db) throw new Error('Armazenamento local indisponível.');
 
-  const local = await db.aplicadores.get(remote.id);
+  let payload = { ...remote };
+  const byNip = await findAplicadorByNipDigits(ownerUid, payload.nip, payload.id);
+  if (byNip && !byNip.deleted) {
+    payload = { ...payload, id: byNip.id };
+  }
+
+  const local = await db.aplicadores.get(payload.id);
   const remoteAt =
-    typeof remote.updatedAt === 'number' && remote.updatedAt > 0 ? remote.updatedAt : 0;
+    typeof payload.updatedAt === 'number' && payload.updatedAt > 0 ? payload.updatedAt : 0;
 
   if (!local || local.deleted || local.ownerUid !== ownerUid) {
     const deviceId = await getDeviceId();
     const userId = getCachedLoginUid();
     const base = ensureRecordMeta(
-      { ...remote, ownerUid, updatedAt: remoteAt || Date.now() } as AplicadorRecord,
+      { ...payload, ownerUid, updatedAt: remoteAt || Date.now() } as AplicadorRecord,
       ownerUid,
     );
     await db.aplicadores.put(bumpRecordMeta(base, deviceId, userId, 'CREATE'));
     return 'created';
   }
 
-  const remoteForLww = { ...local, ...remote, ownerUid, updatedAt: remoteAt };
+  const remoteForLww = { ...local, ...payload, ownerUid, updatedAt: remoteAt };
   const decision = decideLastWriteWins(local, remoteForLww);
   if (decision.action !== 'download') return 'kept_local';
 
@@ -999,7 +1101,7 @@ export async function applyCsvAplicadorLww(
     bumpRecordMeta(
       {
         ...local,
-        ...remote,
+        ...payload,
         ownerUid,
         updatedAt: remoteAt > 0 ? remoteAt : local.updatedAt,
         createdAt: local.createdAt,

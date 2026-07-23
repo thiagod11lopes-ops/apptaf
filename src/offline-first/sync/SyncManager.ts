@@ -3,7 +3,7 @@ import { getFirebaseAuth } from '../../config/firebase';
 import { connectivityMonitor, getConnectivityState } from './ConnectivityMonitor';
 import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
 import { syncEngine, notifyDataChanged } from './SyncEngine';
-import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip } from '../db/localDb';
+import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip, compactDuplicateAplicadoresByNip } from '../db/localDb';
 import { systemState } from './SystemState';
 import { syncLogger } from './SyncLogger';
 import { createLocalBackup, restoreLocalBackup } from './localBackup';
@@ -612,15 +612,16 @@ async function compactCadastrosIfNeeded(uid: string): Promise<void> {
   // sync rebaixa e o ciclo repete (perda visual + looping).
   if (isAuthorizedMemberSession()) return;
   try {
-    const removed = await compactDuplicateCadastrosByNip(uid);
-    if (removed > 0) {
+    const removedCad = await compactDuplicateCadastrosByNip(uid);
+    const removedAp = await compactDuplicateAplicadoresByNip(uid);
+    if (removedCad > 0 || removedAp > 0) {
       await refreshPendingSummary();
       notifyDataChanged();
     }
   } catch (error) {
     await syncLogger.warn(
       'sync-manager',
-      `Falha ao remover cadastros duplicados: ${error instanceof Error ? error.message : String(error)}`,
+      `Falha ao remover duplicados por NIP: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

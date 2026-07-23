@@ -1,0 +1,23 @@
+{
+  "name": "TAF — Teste de Aptidão Física",
+  "short_name": "TAF",
+  "description": "Sistema TAF — Teste de Aptidão Física",
+  "start_url": "/apptaf/",
+  "scope": "/apptaf/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "fullscreen"
+  ],
+  "orientation": "any",
+  "background_color": "#1C1C22",
+  "theme_color": "#1C1C22",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/apptaf/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

@@ -64,7 +64,7 @@ function stripSessao(row: Record<string, unknown>): SessaoAplicacaoTaf {
  * Resumo dos cards da Home **somente a partir do IndexedDB (Dexie)**.
  * Não consulta a nuvem — evita zerar Cadastrados/Parcial/Concluídos/Pendente
  * quando a sync falha ou a nuvem está vazia/divergente.
- * Modo Teste (demo-cad-*/demo-sess-*) não entra no balanço.
+ * Modo Teste (ids demo-cad- e demo-sess-) não entra no balanço.
  */
 export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHistorico> {
   const db = getTafDatabase();

@@ -402,7 +402,7 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
         }
         if (!ok) {
           doc.setTextColor(156, 163, 175);
-          doc.text('—', x + col.w / 2, textBaseline, { align: 'center' });
+          doc.text(pdfTexto('—'), x + col.w / 2, textBaseline, { align: 'center' });
           doc.setTextColor(17, 24, 39);
         }
       } else {

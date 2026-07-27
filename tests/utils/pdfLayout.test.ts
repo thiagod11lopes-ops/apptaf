@@ -6,9 +6,20 @@ import {
   PDF_MAX_ROWS_PER_PAGE,
   PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
   paginatePdfTableRows,
+  pdfTextoParaJsPdf,
 } from '../../src/utils/pdfLayout';
 
 describe('pdfLayout', () => {
+  it('converte travessão tipográfico sem virar ponto de interrogação', () => {
+    expect(pdfTextoParaJsPdf('Resultados TAF — Corrida, Natacao e Permanencia')).toBe(
+      'Resultados TAF - Corrida, Natacao e Permanencia',
+    );
+    expect(pdfTextoParaJsPdf('Resultados do dia — 27/07/2026 · Gerado em 27/07/2026')).toBe(
+      'Resultados do dia - 27/07/2026 - Gerado em 27/07/2026',
+    );
+    expect(pdfTextoParaJsPdf('NIP —')).toBe('NIP -');
+    expect(pdfTextoParaJsPdf('Resultados TAF — Corrida')).not.toContain('?');
+  });
   it('gera documento A4 paisagem com cabeçalho fixo e tabela contínua', () => {
     const tabela = buildPdfTableHtml({
       tableClass: 'resultados-taf',

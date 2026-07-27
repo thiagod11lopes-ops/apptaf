@@ -36,9 +36,12 @@ export function pdfTextoParaJsPdf(valor: string): string {
   return String(valor ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    // Tipografia comum → ASCII (evita "?" no PDF)
     .replace(/[·•]/g, '-')
+    .replace(/[\u2010-\u2015\u2212]/g, '-') // hyphen / en / em dash / minus
+    .replace(/\u2026/g, '...') // ellipsis
     // ASCII + Latin-1 Supplement (inclui ° U+00B0 e º U+00BA)
-    .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '?');
+    .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '');
 }
 
 /** Estilos de tabela — blocos paginados mantêm thead junto às linhas da folha. */

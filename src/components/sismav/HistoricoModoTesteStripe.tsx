@@ -1,52 +1,63 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 
-/** Tarja amarela vertical "Modo Teste" à direita do card do histórico. */
+/** Tarja amarela opaca na diagonal, no centro do card do Histórico. */
 export function HistoricoModoTesteStripe() {
   const { theme } = useTheme();
 
   return (
-    <View
-      accessibilityLabel="Modo Teste"
-      style={[
-        styles.stripe,
-        {
-          backgroundColor: theme.isDark ? 'rgba(234, 179, 8, 0.92)' : '#FACC15',
-          borderColor: theme.isDark ? '#CA8A04' : '#EAB308',
-        },
-      ]}
-    >
-      <Text style={styles.label} numberOfLines={1}>
-        Modo Teste
-      </Text>
+    <View pointerEvents="none" style={styles.overlay} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View
+        accessibilityLabel="Modo Teste"
+        accessibilityRole="text"
+        style={[
+          styles.stripe,
+          {
+            backgroundColor: theme.isDark ? '#EAB308' : '#FACC15',
+            borderColor: theme.isDark ? '#A16207' : '#CA8A04',
+          },
+        ]}
+      >
+        <Text style={styles.label} numberOfLines={1}>
+          Modo Teste
+        </Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  stripe: {
-    alignSelf: 'stretch',
-    width: 28,
-    minHeight: 56,
-    marginVertical: -2,
-    marginRight: -2,
-    borderTopRightRadius: 14,
-    borderBottomRightRadius: 14,
-    borderLeftWidth: 1,
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 4,
     overflow: 'hidden',
+  },
+  stripe: {
+    width: '130%',
+    paddingVertical: 7,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '-28deg' }],
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 8px rgba(66, 32, 6, 0.22)',
+      } as object,
+      default: {
+        elevation: 3,
+      },
+    }),
   },
   label: {
     color: '#422006',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.6,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    // Texto vertical (de cima para baixo).
-    transform: [{ rotate: '90deg' }],
-    width: 72,
     textAlign: 'center',
   },
 });

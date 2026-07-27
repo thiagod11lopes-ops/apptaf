@@ -342,8 +342,8 @@ export default function ResultadosScreen() {
                       >
                         <Trash2 size={20} color={theme.loss} strokeWidth={2.2} />
                       </TouchableOpacity>
-                      {modoTeste ? <HistoricoModoTesteStripe /> : null}
                     </View>
+                    {modoTeste ? <HistoricoModoTesteStripe /> : null}
                   </TafGlassPanel>
                 </View>
               );
@@ -433,6 +433,7 @@ const styles = StyleSheet.create({
   sessaoCard: {
     ...tableFullWidthStyle,
     overflow: 'hidden',
+    position: 'relative',
   },
   sessaoRow: {
     flexDirection: 'row',

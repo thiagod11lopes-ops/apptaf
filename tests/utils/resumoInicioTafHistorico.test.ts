@@ -133,9 +133,27 @@ describe('calcularResumoInicioTafFromHistorico', () => {
     expect(resumo.semTeste).toBe(1);
     expect(resumo.completos).toBe(0);
     expect(resumo.parcial).toBe(0);
+    expect(resumo.fatoresRisco).toBe(0);
     expect(resumo.completos + resumo.parcial + resumo.semTeste + resumo.restritos).toBe(
       resumo.totalCadastrados,
     );
+  });
+
+  it('conta fatores de risco sem tirar de pendente/concluídos', () => {
+    const cadastros = [
+      cadastro({ id: 'c1', nip: '11.1111.11', nome: 'Com risco' }),
+      cadastro({ id: 'c2', nip: '22.2222.22', nome: 'Sem risco' }),
+    ];
+    const resumo = calcularResumoInicioTafFromHistorico(
+      [],
+      cadastros,
+      [],
+      new Set(),
+      new Set(['11111111']),
+    );
+    expect(resumo.fatoresRisco).toBe(1);
+    expect(resumo.semTeste).toBe(2);
+    expect(resumo.restritos).toBe(0);
   });
 
   it('une o mesmo NIP vindo com chaves diferentes em um único participante', () => {

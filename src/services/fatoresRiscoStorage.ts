@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { readAppMeta, writeAppMeta, removeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
-import { nipDigitos } from '../utils/nipFormat';
+import { nipChaveCadastro, nipDigitos } from '../utils/nipFormat';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 
 export type FatorRiscoId =
@@ -199,6 +199,20 @@ export async function getAllFatoresRisco(
   ownerUid?: string | null,
 ): Promise<Record<string, FatoresRiscoRegistro>> {
   return onlyActive(await readMap(ownerUid));
+}
+
+/** NIPs (8 dígitos) de cadastrados com ao menos um fator de risco “sim”. */
+export async function getNipsComFatorRiscoSim(
+  ownerUid?: string | null,
+): Promise<Set<string>> {
+  const map = await getAllFatoresRisco(ownerUid);
+  const out = new Set<string>();
+  for (const [nip, reg] of Object.entries(map)) {
+    if (!temFatorRiscoSim(reg.respostas)) continue;
+    const key = nipChaveCadastro(nip) || nipChaveCadastro(reg.nip);
+    if (key) out.add(key);
+  }
+  return out;
 }
 
 /** Inclui tombstones — sync LWW. */

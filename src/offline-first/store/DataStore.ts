@@ -84,12 +84,14 @@ export class DataStore {
 
   async getResumo(ownerUid: string | null): Promise<ResumoInicioTafHistorico> {
     const { getNipsRestritosAtivos } = await import('../../services/restritosStorage');
-    const [cadastros, sessoes, nipsRestritos] = await Promise.all([
+    const { getNipsComFatorRiscoSim } = await import('../../services/fatoresRiscoStorage');
+    const [cadastros, sessoes, nipsRestritos, nipsFatores] = await Promise.all([
       this.getCadastros(ownerUid),
       this.getSessoes(ownerUid),
       getNipsRestritosAtivos(),
+      getNipsComFatorRiscoSim(),
     ]);
-    return calcularResumoInicioTafFromHistorico(sessoes, cadastros, [], nipsRestritos);
+    return calcularResumoInicioTafFromHistorico(sessoes, cadastros, [], nipsRestritos, nipsFatores);
   }
 
   async upsertCadastro(item: CadastroItemPersist, ownerUid: string | null): Promise<void> {

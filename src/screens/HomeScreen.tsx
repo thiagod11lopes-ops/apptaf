@@ -25,6 +25,7 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   parcial: 0,
   semTeste: 0,
   restritos: 0,
+  fatoresRisco: 0,
 };
 
 /** Parte local do e-mail + "@" — ex.: lopes.thiago.oliveira@marinha.mil.br → lopes.thiago.oliveira@ */
@@ -172,6 +173,11 @@ export default function HomeScreen() {
             label="Restritos"
             value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
             variant="warning"
+          />
+          <StatCard
+            label="Fatores de risco"
+            value={(resumo.fatoresRisco ?? 0).toLocaleString('pt-BR')}
+            variant="negative"
           />
         </View>
       </TafGlassPanel>

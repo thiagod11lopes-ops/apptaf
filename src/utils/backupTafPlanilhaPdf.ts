@@ -112,7 +112,7 @@ export async function buildBackupPlanilhaPdfBytes(
   const ano = String(new Date().getFullYear());
 
   drawSheet(doc, {
-    titulo: `TESTE DE APTIDAO FISICA (TAF) ${ano} — Armada`,
+    titulo: `TESTE DE APTIDAO FISICA (TAF) ${ano} Armada`,
     balanco,
     colunas: COLS_ARMADA,
     linhas: armada,
@@ -121,7 +121,7 @@ export async function buildBackupPlanilhaPdfBytes(
   });
 
   drawSheet(doc, {
-    titulo: `TESTE DE APTIDAO FISICA (TAF) ${ano} — Fuzileiros Navais (FN)`,
+    titulo: `TESTE DE APTIDAO FISICA (TAF) ${ano} FN`,
     balanco,
     colunas: COLS_FN,
     linhas: fn,
@@ -175,7 +175,7 @@ function drawSheet(
     doc.setTextColor(55, 65, 81);
     doc.text(
       pdfTexto(
-        `Balanco: cadastrados ${opts.balanco.cadastrados} | parcial ${opts.balanco.parcial} | completo ${opts.balanco.completo} · Gerado em ${opts.geradoEm} · ${opts.linhas.length} militar(es)`,
+        `Balanço: cadastrados ${opts.balanco.cadastrados} | parcial ${opts.balanco.parcial} | completo ${opts.balanco.completo} - Gerado em ${opts.geradoEm} - ${opts.linhas.length} militar(es).`,
       ),
       marginX,
       y,

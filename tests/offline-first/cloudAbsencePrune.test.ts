@@ -17,7 +17,37 @@ describe('shouldAllowCloudAbsencePrune', () => {
     ).toBe(true);
   });
 
-  it('membro autorizado nunca poda por ausência (mesmo full confiável)', () => {
+  it('membro autorizado: cadastros/sessões não podam por ausência', () => {
+    expect(
+      shouldAllowCloudAbsencePrune({
+        fetchMode: 'full',
+        trustworthyForPrune: true,
+        isAuthorizedMember: true,
+        collection: 'cadastros',
+      }),
+    ).toBe(false);
+    expect(
+      shouldAllowCloudAbsencePrune({
+        fetchMode: 'full',
+        trustworthyForPrune: true,
+        isAuthorizedMember: true,
+        collection: 'sessoes',
+      }),
+    ).toBe(false);
+  });
+
+  it('membro autorizado: aplicadores podam por ausência (SoT do e-mail chefe)', () => {
+    expect(
+      shouldAllowCloudAbsencePrune({
+        fetchMode: 'full',
+        trustworthyForPrune: true,
+        isAuthorizedMember: true,
+        collection: 'aplicadores',
+      }),
+    ).toBe(true);
+  });
+
+  it('membro sem collection (legado) → não poda', () => {
     expect(
       shouldAllowCloudAbsencePrune({
         fetchMode: 'full',
@@ -35,6 +65,14 @@ describe('shouldAllowCloudAbsencePrune', () => {
         isAuthorizedMember: false,
       }),
     ).toBe(false);
+    expect(
+      shouldAllowCloudAbsencePrune({
+        fetchMode: 'full',
+        trustworthyForPrune: false,
+        isAuthorizedMember: true,
+        collection: 'aplicadores',
+      }),
+    ).toBe(false);
   });
 
   it('fetch incremental → não poda', () => {
@@ -43,6 +81,14 @@ describe('shouldAllowCloudAbsencePrune', () => {
         fetchMode: 'incremental',
         trustworthyForPrune: true,
         isAuthorizedMember: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAllowCloudAbsencePrune({
+        fetchMode: 'incremental',
+        trustworthyForPrune: true,
+        isAuthorizedMember: true,
+        collection: 'aplicadores',
       }),
     ).toBe(false);
   });

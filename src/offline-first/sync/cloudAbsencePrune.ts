@@ -3,20 +3,29 @@
  * Extraídas para teste unitário — evita loop baixar→apagar→baixar no autorizado.
  */
 
+export type CloudAbsencePruneCollection = 'cadastros' | 'sessoes' | 'aplicadores' | 'pre_cadastros';
+
 export type CloudAbsencePruneGate = {
   fetchMode: 'full' | 'incremental';
   /** false = decrypt parcial / snapshot incompleto. */
   trustworthyForPrune: boolean;
   isAuthorizedMember: boolean;
+  /**
+   * Coleção alvo. Sem coleção: comportamento legado (só chefe poda).
+   * Aplicadores: membros também podam — cadastro é SoT do e-mail chefe.
+   */
+  collection?: CloudAbsencePruneCollection;
 };
 
-/** Só o chefe, em full fetch confiável, pode podar local synced ausente na nuvem. */
+/**
+ * Full fetch confiável:
+ * - Chefe: poda todas as coleções por ausência na nuvem.
+ * - Membro: só aplicadores (lista do e-mail chefe); cadastros/sessões preservam local.
+ */
 export function shouldAllowCloudAbsencePrune(gate: CloudAbsencePruneGate): boolean {
-  return (
-    gate.fetchMode === 'full' &&
-    gate.trustworthyForPrune !== false &&
-    !gate.isAuthorizedMember
-  );
+  if (gate.fetchMode !== 'full' || gate.trustworthyForPrune === false) return false;
+  if (!gate.isAuthorizedMember) return true;
+  return gate.collection === 'aplicadores';
 }
 
 export type AbsencePlanAction = 'prune' | 'preserve';

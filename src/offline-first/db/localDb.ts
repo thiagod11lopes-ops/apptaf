@@ -189,18 +189,66 @@ export async function listSessoesForDisplay(ownerUid: string | null): Promise<Se
   return mergeRecordsById(mergeTarget, batches).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 
-/** Lista aplicadores para exibição — une todos os owners locais do aparelho. */
+/** Lista aplicadores para exibição — espelha o e-mail chefe (dataOwnerUid). */
 export async function listAplicadoresForDisplay(ownerUid: string | null): Promise<AplicadorRecord[]> {
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
   const loginUid = getCachedLoginUid();
-  const indexedOwners = await listOwnerUidsInTable('aplicadores');
-  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid, ...indexedOwners);
+  // Não unir todos os ownerUids do IndexedDB: cópias órfãs de sessões antigas
+  // continuariam aparecendo como "cadastrados" após o chefe remover na nuvem.
+  const sources = isAuthorizedMemberSession()
+    ? uniqueOwnerSources(persisted ?? primary, ANONYMOUS_OWNER)
+    : uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
   const batches = await Promise.all(sources.map((uid) => listAplicadores(uid)));
   const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
   const merged = mergeRecordsById(mergeTarget, batches);
   return dedupeAplicadoresByNipNewest(merged) as AplicadorRecord[];
+}
+
+/**
+ * Soft-delete local (já synced) de aplicadores cujo ownerUid não é o do e-mail chefe.
+ * Usado em dispositivos de membros para limpar resíduos de migração/sessões antigas
+ * sem tentar upload (membro não cadastra aplicador).
+ */
+export async function pruneAplicadoresOutsideDataOwner(dataOwnerUid: string): Promise<number> {
+  const db = getTafDatabase();
+  if (!db) return 0;
+  const owner = resolveOwnerUid(dataOwnerUid);
+  if (owner === ANONYMOUS_OWNER) return 0;
+
+  const rows = await db.aplicadores.toArray();
+  const keepOwners = new Set([owner, ANONYMOUS_OWNER]);
+  const loginUid = getCachedLoginUid();
+  let removed = 0;
+
+  for (const row of rows) {
+    if (keepOwners.has(row.ownerUid)) continue;
+    if (row.deleted) {
+      await syncQueue.clearPendingForDocument(row.ownerUid, 'aplicadores', row.id);
+      continue;
+    }
+    const pruned = markRecordSynced(
+      {
+        ...row,
+        deleted: true,
+        updatedAt: Math.max(readUpdatedAt(row) + 1, Date.now()),
+      },
+      loginUid,
+    );
+    await putAplicadorRecord(pruned);
+    await syncQueue.clearPendingForDocument(row.ownerUid, 'aplicadores', row.id);
+    removed += 1;
+  }
+
+  if (removed > 0) {
+    await syncLogger.info(
+      'local-db',
+      `Removidos ${removed} aplicador(es) fora do e-mail chefe`,
+      { dataOwnerUid: owner },
+    );
+  }
+  return removed;
 }
 
 /** Lista registros locais para sync — inclui __local__ e UID de login antes da migração. */

@@ -3,7 +3,7 @@ import { getFirebaseAuth } from '../../config/firebase';
 import { connectivityMonitor, getConnectivityState } from './ConnectivityMonitor';
 import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
 import { syncEngine, notifyDataChanged } from './SyncEngine';
-import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip, compactDuplicateAplicadoresByNip } from '../db/localDb';
+import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip, compactDuplicateAplicadoresByNip, pruneAplicadoresOutsideDataOwner } from '../db/localDb';
 import { systemState } from './SystemState';
 import { syncLogger } from './SyncLogger';
 import { createLocalBackup, restoreLocalBackup } from './localBackup';
@@ -630,6 +630,20 @@ async function applyCountersAfterSuccessfulSync(): Promise<void> {
   const uid = ownerUid ?? getCachedDataOwnerUid();
   if (!uid) return;
   await compactCadastrosIfNeeded(uid);
+  // Membro: remove aplicadores órfãos de outros ownerUids — lista segue o e-mail chefe.
+  if (isAuthorizedMemberSession()) {
+    try {
+      const removedOrphans = await pruneAplicadoresOutsideDataOwner(uid);
+      if (removedOrphans > 0) {
+        notifyDataChanged();
+      }
+    } catch (error) {
+      await syncLogger.warn(
+        'sync-manager',
+        `Falha ao limpar aplicadores fora do chefe: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
   invalidateRemoteSnapshotCache();
   await refreshPendingSummary();
   counters = await buildSyncCounters(

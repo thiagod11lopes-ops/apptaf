@@ -298,7 +298,7 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
   forceUploadIds?: Set<string>,
   remoteTombstones?: TombstonePayload[],
   fetchMode: 'full' | 'incremental' = 'full',
-  /** Ausência na nuvem só vira prune quando true (full + snapshot confiável + não-membro). */
+  /** Ausência na nuvem só vira prune quando true (full + snapshot confiável; aplicadores também para membro). */
   allowCloudAbsencePrune = false,
 ): { plan: PlannedSyncItem[]; ignored: number; syncedMissingOnCloud: number } {
   const localMap = new Map(localRows.map((r) => [r.id, r]));
@@ -315,8 +315,9 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
     const decision = decideLastWriteWins(local, remote);
 
     // Id só no local (já synced):
-    // - full fetch confiável (chefe): remover local — ausência na nuvem = verdade.
-    // - membro / incremental / snapshot parcial: NÃO apagar (evita loop baixar→apagar→baixar).
+    // - full fetch confiável: remover local — ausência na nuvem = verdade (chefe: todas;
+    //   membro: só aplicadores, SoT do e-mail chefe).
+    // - incremental / snapshot parcial / outras coleções do membro: NÃO apagar.
     if (
       decision.action === 'upload' &&
       decision.reason === 'somente_local' &&
@@ -536,9 +537,19 @@ async function flushRemainingPendingRecords(
             deletionAudits,
           );
         } else {
+          // Aplicador local sem correspondente na nuvem do chefe → remove localmente.
           const loginUid = getCachedLoginUid();
-          const merged = markRecordSynced({ ...local, ownerUid }, loginUid);
-          await putAplicadorRecord(merged as AplicadorRecord);
+          const pruned = markRecordSynced(
+            {
+              ...local,
+              ownerUid,
+              deleted: true,
+              updatedAt: Math.max(readUpdatedAt(local) + 1, Date.now()),
+            },
+            loginUid,
+          );
+          await putAplicadorRecord(pruned as AplicadorRecord);
+          await syncQueue.clearPendingForDocument(ownerUid, 'aplicadores', item.id);
           stats.ignored += 1;
         }
       } catch (error) {
@@ -918,7 +929,8 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
 
   const runReconcileAndPlan = async (
     fetchMode: 'full' | 'incremental',
-    allowCloudAbsencePrune: boolean,
+    allowCadSessPrune: boolean,
+    allowAppPrune: boolean,
   ) => {
     await reconcileIdenticalUnsyncedLocals(
       'cadastros',
@@ -960,7 +972,7 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       plainCadIds,
       remoteCadTombstones,
       fetchMode,
-      allowCloudAbsencePrune,
+      allowCadSessPrune,
     );
     const sessPlanFresh = buildSyncPlan(
       'sessoes',
@@ -971,7 +983,7 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       plainSessIds,
       remoteSessTombstones,
       fetchMode,
-      allowCloudAbsencePrune,
+      allowCadSessPrune,
     );
     const appPlanFresh = buildSyncPlan(
       'aplicadores',
@@ -982,28 +994,46 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       plainAppIds,
       remoteAppTombstones,
       fetchMode,
-      allowCloudAbsencePrune,
+      allowAppPrune,
     );
 
     return { cadPlanFresh, sessPlanFresh, appPlanFresh, localCadFresh, localSessFresh, localAppFresh };
   };
 
-  const allowPruneThisCycle = shouldAllowCloudAbsencePrune({
+  const memberSession = isAuthorizedMemberSession();
+  const pruneGateBase = {
     fetchMode: remoteSnapshot.fetchMode,
     trustworthyForPrune: remoteSnapshot.trustworthyForPrune !== false,
-    isAuthorizedMember: isAuthorizedMemberSession(),
+    isAuthorizedMember: memberSession,
+  } as const;
+  const allowCadSessPruneThisCycle = shouldAllowCloudAbsencePrune({
+    ...pruneGateBase,
+    collection: 'cadastros',
+  });
+  const allowAppPruneThisCycle = shouldAllowCloudAbsencePrune({
+    ...pruneGateBase,
+    collection: 'aplicadores',
   });
 
-  if (remoteSnapshot.fetchMode === 'full' && !allowPruneThisCycle) {
+  if (remoteSnapshot.fetchMode === 'full' && !allowCadSessPruneThisCycle && !allowAppPruneThisCycle) {
     await syncLogger.info(
       'sync',
-      isAuthorizedMemberSession()
-        ? 'Membro autorizado: prune por ausência desativado (só tombstone real remove local)'
+      memberSession
+        ? 'Membro autorizado: prune por ausência desativado (snapshot não confiável)'
         : 'Snapshot remoto não confiável para prune (decrypt parcial) — ausência local preservada',
+    );
+  } else if (remoteSnapshot.fetchMode === 'full' && memberSession && allowAppPruneThisCycle) {
+    await syncLogger.info(
+      'sync',
+      'Membro autorizado: aplicadores alinhados ao e-mail chefe (prune por ausência ativo)',
     );
   }
 
-  let planned = await runReconcileAndPlan(remoteSnapshot.fetchMode, allowPruneThisCycle);
+  let planned = await runReconcileAndPlan(
+    remoteSnapshot.fetchMode,
+    allowCadSessPruneThisCycle,
+    allowAppPruneThisCycle,
+  );
 
   // Incremental viu ids sincronizados ausentes na nuvem → full fetch imediato (nuvem = SoT).
   const missingHint =
@@ -1026,12 +1056,24 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       remoteSessTombstones = [],
       remoteAppTombstones = [],
     } = remoteSnapshot);
-    const allowPruneAfterFull = shouldAllowCloudAbsencePrune({
+    const pruneGateAfterFull = {
       fetchMode: remoteSnapshot.fetchMode,
       trustworthyForPrune: remoteSnapshot.trustworthyForPrune !== false,
-      isAuthorizedMember: isAuthorizedMemberSession(),
+      isAuthorizedMember: memberSession,
+    } as const;
+    const allowCadSessPruneAfterFull = shouldAllowCloudAbsencePrune({
+      ...pruneGateAfterFull,
+      collection: 'cadastros',
     });
-    planned = await runReconcileAndPlan(remoteSnapshot.fetchMode, allowPruneAfterFull);
+    const allowAppPruneAfterFull = shouldAllowCloudAbsencePrune({
+      ...pruneGateAfterFull,
+      collection: 'aplicadores',
+    });
+    planned = await runReconcileAndPlan(
+      remoteSnapshot.fetchMode,
+      allowCadSessPruneAfterFull,
+      allowAppPruneAfterFull,
+    );
   }
 
   const { cadPlanFresh, sessPlanFresh, appPlanFresh, localCadFresh, localSessFresh, localAppFresh } =

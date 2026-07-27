@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildBackupApptafFilename,
   buildBackupPlanilhaOdsFilename,
+  buildBackupPlanilhaPdfFilename,
   formatBrDateKey,
 } from '../../src/utils/backupNaming';
 
@@ -21,5 +22,12 @@ describe('backupNaming', () => {
     const filename = buildBackupPlanilhaOdsFilename(new Date('2026-07-03T12:00:00.000Z'));
     expect(filename.startsWith('Planilha TAF apptaf ')).toBe(true);
     expect(filename.endsWith('.ods')).toBe(true);
+  });
+
+  it('gera nome Planilha PDF (dd-mm-aaaa).pdf', () => {
+    const filename = buildBackupPlanilhaPdfFilename(new Date('2026-07-03T12:00:00.000Z'));
+    expect(filename.startsWith('Planilha PDF (')).toBe(true);
+    expect(filename.endsWith(').pdf')).toBe(true);
+    expect(filename).toMatch(/^Planilha PDF \(\d{2}-\d{2}-\d{4}\)\.pdf$/);
   });
 });

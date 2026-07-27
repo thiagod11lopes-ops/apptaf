@@ -30,8 +30,9 @@ import {
   type SystemBackupPayload,
 } from './gatherSystemBackupData';
 import { csvRow, parseCsvRecords, recordsToObjects } from './csvText';
-import { buildBackupApptafFilename, buildBackupPlanilhaOdsFilename } from './backupNaming';
+import { buildBackupApptafFilename, buildBackupPlanilhaOdsFilename, buildBackupPlanilhaPdfFilename } from './backupNaming';
 import { buildBackupOdsBytes, ODS_MIME_TYPE } from './backupTafOds';
+import { buildBackupPlanilhaPdfBytes, PLANILHA_PDF_MIME_TYPE } from './backupTafPlanilhaPdf';
 
 const BACKUP_VERSION = '2';
 
@@ -717,6 +718,10 @@ function planilhaOdsFilename(): string {
   return buildBackupPlanilhaOdsFilename();
 }
 
+function planilhaPdfFilename(): string {
+  return buildBackupPlanilhaPdfFilename();
+}
+
 function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -741,18 +746,41 @@ export async function downloadBackupOdsFile(
   }
 }
 
-/** Baixa CSV e, em seguida, a planilha ODS (dois arquivos). */
+export async function downloadBackupPlanilhaPdfFile(
+  cadastros: CadastroItemPersist[],
+  filename = planilhaPdfFilename(),
+  sessoes: SessaoAplicacaoTaf[] = [],
+): Promise<void> {
+  const { baixarBinarioParaDownloads } = await import('./salvarArquivoNaPasta');
+  const bytes = await buildBackupPlanilhaPdfBytes(cadastros, sessoes);
+  const resultado = await baixarBinarioParaDownloads({
+    bytes,
+    filename,
+    mimeType: PLANILHA_PDF_MIME_TYPE,
+    uti: 'com.adobe.pdf',
+    dialogTitle: 'Salvar planilha TAF (PDF) em Downloads',
+    extensaoPadrao: '.pdf',
+  });
+  if (!resultado.ok) {
+    throw new Error('Seleção de pasta cancelada.');
+  }
+}
+
+/** Baixa CSV, planilha ODS e PDF da planilha (três arquivos). */
 export async function downloadBackupCsvEOds(
   csvContent: string,
   csvFilename: string,
   cadastros: CadastroItemPersist[],
   odsFilename = planilhaOdsFilename(),
   sessoes: SessaoAplicacaoTaf[] = [],
+  pdfFilename = planilhaPdfFilename(),
 ): Promise<void> {
   await downloadBackupCsvFile(csvContent, csvFilename);
-  // Navegadores costumam bloquear o 2º download se for imediato.
+  // Navegadores costumam bloquear downloads seguintes se forem imediatos.
   await delayMs(450);
   await downloadBackupOdsFile(cadastros, odsFilename, sessoes);
+  await delayMs(450);
+  await downloadBackupPlanilhaPdfFile(cadastros, pdfFilename, sessoes);
 }
 
 export async function downloadBackupCsvFile(content: string, filename: string): Promise<void> {
@@ -774,6 +802,7 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   sessoes: number;
   filename: string;
   filenameOds: string;
+  filenamePdf: string;
   mensagem: string;
 }> {
   const {
@@ -785,6 +814,7 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   const content = buildBackupCsvContent(payload);
   const filename = backupFilename();
   const filenameOds = planilhaOdsFilename();
+  const filenamePdf = planilhaPdfFilename();
   const resultado = await salvarConteudoTextoNaPastaEscolhida({
     content,
     filename,
@@ -807,12 +837,25 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   if (!odsResult.ok) {
     throw new Error('Seleção de pasta cancelada.');
   }
+  const pdfBytes = await buildBackupPlanilhaPdfBytes(payload.cadastros, payload.sessoes);
+  const pdfResult = await salvarBinarioNaPastaEscolhida({
+    bytes: pdfBytes,
+    filename: filenamePdf,
+    mimeType: PLANILHA_PDF_MIME_TYPE,
+    uti: 'com.adobe.pdf',
+    dialogTitle: 'Salvar planilha TAF (PDF) na pasta',
+    extensaoPadrao: '.pdf',
+  });
+  if (!pdfResult.ok) {
+    throw new Error('Seleção de pasta cancelada.');
+  }
   return {
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
     filename,
     filenameOds,
-    mensagem: `${mensagemSucessoSalvarNaPasta(resultado)} Também salva a planilha ODS.`,
+    filenamePdf,
+    mensagem: `${mensagemSucessoSalvarNaPasta(resultado)} Também salva a planilha ODS e o PDF.`,
   };
 }
 
@@ -821,6 +864,7 @@ export async function exportarBackupTafCsv(): Promise<{
   sessoes: number;
   filename: string;
   filenameOds: string;
+  filenamePdf: string;
   mensagem: string;
 }> {
   const { mensagemSucessoSalvarNaPasta, baixarTextoParaDownloads } = await import(
@@ -830,6 +874,7 @@ export async function exportarBackupTafCsv(): Promise<{
   const content = buildBackupCsvContent(payload);
   const filename = backupFilename();
   const filenameOds = planilhaOdsFilename();
+  const filenamePdf = planilhaPdfFilename();
   const resultado = await baixarTextoParaDownloads({
     content,
     filename,
@@ -842,12 +887,15 @@ export async function exportarBackupTafCsv(): Promise<{
   }
   await delayMs(450);
   await downloadBackupOdsFile(payload.cadastros, filenameOds, payload.sessoes);
+  await delayMs(450);
+  await downloadBackupPlanilhaPdfFile(payload.cadastros, filenamePdf, payload.sessoes);
   return {
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
     filename,
     filenameOds,
-    mensagem: `${mensagemSucessoSalvarNaPasta(resultado)} Também baixou a planilha ODS.`,
+    filenamePdf,
+    mensagem: `${mensagemSucessoSalvarNaPasta(resultado)} Também baixou a planilha ODS e o PDF.`,
   };
 }
 

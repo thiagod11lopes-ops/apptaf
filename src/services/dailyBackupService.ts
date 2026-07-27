@@ -6,6 +6,7 @@ import { gatherSystemBackupData } from '../utils/gatherSystemBackupData';
 import {
   buildBackupApptafFilename,
   buildBackupPlanilhaOdsFilename,
+  buildBackupPlanilhaPdfFilename,
   formatBrDateKey,
 } from '../utils/backupNaming';
 import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
@@ -25,9 +26,10 @@ export type DailyBackupPrepared = {
   content: string;
   filename: string;
   filenameOds: string;
-  /** Cadastros usados na planilha ODS. */
+  filenamePdf: string;
+  /** Cadastros usados na planilha ODS/PDF. */
   cadastrosData: CadastroItemPersist[];
-  /** Sessões para rúbricas do Histórico na planilha ODS. */
+  /** Sessões para rúbricas do Histórico na planilha ODS/PDF. */
   sessoesData: SessaoAplicacaoTaf[];
   cadastros: number;
   sessoes: number;
@@ -66,9 +68,10 @@ export async function prepareDailySystemBackup(
   const content = buildBackupCsvContent(payload);
   const filename = buildBackupApptafFilename();
   const filenameOds = buildBackupPlanilhaOdsFilename();
+  const filenamePdf = buildBackupPlanilhaPdfFilename();
   await yieldToUi();
 
-  report(72, 'Gerando planilha ODS…');
+  report(72, 'Gerando planilha ODS e PDF…');
   await yieldToUi();
 
   report(84, 'Salvando snapshot local…');
@@ -78,7 +81,7 @@ export async function prepareDailySystemBackup(
       await createLocalBackup(uid);
     }
   } catch {
-    // Backup CSV/ODS principal continua mesmo se o snapshot local falhar.
+    // Backup CSV/ODS/PDF principal continua mesmo se o snapshot local falhar.
   }
 
   report(95, 'Backup pronto para download');
@@ -86,6 +89,7 @@ export async function prepareDailySystemBackup(
     content,
     filename,
     filenameOds,
+    filenamePdf,
     cadastrosData: payload.cadastros,
     sessoesData: payload.sessoes,
     cadastros: payload.cadastros.length,
@@ -102,6 +106,7 @@ export async function downloadPreparedDailyBackup(prepared: DailyBackupPrepared)
     prepared.cadastrosData,
     prepared.filenameOds,
     prepared.sessoesData,
+    prepared.filenamePdf,
   );
 }
 
@@ -110,6 +115,6 @@ export async function runDailySystemBackup(
 ): Promise<DailyBackupPrepared> {
   const prepared = await prepareDailySystemBackup(onProgress);
   await downloadPreparedDailyBackup(prepared);
-  onProgress?.({ percent: 100, label: 'Backup concluído (CSV + ODS)' });
+  onProgress?.({ percent: 100, label: 'Backup concluído (CSV + ODS + PDF)' });
   return prepared;
 }

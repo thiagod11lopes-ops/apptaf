@@ -255,7 +255,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
                   <Text style={[styles.stepLabel, { color: theme.textSecondary }]}>{progress.label}</Text>
                   {prepared ? (
                     <Text style={[ts.caption, styles.filename, { color: theme.textMuted }]}>
-                      Arquivos: {prepared.filename} + {prepared.filenameOds}
+                      Arquivos: {prepared.filename} + {prepared.filenameOds} + {prepared.filenamePdf}
                     </Text>
                   ) : null}
                 </View>
@@ -317,7 +317,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
                       style={styles.btnPrimary}
                     >
                       <Download size={18} color="#FFFFFF" strokeWidth={2.4} />
-                      <Text style={styles.btnPrimaryText}>Baixar CSV + planilha e continuar</Text>
+                      <Text style={styles.btnPrimaryText}>Baixar CSV + planilha + PDF e continuar</Text>
                     </LinearGradient>
                   </PressableScale>
                 ) : null}

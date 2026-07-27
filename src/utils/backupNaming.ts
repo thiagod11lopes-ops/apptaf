@@ -40,3 +40,8 @@ export function buildBackupApptafFilename(date = new Date()): string {
 export function buildBackupPlanilhaOdsFilename(date = new Date()): string {
   return `Planilha TAF apptaf ${formatBrDateKey(date)}.ods`;
 }
+
+/** Nome do PDF da planilha — ex.: Planilha PDF (03-07-2026).pdf */
+export function buildBackupPlanilhaPdfFilename(date = new Date()): string {
+  return `Planilha PDF (${formatBrDateKey(date)}).pdf`;
+}

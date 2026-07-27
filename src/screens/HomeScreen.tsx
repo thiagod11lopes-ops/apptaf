@@ -185,24 +185,24 @@ export default function HomeScreen() {
             variant="primary"
           />
           <StatCard
+            label="Parcial"
+            value={resumo.parcial.toLocaleString('pt-BR')}
+            variant="warning"
+          />
+          <StatCard
             label="Pendente"
             value={resumo.semTeste.toLocaleString('pt-BR')}
             variant="negative"
           />
           <StatCard
-            label="Parcial"
-            value={resumo.parcial.toLocaleString('pt-BR')}
+            label="Restritos"
+            value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
             variant="warning"
           />
           <StatCard
             label="Concluídos"
             value={resumo.completos.toLocaleString('pt-BR')}
             variant="positive"
-          />
-          <StatCard
-            label="Restritos"
-            value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
-            variant="warning"
           />
           <StatCard
             label="Fatores de risco"

@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
-import { nipDigitos } from '../utils/nipFormat';
+import { nipChaveCadastro, nipDigitos } from '../utils/nipFormat';
 import { dataBrParaIso, dataHojeBr } from '../utils/tafRegistro';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 
@@ -46,24 +46,21 @@ function parseMap(raw: string | null | undefined): Record<string, RestritoRegist
   }
 }
 
-function readWebLocalBackup(ownerUid?: string | null): Record<string, RestritoRegistro> {
+function readWebKey(key: string): Record<string, RestritoRegistro> {
   if (Platform.OS !== 'web') return {};
   try {
     if (typeof localStorage === 'undefined') return {};
-    return parseMap(localStorage.getItem(webLsKey(ownerUid)));
+    return parseMap(localStorage.getItem(key));
   } catch {
     return {};
   }
 }
 
-function writeWebLocalBackup(
-  map: Record<string, RestritoRegistro>,
-  ownerUid?: string | null,
-): void {
+function writeWebKey(key: string, map: Record<string, RestritoRegistro>): void {
   if (Platform.OS !== 'web') return;
   try {
     if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(webLsKey(ownerUid), JSON.stringify(map));
+    localStorage.setItem(key, JSON.stringify(map));
   } catch {
     // silencioso
   }
@@ -75,7 +72,8 @@ function mergeMaps(
   const out: Record<string, RestritoRegistro> = {};
   for (const map of maps) {
     for (const [nip, reg] of Object.entries(map)) {
-      const key = nipDigitos(nip) || nip;
+      const key = nipChaveCadastro(nip) || nipDigitos(nip) || nip;
+      if (!key) continue;
       const prev = out[key];
       if (!prev || (reg.updatedAt ?? 0) >= (prev.updatedAt ?? 0)) {
         out[key] = { ...reg, nip: key };
@@ -85,38 +83,19 @@ function mergeMaps(
   return out;
 }
 
-async function migrateLegacyIfNeeded(ownerUid: string): Promise<void> {
-  if (!ownerUid) return;
-  const scopedKey = storageKey(ownerUid);
-  const existing = parseMap(await readAppMeta(scopedKey));
-  if (Object.keys(existing).length > 0) return;
-
-  const legacy = parseMap(await readAppMeta(STORAGE_KEY_LEGACY));
-  const legacyWeb = (() => {
-    if (Platform.OS !== 'web') return {};
-    try {
-      if (typeof localStorage === 'undefined') return {};
-      return parseMap(localStorage.getItem(WEB_LS_KEY_LEGACY));
-    } catch {
-      return {};
-    }
-  })();
-  const merged = mergeMaps(legacyWeb, legacy);
-  if (Object.keys(merged).length === 0) return;
-  await writeAppMeta(scopedKey, JSON.stringify(merged));
-  writeWebLocalBackup(merged, ownerUid);
-}
-
+/**
+ * Sempre une legado + bucket do owner + backups web.
+ * Evita Home=0 quando o registro ficou em outra chave de meta.
+ */
 async function readMap(
   ownerUid?: string | null,
 ): Promise<Record<string, RestritoRegistro>> {
   const owner = resolveOwnerUid(ownerUid);
-  if (owner) {
-    await migrateLegacyIfNeeded(owner);
-  }
-  const primary = parseMap(await readAppMeta(storageKey(owner)));
-  const webBackup = readWebLocalBackup(owner);
-  return mergeMaps(webBackup, primary);
+  const scoped = owner ? parseMap(await readAppMeta(storageKey(owner))) : {};
+  const legacy = parseMap(await readAppMeta(STORAGE_KEY_LEGACY));
+  const webScoped = owner ? readWebKey(webLsKey(owner)) : {};
+  const webLegacy = readWebKey(WEB_LS_KEY_LEGACY);
+  return mergeMaps(legacy, webLegacy, scoped, webScoped);
 }
 
 async function writeMap(
@@ -125,8 +104,13 @@ async function writeMap(
 ): Promise<void> {
   const owner = resolveOwnerUid(ownerUid);
   const payload = JSON.stringify(map);
-  writeWebLocalBackup(map, owner);
-  await writeAppMeta(storageKey(owner), payload);
+  // Espelha no legado e no bucket do owner para qualquer caminho de leitura.
+  await writeAppMeta(STORAGE_KEY_LEGACY, payload);
+  writeWebKey(WEB_LS_KEY_LEGACY, map);
+  if (owner) {
+    await writeAppMeta(storageKey(owner), payload);
+    writeWebKey(webLsKey(owner), map);
+  }
   notifyDataChanged();
 }
 
@@ -194,14 +178,16 @@ export async function getNipsRestritosAtivos(refBr: string = dataHojeBr()): Prom
   const map = await getAllRestritos();
   const ativos = new Set<string>();
   for (const [nip, reg] of Object.entries(map)) {
-    if (isDispensaAtiva(reg, refBr)) ativos.add(nipDigitos(nip) || nip);
+    if (!isDispensaAtiva(reg, refBr)) continue;
+    const key = nipChaveCadastro(nip) || nipChaveCadastro(reg.nip);
+    if (key) ativos.add(key);
   }
   return ativos;
 }
 
 export async function getRestritoByNip(nip: string): Promise<RestritoRegistro | null> {
-  const key = nipDigitos(nip);
-  if (key.length !== 8) return null;
+  const key = nipChaveCadastro(nip);
+  if (!key) return null;
   const map = await getAllRestritos();
   return map[key] ?? null;
 }
@@ -212,8 +198,8 @@ export async function saveRestrito(input: {
   dataInicio: string;
   dataFim: string;
 }): Promise<RestritoRegistro> {
-  const key = nipDigitos(input.nip);
-  if (key.length !== 8) {
+  const key = nipChaveCadastro(input.nip);
+  if (!key) {
     throw new Error('NIP inválido');
   }
   if (!dataDispensaValida(input.dataInicio)) {
@@ -250,8 +236,8 @@ export async function saveRestrito(input: {
 }
 
 export async function deleteRestritoByNip(nip: string): Promise<boolean> {
-  const key = nipDigitos(nip);
-  if (key.length !== 8) {
+  const key = nipChaveCadastro(nip);
+  if (!key) {
     throw new Error('NIP inválido');
   }
   const map = await readMap();
@@ -276,7 +262,7 @@ export async function clearAllRestritos(ownerUid?: string | null): Promise<numbe
   const now = Date.now();
   const next: Record<string, RestritoRegistro> = { ...map };
   for (const reg of ativos) {
-    const nip = nipDigitos(reg.nip);
+    const nip = nipChaveCadastro(reg.nip) || nipDigitos(reg.nip);
     next[nip] = { ...reg, nip, deleted: true, updatedAt: now };
   }
   await writeMap(next, ownerUid);

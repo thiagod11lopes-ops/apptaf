@@ -231,7 +231,16 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
         dataInicio,
         dataFim,
       });
-      setSucesso(editandoExistente ? 'Dispensa atualizada.' : 'Dispensa registrada.');
+      const ativa = isDispensaAtiva({ dataInicio, dataFim });
+      setSucesso(
+        editandoExistente
+          ? ativa
+            ? 'Dispensa atualizada. Conta em Restritos na Home.'
+            : 'Dispensa atualizada, mas fora do período de hoje — não conta em Restritos na Home.'
+          : ativa
+            ? 'Dispensa registrada. Conta em Restritos na Home.'
+            : 'Dispensa registrada, mas fora do período de hoje — não conta em Restritos na Home.',
+      );
       setEditandoExistente(true);
       await recarregarLista();
       onSalvo?.();
@@ -282,7 +291,7 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
         <AplicarTafSectionHeader
           kicker="DISPENSA"
           title="Restritos"
-          subtitle="Localize o militar pelo NIP ou nome e informe o período da dispensa."
+          subtitle="Localize o militar pelo NIP ou nome e informe o período da dispensa. Só entram em Restritos na Home as dispensas ativas (hoje entre início e fim)."
         />
 
         <View style={styles.fieldBlock}>

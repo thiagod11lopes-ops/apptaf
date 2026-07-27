@@ -4,7 +4,7 @@ import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultad
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
-import { formatNipInput, nipDigitos } from './nipFormat';
+import { formatNipInput, nipChaveCadastro, nipDigitos } from './nipFormat';
 import type { PendenciaParcialItem, ResultadoGeralItem, ResultadoTafLinha } from './resultadoTafCadastro';
 import {
   postoGradFromLinhaId,
@@ -497,13 +497,19 @@ export function calcularResumoInicioTafFromHistorico(
   // Conta só cadastrados — evita inflar Parcial/Concluídos com sessões órfãs
   // (ex.: NIP sem cadastro) que deixam Pendente igual entre dispositivos e Parcial diferente.
   // Restritos (dispensa ativa): entram em `restritos`, não em pendente nem concluídos.
+  const nipsRestritosNorm = new Set<string>();
+  for (const n of nipsRestritosAtivos) {
+    const key = nipChaveCadastro(n) || (nipDigitos(n).length === 8 ? nipDigitos(n) : '');
+    if (key) nipsRestritosNorm.add(key);
+  }
+
   let completos = 0;
   let parcial = 0;
   let semTeste = 0;
   let restritos = 0;
   for (const c of cadastrosReais) {
-    const nipC = nipDigitos(c.nip);
-    if (nipC.length >= 8 && nipsRestritosAtivos.has(nipC)) {
+    const nipC = nipChaveCadastro(c.nip);
+    if (nipC && nipsRestritosNorm.has(nipC)) {
       restritos += 1;
       continue;
     }

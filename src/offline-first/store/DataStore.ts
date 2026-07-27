@@ -31,23 +31,43 @@ import { notifyDataChanged, subscribeDataChanged } from '../sync/SyncEngine';
 import { syncQueue } from '../sync/SyncQueue';
 import { sanitizeAplicadorForDisplay } from '../../utils/aplicadorSyncPolicy';
 import { getTafDatabase } from '../db/tafDatabase';
+import {
+  isDemoAplicadorId,
+  isDemoCadastroId,
+  isDemoSessaoId,
+} from '../../utils/gatherSystemBackupData';
 
 export class DataStore {
-  async getCadastros(ownerUid: string | null): Promise<CadastroItemPersist[]> {
+  async getCadastros(
+    ownerUid: string | null,
+    opts?: { includeDemo?: boolean },
+  ): Promise<CadastroItemPersist[]> {
     const rows = await listCadastrosForDisplay(ownerUid);
-    return filterRowsForDisplay(rows).map(stripMeta);
+    const list = filterRowsForDisplay(rows).map(stripMeta);
+    if (opts?.includeDemo) return list;
+    return list.filter((c) => !isDemoCadastroId(c.id));
   }
 
-  async getAplicadores(ownerUid: string | null): Promise<AplicadorItemPersist[]> {
+  async getAplicadores(
+    ownerUid: string | null,
+    opts?: { includeDemo?: boolean },
+  ): Promise<AplicadorItemPersist[]> {
     const rows = await listAplicadoresForDisplay(ownerUid);
-    return filterRowsForDisplay(rows)
+    const list = filterRowsForDisplay(rows)
       .map(stripMeta)
       .map((item) => sanitizeAplicadorForDisplay(item));
+    if (opts?.includeDemo) return list;
+    return list.filter((a) => !isDemoAplicadorId(a.id));
   }
 
-  async getSessoes(ownerUid: string | null): Promise<SessaoAplicacaoTaf[]> {
+  async getSessoes(
+    ownerUid: string | null,
+    opts?: { includeDemo?: boolean },
+  ): Promise<SessaoAplicacaoTaf[]> {
     const rows = await listSessoesForDisplay(ownerUid);
-    return filterRowsForDisplay(rows).map(stripMeta);
+    const list = filterRowsForDisplay(rows).map(stripMeta);
+    if (opts?.includeDemo) return list;
+    return list.filter((s) => !isDemoSessaoId(s.id));
   }
 
   /** Soft-deletes locais (ainda no Dexie) — bloqueiam recriação de sessões virtuais. */

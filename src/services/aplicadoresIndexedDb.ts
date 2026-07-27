@@ -79,14 +79,16 @@ export async function clearLocalAplicadores(): Promise<void> {
   }
 }
 
-export async function getAllAplicadores(): Promise<AplicadorItemPersist[]> {
+export async function getAllAplicadores(opts?: {
+  includeDemo?: boolean;
+}): Promise<AplicadorItemPersist[]> {
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
-    return dataStore.getAplicadores(uid);
+    return dataStore.getAplicadores(uid, opts);
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
-    return dataStore.getAplicadores(uid);
+    return dataStore.getAplicadores(uid, opts);
   }
   return getAllAplicadoresLocal();
 }

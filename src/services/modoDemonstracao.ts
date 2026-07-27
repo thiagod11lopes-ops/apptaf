@@ -6,10 +6,15 @@ import {
   removeAppMeta,
   writeAppMeta,
 } from '../offline-first/db/appMeta';
-import { resolveOwnerUid } from '../offline-first/db/localDb';
+import {
+  ensureDemoCadastrosForAplicar,
+  removeDemoCadastrosAndAplicador,
+  resolveOwnerUid,
+} from '../offline-first/db/localDb';
 import { restoreLocalBackup } from '../offline-first/sync/localBackup';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { resolveStorageOwnerUid } from './firebase/authUid';
+import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 
 export { DEMO_SYNC_BLOCKED_MESSAGE } from '../offline-first/sync/syncAuthMessages';
 
@@ -29,20 +34,26 @@ export function subscribeModoDemonstracao(listener: () => void): () => void {
 export { isModoDemonstracaoAtivo };
 
 /**
- * Liga/desliga apenas a exibição de cards de exemplo no Histórico.
- * Não altera IndexedDB, planilhas, backup nem sincronização.
+ * Liga/desliga Modo Teste na aba Aplicar TAF.
+ * Disponibiliza militares fictícios para aplicar provas; as sessões aplicadas
+ * (demo-sess-*) permanecem no Histórico com tarja “Modo Teste”.
+ * Não troca o banco real nem entra em planilha/backup/sync.
  */
 export async function toggleModoDemonstracaoSistema(): Promise<{ ativo: boolean }> {
-  // Limpa resíduo do antigo modo que trocava o banco inteiro.
   await limparResiduoModoDemoAntigo();
 
+  const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
   const estavaAtivo = isModoDemonstracaoAtivo();
+
   if (estavaAtivo) {
+    await removeDemoCadastrosAndAplicador(ownerUid);
     await removeAppMeta(DEMO_MODO_ATIVO_KEY);
   } else {
+    await ensureDemoCadastrosForAplicar(ownerUid);
     await writeAppMeta(DEMO_MODO_ATIVO_KEY, '1');
   }
 
+  notifyDataChanged();
   notifyListeners();
   return { ativo: !estavaAtivo };
 }
@@ -52,12 +63,11 @@ async function limparResiduoModoDemoAntigo(): Promise<void> {
   if (!backupRaw?.trim()) return;
 
   const backupId = Number(backupRaw);
-  const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
   if (Number.isFinite(backupId)) {
     try {
       await restoreLocalBackup(backupId);
     } catch {
-      /* segue limpeza das chaves */
+      /* segue limpeza */
     }
     const db = getTafDatabase();
     if (db) {
@@ -71,18 +81,15 @@ async function limparResiduoModoDemoAntigo(): Promise<void> {
   await removeAppMeta(DEMO_BACKUP_ID_KEY);
 }
 
-/**
- * Na abertura: se ainda existir snapshot do antigo swap IndexedDB, restaura dados reais
- * e mantém o flag só como overlay de cards (desligado por padrão após limpeza).
- */
+/** Na abertura: restaura banco se ainda houver snapshot do antigo swap IndexedDB. */
 export async function garantirModoNormalNaAbertura(): Promise<void> {
   if (!garantiaModoNormalPromise) {
     garantiaModoNormalPromise = (async () => {
       const backupRaw = await readAppMeta(DEMO_BACKUP_ID_KEY);
       if (!backupRaw?.trim()) return;
       await limparResiduoModoDemoAntigo();
-      // Após restaurar o banco real, desliga o overlay até o usuário pedir de novo.
       await removeAppMeta(DEMO_MODO_ATIVO_KEY);
+      notifyDataChanged();
       notifyListeners();
     })().catch((error) => {
       garantiaModoNormalPromise = null;
@@ -94,7 +101,7 @@ export async function garantirModoNormalNaAbertura(): Promise<void> {
 
 let garantiaModoNormalPromise: Promise<void> | null = null;
 
-/** Apenas testes — permite simular nova abertura do app. */
+/** Apenas testes. */
 export function resetGarantiaModoNormalForTests(): void {
   garantiaModoNormalPromise = null;
 }

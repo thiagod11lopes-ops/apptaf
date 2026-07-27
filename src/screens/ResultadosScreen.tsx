@@ -1,11 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Platform,
-  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
@@ -49,12 +48,7 @@ import {
 } from '../utils/sessoesUnificadasResultados';
 import {
   isSessaoModoTeste,
-  mesclarSessoesHistoricoComModoTeste,
 } from '../utils/historicoSessoesModoTeste';
-import {
-  isModoDemonstracaoAtivo,
-  subscribeModoDemonstracao,
-} from '../services/modoDemonstracao';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { PREMIUM } from '../theme/premium';
@@ -83,16 +77,14 @@ export default function ResultadosScreen() {
   const [excluindo, setExcluindo] = useState(false);
   const [erroExclusao, setErroExclusao] = useState<string | null>(null);
   const ultimoToqueCardRef = useRef<{ id: string; at: number } | null>(null);
-  const [modoTesteHistorico, setModoTesteHistorico] = useState(isModoDemonstracaoAtivo);
-
-  useEffect(
-    () => subscribeModoDemonstracao(() => setModoTesteHistorico(isModoDemonstracaoAtivo())),
-    [],
-  );
 
   const carregar = useCallback(() => {
     setCarregando(true);
-    Promise.all([getAllCadastros(), getAllSessoesAplicacao(), getDeletedSessoesAplicacao()])
+    Promise.all([
+      getAllCadastros(),
+      getAllSessoesAplicacao({ includeDemo: true }),
+      getDeletedSessoesAplicacao(),
+    ])
       .then(([cadastrosLista, sessoesLista, sessoesExcluidas]) => {
         setCadastros(cadastrosLista);
         setSessoes(
@@ -115,13 +107,10 @@ export default function ResultadosScreen() {
   const sessoesHistoricoVisiveis = useMemo(() => {
     if (!normaVista) return [];
     const base = sessoesPorNorma;
-    const filtradas = historicoFiltroMilitar
+    return historicoFiltroMilitar
       ? filtrarSessoesHistoricoMilitar(base, historicoFiltroMilitar, cadastros)
       : base;
-    // Cards de exemplo só no Histórico (sem filtro por militar) e nunca nas outras abas/planilhas.
-    if (historicoFiltroMilitar) return filtradas.filter((s) => !isSessaoModoTeste(s));
-    return mesclarSessoesHistoricoComModoTeste(filtradas, modoTesteHistorico, normaVista);
-  }, [sessoesPorNorma, historicoFiltroMilitar, cadastros, normaVista, modoTesteHistorico]);
+  }, [sessoesPorNorma, historicoFiltroMilitar, cadastros, normaVista]);
 
   const abrirHistoricoMilitar = useCallback((filtro: FiltroHistoricoMilitar) => {
     setHistoricoFiltroMilitar(filtro);
@@ -145,17 +134,13 @@ export default function ResultadosScreen() {
 
   const abrirSessao = useCallback(
     (sessao: SessaoAplicacaoTaf) => {
-      if (isSessaoModoTeste(sessao)) {
-        abrirDetalheSessao(sessao);
-        return;
-      }
       navigation.navigate('CadastrarResultados', {
         resultados: sessao.resultados,
         aplicadorAssinatura: sessao.aplicadorAssinatura,
         returnTo: 'Resultados',
       });
     },
-    [navigation, abrirDetalheSessao],
+    [navigation],
   );
 
   /** Dois toques/cliques no card abrem a tabela do histórico. */
@@ -348,22 +333,11 @@ export default function ResultadosScreen() {
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => {
-                          if (modoTeste) {
-                            Alert.alert(
-                              'Modo Teste',
-                              'Esta sessão é apenas demonstração e não faz parte dos seus dados reais.',
-                            );
-                            return;
-                          }
                           setErroExclusao(null);
                           setSessaoParaExcluir(sessao);
                         }}
                         style={[styles.trashBtn, { borderColor: theme.loss }]}
-                        accessibilityLabel={
-                          modoTeste
-                            ? 'Sessão de modo teste'
-                            : 'Excluir sessão do histórico'
-                        }
+                        accessibilityLabel="Excluir sessão do histórico"
                         accessibilityRole="button"
                       >
                         <Trash2 size={20} color={theme.loss} strokeWidth={2.2} />
@@ -401,13 +375,8 @@ export default function ResultadosScreen() {
 
       <HistoricoSessaoDetalheModal
         sessao={sessaoDetalhe}
-        somenteLeitura={isSessaoModoTeste(sessaoDetalhe)}
         onClose={() => setSessaoDetalhe(null)}
         onSessaoAtualizada={(atualizada) => {
-          if (isSessaoModoTeste(atualizada)) {
-            setSessaoDetalhe(atualizada);
-            return;
-          }
           setSessaoDetalhe(atualizada);
           carregar();
         }}

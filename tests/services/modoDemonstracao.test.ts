@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { closeTafDatabaseForTests } from '../../src/offline-first/db/tafDatabase';
-import { importCadastroRecord, listCadastros } from '../../src/offline-first/db/localDb';
+import {
+  importCadastroRecord,
+  listCadastros,
+  listSessoes,
+  ensureDemoCadastrosForAplicar,
+  removeDemoCadastrosAndAplicador,
+} from '../../src/offline-first/db/localDb';
 import type { CadastroRecord } from '../../src/offline-first/types';
 import {
   DEMO_BACKUP_ID_KEY,
@@ -21,10 +27,8 @@ import {
 } from '../../src/services/modoDemonstracao';
 import { gerarDadosDemonstracaoTaf } from '../../src/utils/gerarDadosDemonstracaoTaf';
 import { importDemonstracaoDataset } from '../../src/offline-first/db/localDb';
-import {
-  isSessaoModoTeste,
-  mesclarSessoesHistoricoComModoTeste,
-} from '../../src/utils/historicoSessoesModoTeste';
+import { isSessaoModoTeste } from '../../src/utils/historicoSessoesModoTeste';
+import { dataStore } from '../../src/offline-first/store/DataStore';
 
 const OWNER_UID = 'demo-restore-owner';
 
@@ -49,7 +53,7 @@ function cadastroRecord(id: string): CadastroRecord {
   };
 }
 
-describe('modoDemonstracao (overlay Histórico)', () => {
+describe('modoDemonstracao (Aplicar → Histórico)', () => {
   beforeEach(async () => {
     resetAppMetaCacheForTests();
     resetAuthUidStateForTests();
@@ -65,19 +69,51 @@ describe('modoDemonstracao (overlay Histórico)', () => {
     resetGarantiaModoNormalForTests();
   });
 
-  it('toggle só altera o flag — não troca cadastros do IndexedDB', async () => {
-    const before = await listCadastros(OWNER_UID);
-    expect(before).toHaveLength(1);
-
+  it('ativar disponibiliza cadastros demo sem apagar dados reais nem criar sessões', async () => {
     const on = await toggleModoDemonstracaoSistema();
     expect(on.ativo).toBe(true);
     expect(isModoDemonstracaoAtivo()).toBe(true);
-    expect(await listCadastros(OWNER_UID)).toHaveLength(1);
+
+    const cadastros = await listCadastros(OWNER_UID);
+    expect(cadastros.some((c) => c.id === 'real-1')).toBe(true);
+    expect(cadastros.some((c) => c.id.startsWith('demo-cad-'))).toBe(true);
+
+    const sessoes = await listSessoes(OWNER_UID);
+    expect(sessoes.every((s) => !s.id.startsWith('demo-sess-'))).toBe(true);
+
+    const display = await dataStore.getCadastros(OWNER_UID);
+    expect(display.every((c) => !c.id.startsWith('demo-cad-'))).toBe(true);
+    const comDemo = await dataStore.getCadastros(OWNER_UID, { includeDemo: true });
+    expect(comDemo.some((c) => c.id.startsWith('demo-cad-'))).toBe(true);
+  });
+
+  it('desativar remove cadastros demo e mantém sessões demo-sess-*', async () => {
+    await toggleModoDemonstracaoSistema();
+    await dataStore.upsertSessao(
+      {
+        id: 'demo-sess-applied-1',
+        criadoEm: new Date().toISOString(),
+        dataAplicacao: '20/07/2026',
+        tipoProva: 'corrida',
+        resultados: [],
+        normaTaf: 'armada',
+      },
+      OWNER_UID,
+    );
 
     const off = await toggleModoDemonstracaoSistema();
     expect(off.ativo).toBe(false);
-    expect(isModoDemonstracaoAtivo()).toBe(false);
-    expect(await listCadastros(OWNER_UID)).toHaveLength(1);
+
+    const cadastros = await listCadastros(OWNER_UID);
+    expect(cadastros.every((c) => !c.id.startsWith('demo-cad-'))).toBe(true);
+    expect(cadastros.some((c) => c.id === 'real-1')).toBe(true);
+
+    const historico = await dataStore.getSessoes(OWNER_UID, { includeDemo: true });
+    expect(historico.some((s) => s.id === 'demo-sess-applied-1')).toBe(true);
+    expect(isSessaoModoTeste({ id: 'demo-sess-applied-1' })).toBe(true);
+
+    const foraHistorico = await dataStore.getSessoes(OWNER_UID);
+    expect(foraHistorico.every((s) => !s.id.startsWith('demo-sess-'))).toBe(true);
   });
 
   it('restaura dados reais se ainda houver snapshot do antigo swap', async () => {
@@ -98,27 +134,25 @@ describe('modoDemonstracao (overlay Histórico)', () => {
     expect(after.some((c) => c.id === 'real-1')).toBe(true);
     expect(after.every((c) => !c.id.startsWith('demo-cad-'))).toBe(true);
   });
-});
 
-describe('historicoSessoesModoTeste', () => {
-  it('mescla cards de exemplo só quando o modo teste está ligado', () => {
-    const reais = [
+  it('ensure/remove helpers não tocam sessões demo', async () => {
+    await ensureDemoCadastrosForAplicar(OWNER_UID);
+    await dataStore.upsertSessao(
       {
-        id: 'sess-real',
-        criadoEm: '2026-01-01T00:00:00.000Z',
-        dataAplicacao: '01/01/2026',
-        tipoProva: 'corrida' as const,
+        id: 'demo-sess-keep',
+        criadoEm: new Date().toISOString(),
+        dataAplicacao: '20/07/2026',
+        tipoProva: 'natacao',
         resultados: [],
-        normaTaf: 'armada' as const,
+        normaTaf: 'armada',
       },
-    ];
-    const off = mesclarSessoesHistoricoComModoTeste(reais, false, 'armada');
-    expect(off).toHaveLength(1);
-    expect(off.every((s) => !isSessaoModoTeste(s))).toBe(true);
-
-    const on = mesclarSessoesHistoricoComModoTeste(reais, true, 'armada');
-    expect(on.length).toBeGreaterThan(1);
-    expect(on[0]?.id).toBe('sess-real');
-    expect(on.slice(1).every((s) => isSessaoModoTeste(s))).toBe(true);
+      OWNER_UID,
+    );
+    await removeDemoCadastrosAndAplicador(OWNER_UID);
+    const sessoes = await listSessoes(OWNER_UID);
+    expect(sessoes.some((s) => s.id === 'demo-sess-keep')).toBe(true);
+    expect((await listCadastros(OWNER_UID)).every((c) => !c.id.startsWith('demo-cad-'))).toBe(
+      true,
+    );
   });
 });

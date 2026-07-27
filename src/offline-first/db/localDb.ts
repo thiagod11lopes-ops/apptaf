@@ -19,6 +19,16 @@ import { readUpdatedAt } from '../sync/recordMeta';
 const ANONYMOUS_OWNER = '__local__';
 
 async function enqueueIfAllowed(entry: Parameters<typeof syncQueue.enqueue>[0]): Promise<void> {
+  const id = entry.documentId ?? '';
+  // Dados de Modo Teste nunca entram na fila de sync.
+  if (
+    id.startsWith('demo-cad-') ||
+    id.startsWith('demo-sess-') ||
+    id === 'demo-aplicador-1' ||
+    id.startsWith('demo-aplicador')
+  ) {
+    return;
+  }
   await syncQueue.enqueue(entry);
 }
 
@@ -1170,7 +1180,47 @@ export async function wipeOwnerData(ownerUid: string): Promise<void> {
   await db.syncQueue.where('ownerUid').equals(ownerUid).delete();
 }
 
-/** Substitui dados do owner por dataset de demonstração — sem fila de sync. */
+/**
+ * Garante militares e aplicador fictícios para a aba Aplicar (sem sessões).
+ * Não apaga dados reais; não importa cards de Histórico.
+ */
+export async function ensureDemoCadastrosForAplicar(ownerUid: string): Promise<void> {
+  const { gerarDadosDemonstracaoTaf, gerarAplicadorDemonstracaoTaf } = await import(
+    '../../utils/gerarDadosDemonstracaoTaf'
+  );
+  const { cadastros } = gerarDadosDemonstracaoTaf();
+  const bare: CadastroItemPersist[] = cadastros.map((c) => ({
+    id: c.id,
+    nip: c.nip,
+    nome: c.nome,
+    dataNascimento: c.dataNascimento,
+    categoria: c.categoria,
+    sexo: c.sexo,
+    praca: c.praca,
+    updatedAt: c.updatedAt,
+  }));
+  await importDemonstracaoDataset(ownerUid, bare, [], [gerarAplicadorDemonstracaoTaf()]);
+}
+
+/** Remove cadastros/aplicador de exemplo; mantém sessões demo-sess-* no Histórico. */
+export async function removeDemoCadastrosAndAplicador(ownerUid: string): Promise<void> {
+  const db = getTafDatabase();
+  if (!db) return;
+  const cadastros = await listCadastros(ownerUid, true);
+  const cadIds = cadastros.filter((c) => c.id.startsWith('demo-cad-')).map((c) => c.id);
+  if (cadIds.length > 0) {
+    await db.cadastros.bulkDelete(cadIds);
+  }
+  const aplicadores = await listAplicadores(ownerUid, true);
+  const appIds = aplicadores
+    .filter((a) => a.id === 'demo-aplicador-1' || a.id.startsWith('demo-aplicador'))
+    .map((a) => a.id);
+  if (appIds.length > 0) {
+    await db.aplicadores.bulkDelete(appIds);
+  }
+}
+
+/** Substitui/insere dataset de demonstração — sem fila de sync. */
 export async function importDemonstracaoDataset(
   ownerUid: string,
   cadastros: CadastroItemPersist[],

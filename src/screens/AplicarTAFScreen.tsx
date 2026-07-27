@@ -52,6 +52,7 @@ import {
 } from '../components/taf/aplicar/AplicarTafPreCadastroCard';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
+import { AplicarTafDemoNipsIconButton } from '../components/taf/aplicar/AplicarTafDemoNipsIconButton';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -94,6 +95,14 @@ import {
 } from '../utils/registroModalidadeHistorico';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
+import {
+  filtrarCadastrosDemonstracao,
+  nipFeedbackOkFromCadastro,
+} from '../utils/aplicarTafDemonstracao';
+import {
+  isModoDemonstracaoAtivo,
+  subscribeModoDemonstracao,
+} from '../services/modoDemonstracao';
 import { cadastroPrecisaCompletarDadosTaf, dataNascimentoCadastroValida } from '../utils/cadastroDadosTaf';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { detectarConflitoCorridaCaminhada, removerModalidadeOpostaDistanciaDoHistorico } from '../utils/corridaCaminhadaExcludente';
@@ -314,6 +323,7 @@ export default function AplicarTAFScreen() {
   useLayoutEffect(() => {
     tipoProvaRef.current = tipoProva;
   }, [tipoProva]);
+  useEffect(() => subscribeModoDemonstracao(() => setDemoAtivo(isModoDemonstracaoAtivo())), []);
   const modalityTime: TafModality =
     tipoProva === 'natacao' || tipoProva === 'abdominal_prancha' ? 'natacao' : 'corrida';
   const { formatMs, parseInput } = useTafTimeFormat(modalityTime);
@@ -326,6 +336,8 @@ export default function AplicarTAFScreen() {
   const [nParticipantesConfirmado, setNParticipantesConfirmado] = useState(0);
   const [nipsParticipantes, setNipsParticipantes] = useState<string[]>([]);
   const [nipFeedbackLinhas, setNipFeedbackLinhas] = useState<NipFeedbackLinha[]>([]);
+  const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
+  const [preenchendoNipsDemo, setPreenchendoNipsDemo] = useState(false);
   const [modalTesteExistente, setModalTesteExistente] = useState<
     (ModalTesteJaAplicadoInfo & { dataNascimento: string; sexo?: 'M' | 'F' }) | null
   >(null);
@@ -857,8 +869,9 @@ export default function AplicarTAFScreen() {
       const tipo = tipoProvaRef.current ?? tipoProva;
       if (!tipo || resultados.length === 0) return undefined;
 
+      const emDemonstracao = isModoDemonstracaoAtivo();
       const indicesRepeticao = nipsRepeticaoAutorizadaRef.current;
-      if (indicesRepeticao.size > 0) {
+      if (indicesRepeticao.size > 0 && !emDemonstracao) {
         for (const i of indicesRepeticao) {
           const nip = (resultados[i]?.nip ?? nipsParticipantes[i] ?? '').trim();
           if (nip) {
@@ -869,6 +882,7 @@ export default function AplicarTAFScreen() {
       }
 
       return addSessaoAplicacao({
+        ...(emDemonstracao ? { id: `demo-sess-${Date.now()}` } : {}),
         dataAplicacao: dataHojeBr(),
         tipoProva: tipo,
         resultados,
@@ -882,25 +896,33 @@ export default function AplicarTAFScreen() {
   /**
    * Grava DE FATO no sistema tudo que estava pendente (notas no cadastro, limpezas de
    * histórico e a sessão) — somente após o aplicador confirmar senha + rúbrica.
+   * No Modo Teste: só a sessão (demo-sess-*), sem alterar cadastros reais.
    */
   const commitAplicacao = useCallback(
     async (
       resultados: ResultadoCorridaItem[],
       assinatura: AplicadorAssinaturaResumo,
     ): Promise<void> => {
-      for (const cleanup of pendingCleanupsRef.current) {
-        try {
-          await cleanup();
-        } catch {
-          // Limpeza de histórico é complementar; não deve impedir o lançamento.
-        }
-      }
-      pendingCleanupsRef.current = [];
+      const emDemonstracao = isModoDemonstracaoAtivo();
 
-      for (const cadastro of pendingCadastrosRef.current) {
-        await addCadastro(cadastro);
+      if (!emDemonstracao) {
+        for (const cleanup of pendingCleanupsRef.current) {
+          try {
+            await cleanup();
+          } catch {
+            // Limpeza de histórico é complementar; não deve impedir o lançamento.
+          }
+        }
+        pendingCleanupsRef.current = [];
+
+        for (const cadastro of pendingCadastrosRef.current) {
+          await addCadastro(cadastro);
+        }
+        pendingCadastrosRef.current = [];
+      } else {
+        pendingCleanupsRef.current = [];
+        pendingCadastrosRef.current = [];
       }
-      pendingCadastrosRef.current = [];
 
       await gravarSessaoAplicacao(resultados, assinatura);
     },
@@ -979,7 +1001,7 @@ export default function AplicarTAFScreen() {
 
     let cadastrosInicial: CadastroItemPersist[] = [];
     try {
-      cadastrosInicial = await getAllCadastros();
+      cadastrosInicial = await getAllCadastros({ includeDemo: true });
     } catch {
       cadastrosInicial = [];
     }
@@ -1161,7 +1183,7 @@ export default function AplicarTAFScreen() {
 
     let cadastrosInicial: CadastroItemPersist[] = [];
     try {
-      cadastrosInicial = await getAllCadastros();
+      cadastrosInicial = await getAllCadastros({ includeDemo: true });
     } catch {
       cadastrosInicial = [];
     }
@@ -1597,7 +1619,9 @@ export default function AplicarTAFScreen() {
       const nome = (c.nome || '').trim() || 'Sem nome';
       const nipLinha = nipsParticipantes[index] || c.nip;
       const modalidade = tipoProvaRef.current ?? tipoProva;
+      const emDemonstracao = isModoDemonstracaoAtivo();
       const precisaHistorico =
+        !emDemonstracao &&
         (modalidade === 'corrida' || modalidade === 'caminhada') &&
         !modoTafNaval;
 
@@ -1606,15 +1630,15 @@ export default function AplicarTAFScreen() {
 
       if (
         precisaHistorico ||
-        (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index))
+        (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index) && !emDemonstracao)
       ) {
         [sessoes, cadastros] = await Promise.all([
           getAllSessoesAplicacao(),
-          getAllCadastros(),
+          getAllCadastros({ includeDemo: true }),
         ]);
       }
 
-      if (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index)) {
+      if (modalidade && !nipsRepeticaoAutorizadaRef.current.has(index) && !emDemonstracao) {
         const existente = buscarRegistroModalidadeExistente(
           nipLinha,
           modalidade,
@@ -1637,6 +1661,7 @@ export default function AplicarTAFScreen() {
 
       if (
         precisaHistorico &&
+        !emDemonstracao &&
         abrirModalExcludenteSeConflito(index, c, nipLinha, sessoes, cadastros)
       ) {
         return;
@@ -1740,7 +1765,7 @@ export default function AplicarTAFScreen() {
       return;
     }
 
-    const cadastros = await getAllCadastros();
+    const cadastros = await getAllCadastros({ includeDemo: true });
     const resultado = buscarCadastroPorNomeOuNip(cadastros, nip);
 
     if (resultado.kind !== 'found') {
@@ -1767,6 +1792,31 @@ export default function AplicarTAFScreen() {
     await continuarAposCadastroEncontrado(index, c);
   }, [nipsParticipantes, continuarAposCadastroEncontrado]);
 
+  const preencherNipsDemonstracao = useCallback(async () => {
+    if (preenchendoNipsDemo || nParticipantesConfirmado < 1) return;
+    setPreenchendoNipsDemo(true);
+    try {
+      const cadastros = await getAllCadastros({ includeDemo: true });
+      const pool = filtrarCadastrosDemonstracao(cadastros, modoTafNaval);
+      const n = nParticipantesConfirmado;
+      if (pool.length < n) {
+        Alert.alert(
+          'Cadastros insuficientes',
+          `Há ${pool.length} militar(es) de exemplo disponível(is) para esta prova. Reduza o número de participantes.`,
+        );
+        return;
+      }
+      const selecionados = pool.slice(0, n);
+      setNipsParticipantes(selecionados.map((c) => c.nip));
+      setNipFeedbackLinhas(selecionados.map((c) => nipFeedbackOkFromCadastro(c)));
+      nipsRepeticaoAutorizadaRef.current = new Set(Array.from({ length: n }, (_, i) => i));
+      setModalTesteExistente(null);
+      setModalModalidadeExcludente(null);
+    } finally {
+      setPreenchendoNipsDemo(false);
+    }
+  }, [modoTafNaval, nParticipantesConfirmado, preenchendoNipsDemo]);
+
   const fecharModalTesteExistente = useCallback(() => {
     setModalTesteExistente(null);
   }, []);
@@ -1775,7 +1825,7 @@ export default function AplicarTAFScreen() {
     if (!modalTesteExistente) return;
     const { index, nip } = modalTesteExistente;
     nipsRepeticaoAutorizadaRef.current.add(index);
-    const cadastros = await getAllCadastros();
+    const cadastros = await getAllCadastros({ includeDemo: true });
     const busca = buscarCadastroPorNomeOuNip(cadastros, nip);
     if (busca.kind === 'found') {
       definirNipOk(index, busca.cadastro);
@@ -1878,7 +1928,7 @@ export default function AplicarTAFScreen() {
     const tempoStr = formatMsByModality('corrida', tempoMs);
 
     try {
-      let cadastrosInicial = await getAllCadastros();
+      let cadastrosInicial = await getAllCadastros({ includeDemo: true });
       // Gravação adiada: monta o que será lançado, mas só grava após o aplicador confirmar.
       const bufferCadastros: CadastroItemPersist[] = [];
       const listaAtual = [...cadastrosInicial];
@@ -2687,6 +2737,14 @@ export default function AplicarTAFScreen() {
               title={flowHeader.title}
               subtitle={flowHeader.subtitle}
               onBack={() => navigation.goBack()}
+              right={
+                mostrarProvas && corridaEtapa === 'nips' && demoAtivo ? (
+                  <AplicarTafDemoNipsIconButton
+                    onPress={() => void preencherNipsDemonstracao()}
+                    loading={preenchendoNipsDemo}
+                  />
+                ) : undefined
+              }
             />
           )}
 
@@ -2830,7 +2888,11 @@ export default function AplicarTAFScreen() {
               <AplicarTafSectionHeader
                 kicker="IDENTIFICAÇÃO"
                 title={`${tituloProvaCurta} — NIPs`}
-                subtitle={`Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes.`}
+                subtitle={
+                  demoAtivo
+                    ? `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes ou toque no ícone ✨ acima para preencher automaticamente.`
+                    : `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes.`
+                }
               />
 
             {nipsParticipantes.map((nip, index) => {

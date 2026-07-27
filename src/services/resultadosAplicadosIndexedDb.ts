@@ -100,10 +100,13 @@ async function resolveCloudSessoes(uid: string): Promise<SessaoAplicacaoTaf[]> {
   return entry.sessoes;
 }
 
-export async function getAllSessoesAplicacao(): Promise<SessaoAplicacaoTaf[]> {
+export async function getAllSessoesAplicacao(opts?: {
+  /** Inclui sessões do Modo Teste (demo-sess-*) — usado no Histórico. */
+  includeDemo?: boolean;
+}): Promise<SessaoAplicacaoTaf[]> {
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
-    return dataStore.getSessoes(uid);
+    return dataStore.getSessoes(uid, opts);
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {

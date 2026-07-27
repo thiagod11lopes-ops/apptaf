@@ -277,13 +277,13 @@ export function TopActionIcons({
           </React.Fragment>
         );
       })}
-      {activeRoute !== 'Login'
+      {activeRoute === 'AplicarTAF'
         ? wrapTooltip(
             inline,
-            demoAtivo ? 'Ocultar cards de exemplo' : 'Cards de exemplo no Histórico',
+            demoAtivo ? 'Desativar Modo Teste' : 'Modo Teste',
             demoAtivo
-              ? 'Ocultar os cards amarelos de Modo Teste no Histórico'
-              : 'Mostrar cards de exemplo só no Histórico (não altera seus dados reais)',
+              ? 'Desliga o Modo Teste na aba Aplicar (sessões já aplicadas permanecem no Histórico)'
+              : 'Ativa militares fictícios só para aplicar provas; após o teste elas entram no Histórico',
             <PressableScale
               onPress={alternarDemonstracao}
               disabled={demoCarregando}
@@ -296,9 +296,7 @@ export function TopActionIcons({
                 demoCarregando ? { opacity: 0.65 } : null,
               ]}
               accessibilityLabel={
-                demoAtivo
-                  ? 'Ocultar cards de exemplo do Histórico'
-                  : 'Mostrar cards de exemplo no Histórico'
+                demoAtivo ? 'Desativar Modo Teste' : 'Ativar Modo Teste na aba Aplicar'
               }
             >
               {demoCarregando ? (

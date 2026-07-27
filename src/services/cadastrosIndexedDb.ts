@@ -123,16 +123,21 @@ export async function clearLocalCadastros(): Promise<void> {
   }
 }
 
-async function resolveCloudCadastros(uid: string): Promise<CadastroItemPersist[]> {
-  if (useOfflineFirstDb()) return dataStore.getCadastros(uid);
+async function resolveCloudCadastros(
+  uid: string,
+  opts?: { includeDemo?: boolean },
+): Promise<CadastroItemPersist[]> {
+  if (useOfflineFirstDb()) return dataStore.getCadastros(uid, opts);
   const entry = await readOfflineCloudEntry(uid, { autoSync: false });
   return entry.cadastros;
 }
 
-export async function getAllCadastros(): Promise<CadastroItemPersist[]> {
+export async function getAllCadastros(opts?: {
+  includeDemo?: boolean;
+}): Promise<CadastroItemPersist[]> {
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
-    return dataStore.getCadastros(uid);
+    return dataStore.getCadastros(uid, opts);
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {

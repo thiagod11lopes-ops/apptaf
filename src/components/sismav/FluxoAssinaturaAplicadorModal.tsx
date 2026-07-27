@@ -20,6 +20,7 @@ import {
   substituirRubricaAplicador,
   type AplicadorItemPersist,
 } from '../../services/aplicadoresIndexedDb';
+import { isModoDemonstracaoAtivo } from '../../services/modoDemonstracao';
 import { verificarSenhaAplicador, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../../utils/aplicadorSenha';
 import {
   postoGradAplicador,
@@ -126,7 +127,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
     resetFluxo();
 
     setCarregandoAplicadores(true);
-    void getAllAplicadores()
+    void getAllAplicadores({ includeDemo: isModoDemonstracaoAtivo() })
       .then((lista) => {
         const ordenados = [...lista].sort(compareByNomePtBr);
         setAplicadores(ordenados);

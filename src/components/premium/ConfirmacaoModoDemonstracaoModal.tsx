@@ -11,7 +11,7 @@ export type ModoDemonstracaoModalPhase = 'confirm' | 'loading' | 'success' | 'er
 type Props = {
   visible: boolean;
   phase: ModoDemonstracaoModalPhase;
-  /** true = carregar exemplo; false = restaurar dados reais */
+  /** true = ativar Modo Teste; false = desativar */
   ativar: boolean;
   errorMessage?: string | null;
   onClose: () => void;
@@ -20,15 +20,15 @@ type Props = {
 
 function tituloModal(phase: ModoDemonstracaoModalPhase, ativar: boolean): string {
   if (phase === 'loading') {
-    return ativar ? 'Ativando cards de exemplo…' : 'Ocultando cards de exemplo…';
+    return ativar ? 'Ativando Modo Teste…' : 'Desativando Modo Teste…';
   }
   if (phase === 'success') {
-    return ativar ? 'Modo Teste no Histórico' : 'Cards de exemplo ocultos';
+    return ativar ? 'Modo Teste ativo' : 'Modo Teste desativado';
   }
   if (phase === 'error') {
     return 'Não foi possível concluir';
   }
-  return ativar ? 'Mostrar cards de exemplo no Histórico?' : 'Ocultar cards de exemplo?';
+  return ativar ? 'Ativar Modo Teste?' : 'Desativar Modo Teste?';
 }
 
 export function ConfirmacaoModoDemonstracaoModal({
@@ -92,7 +92,7 @@ export function ConfirmacaoModoDemonstracaoModal({
           ) : (
             <>
               <Sparkles size={16} color="#FFFFFF" strokeWidth={2.4} />
-              <Text style={styles.btnPrimaryText}>{ativar ? 'Carregar exemplo' : 'Restaurar'}</Text>
+              <Text style={styles.btnPrimaryText}>{ativar ? 'Ativar' : 'Desativar'}</Text>
             </>
           )}
         </LinearGradient>
@@ -123,13 +123,13 @@ export function ConfirmacaoModoDemonstracaoModal({
           <>
             <Text style={[styles.message, { color: theme.text }]}>
               {ativar
-                ? 'Serão exibidos cards de exemplo só na aba Histórico, com a tarja amarela “Modo Teste”. Eles não entram em planilhas, backup, estatísticas nem sincronização.'
-                : 'Os cards de exemplo deixarão de aparecer no Histórico. Seus dados reais permanecem intactos.'}
+                ? 'Disponibiliza militares fictícios só na aba Aplicar TAF para você treinar o fluxo. Os testes só entram no Histórico depois de aplicados, com a tarja “Modo Teste”. Não alteram planilhas, backup nem sincronização.'
+                : 'Remove os militares fictícios da aba Aplicar. Sessões de Modo Teste já aplicadas permanecem no Histórico.'}
             </Text>
             <Text style={[styles.hint, { color: theme.textMuted }]}>
               {ativar
-                ? 'Toque duas vezes em um card de exemplo para ver a tabela. Toque de novo no ícone de exemplo para ocultá-los.'
-                : 'Nada é apagado do sistema ao ocultar os cards de exemplo.'}
+                ? 'Com o modo ativo, use o ícone ✨ na tela de NIPs para preencher participantes de exemplo.'
+                : 'Seus dados reais não são apagados ao desativar o Modo Teste.'}
             </Text>
           </>
         ) : null}
@@ -139,8 +139,8 @@ export function ConfirmacaoModoDemonstracaoModal({
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={[styles.message, { color: theme.textSecondary, textAlign: 'center' }]}>
               {ativar
-                ? 'Preparando os cards de exemplo do Histórico…'
-                : 'Removendo os cards de exemplo da lista…'}
+                ? 'Preparando militares de exemplo para Aplicar TAF…'
+                : 'Desativando Modo Teste…'}
             </Text>
           </View>
         ) : null}
@@ -148,8 +148,8 @@ export function ConfirmacaoModoDemonstracaoModal({
         {phase === 'success' ? (
           <Text style={[styles.message, { color: theme.text }]}>
             {ativar
-              ? 'Abra Resultados → Histórico para ver os cards com a tarja “Modo Teste”. Clique neles para explorar a tabela de exemplo.'
-              : 'Os cards de exemplo foram ocultados. Seus dados reais não foram alterados.'}
+              ? 'Modo Teste pronto. Aplique as provas normalmente; ao finalizar, elas aparecem no Histórico com a tarja amarela.'
+              : 'Modo Teste desativado. As sessões já aplicadas continuam no Histórico.'}
           </Text>
         ) : null}
 

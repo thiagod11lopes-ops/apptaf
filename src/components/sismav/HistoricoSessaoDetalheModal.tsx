@@ -112,6 +112,8 @@ type Props = {
   sessao: SessaoAplicacaoTaf | null;
   onClose: () => void;
   onSessaoAtualizada?: (sessao: SessaoAplicacaoTaf) => void;
+  /** Sessão fictícia do Histórico — só visualização. */
+  somenteLeitura?: boolean;
 };
 
 type MetaLinha = {
@@ -299,7 +301,12 @@ function placeholderDesempenho(tipo: TipoProvaAplicada): string {
 }
 
 /** Modal ultramoderno com tabela dos resultados — clique direito insere linha editável. */
-export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizada }: Props) {
+export function HistoricoSessaoDetalheModal({
+  sessao,
+  onClose,
+  onSessaoAtualizada,
+  somenteLeitura = false,
+}: Props) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const visible = sessao != null;
@@ -359,7 +366,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
 
   const persistirSessao = useCallback(
     async (nextLinhas: ResultadoCorridaItem[], nextMetas: MetaLinha[]) => {
-      if (!sessao) return;
+      if (!sessao || somenteLeitura) return;
       const resultados = renumerar(nextLinhas);
       const atualizada: SessaoAplicacaoTaf = {
         ...sessao,
@@ -420,7 +427,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
         setSalvando(false);
       }
     },
-    [sessao, cadastros, tipo, modoTafNaval, onSessaoAtualizada],
+    [sessao, cadastros, tipo, modoTafNaval, onSessaoAtualizada, somenteLeitura],
   );
 
   const inserirLinhaAbaixo = useCallback((idx: number) => {
@@ -871,6 +878,10 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
   );
 
   const confirmarExclusaoLinha = useCallback(async () => {
+    if (somenteLeitura) {
+      setExcluirIdx(null);
+      return;
+    }
     if (excluirIdx == null || !sessao || excluindo) return;
     const idx = excluirIdx;
     const removido = linhas[idx];
@@ -935,6 +946,7 @@ export function HistoricoSessaoDetalheModal({ sessao, onClose, onSessaoAtualizad
     tipo,
     onClose,
     onSessaoAtualizada,
+    somenteLeitura,
   ]);
 
   return (

@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Platform,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
@@ -15,6 +16,7 @@ import { ResultadosNavTabs } from '../components/resultados/ResultadosNavTabs';
 import { ResultadosNormaLauncher } from '../components/resultados/ResultadosNormaLauncher';
 import { ConfirmacaoExcluirSessaoModal } from '../components/sismav/ConfirmacaoExcluirSessaoModal';
 import { HistoricoSessaoDetalheModal } from '../components/sismav/HistoricoSessaoDetalheModal';
+import { HistoricoModoTesteStripe } from '../components/sismav/HistoricoModoTesteStripe';
 import { PressableScale } from '../components/premium/PressableScale';
 import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
 import { ResultadosPendenciaParcialPanel } from '../components/ResultadosPendenciaParcialPanel';
@@ -45,6 +47,14 @@ import {
   isSessaoVirtualRegistrador,
   unificarSessoesComCadastroRegistrador,
 } from '../utils/sessoesUnificadasResultados';
+import {
+  isSessaoModoTeste,
+  mesclarSessoesHistoricoComModoTeste,
+} from '../utils/historicoSessoesModoTeste';
+import {
+  isModoDemonstracaoAtivo,
+  subscribeModoDemonstracao,
+} from '../services/modoDemonstracao';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { PREMIUM } from '../theme/premium';
@@ -73,6 +83,12 @@ export default function ResultadosScreen() {
   const [excluindo, setExcluindo] = useState(false);
   const [erroExclusao, setErroExclusao] = useState<string | null>(null);
   const ultimoToqueCardRef = useRef<{ id: string; at: number } | null>(null);
+  const [modoTesteHistorico, setModoTesteHistorico] = useState(isModoDemonstracaoAtivo);
+
+  useEffect(
+    () => subscribeModoDemonstracao(() => setModoTesteHistorico(isModoDemonstracaoAtivo())),
+    [],
+  );
 
   const carregar = useCallback(() => {
     setCarregando(true);
@@ -99,9 +115,13 @@ export default function ResultadosScreen() {
   const sessoesHistoricoVisiveis = useMemo(() => {
     if (!normaVista) return [];
     const base = sessoesPorNorma;
-    if (!historicoFiltroMilitar) return base;
-    return filtrarSessoesHistoricoMilitar(base, historicoFiltroMilitar, cadastros);
-  }, [sessoesPorNorma, historicoFiltroMilitar, cadastros, normaVista]);
+    const filtradas = historicoFiltroMilitar
+      ? filtrarSessoesHistoricoMilitar(base, historicoFiltroMilitar, cadastros)
+      : base;
+    // Cards de exemplo só no Histórico (sem filtro por militar) e nunca nas outras abas/planilhas.
+    if (historicoFiltroMilitar) return filtradas.filter((s) => !isSessaoModoTeste(s));
+    return mesclarSessoesHistoricoComModoTeste(filtradas, modoTesteHistorico, normaVista);
+  }, [sessoesPorNorma, historicoFiltroMilitar, cadastros, normaVista, modoTesteHistorico]);
 
   const abrirHistoricoMilitar = useCallback((filtro: FiltroHistoricoMilitar) => {
     setHistoricoFiltroMilitar(filtro);
@@ -119,20 +139,24 @@ export default function ResultadosScreen() {
     setAba(novaAba);
   }, []);
 
+  const abrirDetalheSessao = useCallback((sessao: SessaoAplicacaoTaf) => {
+    setSessaoDetalhe(sessao);
+  }, []);
+
   const abrirSessao = useCallback(
     (sessao: SessaoAplicacaoTaf) => {
+      if (isSessaoModoTeste(sessao)) {
+        abrirDetalheSessao(sessao);
+        return;
+      }
       navigation.navigate('CadastrarResultados', {
         resultados: sessao.resultados,
         aplicadorAssinatura: sessao.aplicadorAssinatura,
         returnTo: 'Resultados',
       });
     },
-    [navigation],
+    [navigation, abrirDetalheSessao],
   );
-
-  const abrirDetalheSessao = useCallback((sessao: SessaoAplicacaoTaf) => {
-    setSessaoDetalhe(sessao);
-  }, []);
 
   /** Dois toques/cliques no card abrem a tabela do histórico. */
   const onPressCardHistorico = useCallback(
@@ -276,6 +300,7 @@ export default function ResultadosScreen() {
               const aprovados = sessao.resultados.filter(
                 (r) => r.notaTexto !== 'REPROVADO' && r.reprovacaoTexto == null,
               ).length;
+              const modoTeste = isSessaoModoTeste(sessao);
 
               return (
                 <View key={sessao.id} style={styles.itemPress}>
@@ -308,6 +333,7 @@ export default function ResultadosScreen() {
                                 ? ' · Cadastro manual'
                                 : ' · Registrador de TAF'
                               : null}
+                            {modoTeste ? ' · Exemplo' : null}
                           </Text>
                         </View>
                       </PressableScale>
@@ -322,15 +348,27 @@ export default function ResultadosScreen() {
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => {
+                          if (modoTeste) {
+                            Alert.alert(
+                              'Modo Teste',
+                              'Esta sessão é apenas demonstração e não faz parte dos seus dados reais.',
+                            );
+                            return;
+                          }
                           setErroExclusao(null);
                           setSessaoParaExcluir(sessao);
                         }}
                         style={[styles.trashBtn, { borderColor: theme.loss }]}
-                        accessibilityLabel="Excluir sessão do histórico"
+                        accessibilityLabel={
+                          modoTeste
+                            ? 'Sessão de modo teste'
+                            : 'Excluir sessão do histórico'
+                        }
                         accessibilityRole="button"
                       >
                         <Trash2 size={20} color={theme.loss} strokeWidth={2.2} />
                       </TouchableOpacity>
+                      {modoTeste ? <HistoricoModoTesteStripe /> : null}
                     </View>
                   </TafGlassPanel>
                 </View>
@@ -363,8 +401,13 @@ export default function ResultadosScreen() {
 
       <HistoricoSessaoDetalheModal
         sessao={sessaoDetalhe}
+        somenteLeitura={isSessaoModoTeste(sessaoDetalhe)}
         onClose={() => setSessaoDetalhe(null)}
         onSessaoAtualizada={(atualizada) => {
+          if (isSessaoModoTeste(atualizada)) {
+            setSessaoDetalhe(atualizada);
+            return;
+          }
           setSessaoDetalhe(atualizada);
           carregar();
         }}
@@ -418,7 +461,10 @@ const styles = StyleSheet.create({
   itemPress: {
     marginBottom: 12,
   },
-  sessaoCard: tableFullWidthStyle,
+  sessaoCard: {
+    ...tableFullWidthStyle,
+    overflow: 'hidden',
+  },
   sessaoRow: {
     flexDirection: 'row',
     alignItems: 'center',

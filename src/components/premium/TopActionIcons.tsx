@@ -29,11 +29,6 @@ import {
   toggleModoDemonstracaoSistema,
 } from '../../services/modoDemonstracao';
 import {
-  DEMO_TOTAL_CFN,
-  DEMO_TOTAL_FEMININO,
-  DEMO_TOTAL_MILITARES,
-} from '../../utils/gerarDadosDemonstracaoTaf';
-import {
   ConfirmacaoModoDemonstracaoModal,
   type ModoDemonstracaoModalPhase,
 } from './ConfirmacaoModoDemonstracaoModal';
@@ -285,10 +280,10 @@ export function TopActionIcons({
       {activeRoute !== 'Login'
         ? wrapTooltip(
             inline,
-            demoAtivo ? 'Sair do modo exemplo' : 'Dados de exemplo',
+            demoAtivo ? 'Ocultar cards de exemplo' : 'Cards de exemplo no Histórico',
             demoAtivo
-              ? 'Restaurar seus dados reais (nada vai para a nuvem no modo exemplo)'
-              : `Preencher o app com ${DEMO_TOTAL_MILITARES} militares fictícios (${DEMO_TOTAL_CFN} FN, ${DEMO_TOTAL_FEMININO} mulheres) para demonstração`,
+              ? 'Ocultar os cards amarelos de Modo Teste no Histórico'
+              : 'Mostrar cards de exemplo só no Histórico (não altera seus dados reais)',
             <PressableScale
               onPress={alternarDemonstracao}
               disabled={demoCarregando}
@@ -300,7 +295,11 @@ export function TopActionIcons({
                 },
                 demoCarregando ? { opacity: 0.65 } : null,
               ]}
-              accessibilityLabel={demoAtivo ? 'Restaurar dados reais' : 'Carregar dados de exemplo'}
+              accessibilityLabel={
+                demoAtivo
+                  ? 'Ocultar cards de exemplo do Histórico'
+                  : 'Mostrar cards de exemplo no Histórico'
+              }
             >
               {demoCarregando ? (
                 <ActivityIndicator size="small" color={theme.primary} />

@@ -5,11 +5,6 @@ import { AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react-native';
 import { ModernModal } from '../sismav/ModernModal';
 import { PressableScale } from './PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
-import {
-  DEMO_TOTAL_CFN,
-  DEMO_TOTAL_FEMININO,
-  DEMO_TOTAL_MILITARES,
-} from '../../utils/gerarDadosDemonstracaoTaf';
 
 export type ModoDemonstracaoModalPhase = 'confirm' | 'loading' | 'success' | 'error';
 
@@ -25,15 +20,15 @@ type Props = {
 
 function tituloModal(phase: ModoDemonstracaoModalPhase, ativar: boolean): string {
   if (phase === 'loading') {
-    return ativar ? 'Gerando dados de exemplo…' : 'Restaurando dados reais…';
+    return ativar ? 'Ativando cards de exemplo…' : 'Ocultando cards de exemplo…';
   }
   if (phase === 'success') {
-    return ativar ? 'Modo demonstração ativo' : 'Dados reais restaurados';
+    return ativar ? 'Modo Teste no Histórico' : 'Cards de exemplo ocultos';
   }
   if (phase === 'error') {
     return 'Não foi possível concluir';
   }
-  return ativar ? 'Carregar dados de exemplo?' : 'Restaurar dados reais?';
+  return ativar ? 'Mostrar cards de exemplo no Histórico?' : 'Ocultar cards de exemplo?';
 }
 
 export function ConfirmacaoModoDemonstracaoModal({
@@ -128,13 +123,13 @@ export function ConfirmacaoModoDemonstracaoModal({
           <>
             <Text style={[styles.message, { color: theme.text }]}>
               {ativar
-                ? `Serão gerados ${DEMO_TOTAL_MILITARES} militares fictícios (${DEMO_TOTAL_CFN} fuzileiros navais e ${DEMO_TOTAL_FEMININO} mulheres) e 1 aplicador de teste (senha 0000) para demonstração. Seus dados reais ficam guardados localmente e nada será enviado à nuvem.`
-                : 'Os dados de demonstração serão removidos e seus dados reais serão restaurados.'}
+                ? 'Serão exibidos cards de exemplo só na aba Histórico, com a tarja amarela “Modo Teste”. Eles não entram em planilhas, backup, estatísticas nem sincronização.'
+                : 'Os cards de exemplo deixarão de aparecer no Histórico. Seus dados reais permanecem intactos.'}
             </Text>
             <Text style={[styles.hint, { color: theme.textMuted }]}>
               {ativar
-                ? 'Toque novamente no ícone de exemplo a qualquer momento para voltar aos seus dados.'
-                : 'Nenhuma alteração será enviada à nuvem durante este processo.'}
+                ? 'Toque duas vezes em um card de exemplo para ver a tabela. Toque de novo no ícone de exemplo para ocultá-los.'
+                : 'Nada é apagado do sistema ao ocultar os cards de exemplo.'}
             </Text>
           </>
         ) : null}
@@ -144,8 +139,8 @@ export function ConfirmacaoModoDemonstracaoModal({
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={[styles.message, { color: theme.textSecondary, textAlign: 'center' }]}>
               {ativar
-                ? 'Isso pode levar alguns segundos enquanto preenchemos cadastros e resultados fictícios.'
-                : 'Aguarde enquanto aplicamos seu backup local.'}
+                ? 'Preparando os cards de exemplo do Histórico…'
+                : 'Removendo os cards de exemplo da lista…'}
             </Text>
           </View>
         ) : null}
@@ -153,8 +148,8 @@ export function ConfirmacaoModoDemonstracaoModal({
         {phase === 'success' ? (
           <Text style={[styles.message, { color: theme.text }]}>
             {ativar
-              ? 'Explore o sistema com dados fictícios. Use o aplicador "Aplicador Demonstração" (senha 0000) para assinar provas. Toque novamente no ícone de exemplo para voltar aos seus dados.'
-              : 'Seus dados reais foram aplicados novamente.'}
+              ? 'Abra Resultados → Histórico para ver os cards com a tarja “Modo Teste”. Clique neles para explorar a tabela de exemplo.'
+              : 'Os cards de exemplo foram ocultados. Seus dados reais não foram alterados.'}
           </Text>
         ) : null}
 

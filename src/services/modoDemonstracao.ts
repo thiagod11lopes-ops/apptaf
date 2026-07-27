@@ -1,4 +1,3 @@
-import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import {
   DEMO_BACKUP_ID_KEY,
   DEMO_MODO_ATIVO_KEY,
@@ -7,11 +6,10 @@ import {
   removeAppMeta,
   writeAppMeta,
 } from '../offline-first/db/appMeta';
-import { importDemonstracaoDataset, resolveOwnerUid, wipeOwnerData } from '../offline-first/db/localDb';
-import { createLocalBackup, restoreLocalBackup } from '../offline-first/sync/localBackup';
-import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
+import { resolveOwnerUid } from '../offline-first/db/localDb';
+import { restoreLocalBackup } from '../offline-first/sync/localBackup';
+import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { resolveStorageOwnerUid } from './firebase/authUid';
-import { gerarAplicadorDemonstracaoTaf, gerarDadosDemonstracaoTaf } from '../utils/gerarDadosDemonstracaoTaf';
 
 export { DEMO_SYNC_BLOCKED_MESSAGE } from '../offline-first/sync/syncAuthMessages';
 
@@ -30,79 +28,61 @@ export function subscribeModoDemonstracao(listener: () => void): () => void {
 
 export { isModoDemonstracaoAtivo };
 
-async function deleteDemoBackup(backupId: number | null): Promise<void> {
-  const db = getTafDatabase();
-  if (db && backupId != null && Number.isFinite(backupId)) {
-    await db.localBackups.delete(backupId);
-  }
-}
-
-async function ativarModoDemonstracao(ownerUid: string): Promise<void> {
-  const db = getTafDatabase();
-  if (!db) {
-    throw new Error('Modo demonstração requer armazenamento local (IndexedDB).');
-  }
-
-  const backupId = await createLocalBackup(ownerUid);
-  if (backupId == null) {
-    throw new Error('Não foi possível guardar seus dados reais antes da demonstração.');
-  }
-
-  await wipeOwnerData(ownerUid);
-  const { cadastros, sessoes } = gerarDadosDemonstracaoTaf();
-  const aplicador = gerarAplicadorDemonstracaoTaf();
-  await importDemonstracaoDataset(ownerUid, cadastros, sessoes, [aplicador]);
-
-  await writeAppMeta(DEMO_BACKUP_ID_KEY, String(backupId));
-  await writeAppMeta(DEMO_MODO_ATIVO_KEY, '1');
-}
-
-async function desativarModoDemonstracao(ownerUid: string): Promise<void> {
-  const backupRaw = await readAppMeta(DEMO_BACKUP_ID_KEY);
-  const backupId = backupRaw ? Number(backupRaw) : NaN;
-
-  if (!Number.isFinite(backupId)) {
-    await wipeOwnerData(ownerUid);
-  } else {
-    const ok = await restoreLocalBackup(backupId);
-    if (!ok) {
-      throw new Error('Não foi possível restaurar seus dados reais.');
-    }
-    await deleteDemoBackup(backupId);
-  }
-
-  await removeAppMeta(DEMO_MODO_ATIVO_KEY);
-  await removeAppMeta(DEMO_BACKUP_ID_KEY);
-}
-
+/**
+ * Liga/desliga apenas a exibição de cards de exemplo no Histórico.
+ * Não altera IndexedDB, planilhas, backup nem sincronização.
+ */
 export async function toggleModoDemonstracaoSistema(): Promise<{ ativo: boolean }> {
-  const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
-  const estavaAtivo = isModoDemonstracaoAtivo();
+  // Limpa resíduo do antigo modo que trocava o banco inteiro.
+  await limparResiduoModoDemoAntigo();
 
+  const estavaAtivo = isModoDemonstracaoAtivo();
   if (estavaAtivo) {
-    await desativarModoDemonstracao(ownerUid);
+    await removeAppMeta(DEMO_MODO_ATIVO_KEY);
   } else {
-    await ativarModoDemonstracao(ownerUid);
+    await writeAppMeta(DEMO_MODO_ATIVO_KEY, '1');
   }
 
-  notifyDataChanged();
   notifyListeners();
   return { ativo: !estavaAtivo };
 }
 
-let garantiaModoNormalPromise: Promise<void> | null = null;
+async function limparResiduoModoDemoAntigo(): Promise<void> {
+  const backupRaw = await readAppMeta(DEMO_BACKUP_ID_KEY);
+  if (!backupRaw?.trim()) return;
 
-/** Restaura dados reais na abertura/atualização do app (modo demo não persiste entre sessões). */
+  const backupId = Number(backupRaw);
+  const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
+  if (Number.isFinite(backupId)) {
+    try {
+      await restoreLocalBackup(backupId);
+    } catch {
+      /* segue limpeza das chaves */
+    }
+    const db = getTafDatabase();
+    if (db) {
+      try {
+        await db.localBackups.delete(backupId);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  await removeAppMeta(DEMO_BACKUP_ID_KEY);
+}
+
+/**
+ * Na abertura: se ainda existir snapshot do antigo swap IndexedDB, restaura dados reais
+ * e mantém o flag só como overlay de cards (desligado por padrão após limpeza).
+ */
 export async function garantirModoNormalNaAbertura(): Promise<void> {
   if (!garantiaModoNormalPromise) {
     garantiaModoNormalPromise = (async () => {
       const backupRaw = await readAppMeta(DEMO_BACKUP_ID_KEY);
-      const demoAtivo = isModoDemonstracaoAtivo();
-      if (!demoAtivo && !backupRaw?.trim()) return;
-
-      const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
-      await desativarModoDemonstracao(ownerUid);
-      notifyDataChanged();
+      if (!backupRaw?.trim()) return;
+      await limparResiduoModoDemoAntigo();
+      // Após restaurar o banco real, desliga o overlay até o usuário pedir de novo.
+      await removeAppMeta(DEMO_MODO_ATIVO_KEY);
       notifyListeners();
     })().catch((error) => {
       garantiaModoNormalPromise = null;
@@ -111,6 +91,8 @@ export async function garantirModoNormalNaAbertura(): Promise<void> {
   }
   await garantiaModoNormalPromise;
 }
+
+let garantiaModoNormalPromise: Promise<void> | null = null;
 
 /** Apenas testes — permite simular nova abertura do app. */
 export function resetGarantiaModoNormalForTests(): void {

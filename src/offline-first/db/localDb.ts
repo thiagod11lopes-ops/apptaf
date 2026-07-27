@@ -15,12 +15,10 @@ import { normalizeSessaoShape } from '../../utils/sessaoLight';
 import { nipChaveCadastro } from '../../utils/nipFormat';
 import { dedupeCadastrosByNipNewest, dedupeAplicadoresByNipNewest } from '../../services/offline/conflictMerge';
 import { readUpdatedAt } from '../sync/recordMeta';
-import { isModoDemonstracaoAtivo } from './appMeta';
 
 const ANONYMOUS_OWNER = '__local__';
 
 async function enqueueIfAllowed(entry: Parameters<typeof syncQueue.enqueue>[0]): Promise<void> {
-  if (isModoDemonstracaoAtivo()) return;
   await syncQueue.enqueue(entry);
 }
 

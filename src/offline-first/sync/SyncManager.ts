@@ -40,12 +40,10 @@ import { commitAllCollectionCheckpoints } from './syncCheckpoint';
 import { syncQueue } from './SyncQueue';
 import { peekRemoteSnapshotCache } from './remoteSnapshotCache';
 import { parseSyncError, shouldTreatAsUpdateBlocked, type SyncErrorDetail } from './syncErrorInfo';
-import { isModoDemonstracaoAtivo } from '../db/appMeta';
 import {
   SYNC_AUTH_REQUIRED,
   SYNC_AUTH_REQUIRED_MESSAGE,
   SYNC_UPDATE_BLOCKED,
-  DEMO_SYNC_BLOCKED_MESSAGE,
 } from './syncAuthMessages';
 import { isCloudOwnerUid, legacyFirebaseUidMessage } from '../../utils/cloudOwnerUid';
 import {
@@ -516,10 +514,6 @@ async function runCloudAuthoritativeMirror(options?: {
 
   cloudMirrorPromise = (async () => {
     try {
-      if (isModoDemonstracaoAtivo()) {
-        return { ok: false, error: DEMO_SYNC_BLOCKED_MESSAGE };
-      }
-
       try {
         await applyTeamWipeIfNeeded(uid, getCachedLoginUid());
       } catch {
@@ -726,9 +720,6 @@ async function runSyncPipeline(
   options?: { silent?: boolean },
 ): Promise<{ ok: boolean; error?: string }> {
   const silent = options?.silent === true;
-  if (isModoDemonstracaoAtivo()) {
-    return { ok: false, error: DEMO_SYNC_BLOCKED_MESSAGE };
-  }
   if (syncInFlight) return { ok: false, error: 'sync_in_progress' };
 
   let queueEstimateWaitMs = 0;
@@ -1277,9 +1268,6 @@ export const syncManager = {
     const forceFromRealtime = realtimeForcePull;
     if (!forceFromRealtime && Date.now() < backgroundSyncCooldownUntil) {
       return { ok: false, skipped: 'cooldown' };
-    }
-    if (isModoDemonstracaoAtivo()) {
-      return { ok: false, skipped: 'demo' };
     }
     if (!syncAuthAvailable || !getFirebaseAuth()?.currentUser) {
       return { ok: false, skipped: 'auth' };

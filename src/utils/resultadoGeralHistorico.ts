@@ -456,6 +456,8 @@ export type ResumoInicioTafHistorico = {
   parcial: number;
   /** Cadastrados sem nenhuma modalidade no Histórico. */
   semTeste: number;
+  /** Cadastrados com dispensa ativa (Restritos) — fora de pendente e concluído. */
+  restritos: number;
 };
 
 function findAggRowForCadastro(aggs: AggRow[], c: CadastroItemPersist): AggRow | undefined {
@@ -480,6 +482,7 @@ export function calcularResumoInicioTafFromHistorico(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[],
   sessoesExcluidas: SessaoAplicacaoTaf[] = [],
+  nipsRestritosAtivos: Set<string> | ReadonlySet<string> = new Set(),
 ): ResumoInicioTafHistorico {
   const cadastrosReais = cadastros.filter((c) => !isDemoCadastroId(c.id));
   const sessoesReais = sessoes.filter((s) => !isDemoSessaoId(s.id));
@@ -493,10 +496,17 @@ export function calcularResumoInicioTafFromHistorico(
 
   // Conta só cadastrados — evita inflar Parcial/Concluídos com sessões órfãs
   // (ex.: NIP sem cadastro) que deixam Pendente igual entre dispositivos e Parcial diferente.
+  // Restritos (dispensa ativa): entram em `restritos`, não em pendente nem concluídos.
   let completos = 0;
   let parcial = 0;
   let semTeste = 0;
+  let restritos = 0;
   for (const c of cadastrosReais) {
+    const nipC = nipDigitos(c.nip);
+    if (nipC.length >= 8 && nipsRestritosAtivos.has(nipC)) {
+      restritos += 1;
+      continue;
+    }
     const agg = findAggRowForCadastro(aggs, c);
     if (!agg) {
       semTeste += 1;
@@ -513,5 +523,6 @@ export function calcularResumoInicioTafFromHistorico(
     completos,
     parcial,
     semTeste,
+    restritos,
   };
 }

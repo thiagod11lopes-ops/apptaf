@@ -72,6 +72,7 @@ describe('calcularResumoInicioTafFromHistorico', () => {
     expect(resumo.completos).toBe(0);
     expect(resumo.semTeste).toBe(1);
     expect(resumo.completos + resumo.parcial + resumo.semTeste).toBe(resumo.totalCadastrados);
+    expect(resumo.restritos).toBe(0);
   });
 
   it('ignora sessões e cadastros do Modo Teste no balanço', () => {
@@ -115,9 +116,26 @@ describe('calcularResumoInicioTafFromHistorico', () => {
     expect(resumo.parcial).toBe(1);
     expect(resumo.completos).toBe(0);
     expect(resumo.semTeste).toBe(0);
+    expect(resumo.restritos).toBe(0);
 
     const aggs = agregarHistoricoPorParticipante(sessoes, cadastros);
     expect(aggs.every((a) => !a.nip.includes('10.0000.00'))).toBe(true);
+  });
+
+  it('move militar com dispensa ativa para restritos (fora de pendente e concluídos)', () => {
+    const cadastros = [
+      cadastro({ id: 'c1', nip: '11.1111.11', nome: 'Dispensado' }),
+      cadastro({ id: 'c2', nip: '22.2222.22', nome: 'Pendente' }),
+    ];
+    const resumo = calcularResumoInicioTafFromHistorico([], cadastros, [], new Set(['11111111']));
+    expect(resumo.totalCadastrados).toBe(2);
+    expect(resumo.restritos).toBe(1);
+    expect(resumo.semTeste).toBe(1);
+    expect(resumo.completos).toBe(0);
+    expect(resumo.parcial).toBe(0);
+    expect(resumo.completos + resumo.parcial + resumo.semTeste + resumo.restritos).toBe(
+      resumo.totalCadastrados,
+    );
   });
 
   it('une o mesmo NIP vindo com chaves diferentes em um único participante', () => {

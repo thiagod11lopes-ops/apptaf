@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ship, ClipboardList, Sparkles, Anchor, ShieldAlert } from 'lucide-react-native';
+import { Ship, ClipboardList, Sparkles, Anchor, ShieldAlert, Ban } from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
@@ -17,6 +17,7 @@ type Props = {
   onIniciarTafNaval: () => void;
   onPreCadastro: () => void;
   onFatoresRisco: () => void;
+  onRestritos: () => void;
 };
 
 export function AplicarTafHomeLauncher({
@@ -24,6 +25,7 @@ export function AplicarTafHomeLauncher({
   onIniciarTafNaval,
   onPreCadastro,
   onFatoresRisco,
+  onRestritos,
 }: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
@@ -160,6 +162,48 @@ export function AplicarTafHomeLauncher({
                 </Text>
                 <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
                   Avalie condições de saúde antes da prova
+                </Text>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          accessibilityLabel="Restritos"
+          activeOpacity={0.92}
+          onPress={onRestritos}
+          style={styles.tileWrap}
+        >
+          <View
+            style={[
+              styles.tileSecondary,
+              {
+                backgroundColor: glass.bg,
+                borderColor: glass.border,
+              },
+            ]}
+          >
+            <View style={styles.tileBody}>
+              <View
+                style={[
+                  styles.iconRingMuted,
+                  {
+                    backgroundColor: theme.isDark
+                      ? 'rgba(148,163,184,0.2)'
+                      : 'rgba(100,116,139,0.14)',
+                  },
+                ]}
+              >
+                <Ban size={24} color={theme.isDark ? '#94a3b8' : '#64748b'} strokeWidth={2.2} />
+              </View>
+              <View style={styles.textCol}>
+                <Text
+                  style={[styles.tileTitle, { color: ui.text }, isNarrowPhone ? styles.tileTitleCompact : null]}
+                >
+                  Restritos
+                </Text>
+                <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
+                  Registre dispensas com início e fim
                 </Text>
               </View>
             </View>

@@ -10,12 +10,14 @@ import {
   type ResumoInicioTafHistorico,
 } from './resultadoGeralHistorico';
 import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
+import { getNipsRestritosAtivos } from '../services/restritosStorage';
 
 const RESUMO_VAZIO: ResumoInicioTafHistorico = {
   totalCadastrados: 0,
   completos: 0,
   parcial: 0,
   semTeste: 0,
+  restritos: 0,
 };
 
 function stripCadastro(row: Record<string, unknown>): CadastroItemPersist {
@@ -87,7 +89,14 @@ export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHi
       .filter((row) => row.deleted === true && !isDemoSessaoId(row.id))
       .map((row) => stripSessao(row as unknown as Record<string, unknown>));
 
-    return calcularResumoInicioTafFromHistorico(sessoes, cadastros, sessoesExcluidas);
+    const nipsRestritos = await getNipsRestritosAtivos();
+
+    return calcularResumoInicioTafFromHistorico(
+      sessoes,
+      cadastros,
+      sessoesExcluidas,
+      nipsRestritos,
+    );
   } catch (error) {
     console.warn('[home-resumo] leitura IndexedDB falhou:', error);
     return RESUMO_VAZIO;

@@ -24,6 +24,7 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   completos: 0,
   parcial: 0,
   semTeste: 0,
+  restritos: 0,
 };
 
 /** Parte local do e-mail + "@" — ex.: lopes.thiago.oliveira@marinha.mil.br → lopes.thiago.oliveira@ */
@@ -166,6 +167,11 @@ export default function HomeScreen() {
             label="Pendente"
             value={resumo.semTeste.toLocaleString('pt-BR')}
             variant="negative"
+          />
+          <StatCard
+            label="Restritos"
+            value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
+            variant="warning"
           />
         </View>
       </TafGlassPanel>

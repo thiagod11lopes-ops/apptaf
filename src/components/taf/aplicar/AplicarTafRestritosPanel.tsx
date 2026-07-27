@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Pencil, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { getAllCadastros, type CadastroItemPersist } from '../../../services/cadastrosIndexedDb';
@@ -24,6 +25,7 @@ import {
 } from './AplicarTafUi';
 import { ConfirmacaoExcluirRestritoModal } from './ConfirmacaoExcluirRestritoModal';
 import { LabelNip } from '../../LabelNip';
+import { PREMIUM } from '../../../theme/premium';
 
 type Props = {
   onVoltar: () => void;
@@ -47,7 +49,7 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [editandoExistente, setEditandoExistente] = useState(false);
-  const [confirmExcluirVisible, setConfirmExcluirVisible] = useState(false);
+  const [restritoParaExcluir, setRestritoParaExcluir] = useState<RestritoRegistro | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
   const recarregarLista = useCallback(async () => {
@@ -85,12 +87,27 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
     setDataInicio(reg.dataInicio || '');
     setDataFim(reg.dataFim || '');
     setErroSalvar(null);
+    setSucesso(null);
     setEditandoExistente(true);
     setFeedback(
       isDispensaAtiva(reg)
         ? 'Dispensa ativa. Altere as datas e confirme para atualizar.'
         : 'Dispensa fora do período atual. Altere as datas e confirme para atualizar.',
     );
+  }, []);
+
+  const editarDaLista = useCallback(
+    (reg: RestritoRegistro) => {
+      aplicarRegistroNoFormulario(reg);
+      setFeedback('Editando dispensa selecionada. Altere e toque em Atualizar dispensa.');
+    },
+    [aplicarRegistroNoFormulario],
+  );
+
+  const pedirExclusao = useCallback((reg: RestritoRegistro) => {
+    setRestritoParaExcluir(reg);
+    setErroSalvar(null);
+    setSucesso(null);
   }, []);
 
   const carregarRestritoSalvo = useCallback(
@@ -225,11 +242,15 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
   }, [nip, nome, dataInicio, dataFim, cadastros, editandoExistente, recarregarLista, onSalvo]);
 
   const confirmarExclusao = useCallback(async () => {
+    if (!restritoParaExcluir) return;
     setExcluindo(true);
     try {
-      await deleteRestritoByNip(nip);
-      setConfirmExcluirVisible(false);
-      limparFormulario();
+      await deleteRestritoByNip(restritoParaExcluir.nip);
+      const nipExcluido = nipDigitos(restritoParaExcluir.nip);
+      setRestritoParaExcluir(null);
+      if (nipDigitos(nip) === nipExcluido) {
+        limparFormulario();
+      }
       setSucesso('Dispensa excluída.');
       await recarregarLista();
       onSalvo?.();
@@ -238,7 +259,7 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
     } finally {
       setExcluindo(false);
     }
-  }, [nip, limparFormulario, recarregarLista, onSalvo]);
+  }, [restritoParaExcluir, nip, limparFormulario, recarregarLista, onSalvo]);
 
   return (
     <>
@@ -327,7 +348,15 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
           <View style={{ marginTop: 10 }}>
             <AplicarTafPrimaryButton
               label="Excluir dispensa"
-              onPress={() => setConfirmExcluirVisible(true)}
+              onPress={() =>
+                pedirExclusao({
+                  nip: nipDigitos(nip),
+                  nome: nome.trim(),
+                  dataInicio,
+                  dataFim,
+                  updatedAt: Date.now(),
+                })
+              }
               variant="outline"
             />
           </View>
@@ -352,13 +381,47 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
                       },
                     ]}
                   >
-                    <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>
-                      {reg.nome || 'Sem nome'}
-                    </Text>
-                    <Text style={[ts.caption, { color: theme.textMuted }]}>
-                      NIP {formatNipInput(reg.nip)} · {reg.dataInicio} → {reg.dataFim}
-                      {ativo ? ' · Ativa' : ' · Fora do período'}
-                    </Text>
+                    <View style={styles.listaItemRow}>
+                      <View style={styles.listaItemText}>
+                        <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>
+                          {reg.nome || 'Sem nome'}
+                        </Text>
+                        <Text style={[ts.caption, { color: theme.textMuted }]}>
+                          NIP {formatNipInput(reg.nip)} · {reg.dataInicio} → {reg.dataFim}
+                          {ativo ? ' · Ativa' : ' · Fora do período'}
+                        </Text>
+                      </View>
+                      <View style={styles.listaAcoes}>
+                        <TouchableOpacity
+                          accessibilityLabel={`Editar dispensa de ${reg.nome || reg.nip}`}
+                          accessibilityRole="button"
+                          onPress={() => editarDaLista(reg)}
+                          style={[
+                            styles.acaoBtn,
+                            {
+                              borderColor: theme.primary,
+                              backgroundColor: theme.accentMuted,
+                            },
+                          ]}
+                        >
+                          <Pencil size={18} color={theme.primary} strokeWidth={2.3} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          accessibilityLabel={`Excluir dispensa de ${reg.nome || reg.nip}`}
+                          accessibilityRole="button"
+                          onPress={() => pedirExclusao(reg)}
+                          style={[
+                            styles.acaoBtn,
+                            {
+                              borderColor: theme.loss,
+                              backgroundColor: theme.lossMuted,
+                            },
+                          ]}
+                        >
+                          <Trash2 size={18} color={theme.loss} strokeWidth={2.3} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   </View>
                 );
               })}
@@ -368,12 +431,12 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
       </AplicarTafGlassPanel>
 
       <ConfirmacaoExcluirRestritoModal
-        visible={confirmExcluirVisible}
-        nip={nip}
-        nome={nome}
+        visible={restritoParaExcluir != null}
+        nip={restritoParaExcluir?.nip ?? ''}
+        nome={restritoParaExcluir?.nome ?? ''}
         loading={excluindo}
         onClose={() => {
-          if (!excluindo) setConfirmExcluirVisible(false);
+          if (!excluindo) setRestritoParaExcluir(null);
         }}
         onConfirm={() => void confirmarExclusao()}
       />
@@ -387,12 +450,34 @@ const styles = StyleSheet.create({
   datesRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   dateCol: { flex: 1, gap: 6 },
   listaWrap: { marginTop: 18 },
-  listaScroll: { maxHeight: 220 },
+  listaScroll: { maxHeight: 280 },
   listaItem: {
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
+  },
+  listaItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  listaItemText: {
+    flex: 1,
+    minWidth: 0,
     gap: 4,
+  },
+  listaAcoes: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  acaoBtn: {
+    width: PREMIUM.minTouch,
+    height: PREMIUM.minTouch,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

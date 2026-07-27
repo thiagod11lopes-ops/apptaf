@@ -123,12 +123,12 @@ export function ConfirmacaoModoDemonstracaoModal({
           <>
             <Text style={[styles.message, { color: theme.text }]}>
               {ativar
-                ? 'Disponibiliza militares fictícios só na aba Aplicar TAF para você treinar o fluxo. Os testes só entram no Histórico depois de aplicados, com a tarja “Modo Teste”. Não alteram planilhas, backup nem sincronização.'
+                ? 'Disponibiliza militares fictícios só na aba Aplicar TAF e preenche os NIPs automaticamente. Os testes só entram no Histórico depois de aplicados, com a tarja “Modo Teste”. Não alteram planilhas, backup nem sincronização.'
                 : 'Remove os militares fictícios da aba Aplicar. Sessões de Modo Teste já aplicadas permanecem no Histórico.'}
             </Text>
             <Text style={[styles.hint, { color: theme.textMuted }]}>
               {ativar
-                ? 'Com o modo ativo, use o ícone ✨ na tela de NIPs para preencher participantes de exemplo.'
+                ? 'Ao confirmar, os NIPs dos participantes serão preenchidos automaticamente com militares de exemplo.'
                 : 'Seus dados reais não são apagados ao desativar o Modo Teste.'}
             </Text>
           </>
@@ -148,7 +148,7 @@ export function ConfirmacaoModoDemonstracaoModal({
         {phase === 'success' ? (
           <Text style={[styles.message, { color: theme.text }]}>
             {ativar
-              ? 'Modo Teste pronto. Aplique as provas normalmente; ao finalizar, elas aparecem no Histórico com a tarja amarela.'
+              ? 'Modo Teste pronto. Os NIPs já foram preenchidos; aplique as provas normalmente. Ao finalizar, elas aparecem no Histórico com a tarja amarela.'
               : 'Modo Teste desativado. As sessões já aplicadas continuam no Histórico.'}
           </Text>
         ) : null}

@@ -2913,15 +2913,12 @@ export default function AplicarTAFScreen() {
                 title={`${tituloProvaCurta} — NIPs`}
                 subtitle={
                   demoAtivo
-                    ? `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes ou use Modo Teste abaixo.`
+                    ? `NIPs dos ${nParticipantesConfirmado} participantes (Modo Teste).`
                     : `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes.`
                 }
               />
 
-              <AplicarTafModoTesteBar
-                onPreencherNips={() => void preencherNipsDemonstracao()}
-                preenchendoNips={preenchendoNipsDemo}
-              />
+              <AplicarTafModoTesteBar onPreencherNips={preencherNipsDemonstracao} />
 
             {nipsParticipantes.map((nip, index) => {
               const fb = nipFeedbackLinhas[index];

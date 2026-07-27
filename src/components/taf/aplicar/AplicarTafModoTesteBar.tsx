@@ -21,14 +21,14 @@ import {
 } from '../../premium/ConfirmacaoModoDemonstracaoModal';
 
 type Props = {
-  onPreencherNips: () => void;
-  preenchendoNips?: boolean;
+  /** Preenche os NIPs com militares de exemplo (chamado ao ativar o Modo Teste). */
+  onPreencherNips: () => void | Promise<void>;
 };
 
 /**
- * Controles de Modo Teste na etapa de NIPs (após confirmar nº de participantes).
+ * Modo Teste na etapa de NIPs: ao ativar, preenche os NIPs automaticamente.
  */
-export function AplicarTafModoTesteBar({ onPreencherNips, preenchendoNips = false }: Props) {
+export function AplicarTafModoTesteBar({ onPreencherNips }: Props) {
   const { theme } = useTheme();
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [demoCarregando, setDemoCarregando] = useState(false);
@@ -56,8 +56,11 @@ export function AplicarTafModoTesteBar({ onPreencherNips, preenchendoNips = fals
     setDemoModal({ phase: 'loading', ativar });
     setDemoCarregando(true);
     void toggleModoDemonstracaoSistema()
-      .then(({ ativo }) => {
+      .then(async ({ ativo }) => {
         setDemoAtivo(ativo);
+        if (ativo) {
+          await onPreencherNips();
+        }
         setDemoModal({ phase: 'success', ativar: ativo });
       })
       .catch((e) => {
@@ -68,13 +71,18 @@ export function AplicarTafModoTesteBar({ onPreencherNips, preenchendoNips = fals
         });
       })
       .finally(() => setDemoCarregando(false));
-  }, [demoModal, demoCarregando]);
+  }, [demoModal, demoCarregando, onPreencherNips]);
 
   return (
     <>
       <View style={styles.bar}>
         <TouchableOpacity
           accessibilityLabel={demoAtivo ? 'Desativar Modo Teste' : 'Ativar Modo Teste'}
+          accessibilityHint={
+            demoAtivo
+              ? 'Desliga o Modo Teste'
+              : 'Ativa o Modo Teste e preenche os NIPs automaticamente'
+          }
           accessibilityRole="button"
           activeOpacity={0.85}
           disabled={demoCarregando}
@@ -113,31 +121,6 @@ export function AplicarTafModoTesteBar({ onPreencherNips, preenchendoNips = fals
             {demoAtivo ? 'Modo Teste ativo' : 'Modo Teste'}
           </Text>
         </TouchableOpacity>
-
-        {demoAtivo ? (
-          <TouchableOpacity
-            accessibilityLabel="Preencher NIPs de exemplo"
-            accessibilityHint="Preenche automaticamente os NIPs com militares fictícios"
-            accessibilityRole="button"
-            activeOpacity={0.85}
-            disabled={preenchendoNips}
-            onPress={onPreencherNips}
-            style={[
-              styles.fillBtn,
-              {
-                borderColor: theme.gain,
-                backgroundColor: theme.gainMuted,
-                opacity: preenchendoNips ? 0.65 : 1,
-              },
-            ]}
-          >
-            {preenchendoNips ? (
-              <ActivityIndicator size="small" color={theme.gain} />
-            ) : (
-              <Text style={[styles.fillLabel, { color: theme.gain }]}>Preencher NIPs</Text>
-            )}
-          </TouchableOpacity>
-        ) : null}
       </View>
 
       <ConfirmacaoModoDemonstracaoModal
@@ -170,18 +153,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   toggleLabel: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  fillBtn: {
-    minHeight: PREMIUM.minTouch,
-    paddingHorizontal: 14,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fillLabel: {
     fontSize: 13,
     fontWeight: '800',
   },

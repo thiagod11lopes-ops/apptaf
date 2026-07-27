@@ -2,6 +2,7 @@
  * Exclusões parciais da zona de perigo (chefe):
  * - testes/sessões (mantém cadastros, fatores, aplicadores…)
  * - fatores de risco (mantém o restante)
+ * - sessões do Modo Teste (demo-sess-*)
  */
 import { isFirebaseConfigured } from '../config/firebase';
 import { dataStore } from '../offline-first/store/DataStore';
@@ -10,6 +11,7 @@ import {
   softDeleteSessao,
   resolveOwnerUid,
 } from '../offline-first/db/localDb';
+import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { syncManager } from '../offline-first/sync/SyncManager';
 import { invalidateRemoteSnapshotCache } from '../offline-first/sync/remoteSnapshotCache';
@@ -22,6 +24,7 @@ import {
   limparTodosResultadosTafCadastro,
 } from '../utils/limparResultadoModalidade';
 import { wipeOwnerTable } from './supabase/ownerDocs';
+import { isDemoSessaoId } from '../utils/gatherSystemBackupData';
 
 export type WipeAllTestesResult = {
   sessoesDeleted: number;
@@ -31,6 +34,10 @@ export type WipeAllTestesResult = {
 
 export type WipeAllFatoresRiscoResult = {
   registrosRemovidos: number;
+};
+
+export type WipeAllModoTesteResult = {
+  sessoesDeleted: number;
 };
 
 async function wipeCloudTestesTables(ownerUid: string): Promise<void> {
@@ -87,4 +94,33 @@ export async function wipeAllFatoresRiscoData(): Promise<WipeAllFatoresRiscoResu
   const registrosRemovidos = await clearAllFatoresRisco();
   notifyDataChanged();
   return { registrosRemovidos };
+}
+
+/**
+ * Apaga sessões aplicadas no Modo Teste (ids demo-sess-*).
+ * Não altera testes reais, cadastros nem a nuvem (esses ids nunca sincronizam).
+ */
+export async function wipeAllModoTesteSessoes(options: {
+  uid: string | null;
+}): Promise<WipeAllModoTesteResult> {
+  const ownerUid = resolveOwnerUid(options.uid);
+  const sessoes = await listSessoes(ownerUid, true);
+  const demoIds = sessoes.filter((s) => isDemoSessaoId(s.id)).map((s) => s.id);
+
+  if (demoIds.length === 0) {
+    return { sessoesDeleted: 0 };
+  }
+
+  const db = getTafDatabase();
+  if (db) {
+    await db.sessoes.bulkDelete(demoIds);
+  } else {
+    const userId = getCachedLoginUid();
+    for (const id of demoIds) {
+      await softDeleteSessao(id, ownerUid, userId);
+    }
+  }
+
+  notifyDataChanged();
+  return { sessoesDeleted: demoIds.length };
 }

@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, Platform, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AlertTriangle, ClipboardList, HeartPulse, Trash2 } from 'lucide-react-native';
+import { AlertTriangle, ClipboardList, HeartPulse, Sparkles, Trash2 } from 'lucide-react-native';
 import { ModernModal } from './sismav/ModernModal';
 import { PressableScale } from './premium/PressableScale';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,15 +9,20 @@ import { useAuth } from '../contexts/AuthContext';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import {
   wipeAllFatoresRiscoData,
+  wipeAllModoTesteSessoes,
   wipeAllTestesData,
 } from '../services/wipePartialDangerData';
 import { PREMIUM } from '../theme/premium';
 
-type Target = 'testes' | 'fatores' | null;
+type Target = 'testes' | 'fatores' | 'modoTeste' | null;
 
 type Props = {
   onDone?: () => void;
 };
+
+const MODO_TESTE_YELLOW = '#EAB308';
+const MODO_TESTE_YELLOW_BG = '#FACC15';
+const MODO_TESTE_INK = '#422006';
 
 export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
   const { theme } = useTheme();
@@ -62,6 +67,15 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
           partes.push('Sessões correspondentes na nuvem também foram removidas.');
         }
         setSucesso(partes.join(' '));
+      } else if (target === 'modoTeste') {
+        const result = await wipeAllModoTesteSessoes({
+          uid: getCachedDataOwnerUid(),
+        });
+        setSucesso(
+          result.sessoesDeleted === 0
+            ? 'Nenhum teste de Modo Teste encontrado no Histórico.'
+            : `${result.sessoesDeleted.toLocaleString('pt-BR')} teste(s) de Modo Teste excluído(s) do Histórico. Seus testes reais não foram alterados.`,
+        );
       } else {
         const result = await wipeAllFatoresRiscoData();
         setSucesso(
@@ -82,17 +96,29 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
   if (!isBoss) return null;
 
   const isTestes = target === 'testes';
-  const titulo = isTestes ? 'Excluir todos os testes?' : 'Excluir fatores de risco?';
+  const isModoTeste = target === 'modoTeste';
+  const titulo = isTestes
+    ? 'Excluir todos os testes?'
+    : isModoTeste
+      ? 'Excluir testes do Modo Teste?'
+      : 'Excluir fatores de risco?';
   const mensagem = isTestes
     ? 'Serão removidos todos os testes/sessões de TAF e os resultados vinculados aos cadastros. Cadastros (dados pessoais), fatores de risco, aplicadores e pré-cadastros permanecem.'
-    : 'Serão removidos todos os fatores de risco cadastrados. Cadastros, testes, aplicadores e demais dados permanecem.';
+    : isModoTeste
+      ? 'Serão removidos do Histórico apenas os testes aplicados no Modo Teste (tarja amarela). Seus testes reais, cadastros e demais dados permanecem intactos.'
+      : 'Serão removidos todos os fatores de risco cadastrados. Cadastros, testes, aplicadores e demais dados permanecem.';
   const lista = isTestes
     ? [
         'Sessões e histórico de testes',
         'Resultados de TAF nos cadastros (tempos/notas)',
         ...(apagaNuvem ? ['Sessões de TAF na nuvem do chefe'] : []),
       ]
-    : ['Todos os registros de fatores de risco neste aparelho'];
+    : isModoTeste
+      ? [
+          'Cards do Histórico com tarja “Modo Teste”',
+          'Sessões demo-sess-* neste aparelho',
+        ]
+      : ['Todos os registros de fatores de risco neste aparelho'];
 
   const footer = (
     <View style={styles.footerRow}>
@@ -104,26 +130,47 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
         <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>Cancelar</Text>
       </PressableScale>
       <PressableScale onPress={() => void executar()} disabled={loading} style={styles.btnDangerOuter}>
-        <LinearGradient
-          colors={[...theme.tokens.gradientDangerBtn]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[
-            styles.btnDanger,
-            Platform.OS === 'web'
-              ? ({ boxShadow: '0 6px 16px rgba(220, 38, 38, 0.35)' } as object)
-              : undefined,
-          ]}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <>
-              <Trash2 size={16} color="#FFFFFF" strokeWidth={2.5} />
-              <Text style={styles.btnDangerText}>Excluir</Text>
-            </>
-          )}
-        </LinearGradient>
+        {isModoTeste ? (
+          <View
+            style={[
+              styles.btnDanger,
+              styles.btnYellow,
+              Platform.OS === 'web'
+                ? ({ boxShadow: '0 6px 16px rgba(202, 138, 4, 0.4)' } as object)
+                : undefined,
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color={MODO_TESTE_INK} size="small" />
+            ) : (
+              <>
+                <Trash2 size={16} color={MODO_TESTE_INK} strokeWidth={2.5} />
+                <Text style={[styles.btnDangerText, { color: MODO_TESTE_INK }]}>Excluir</Text>
+              </>
+            )}
+          </View>
+        ) : (
+          <LinearGradient
+            colors={[...theme.tokens.gradientDangerBtn]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[
+              styles.btnDanger,
+              Platform.OS === 'web'
+                ? ({ boxShadow: '0 6px 16px rgba(220, 38, 38, 0.35)' } as object)
+                : undefined,
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <>
+                <Trash2 size={16} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.btnDangerText}>Excluir</Text>
+              </>
+            )}
+          </LinearGradient>
+        )}
       </PressableScale>
     </View>
   );
@@ -153,6 +200,35 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
           <Text style={[styles.btnTriggerText, { color: theme.loss }]}>Excluir todos os testes</Text>
           <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 16 }]}>
             Exclui os testes, mas mantém cadastros, fatores de risco, etc.
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        accessibilityLabel="Excluir todos os testes feitos no Modo Teste"
+        activeOpacity={0.85}
+        disabled={loading}
+        onPress={() => {
+          setErro(null);
+          setSucesso(null);
+          setTarget('modoTeste');
+        }}
+        style={[
+          styles.btnTrigger,
+          {
+            borderColor: MODO_TESTE_YELLOW,
+            backgroundColor: theme.isDark ? 'rgba(234, 179, 8, 0.22)' : 'rgba(254, 249, 195, 0.95)',
+            opacity: loading ? 0.6 : 1,
+          },
+        ]}
+      >
+        <Sparkles size={18} color={MODO_TESTE_YELLOW} strokeWidth={2.4} />
+        <View style={styles.btnTextCol}>
+          <Text style={[styles.btnTriggerText, { color: MODO_TESTE_INK }]}>
+            Excluir testes do Modo Teste
+          </Text>
+          <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 16 }]}>
+            Remove só as sessões com tarja amarela do Histórico.
           </Text>
         </View>
       </TouchableOpacity>
@@ -197,8 +273,20 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
         footer={footer}
       >
         <View style={styles.modalBody}>
-          <View style={[styles.warnIcon, { backgroundColor: theme.lossMuted, borderColor: theme.loss }]}>
-            <AlertTriangle size={28} color={theme.loss} strokeWidth={2} />
+          <View
+            style={[
+              styles.warnIcon,
+              {
+                backgroundColor: isModoTeste ? 'rgba(250, 204, 21, 0.35)' : theme.lossMuted,
+                borderColor: isModoTeste ? MODO_TESTE_YELLOW : theme.loss,
+              },
+            ]}
+          >
+            {isModoTeste ? (
+              <Sparkles size={28} color={MODO_TESTE_YELLOW} strokeWidth={2} />
+            ) : (
+              <AlertTriangle size={28} color={theme.loss} strokeWidth={2} />
+            )}
           </View>
           <Text style={[styles.message, { color: theme.text }]}>{mensagem}</Text>
           <View style={[styles.listBox, { borderColor: theme.border, backgroundColor: theme.surface }]}>
@@ -286,6 +374,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderRadius: 12,
+  },
+  btnYellow: {
+    backgroundColor: MODO_TESTE_YELLOW_BG,
+    borderWidth: 1,
+    borderColor: MODO_TESTE_YELLOW,
   },
   btnDangerText: {
     color: '#FFFFFF',

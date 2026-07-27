@@ -9,6 +9,7 @@ export type WipeCloudCounts = {
   cadastroRubricas: number;
   sessaoRubricas: number;
   preCadastros: number;
+  restritos: number;
 };
 
 export type WipeCloudTeamResult = WipeCloudCounts & {
@@ -34,6 +35,7 @@ const TABLES: Array<{ key: keyof WipeCloudCounts; label: string; table: string }
   { key: 'cadastroRubricas', label: 'Rubricas de cadastros', table: 'cadastro_rubricas' },
   { key: 'sessaoRubricas', label: 'Rubricas de sessões', table: 'sessao_rubricas' },
   { key: 'preCadastros', label: 'Pré-cadastros', table: 'pre_cadastros' },
+  { key: 'restritos', label: 'Restritos / dispensas', table: 'restritos' },
 ];
 
 export async function setTeamWipeMarker(ownerUid: string, wipedAt: number): Promise<void> {
@@ -71,6 +73,7 @@ export async function wipeCloudTeamDataFirestore(
     cadastroRubricas: 0,
     sessaoRubricas: 0,
     preCadastros: 0,
+    restritos: 0,
   };
 
   let step = 0;

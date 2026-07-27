@@ -26,6 +26,7 @@ declare
     'aplicadores',
     'aplicador_senhas',
     'pre_cadastros',
+    'restritos',
     'authorized_emails',
     'team_wipe',
     'team_e2e_member_wraps',
@@ -56,6 +57,7 @@ drop table if exists public.team_e2e_member_wraps cascade;
 drop table if exists public.team_e2e_meta cascade;
 drop table if exists public.team_wipe cascade;
 drop table if exists public.pre_cadastros cascade;
+drop table if exists public.restritos cascade;
 drop table if exists public.aplicador_senhas cascade;
 drop table if exists public.aplicadores cascade;
 drop table if exists public.sessao_rubricas cascade;
@@ -170,6 +172,15 @@ create table public.pre_cadastros (
   primary key (owner_uid, id)
 );
 
+create table public.restritos (
+  id text not null,
+  owner_uid uuid not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at bigint not null default 0,
+  deleted boolean not null default false,
+  primary key (owner_uid, id)
+);
+
 create table public.team_wipe (
   owner_uid uuid primary key,
   wiped_at bigint not null,
@@ -213,6 +224,7 @@ create index idx_cadastros_owner_updated on public.cadastros (owner_uid, updated
 create index idx_sessoes_owner_updated on public.sessoes (owner_uid, updated_at);
 create index idx_aplicadores_owner_updated on public.aplicadores (owner_uid, updated_at);
 create index idx_pre_cadastros_owner_updated on public.pre_cadastros (owner_uid, updated_at);
+create index idx_restritos_owner_updated on public.restritos (owner_uid, updated_at);
 create index idx_member_lookup_boss on public.member_lookup (boss_uid);
 create index idx_member_uid_lookup_boss on public.member_uid_lookup (boss_uid);
 create index idx_database_registry_number on public.database_registry (bank_number);
@@ -226,6 +238,7 @@ alter table public.sessao_rubricas replica identity full;
 alter table public.aplicadores replica identity full;
 alter table public.aplicador_senhas replica identity full;
 alter table public.pre_cadastros replica identity full;
+alter table public.restritos replica identity full;
 alter table public.authorized_emails replica identity full;
 alter table public.team_wipe replica identity full;
 
@@ -293,6 +306,7 @@ grant select, insert, update, delete on
   public.aplicadores,
   public.aplicador_senhas,
   public.pre_cadastros,
+  public.restritos,
   public.team_wipe,
   public.team_e2e_meta,
   public.team_e2e_member_wraps
@@ -319,6 +333,7 @@ alter table public.sessao_rubricas enable row level security;
 alter table public.aplicadores enable row level security;
 alter table public.aplicador_senhas enable row level security;
 alter table public.pre_cadastros enable row level security;
+alter table public.restritos enable row level security;
 alter table public.team_wipe enable row level security;
 alter table public.team_e2e_meta enable row level security;
 alter table public.database_registry enable row level security;
@@ -414,6 +429,11 @@ create policy aplicador_senhas_delete on public.aplicador_senhas
   using (public.is_boss(owner_uid));
 
 create policy pre_cadastros_access on public.pre_cadastros
+  for all to authenticated
+  using (public.can_access_owner(owner_uid))
+  with check (public.can_access_owner(owner_uid));
+
+create policy restritos_access on public.restritos
   for all to authenticated
   using (public.can_access_owner(owner_uid))
   with check (public.can_access_owner(owner_uid));
@@ -743,6 +763,7 @@ declare
     'aplicadores',
     'aplicador_senhas',
     'pre_cadastros',
+    'restritos',
     'authorized_emails',
     'team_wipe'
   ];

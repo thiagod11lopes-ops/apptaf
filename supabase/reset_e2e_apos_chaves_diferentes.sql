@@ -14,6 +14,11 @@ truncate table public.cadastros restart identity cascade;
 truncate table public.sessoes restart identity cascade;
 truncate table public.aplicadores restart identity cascade;
 truncate table public.pre_cadastros restart identity cascade;
+do $$ begin
+  if to_regclass('public.restritos') is not null then
+    execute 'truncate table public.restritos restart identity cascade';
+  end if;
+end $$;
 truncate table public.team_wipe restart identity cascade;
 truncate table public.team_e2e_meta restart identity cascade;
 truncate table public.team_e2e_member_wraps restart identity cascade;

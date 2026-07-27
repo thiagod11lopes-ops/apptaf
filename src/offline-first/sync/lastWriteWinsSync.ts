@@ -59,6 +59,7 @@ import { isUnsyncedLocalStatus } from './syncStatus';
 import { appendSyncAudit, type SyncAuditEntry } from './syncAudit';
 import { syncQueue } from './SyncQueue';
 import { pushPendingAuthorizedEmails } from './syncAuthorizedEmails';
+import { syncRestritosWithCloud } from './syncRestritos';
 import { APP_VERSION } from '../appVersion';
 import type { ClockDriftResult } from './clockDrift';
 import {
@@ -1374,6 +1375,8 @@ export async function executeLastWriteWinsSync(
     );
     const emailErrors = await pushPendingAuthorizedEmails(ownerUid);
     stats.errors.push(...emailErrors);
+    const restritosErrors = await syncRestritosWithCloud(ownerUid);
+    stats.errors.push(...restritosErrors);
     await syncQueue.clearDone(ownerUid);
     await protectDirectPlaintextCloudDocs(ownerUid, stats, progressCb);
 
@@ -1472,6 +1475,9 @@ export async function executeLastWriteWinsSync(
 
   const emailErrors = await pushPendingAuthorizedEmails(ownerUid);
   stats.errors.push(...emailErrors);
+
+  const restritosErrors = await syncRestritosWithCloud(ownerUid);
+  stats.errors.push(...restritosErrors);
 
   await syncQueue.clearDone(ownerUid);
 

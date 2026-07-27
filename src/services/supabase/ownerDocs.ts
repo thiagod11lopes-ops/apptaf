@@ -15,6 +15,7 @@ const TABLES_WITH_DELETED = new Set([
   'sessoes',
   'aplicadores',
   'pre_cadastros',
+  'restritos',
 ]);
 
 /** PostgREST/Supabase limita ~1000 por request — sem paginação o LWW acha que falta dado na nuvem. */
@@ -135,6 +136,7 @@ const HEAL_TABLES = [
   'aplicadores',
   'aplicador_senhas',
   'pre_cadastros',
+  'restritos',
 ] as const;
 
 /**

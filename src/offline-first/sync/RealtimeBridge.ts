@@ -21,6 +21,7 @@ const REALTIME_TABLES = [
   'aplicadores',
   'aplicador_senhas',
   'pre_cadastros',
+  'restritos',
   // authorized_emails fora do Realtime: upserts do chefe geravam eco → loop de sync.
   // Mudanças de e-mail entram pelo cloud-diff / login / pull explícito.
   'team_wipe',

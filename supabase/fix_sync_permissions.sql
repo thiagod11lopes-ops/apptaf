@@ -70,6 +70,24 @@ grant select, insert, update, delete on
   public.team_e2e_meta
 to authenticated;
 
+-- restritos (se a migration fix_restritos já rodou)
+do $$
+begin
+  if to_regclass('public.restritos') is not null then
+    execute 'grant select, insert, update, delete on public.restritos to authenticated';
+    execute 'alter table public.restritos enable row level security';
+    execute 'drop policy if exists restritos_access on public.restritos';
+    execute $p$
+      create policy restritos_access on public.restritos
+        for all to authenticated
+        using (public.can_access_owner(owner_uid))
+        with check (public.can_access_owner(owner_uid))
+    $p$;
+  end if;
+exception when others then
+  raise notice 'grant/policy restritos: %', sqlerrm;
+end $$;
+
 -- database_registry (se existir)
 do $$
 begin

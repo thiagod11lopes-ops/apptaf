@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Image, Platform } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Image, Platform, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,6 +43,36 @@ export default function HomeScreen() {
   const { user, authReady, isAuthenticated, dataOwnerUid } = useAuth();
   const { syncUi } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  const pctConcluidos = useMemo(() => {
+    const total = resumo.totalCadastrados;
+    if (total <= 0) return 0;
+    return Math.min(100, Math.max(0, (resumo.completos / total) * 100));
+  }, [resumo.completos, resumo.totalCadastrados]);
+
+  const pctConcluidosLabel = useMemo(() => {
+    const rounded = Math.round(pctConcluidos * 10) / 10;
+    return `${rounded.toLocaleString('pt-BR', {
+      minimumFractionDigits: rounded % 1 === 0 ? 0 : 1,
+      maximumFractionDigits: 1,
+    })}%`;
+  }, [pctConcluidos]);
+
+  useEffect(() => {
+    Animated.spring(progressAnim, {
+      toValue: pctConcluidos,
+      friction: 9,
+      tension: 48,
+      useNativeDriver: false,
+    }).start();
+  }, [pctConcluidos, progressAnim]);
+
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+    extrapolate: 'clamp',
+  });
 
   const emailPrefixo = useMemo(
     () => (isAuthenticated ? emailPrefixoExibicao(user?.email) : null),
@@ -155,9 +185,9 @@ export default function HomeScreen() {
             variant="primary"
           />
           <StatCard
-            label="Concluídos"
-            value={resumo.completos.toLocaleString('pt-BR')}
-            variant="positive"
+            label="Pendente"
+            value={resumo.semTeste.toLocaleString('pt-BR')}
+            variant="negative"
           />
           <StatCard
             label="Parcial"
@@ -165,9 +195,9 @@ export default function HomeScreen() {
             variant="warning"
           />
           <StatCard
-            label="Pendente"
-            value={resumo.semTeste.toLocaleString('pt-BR')}
-            variant="negative"
+            label="Concluídos"
+            value={resumo.completos.toLocaleString('pt-BR')}
+            variant="positive"
           />
           <StatCard
             label="Restritos"
@@ -179,6 +209,64 @@ export default function HomeScreen() {
             value={(resumo.fatoresRisco ?? 0).toLocaleString('pt-BR')}
             variant="negative"
           />
+        </View>
+
+        <View
+          style={styles.progressBlock}
+          accessibilityRole="progressbar"
+          accessibilityValue={{
+            min: 0,
+            max: 100,
+            now: Math.round(pctConcluidos),
+            text: pctConcluidosLabel,
+          }}
+          accessibilityLabel={`Conclusão dos testes: ${pctConcluidosLabel}`}
+        >
+          <View style={styles.progressHeader}>
+            <Text style={[styles.progressLabel, { color: theme.textMuted }]}>
+              Conclusão dos testes
+            </Text>
+            <Text style={[styles.progressPct, { color: theme.success }]}>
+              {pctConcluidosLabel}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.progressTrack,
+              {
+                backgroundColor:
+                  Platform.OS === 'web' ? 'rgba(15, 23, 42, 0.08)' : 'rgba(15, 23, 42, 0.12)',
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <Animated.View style={[styles.progressFillWrap, { width: progressWidth }]}>
+              <LinearGradient
+                colors={['#059669', '#10b981', '#34d399', '#22d3ee']}
+                locations={[0, 0.35, 0.7, 1]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.progressFill}
+              >
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.45)', 'rgba(255,255,255,0.08)', 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.progressSheen}
+                />
+              </LinearGradient>
+            </Animated.View>
+            <View
+              pointerEvents="none"
+              style={[
+                styles.progressGlow,
+                {
+                  opacity: pctConcluidos > 0 ? 0.55 : 0,
+                  width: `${Math.max(pctConcluidos, 0)}%`,
+                },
+              ]}
+            />
+          </View>
         </View>
       </TafGlassPanel>
 
@@ -265,12 +353,75 @@ const styles = StyleSheet.create({
   },
   statsPanel: {
     flexShrink: 0,
+    gap: 12,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
     justifyContent: 'space-between',
+  },
+  progressBlock: {
+    width: '100%',
+    gap: 8,
+    paddingTop: 2,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  progressLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  progressPct: {
+    fontSize: 15,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.2,
+  },
+  progressTrack: {
+    height: 12,
+    borderRadius: 999,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    position: 'relative',
+  },
+  progressFillWrap: {
+    height: '100%',
+    borderRadius: 999,
+    overflow: 'hidden',
+    minWidth: 0,
+  },
+  progressFill: {
+    flex: 1,
+    height: '100%',
+    borderRadius: 999,
+  },
+  progressSheen: {
+    ...StyleSheet.absoluteFillObject,
+    height: '55%',
+  },
+  progressGlow: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 999,
+    ...(Platform.OS === 'web'
+      ? ({
+          boxShadow: '0 0 18px rgba(16, 185, 129, 0.55), 0 0 4px rgba(34, 211, 238, 0.4)',
+        } as object)
+      : {
+          shadowColor: '#10b981',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.65,
+          shadowRadius: 8,
+        }),
   },
   imagePanel: {
     flex: 1,

@@ -179,36 +179,40 @@ export default function HomeScreen() {
 
       <TafGlassPanel accent="cyan" style={styles.statsPanel}>
         <View style={styles.statsGrid}>
-          <StatCard
-            label="Cadastrados"
-            value={resumo.totalCadastrados.toLocaleString('pt-BR')}
-            variant="primary"
-          />
-          <StatCard
-            label="Parcial"
-            value={resumo.parcial.toLocaleString('pt-BR')}
-            variant="warning"
-          />
-          <StatCard
-            label="Pendente"
-            value={resumo.semTeste.toLocaleString('pt-BR')}
-            variant="negative"
-          />
-          <StatCard
-            label="Restritos"
-            value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
-            variant="warning"
-          />
-          <StatCard
-            label="Concluídos"
-            value={resumo.completos.toLocaleString('pt-BR')}
-            variant="positive"
-          />
-          <StatCard
-            label="Fatores de risco"
-            value={(resumo.fatoresRisco ?? 0).toLocaleString('pt-BR')}
-            variant="negative"
-          />
+          <View style={styles.statsRow}>
+            <StatCard
+              label="Cadastrados"
+              value={resumo.totalCadastrados.toLocaleString('pt-BR')}
+              variant="primary"
+            />
+            <StatCard
+              label="Pendente"
+              value={resumo.semTeste.toLocaleString('pt-BR')}
+              variant="negative"
+            />
+            <StatCard
+              label="Restritos"
+              value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
+              variant="warning"
+            />
+          </View>
+          <View style={styles.statsRow}>
+            <StatCard
+              label="Concluídos"
+              value={resumo.completos.toLocaleString('pt-BR')}
+              variant="positive"
+            />
+            <StatCard
+              label="Parcial"
+              value={resumo.parcial.toLocaleString('pt-BR')}
+              variant="warning"
+            />
+            <StatCard
+              label="Fatores de risco"
+              value={(resumo.fatoresRisco ?? 0).toLocaleString('pt-BR')}
+              variant="negative"
+            />
+          </View>
         </View>
 
         <View
@@ -356,10 +360,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 10,
-    justifyContent: 'space-between',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
   },
   progressBlock: {
     width: '100%',

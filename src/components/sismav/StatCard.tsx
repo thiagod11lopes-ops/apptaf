@@ -68,7 +68,7 @@ export function StatCard({ label, value, variant = 'default' }: Props) {
         style={[styles.label, compactGrid && styles.labelCompact, { color: theme.textMuted }]}
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.8}
+        minimumFontScale={0.7}
       >
         {label}
       </Text>
@@ -81,6 +81,8 @@ export function StatCard({ label, value, variant = 'default' }: Props) {
 
 const styles = StyleSheet.create({
   card: {
+    flex: 1,
+    minWidth: 0,
     borderRadius: 10,
     borderWidth: 1,
     gap: 2,
@@ -91,18 +93,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   cardRegular: {
-    flexGrow: 1,
-    flexBasis: '46%',
-    minWidth: 180,
     padding: 8,
   },
   cardCompact: {
-    width: '48%',
-    flexGrow: 0,
-    flexShrink: 0,
-    minWidth: 0,
     paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   label: {
     fontSize: 10,
@@ -112,9 +107,9 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   labelCompact: {
-    fontSize: 8.5,
-    letterSpacing: 0.25,
-    lineHeight: 11,
+    fontSize: 8,
+    letterSpacing: 0.2,
+    lineHeight: 10,
   },
   value: {
     fontSize: 16,
@@ -123,7 +118,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   valueCompact: {
-    fontSize: 14,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 15,
   },
 });

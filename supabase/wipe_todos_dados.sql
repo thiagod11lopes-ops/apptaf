@@ -21,6 +21,9 @@ do $$ begin
   if to_regclass('public.restritos') is not null then
     execute 'truncate table public.restritos restart identity cascade';
   end if;
+  if to_regclass('public.fatores_risco') is not null then
+    execute 'truncate table public.fatores_risco restart identity cascade';
+  end if;
 end $$;
 truncate table public.authorized_emails restart identity cascade;
 truncate table public.member_lookup restart identity cascade;

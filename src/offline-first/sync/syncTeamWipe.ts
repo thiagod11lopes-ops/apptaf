@@ -3,6 +3,7 @@ import { clearLocalSessoesAplicacao } from '../../services/resultadosAplicadosIn
 import { clearLocalAplicadores } from '../../services/aplicadoresIndexedDb';
 import { clearAllPreCadastrosTaf } from '../../services/preCadastroTafStorage';
 import { wipeLocalRestritos } from '../../services/restritosStorage';
+import { wipeLocalFatoresRisco } from '../../services/fatoresRiscoStorage';
 import { resetCloudDataCache, clearCloudDataCache } from '../../services/cloudDataCache';
 import { calcularResumoInicioTafFromHistorico } from '../../utils/resultadoGeralHistorico';
 import { getTeamWipeMarker } from './firebase/FirebaseGateway';
@@ -129,6 +130,7 @@ export async function applyTeamWipeIfNeeded(
     clearLocalAplicadores(),
     clearAllPreCadastrosTaf(),
     wipeLocalRestritos(dataOwnerUid),
+    wipeLocalFatoresRisco(dataOwnerUid),
   ]);
 
   await wipeLocalOwnerBundle(dataOwnerUid);

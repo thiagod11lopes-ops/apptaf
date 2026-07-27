@@ -66,6 +66,7 @@ function shouldSkipAppMetaRestore(key: string): boolean {
 /** Remapeia chaves de fatores de risco amarradas a outro ownerUid. */
 function remapAppMetaKeyForOwner(key: string, ownerUid: string): string {
   if (key === 'fatoresRisco:registros') return key;
+  if (key.startsWith('fatoresRisco:registros:')) return key;
   if (key.startsWith('fatoresRisco:')) return `fatoresRisco:${ownerUid}`;
   return key;
 }

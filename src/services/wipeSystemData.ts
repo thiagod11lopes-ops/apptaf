@@ -3,6 +3,7 @@ import { clearLocalSessoesAplicacao } from './resultadosAplicadosIndexedDb';
 import { clearLocalAplicadores } from './aplicadoresIndexedDb';
 import { clearAllPreCadastrosTaf } from './preCadastroTafStorage';
 import { wipeLocalRestritos } from './restritosStorage';
+import { wipeLocalFatoresRisco } from './fatoresRiscoStorage';
 import {
   clearMemoryCloudCache,
   resetCloudDataCache,
@@ -205,6 +206,7 @@ export async function wipeSystemData(options: WipeSystemDataOptions): Promise<Wi
     });
     await clearAllPreCadastrosTaf();
     await wipeLocalRestritos(uid);
+    await wipeLocalFatoresRisco(uid);
     await yieldToUi();
 
     const resumo = calcularResumoInicioTafFromHistorico([], []);

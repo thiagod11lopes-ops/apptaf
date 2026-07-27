@@ -18,6 +18,9 @@ do $$ begin
   if to_regclass('public.restritos') is not null then
     execute 'truncate table public.restritos restart identity cascade';
   end if;
+  if to_regclass('public.fatores_risco') is not null then
+    execute 'truncate table public.fatores_risco restart identity cascade';
+  end if;
 end $$;
 truncate table public.team_wipe restart identity cascade;
 truncate table public.team_e2e_meta restart identity cascade;

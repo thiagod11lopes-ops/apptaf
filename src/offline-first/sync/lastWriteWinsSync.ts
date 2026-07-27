@@ -60,6 +60,7 @@ import { appendSyncAudit, type SyncAuditEntry } from './syncAudit';
 import { syncQueue } from './SyncQueue';
 import { pushPendingAuthorizedEmails } from './syncAuthorizedEmails';
 import { syncRestritosWithCloud } from './syncRestritos';
+import { syncFatoresRiscoWithCloud } from './syncFatoresRisco';
 import { APP_VERSION } from '../appVersion';
 import type { ClockDriftResult } from './clockDrift';
 import {
@@ -1377,6 +1378,8 @@ export async function executeLastWriteWinsSync(
     stats.errors.push(...emailErrors);
     const restritosErrors = await syncRestritosWithCloud(ownerUid);
     stats.errors.push(...restritosErrors);
+    const fatoresErrors = await syncFatoresRiscoWithCloud(ownerUid);
+    stats.errors.push(...fatoresErrors);
     await syncQueue.clearDone(ownerUid);
     await protectDirectPlaintextCloudDocs(ownerUid, stats, progressCb);
 
@@ -1478,6 +1481,9 @@ export async function executeLastWriteWinsSync(
 
   const restritosErrors = await syncRestritosWithCloud(ownerUid);
   stats.errors.push(...restritosErrors);
+
+  const fatoresErrors = await syncFatoresRiscoWithCloud(ownerUid);
+  stats.errors.push(...fatoresErrors);
 
   await syncQueue.clearDone(ownerUid);
 

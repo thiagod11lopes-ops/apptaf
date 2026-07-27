@@ -16,6 +16,7 @@ export const E2E_DIRECT_PLAINTEXT_TABLES = [
   'sessao_rubricas',
   'aplicador_senhas',
   'restritos',
+  'fatores_risco',
 ] as const;
 
 const TABLES_WITH_DELETED = new Set([
@@ -24,6 +25,7 @@ const TABLES_WITH_DELETED = new Set([
   'aplicadores',
   'pre_cadastros',
   'restritos',
+  'fatores_risco',
 ]);
 
 const PAGE_SIZE = 1000;

@@ -13,6 +13,9 @@ No SQL Editor, execute `supabase/fix_sync_permissions.sql` e faça logout/login 
 ## Dispensas / Restritos na nuvem
 No SQL Editor, execute também `supabase/fix_restritos.sql` (tabela `restritos` com E2E). Depois sincronize no app (escudo verde).
 
+## Fatores de risco na nuvem
+No SQL Editor, execute também `supabase/fix_fatores_risco.sql` (tabela `fatores_risco` com E2E). Depois sincronize no app.
+
 
 ## 3. Auth por e-mail e senha
 1. Supabase → **Authentication → Providers → Email** → ativar.

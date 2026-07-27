@@ -70,7 +70,7 @@ grant select, insert, update, delete on
   public.team_e2e_meta
 to authenticated;
 
--- restritos (se a migration fix_restritos já rodou)
+-- restritos / fatores_risco (se as migrations já rodaram)
 do $$
 begin
   if to_regclass('public.restritos') is not null then
@@ -84,8 +84,19 @@ begin
         with check (public.can_access_owner(owner_uid))
     $p$;
   end if;
+  if to_regclass('public.fatores_risco') is not null then
+    execute 'grant select, insert, update, delete on public.fatores_risco to authenticated';
+    execute 'alter table public.fatores_risco enable row level security';
+    execute 'drop policy if exists fatores_risco_access on public.fatores_risco';
+    execute $p$
+      create policy fatores_risco_access on public.fatores_risco
+        for all to authenticated
+        using (public.can_access_owner(owner_uid))
+        with check (public.can_access_owner(owner_uid))
+    $p$;
+  end if;
 exception when others then
-  raise notice 'grant/policy restritos: %', sqlerrm;
+  raise notice 'grant/policy restritos/fatores_risco: %', sqlerrm;
 end $$;
 
 -- database_registry (se existir)

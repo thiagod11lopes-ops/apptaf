@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
-import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
+import { readAppMeta, writeAppMeta, removeAppMeta } from '../offline-first/db/appMeta';
+import { getCachedDataOwnerUid } from './firebase/authUid';
 import { nipDigitos } from '../utils/nipFormat';
+import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 
 export type FatorRiscoId =
   | 'hipertensao'
@@ -28,6 +30,8 @@ export type FatoresRiscoRegistro = {
   /** IMC calculado no momento do salvamento. */
   imc?: number;
   updatedAt: number;
+  /** Tombstone local para sync LWW com a nuvem. */
+  deleted?: boolean;
 };
 
 export const FATORES_RISCO_ITENS: ReadonlyArray<{ id: FatorRiscoId; label: string }> = [
@@ -40,10 +44,23 @@ export const FATORES_RISCO_ITENS: ReadonlyArray<{ id: FatorRiscoId; label: strin
   { id: 'morteSubitaFamilia', label: 'Casos de morte súbita na família' },
 ];
 
-/** Chave única (não depende de ownerUid) — evita gravar/ler em buckets diferentes. */
-const STORAGE_KEY = 'fatoresRisco:registros';
-const LEGACY_LS_PREFIX = 'fatoresRisco:';
-const WEB_LS_KEY = '@taf-fatores-risco-v1';
+const STORAGE_KEY_LEGACY = 'fatoresRisco:registros';
+const LEGACY_OWNER_PREFIX = 'fatoresRisco:';
+const WEB_LS_KEY_LEGACY = '@taf-fatores-risco-v1';
+
+function resolveOwnerUid(ownerUid?: string | null): string {
+  return (ownerUid ?? getCachedDataOwnerUid() ?? '').trim();
+}
+
+function storageKey(ownerUid?: string | null): string {
+  const o = resolveOwnerUid(ownerUid);
+  return o ? `fatoresRisco:registros:${o}` : STORAGE_KEY_LEGACY;
+}
+
+function webLsKey(ownerUid?: string | null): string {
+  const o = resolveOwnerUid(ownerUid);
+  return o ? `@taf-fatores-risco-v1:${o}` : WEB_LS_KEY_LEGACY;
+}
 
 export function respostasFatoresVazias(): RespostasFatoresRisco {
   return {
@@ -85,67 +102,121 @@ function mergeMaps(
   const out: Record<string, FatoresRiscoRegistro> = {};
   for (const map of maps) {
     for (const [nip, reg] of Object.entries(map)) {
-      const prev = out[nip];
+      const key = nipDigitos(nip) || nip;
+      const prev = out[key];
       if (!prev || (reg.updatedAt ?? 0) >= (prev.updatedAt ?? 0)) {
-        out[nip] = reg;
+        out[key] = { ...reg, nip: key };
       }
     }
   }
   return out;
 }
 
-function readWebLocalBackup(): Record<string, FatoresRiscoRegistro> {
+function readWebLocalBackup(ownerUid?: string | null): Record<string, FatoresRiscoRegistro> {
   if (Platform.OS !== 'web') return {};
   try {
     if (typeof localStorage === 'undefined') return {};
-    return parseMap(localStorage.getItem(WEB_LS_KEY));
+    return parseMap(localStorage.getItem(webLsKey(ownerUid)));
   } catch {
     return {};
   }
 }
 
-function writeWebLocalBackup(map: Record<string, FatoresRiscoRegistro>): void {
+function writeWebLocalBackup(
+  map: Record<string, FatoresRiscoRegistro>,
+  ownerUid?: string | null,
+): void {
   if (Platform.OS !== 'web') return;
   try {
     if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(WEB_LS_KEY, JSON.stringify(map));
+    localStorage.setItem(webLsKey(ownerUid), JSON.stringify(map));
   } catch {
     // silencioso
   }
 }
 
-async function readMap(): Promise<Record<string, FatoresRiscoRegistro>> {
-  const primary = parseMap(await readAppMeta(STORAGE_KEY));
-  const webBackup = readWebLocalBackup();
+async function migrateLegacyIfNeeded(ownerUid: string): Promise<void> {
+  if (!ownerUid) return;
+  const scopedKey = storageKey(ownerUid);
+  const existing = parseMap(await readAppMeta(scopedKey));
+  if (Object.keys(existing).length > 0) return;
 
-  // Migra chaves antigas por owner (fatoresRisco:<uid>) se ainda existirem no cache/meta.
-  let legacy: Record<string, FatoresRiscoRegistro> = {};
-  try {
-    const { getCachedDataOwnerUid } = await import('./firebase/authUid');
-    const owner = getCachedDataOwnerUid() ?? '__local__';
-    const legacyRaw = await readAppMeta(`${LEGACY_LS_PREFIX}${owner}`);
-    legacy = parseMap(legacyRaw);
-  } catch {
-    legacy = {};
+  const legacyGlobal = parseMap(await readAppMeta(STORAGE_KEY_LEGACY));
+  const legacyOwner = parseMap(await readAppMeta(`${LEGACY_OWNER_PREFIX}${ownerUid}`));
+  const legacyWeb = (() => {
+    if (Platform.OS !== 'web') return {};
+    try {
+      if (typeof localStorage === 'undefined') return {};
+      return parseMap(localStorage.getItem(WEB_LS_KEY_LEGACY));
+    } catch {
+      return {};
+    }
+  })();
+  const merged = mergeMaps(legacyOwner, legacyWeb, legacyGlobal);
+  if (Object.keys(merged).length === 0) return;
+  await writeAppMeta(scopedKey, JSON.stringify(merged));
+  writeWebLocalBackup(merged, ownerUid);
+}
+
+async function readMap(
+  ownerUid?: string | null,
+): Promise<Record<string, FatoresRiscoRegistro>> {
+  const owner = resolveOwnerUid(ownerUid);
+  if (owner) {
+    await migrateLegacyIfNeeded(owner);
   }
-
-  return mergeMaps(legacy, webBackup, primary);
+  const primary = parseMap(await readAppMeta(storageKey(owner)));
+  const webBackup = readWebLocalBackup(owner);
+  return mergeMaps(webBackup, primary);
 }
 
-async function writeMap(map: Record<string, FatoresRiscoRegistro>): Promise<void> {
+async function writeMap(
+  map: Record<string, FatoresRiscoRegistro>,
+  ownerUid?: string | null,
+): Promise<void> {
+  const owner = resolveOwnerUid(ownerUid);
   const payload = JSON.stringify(map);
-  writeWebLocalBackup(map);
-  await writeAppMeta(STORAGE_KEY, payload);
+  writeWebLocalBackup(map, owner);
+  await writeAppMeta(storageKey(owner), payload);
+  notifyDataChanged();
 }
 
-export async function getAllFatoresRisco(): Promise<Record<string, FatoresRiscoRegistro>> {
-  return readMap();
+function onlyActive(
+  map: Record<string, FatoresRiscoRegistro>,
+): Record<string, FatoresRiscoRegistro> {
+  const out: Record<string, FatoresRiscoRegistro> = {};
+  for (const [nip, reg] of Object.entries(map)) {
+    if (reg.deleted === true) continue;
+    out[nip] = reg;
+  }
+  return out;
+}
+
+/** Ativos (sem tombstones) — UI. */
+export async function getAllFatoresRisco(
+  ownerUid?: string | null,
+): Promise<Record<string, FatoresRiscoRegistro>> {
+  return onlyActive(await readMap(ownerUid));
+}
+
+/** Inclui tombstones — sync LWW. */
+export async function getAllFatoresRiscoIncludingDeleted(
+  ownerUid?: string | null,
+): Promise<Record<string, FatoresRiscoRegistro>> {
+  return readMap(ownerUid);
+}
+
+export async function replaceAllFatoresRiscoMap(
+  map: Record<string, FatoresRiscoRegistro>,
+  ownerUid?: string | null,
+): Promise<void> {
+  await writeMap(map, ownerUid);
 }
 
 export async function getFatoresRiscoByNip(nip: string): Promise<FatoresRiscoRegistro | null> {
   const key = nipDigitos(nip);
   if (key.length !== 8) return null;
-  const map = await readMap();
+  const map = await getAllFatoresRisco();
   return map[key] ?? null;
 }
 
@@ -173,13 +244,13 @@ export async function saveFatoresRisco(input: {
     peso: input.peso?.trim() || undefined,
     imc: input.imc,
     updatedAt: Date.now(),
+    deleted: false,
   };
 
   map[key] = registro;
   await writeMap(map);
 
-  // Confirma leitura imediata (falha cedo se a persistência não refletiu).
-  const confirmado = (await readMap())[key];
+  const confirmado = onlyActive(await readMap())[key];
   if (!confirmado) {
     throw new Error('Falha ao confirmar gravação dos fatores de risco.');
   }
@@ -193,39 +264,52 @@ export async function deleteFatoresRiscoByNip(nip: string): Promise<boolean> {
   }
 
   const map = await readMap();
-  if (!map[key]) return false;
+  const prev = map[key];
+  if (!prev || prev.deleted === true) return false;
 
-  delete map[key];
+  map[key] = {
+    ...prev,
+    deleted: true,
+    updatedAt: Date.now(),
+  };
   await writeMap(map);
-
-  const aindaExiste = (await readMap())[key];
-  if (aindaExiste) {
-    throw new Error('Falha ao confirmar exclusão dos fatores de risco.');
-  }
   return true;
 }
 
-/** Remove todos os fatores de risco (cadastros e demais dados permanecem). */
-export async function clearAllFatoresRisco(): Promise<number> {
-  const map = await readMap();
-  const count = Object.keys(map).length;
-  if (count === 0) return 0;
+/** Soft-delete de todos (próxima sync envia tombstones). */
+export async function clearAllFatoresRisco(ownerUid?: string | null): Promise<number> {
+  const map = await readMap(ownerUid);
+  const ativos = Object.values(map).filter((r) => r.deleted !== true);
+  if (ativos.length === 0) {
+    await writeMap({}, ownerUid);
+    return 0;
+  }
+  const now = Date.now();
+  const next: Record<string, FatoresRiscoRegistro> = { ...map };
+  for (const reg of ativos) {
+    const nip = nipDigitos(reg.nip);
+    next[nip] = { ...reg, nip, deleted: true, updatedAt: now };
+  }
+  await writeMap(next, ownerUid);
 
-  await writeMap({});
-
-  // Limpa bucket legado por owner, se existir.
   try {
-    const { getCachedDataOwnerUid } = await import('./firebase/authUid');
-    const { removeAppMeta } = await import('../offline-first/db/appMeta');
-    const owner = getCachedDataOwnerUid() ?? '__local__';
-    await removeAppMeta(`${LEGACY_LS_PREFIX}${owner}`);
+    const owner = resolveOwnerUid(ownerUid);
+    if (owner) await removeAppMeta(`${LEGACY_OWNER_PREFIX}${owner}`);
   } catch {
     // silencioso
   }
 
-  const restante = Object.keys(await readMap()).length;
-  if (restante > 0) {
-    throw new Error('Falha ao confirmar exclusão de todos os fatores de risco.');
+  return ativos.length;
+}
+
+/** Apaga local sem tombstones (wipe de equipe / sistema). */
+export async function wipeLocalFatoresRisco(ownerUid?: string | null): Promise<void> {
+  await writeMap({}, ownerUid);
+  try {
+    const owner = resolveOwnerUid(ownerUid);
+    if (owner) await removeAppMeta(`${LEGACY_OWNER_PREFIX}${owner}`);
+    await removeAppMeta(STORAGE_KEY_LEGACY);
+  } catch {
+    // silencioso
   }
-  return count;
 }

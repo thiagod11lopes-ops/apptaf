@@ -124,12 +124,12 @@ export function ConfirmacaoModoDemonstracaoModal({
             <Text style={[styles.message, { color: theme.text }]}>
               {ativar
                 ? 'Disponibiliza militares fictícios só na aba Aplicar TAF e preenche os NIPs automaticamente. Os testes só entram no Histórico depois de aplicados, com a tarja “Modo Teste”. Não alteram planilhas, backup nem sincronização.'
-                : 'Remove os militares fictícios da aba Aplicar. Sessões de Modo Teste já aplicadas permanecem no Histórico.'}
+                : 'Remove os militares fictícios da aba Aplicar e limpa os NIPs preenchidos nesta tela. Sessões de Modo Teste já aplicadas permanecem no Histórico.'}
             </Text>
             <Text style={[styles.hint, { color: theme.textMuted }]}>
               {ativar
                 ? 'Ao confirmar, os NIPs dos participantes serão preenchidos automaticamente com militares de exemplo.'
-                : 'Seus dados reais não são apagados ao desativar o Modo Teste.'}
+                : 'Os NIPs preenchidos nesta tela serão apagados. Seus dados reais não são afetados.'}
             </Text>
           </>
         ) : null}
@@ -149,7 +149,7 @@ export function ConfirmacaoModoDemonstracaoModal({
           <Text style={[styles.message, { color: theme.text }]}>
             {ativar
               ? 'Modo Teste pronto. Os NIPs já foram preenchidos; aplique as provas normalmente. Ao finalizar, elas aparecem no Histórico com a tarja amarela.'
-              : 'Modo Teste desativado. As sessões já aplicadas continuam no Histórico.'}
+              : 'Modo Teste desativado. Os NIPs desta tela foram limpos; as sessões já aplicadas continuam no Histórico.'}
           </Text>
         ) : null}
 

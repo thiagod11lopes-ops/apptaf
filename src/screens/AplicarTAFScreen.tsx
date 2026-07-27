@@ -1819,6 +1819,17 @@ export default function AplicarTAFScreen() {
     }
   }, [modoTafNaval, nParticipantesConfirmado, preenchendoNipsDemo]);
 
+  /** Limpa NIPs da etapa atual ao desativar o Modo Teste. */
+  const limparNipsDemonstracao = useCallback(() => {
+    const n = nParticipantesConfirmado;
+    if (n < 1) return;
+    setNipsParticipantes(Array.from({ length: n }, () => ''));
+    setNipFeedbackLinhas(Array.from({ length: n }, () => null));
+    nipsRepeticaoAutorizadaRef.current = new Set();
+    setModalTesteExistente(null);
+    setModalModalidadeExcludente(null);
+  }, [nParticipantesConfirmado]);
+
   const fecharModalTesteExistente = useCallback(() => {
     setModalTesteExistente(null);
   }, []);
@@ -2918,7 +2929,10 @@ export default function AplicarTAFScreen() {
                 }
               />
 
-              <AplicarTafModoTesteBar onPreencherNips={preencherNipsDemonstracao} />
+              <AplicarTafModoTesteBar
+                onPreencherNips={preencherNipsDemonstracao}
+                onLimparNips={limparNipsDemonstracao}
+              />
 
             {nipsParticipantes.map((nip, index) => {
               const fb = nipFeedbackLinhas[index];

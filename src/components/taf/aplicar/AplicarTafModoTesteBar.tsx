@@ -23,12 +23,14 @@ import {
 type Props = {
   /** Preenche os NIPs com militares de exemplo (chamado ao ativar o Modo Teste). */
   onPreencherNips: () => void | Promise<void>;
+  /** Limpa os NIPs preenchidos (chamado ao desativar o Modo Teste). */
+  onLimparNips: () => void;
 };
 
 /**
- * Modo Teste na etapa de NIPs: ao ativar, preenche os NIPs automaticamente.
+ * Modo Teste na etapa de NIPs: ao ativar preenche NIPs; ao desativar limpa os campos.
  */
-export function AplicarTafModoTesteBar({ onPreencherNips }: Props) {
+export function AplicarTafModoTesteBar({ onPreencherNips, onLimparNips }: Props) {
   const { theme } = useTheme();
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [demoCarregando, setDemoCarregando] = useState(false);
@@ -60,6 +62,8 @@ export function AplicarTafModoTesteBar({ onPreencherNips }: Props) {
         setDemoAtivo(ativo);
         if (ativo) {
           await onPreencherNips();
+        } else {
+          onLimparNips();
         }
         setDemoModal({ phase: 'success', ativar: ativo });
       })
@@ -71,7 +75,7 @@ export function AplicarTafModoTesteBar({ onPreencherNips }: Props) {
         });
       })
       .finally(() => setDemoCarregando(false));
-  }, [demoModal, demoCarregando, onPreencherNips]);
+  }, [demoModal, demoCarregando, onPreencherNips, onLimparNips]);
 
   return (
     <>
@@ -80,7 +84,7 @@ export function AplicarTafModoTesteBar({ onPreencherNips }: Props) {
           accessibilityLabel={demoAtivo ? 'Desativar Modo Teste' : 'Ativar Modo Teste'}
           accessibilityHint={
             demoAtivo
-              ? 'Desliga o Modo Teste'
+              ? 'Desliga o Modo Teste e limpa os NIPs preenchidos'
               : 'Ativa o Modo Teste e preenche os NIPs automaticamente'
           }
           accessibilityRole="button"

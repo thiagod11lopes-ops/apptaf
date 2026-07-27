@@ -14,6 +14,7 @@ import {
 } from './resultadoTafCadastro';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 import { compareByNomePtBr } from './compareNomePtBr';
+import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
 
 type ModalidadeHistorico = {
   nota: string;
@@ -201,7 +202,9 @@ export function agregarHistoricoPorParticipante(
   cadastros: CadastroItemPersist[] = [],
 ): AggRow[] {
   const map = new Map<string, AggRow>();
-  const ordenadas = [...sessoes].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+  const ordenadas = [...sessoes]
+    .filter((s) => !isDemoSessaoId(s.id))
+    .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
 
   for (const sessao of ordenadas) {
     const tipo = sessao.tipoProva;
@@ -381,15 +384,17 @@ export function listarResultadosGeralFromHistorico(
   cadastros: CadastroItemPersist[] = [],
   opts?: { somenteSessoesInformadas?: boolean },
 ): ResultadoGeralItem[] {
+  const sessoesReais = sessoes.filter((s) => !isDemoSessaoId(s.id));
+  const cadastrosReais = cadastros.filter((c) => !isDemoCadastroId(c.id));
   // PDF do dia: não misturar sessões virtuais do Registrador (outras datas).
   const base = opts?.somenteSessoesInformadas
-    ? sessoes
-    : unificarSessoesComCadastroRegistrador(sessoes, cadastros);
-  return agregarHistoricoPorParticipante(base, cadastros)
+    ? sessoesReais
+    : unificarSessoesComCadastroRegistrador(sessoesReais, cadastrosReais);
+  return agregarHistoricoPorParticipante(base, cadastrosReais)
     .map((agg) => ({
       ...aggParaLinha(agg),
-      ...metaCorridaCaminhadaFromCadastro(agg, cadastros),
-      postoGrad: postoGradFromLinhaId(agg.id, agg.nip, cadastros),
+      ...metaCorridaCaminhadaFromCadastro(agg, cadastrosReais),
+      postoGrad: postoGradFromLinhaId(agg.id, agg.nip, cadastrosReais),
     }))
     .sort(compareByNomePtBr);
 }
@@ -401,8 +406,10 @@ export function listarPendenciasParciaisFromHistorico(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
 ): PendenciaParcialItem[] {
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
-  return agregarHistoricoPorParticipante(unificadas, cadastros)
+  const sessoesReais = sessoes.filter((s) => !isDemoSessaoId(s.id));
+  const cadastrosReais = cadastros.filter((c) => !isDemoCadastroId(c.id));
+  const unificadas = unificarSessoesComCadastroRegistrador(sessoesReais, cadastrosReais);
+  return agregarHistoricoPorParticipante(unificadas, cadastrosReais)
     .map(aggParaPendenciaParcial)
     .filter((item): item is PendenciaParcialItem => item != null)
     .sort(compareByNomePtBr);
@@ -474,15 +481,22 @@ export function calcularResumoInicioTafFromHistorico(
   cadastros: CadastroItemPersist[],
   sessoesExcluidas: SessaoAplicacaoTaf[] = [],
 ): ResumoInicioTafHistorico {
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros, sessoesExcluidas);
-  const aggs = agregarHistoricoPorParticipante(unificadas, cadastros);
+  const cadastrosReais = cadastros.filter((c) => !isDemoCadastroId(c.id));
+  const sessoesReais = sessoes.filter((s) => !isDemoSessaoId(s.id));
+  const excluidasReais = sessoesExcluidas.filter((s) => !isDemoSessaoId(s.id));
+  const unificadas = unificarSessoesComCadastroRegistrador(
+    sessoesReais,
+    cadastrosReais,
+    excluidasReais,
+  );
+  const aggs = agregarHistoricoPorParticipante(unificadas, cadastrosReais);
 
   // Conta só cadastrados — evita inflar Parcial/Concluídos com sessões órfãs
   // (ex.: NIP sem cadastro) que deixam Pendente igual entre dispositivos e Parcial diferente.
   let completos = 0;
   let parcial = 0;
   let semTeste = 0;
-  for (const c of cadastros) {
+  for (const c of cadastrosReais) {
     const agg = findAggRowForCadastro(aggs, c);
     if (!agg) {
       semTeste += 1;
@@ -495,7 +509,7 @@ export function calcularResumoInicioTafFromHistorico(
   }
 
   return {
-    totalCadastrados: cadastros.length,
+    totalCadastrados: cadastrosReais.length,
     completos,
     parcial,
     semTeste,

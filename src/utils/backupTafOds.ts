@@ -26,6 +26,7 @@ import {
   temAvaliacaoNatacao,
   temAvaliacaoPermanencia,
 } from './resultadoTafCadastro';
+import { isDemoCadastroId } from './gatherSystemBackupData';
 import {
   cadastroTemResultadoArmada,
   cadastroTemResultadoCfn,
@@ -137,12 +138,13 @@ export type BalancoPlanilhaTaf = {
   completo: number;
 };
 
-/** Totais do balanço sob o título da planilha. */
+/** Totais do balanço sob o título da planilha (sem dados do Modo Teste). */
 export function calcularBalancoPlanilhaTaf(cadastros: CadastroItemPersist[]): BalancoPlanilhaTaf {
+  const reais = cadastros.filter((c) => !isDemoCadastroId(c.id));
   return {
-    cadastrados: cadastros.length,
-    parcial: cadastros.filter(cadastroComPendenciaParcialTaf).length,
-    completo: cadastros.filter(cadastroComTafCompleto).length,
+    cadastrados: reais.length,
+    parcial: reais.filter(cadastroComPendenciaParcialTaf).length,
+    completo: reais.filter(cadastroComTafCompleto).length,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   calcularResumoInicioTafFromHistorico,
   type ResumoInicioTafHistorico,
 } from './resultadoGeralHistorico';
+import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
 
 const RESUMO_VAZIO: ResumoInicioTafHistorico = {
   totalCadastrados: 0,
@@ -61,6 +62,7 @@ function stripSessao(row: Record<string, unknown>): SessaoAplicacaoTaf {
  * Resumo dos cards da Home **somente a partir do IndexedDB (Dexie)**.
  * Não consulta a nuvem — evita zerar Cadastrados/Parcial/Concluídos/Pendente
  * quando a sync falha ou a nuvem está vazia/divergente.
+ * Modo Teste (demo-cad-*/demo-sess-*) não entra no balanço.
  */
 export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHistorico> {
   const db = getTafDatabase();
@@ -74,15 +76,15 @@ export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHi
     ]);
 
     const cadastros = cadRows
-      .filter((row) => row.deleted !== true)
+      .filter((row) => row.deleted !== true && !isDemoCadastroId(row.id))
       .map((row) => stripCadastro(row as unknown as Record<string, unknown>));
 
     const sessoes = sessRows
-      .filter((row) => row.deleted !== true)
+      .filter((row) => row.deleted !== true && !isDemoSessaoId(row.id))
       .map((row) => stripSessao(row as unknown as Record<string, unknown>));
 
     const sessoesExcluidas = allSessoes
-      .filter((row) => row.deleted === true)
+      .filter((row) => row.deleted === true && !isDemoSessaoId(row.id))
       .map((row) => stripSessao(row as unknown as Record<string, unknown>));
 
     return calcularResumoInicioTafFromHistorico(sessoes, cadastros, sessoesExcluidas);

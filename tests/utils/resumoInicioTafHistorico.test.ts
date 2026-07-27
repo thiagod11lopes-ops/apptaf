@@ -74,6 +74,52 @@ describe('calcularResumoInicioTafFromHistorico', () => {
     expect(resumo.completos + resumo.parcial + resumo.semTeste).toBe(resumo.totalCadastrados);
   });
 
+  it('ignora sessões e cadastros do Modo Teste no balanço', () => {
+    const cadastros = [
+      cadastro({ id: 'c1', nip: '11.1111.11', nome: 'Real' }),
+      cadastro({ id: 'demo-cad-0', nip: '10.0000.00', nome: 'Demo' }),
+    ];
+    const sessoes: SessaoAplicacaoTaf[] = [
+      sessao({
+        id: 'demo-sess-1',
+        tipoProva: 'corrida',
+        resultados: [
+          {
+            corredor: 1,
+            nome: 'Demo',
+            nip: '10.0000.00',
+            tempoMs: 12 * 60 * 1000,
+            notaTexto: '90',
+            prova: 'corrida',
+          },
+        ],
+      }),
+      sessao({
+        id: 's-real',
+        tipoProva: 'corrida',
+        resultados: [
+          {
+            corredor: 1,
+            nome: 'Real',
+            nip: '11.1111.11',
+            tempoMs: 12 * 60 * 1000,
+            notaTexto: '85',
+            prova: 'corrida',
+          },
+        ],
+      }),
+    ];
+
+    const resumo = calcularResumoInicioTafFromHistorico(sessoes, cadastros);
+    expect(resumo.totalCadastrados).toBe(1);
+    expect(resumo.parcial).toBe(1);
+    expect(resumo.completos).toBe(0);
+    expect(resumo.semTeste).toBe(0);
+
+    const aggs = agregarHistoricoPorParticipante(sessoes, cadastros);
+    expect(aggs.every((a) => !a.nip.includes('10.0000.00'))).toBe(true);
+  });
+
   it('une o mesmo NIP vindo com chaves diferentes em um único participante', () => {
     const cadastros = [cadastro()];
     const sessoes: SessaoAplicacaoTaf[] = [

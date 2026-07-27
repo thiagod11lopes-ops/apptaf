@@ -104,16 +104,21 @@ export async function getAllSessoesAplicacao(opts?: {
   /** Inclui sessões do Modo Teste (demo-sess-*) — usado no Histórico. */
   includeDemo?: boolean;
 }): Promise<SessaoAplicacaoTaf[]> {
+  const includeDemo = opts?.includeDemo === true;
+  let list: SessaoAplicacaoTaf[];
+
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
     return dataStore.getSessoes(uid, opts);
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
-    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
-    return entry.sessoes;
+    list = await resolveCloudSessoes(uid);
+  } else {
+    list = await getAllSessoesAplicacaoLocal();
   }
-  return getAllSessoesAplicacaoLocal();
+  if (includeDemo) return list;
+  return list.filter((s) => !s.id.startsWith('demo-sess-'));
 }
 
 /** Sessões soft-deleted locais — usadas para não recriar cards virtuais no Histórico. */

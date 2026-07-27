@@ -87,8 +87,10 @@ export function prepararDadosResultadosNorma(
   cadastros: CadastroItemPersist[],
   norma: NormaTafVista,
 ): { sessoesNorma: SessaoAplicacaoTaf[]; cadastrosNorma: CadastroItemPersist[] } {
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  const sessoesSemDemo = sessoes.filter((s) => !s.id.startsWith('demo-sess-'));
+  const cadastrosSemDemo = cadastros.filter((c) => !c.id.startsWith('demo-cad-'));
+  const unificadas = unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
   const sessoesNorma = filtrarSessoesPorNorma(unificadas, norma);
-  const cadastrosNorma = filtrarCadastrosPorNorma(cadastros, norma, sessoesNorma);
+  const cadastrosNorma = filtrarCadastrosPorNorma(cadastrosSemDemo, norma, sessoesNorma);
   return { sessoesNorma, cadastrosNorma };
 }

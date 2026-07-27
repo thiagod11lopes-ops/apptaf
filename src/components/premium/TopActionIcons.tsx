@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Platform, StyleSheet, View, ActivityIndicator } from 'react-native';
 import {
   BookOpen,
@@ -9,7 +9,6 @@ import {
   Shield,
   User,
   UserRoundCheck,
-  Sparkles,
 } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,15 +22,6 @@ import { E2eEncryptionStatusModal } from './E2eEncryptionStatusModal';
 import { SyncLiveStatusModal } from '../sismav/SyncLiveStatusModal';
 import { PREMIUM } from '../../theme/premium';
 import { syncManager } from '../../offline-first/sync/SyncManager';
-import {
-  isModoDemonstracaoAtivo,
-  subscribeModoDemonstracao,
-  toggleModoDemonstracaoSistema,
-} from '../../services/modoDemonstracao';
-import {
-  ConfirmacaoModoDemonstracaoModal,
-  type ModoDemonstracaoModalPhase,
-} from './ConfirmacaoModoDemonstracaoModal';
 
 const ICON_SIZE = 22;
 const BTN_SIZE = PREMIUM.minTouch;
@@ -103,45 +93,7 @@ export function TopActionIcons({
       appMode === 'ONLINE_PREPARING');
   const [e2eModalVisible, setE2eModalVisible] = useState(false);
   const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
-  const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
-  const [demoCarregando, setDemoCarregando] = useState(false);
-  const [demoModal, setDemoModal] = useState<{
-    phase: ModoDemonstracaoModalPhase;
-    ativar: boolean;
-    errorMessage?: string;
-  } | null>(null);
 
-  useEffect(() => subscribeModoDemonstracao(() => setDemoAtivo(isModoDemonstracaoAtivo())), []);
-
-  const fecharModalDemonstracao = useCallback(() => {
-    if (demoCarregando) return;
-    setDemoModal(null);
-  }, [demoCarregando]);
-
-  const alternarDemonstracao = useCallback(() => {
-    if (demoCarregando) return;
-    setDemoModal({ phase: 'confirm', ativar: !demoAtivo });
-  }, [demoAtivo, demoCarregando]);
-
-  const confirmarDemonstracao = useCallback(() => {
-    if (!demoModal || demoCarregando) return;
-    const { ativar } = demoModal;
-    setDemoModal({ phase: 'loading', ativar });
-    setDemoCarregando(true);
-    void toggleModoDemonstracaoSistema()
-      .then(({ ativo }) => {
-        setDemoAtivo(ativo);
-        setDemoModal({ phase: 'success', ativar: ativo });
-      })
-      .catch((e) => {
-        setDemoModal({
-          phase: 'error',
-          ativar,
-          errorMessage: e instanceof Error ? e.message : 'Tente novamente.',
-        });
-      })
-      .finally(() => setDemoCarregando(false));
-  }, [demoModal, demoCarregando]);
   const tabInk = theme.isDark ? '#FFFFFF' : '#111827';
   const iconSize = ICON_SIZE;
   const btnSize = BTN_SIZE;
@@ -277,40 +229,6 @@ export function TopActionIcons({
           </React.Fragment>
         );
       })}
-      {activeRoute === 'AplicarTAF'
-        ? wrapTooltip(
-            inline,
-            demoAtivo ? 'Desativar Modo Teste' : 'Modo Teste',
-            demoAtivo
-              ? 'Desliga o Modo Teste na aba Aplicar (sessões já aplicadas permanecem no Histórico)'
-              : 'Ativa militares fictícios só para aplicar provas; após o teste elas entram no Histórico',
-            <PressableScale
-              onPress={alternarDemonstracao}
-              disabled={demoCarregando}
-              style={[
-                btnStyle,
-                demoAtivo && {
-                  borderColor: theme.gain,
-                  backgroundColor: theme.gainMuted,
-                },
-                demoCarregando ? { opacity: 0.65 } : null,
-              ]}
-              accessibilityLabel={
-                demoAtivo ? 'Desativar Modo Teste' : 'Ativar Modo Teste na aba Aplicar'
-              }
-            >
-              {demoCarregando ? (
-                <ActivityIndicator size="small" color={theme.primary} />
-              ) : (
-                <Sparkles
-                  size={iconSize}
-                  color={demoAtivo ? theme.gain : tabInk}
-                  strokeWidth={strokeWidth}
-                />
-              )}
-            </PressableScale>,
-          )
-        : null}
       {activeRoute !== 'Login'
         ? wrapTooltip(
             inline,
@@ -350,14 +268,6 @@ export function TopActionIcons({
         </PressableScale>,
       )}
     </View>
-    <ConfirmacaoModoDemonstracaoModal
-      visible={demoModal != null}
-      phase={demoModal?.phase ?? 'confirm'}
-      ativar={demoModal?.ativar ?? false}
-      errorMessage={demoModal?.errorMessage}
-      onClose={fecharModalDemonstracao}
-      onConfirm={confirmarDemonstracao}
-    />
     <E2eEncryptionStatusModal
       visible={e2eModalVisible}
       e2eActive={e2eActive}

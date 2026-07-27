@@ -53,7 +53,7 @@ import {
 } from '../components/taf/aplicar/AplicarTafPreCadastroCard';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
-import { AplicarTafDemoNipsIconButton } from '../components/taf/aplicar/AplicarTafDemoNipsIconButton';
+import { AplicarTafModoTesteBar } from '../components/taf/aplicar/AplicarTafModoTesteBar';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -2763,14 +2763,6 @@ export default function AplicarTAFScreen() {
               title={flowHeader.title}
               subtitle={flowHeader.subtitle}
               onBack={() => navigation.goBack()}
-              right={
-                mostrarProvas && corridaEtapa === 'nips' && demoAtivo ? (
-                  <AplicarTafDemoNipsIconButton
-                    onPress={() => void preencherNipsDemonstracao()}
-                    loading={preenchendoNipsDemo}
-                  />
-                ) : undefined
-              }
             />
           )}
 
@@ -2921,9 +2913,14 @@ export default function AplicarTAFScreen() {
                 title={`${tituloProvaCurta} — NIPs`}
                 subtitle={
                   demoAtivo
-                    ? `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes ou toque no ícone ✨ acima para preencher automaticamente.`
+                    ? `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes ou use Modo Teste abaixo.`
                     : `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes.`
                 }
+              />
+
+              <AplicarTafModoTesteBar
+                onPreencherNips={() => void preencherNipsDemonstracao()}
+                preenchendoNips={preenchendoNipsDemo}
               />
 
             {nipsParticipantes.map((nip, index) => {

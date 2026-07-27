@@ -156,4 +156,31 @@ export function aplicarResultadoNoCadastro(
   return cadastro;
 }
 
+/** Desistência em corrida/natação: reprovado sem tempo, com data (teste aplicado). */
+export function aplicarDesistenciaNoCadastro(
+  cadastro: CadastroItemPersist,
+  prova: 'corrida' | 'natacao',
+  opts: { modoTafNaval: boolean },
+): CadastroItemPersist {
+  const hoje = dataHojeBr();
+  if (prova === 'corrida') {
+    const base = opts.modoTafNaval
+      ? cadastro
+      : limparResultadoModalidadeCadastro(cadastro, 'caminhada');
+    return {
+      ...base,
+      tempoCorrida: undefined,
+      dataTafCorrida: hoje,
+      notaCorrida: 'REPROVADO',
+      ...(opts.modoTafNaval ? {} : { modalidadeDistanciaAtiva: 'corrida' as const }),
+    };
+  }
+  return {
+    ...cadastro,
+    tempoNatacao: undefined,
+    dataTafNatacao: hoje,
+    notaNatacao: 'REPROVADO',
+  };
+}
+
 export type { NotaRepeticoesResult };

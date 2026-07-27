@@ -166,7 +166,9 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                 ) : null}
                 <View style={styles.linhaTempoNota}>
                   <Text style={styles.tempoText}>
-                    {formatMsByModality(r.prova ?? 'corrida', r.tempoMs)}
+                    {r.desistencia
+                      ? 'Desistência'
+                      : formatMsByModality(r.prova ?? 'corrida', r.tempoMs)}
                   </Text>
                   {r.notaTexto != null && r.notaTexto !== '' ? (
                     <View style={styles.blocoNotaCorrida}>

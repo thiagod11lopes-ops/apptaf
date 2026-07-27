@@ -12,12 +12,13 @@ import {
 import { AppModal } from '../premium/AppModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, X } from 'lucide-react-native';
+import { Check, X, Flag } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import { getAplicarTafBackdrop, getAplicarTafGlass } from './aplicar/aplicarTafTheme';
 import { useAplicarTafLayout } from './aplicar/useAplicarTafLayout';
+import { ConfirmacaoDesistenciaModal } from './aplicar/ConfirmacaoDesistenciaModal';
 import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPanel';
 import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import { LogombWatermark } from '../mobile/LogombWatermark';
@@ -99,6 +100,11 @@ export type TafProvaTempoModalProps = {
   chegadaNatacao?: boolean[];
   onToggleVolta?: (participante: number, volta: number) => void;
   onToggleChegada?: (participante: number) => void;
+  /** Corrida/natação: desistência por participante. */
+  desistenciaParticipantes?: boolean[];
+  onConfirmDesistencia?: (participante: number) => void;
+  onClearDesistencia?: (participante: number) => void;
+  nipsParticipantes?: string[];
   temposMilitaresMs?: (number | null)[];
   formatMs: (ms: number) => string;
   mostrarTempo: boolean;
@@ -277,6 +283,69 @@ function CheckPermanenciaModal({
   );
 }
 
+/** Checklist ultra-moderno de desistência (corrida/natação). */
+function CheckDesistencia({
+  checked,
+  onPress,
+  touchLarge,
+}: {
+  checked: boolean;
+  onPress: () => void;
+  touchLarge?: boolean;
+}) {
+  const { theme } = useTheme();
+
+  return (
+    <TouchableOpacity
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      accessibilityLabel={checked ? 'Desistência marcada' : 'Marcar desistência'}
+      activeOpacity={0.88}
+      onPress={onPress}
+      hitSlop={touchLarge ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined}
+      style={[
+        styles.desistenciaChip,
+        checked ? styles.desistenciaChipOn : styles.desistenciaChipOff,
+        {
+          borderColor: checked ? theme.loss : theme.border,
+          backgroundColor: checked
+            ? theme.isDark
+              ? 'rgba(220, 38, 38, 0.22)'
+              : 'rgba(254, 226, 226, 0.95)'
+            : theme.isDark
+              ? 'rgba(15, 23, 42, 0.55)'
+              : 'rgba(255, 255, 255, 0.92)',
+        },
+        Platform.OS === 'web'
+          ? ({
+              boxShadow: checked
+                ? '0 4px 14px rgba(220, 38, 38, 0.28)'
+                : '0 2px 8px rgba(15, 23, 42, 0.06)',
+            } as object)
+          : null,
+      ]}
+    >
+      <View
+        style={[
+          styles.desistenciaBox,
+          checked ? styles.desistenciaBoxOn : styles.desistenciaBoxOff,
+          { borderColor: checked ? theme.loss : theme.border },
+        ]}
+      >
+        {checked ? <Flag size={12} color="#FFFFFF" strokeWidth={2.6} /> : null}
+      </View>
+      <Text
+        style={[
+          styles.desistenciaLabel,
+          { color: checked ? theme.loss : theme.textSecondary },
+        ]}
+      >
+        Desistência
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 export function TafProvaTempoModal({
   visible,
   onClose,
@@ -304,6 +373,10 @@ export function TafProvaTempoModal({
   chegadaNatacao = [],
   onToggleVolta,
   onToggleChegada,
+  desistenciaParticipantes = [],
+  onConfirmDesistencia,
+  onClearDesistencia,
+  nipsParticipantes = [],
   temposMilitaresMs = [],
   formatMs,
   mostrarTempo,
@@ -324,9 +397,14 @@ export function TafProvaTempoModal({
 
   const tituloModal = `${tituloProva} preparada`;
   const glass = getAplicarTafGlass(theme);
+  const permiteDesistencia =
+    (prova === 'corrida' || prova === 'natacao') &&
+    onConfirmDesistencia != null &&
+    onClearDesistencia != null;
 
   const [voltasConfirmadas, setVoltasConfirmadas] = useState(false);
   const [modalLayout, setModalLayout] = useState({ width: 0, height: 0 });
+  const [desistenciaPendente, setDesistenciaPendente] = useState<number | null>(null);
 
   const onModalLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -336,12 +414,27 @@ export function TafProvaTempoModal({
   }, []);
 
   useEffect(() => {
-    if (!visible) setVoltasConfirmadas(false);
+    if (!visible) {
+      setVoltasConfirmadas(false);
+      setDesistenciaPendente(null);
+    }
   }, [visible]);
 
   useEffect(() => {
     if (!numeroVoltas) setVoltasConfirmadas(false);
   }, [numeroVoltas]);
+
+  const onPressDesistencia = useCallback(
+    (index: number) => {
+      if (!permiteDesistencia) return;
+      if (desistenciaParticipantes[index]) {
+        onClearDesistencia?.(index);
+        return;
+      }
+      setDesistenciaPendente(index);
+    },
+    [permiteDesistencia, desistenciaParticipantes, onClearDesistencia],
+  );
 
   const cronometroParado =
     cronometroEstado === 'inicial' || cronometroEstado === 'finalizado';
@@ -365,12 +458,14 @@ export function TafProvaTempoModal({
       {Array.from({ length: nParticipantes }, (_, index) => {
         const nome = nomesParticipantes[index] ?? '—';
         const temFatorRisco = participantesComFatorRisco[index] === true;
+        const desistiu = permiteDesistencia && (desistenciaParticipantes[index] ?? false);
         const tempoMs = temposMilitaresMs[index];
-        const tempoStr = tempoMs != null ? formatMs(tempoMs) : '—';
-        const nota = getNota?.(index) ?? '—';
-        const notaReprov = isNotaReprovado?.(index) ?? false;
+        const tempoStr = desistiu ? '—' : tempoMs != null ? formatMs(tempoMs) : '—';
+        const nota = desistiu ? 'REPROVADO' : (getNota?.(index) ?? '—');
+        const notaReprov = desistiu || (isNotaReprovado?.(index) ?? false);
 
         const temChecks =
+          permiteDesistencia ||
           (prova === 'permanencia' && onTogglePermanencia != null) ||
           (prova === 'natacao' && onToggleChegada != null) ||
           ((prova === 'corrida' || prova === 'caminhada') &&
@@ -383,10 +478,12 @@ export function TafProvaTempoModal({
         /** Corrida, caminhada e natação compartilham o mesmo layout de card preparado. */
         const isProvaLayoutPreparado = isCorridaCaminhada || isNatacao;
         const colunasChecksLayout = isCorridaCaminhada
-          ? nColunasVoltasAtivas
+          ? nColunasVoltasAtivas + (permiteDesistencia ? 1 : 0)
           : isNatacao && temChecks
-            ? 1
-            : 0;
+            ? 1 + (permiteDesistencia ? 1 : 0)
+            : permiteDesistencia
+              ? 1
+              : 0;
         const metaScale: MetaFieldScale =
           isProvaLayoutPreparado && (mostrarTempo || mostrarNota)
             ? resolveMetaScaleForNome(
@@ -405,7 +502,7 @@ export function TafProvaTempoModal({
             style={[
               styles.participantCard,
               {
-                borderColor: glass.border,
+                borderColor: desistiu ? theme.loss : glass.border,
                 backgroundColor: glass.bg,
               },
             ]}
@@ -430,14 +527,22 @@ export function TafProvaTempoModal({
                   style={[
                     styles.numBadge,
                     isNativeMobile ? styles.numBadgeCompact : null,
-                    { backgroundColor: theme.isDark ? 'rgba(34,197,94,0.2)' : PREMIUM.accentMuted },
+                    {
+                      backgroundColor: desistiu
+                        ? theme.isDark
+                          ? 'rgba(220,38,38,0.25)'
+                          : 'rgba(254,226,226,0.95)'
+                        : theme.isDark
+                          ? 'rgba(34,197,94,0.2)'
+                          : PREMIUM.accentMuted,
+                    },
                   ]}
                 >
                   <Text
                     style={[
                       styles.numBadgeText,
                       isNativeMobile ? styles.numBadgeTextCompact : null,
-                      { color: theme.success },
+                      { color: desistiu ? theme.loss : theme.success },
                     ]}
                   >
                     {index + 1}
@@ -457,7 +562,7 @@ export function TafProvaTempoModal({
                       : null,
                     isProvaLayoutPreparado || isPermanencia ? styles.participantNomeAdaptive : null,
                     {
-                      color: temFatorRisco ? '#ea580c' : ui.text,
+                      color: desistiu ? theme.loss : temFatorRisco ? '#ea580c' : ui.text,
                       textDecorationLine: temFatorRisco ? 'underline' : 'none',
                     },
                   ]}
@@ -511,6 +616,14 @@ export function TafProvaTempoModal({
                 ]}
                 keyboardShouldPersistTaps="handled"
               >
+                {permiteDesistencia ? (
+                  <CheckDesistencia
+                    checked={desistiu}
+                    touchLarge={isNativeMobile}
+                    onPress={() => onPressDesistencia(index)}
+                  />
+                ) : null}
+
                 {prova === 'permanencia' && onTogglePermanencia ? (
                   <>
                     <CheckPermanenciaModal
@@ -530,7 +643,7 @@ export function TafProvaTempoModal({
                   </>
                 ) : null}
 
-                {prova === 'natacao' && onToggleChegada ? (
+                {prova === 'natacao' && onToggleChegada && !desistiu ? (
                   <CheckVolta
                     checked={chegadaNatacao[index] ?? false}
                     a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
@@ -541,7 +654,8 @@ export function TafProvaTempoModal({
 
                 {(prova === 'corrida' || prova === 'caminhada') &&
                 nColunasVoltasAtivas > 0 &&
-                onToggleVolta
+                onToggleVolta &&
+                !desistiu
                   ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
                       <CheckVolta
                         key={`volta-${index}-${v}`}
@@ -561,6 +675,7 @@ export function TafProvaTempoModal({
   );
 
   return (
+    <>
     <AppModal
       visible={visible}
       transparent={false}
@@ -685,6 +800,19 @@ export function TafProvaTempoModal({
         </View>
       </View>
     </AppModal>
+    <ConfirmacaoDesistenciaModal
+      visible={desistenciaPendente != null}
+      nip={desistenciaPendente != null ? (nipsParticipantes[desistenciaPendente] ?? '') : ''}
+      nome={desistenciaPendente != null ? (nomesParticipantes[desistenciaPendente] ?? '') : ''}
+      provaLabel={tituloProva}
+      onClose={() => setDesistenciaPendente(null)}
+      onConfirm={() => {
+        if (desistenciaPendente == null) return;
+        onConfirmDesistencia?.(desistenciaPendente);
+        setDesistenciaPendente(null);
+      }}
+    />
+    </>
   );
 }
 
@@ -1010,6 +1138,38 @@ const styles = StyleSheet.create({
   checkPermOnReprov: {
     borderColor: '#B91C1C',
     backgroundColor: '#B91C1C',
+  },
+  desistenciaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  desistenciaChipOff: {},
+  desistenciaChipOn: {},
+  desistenciaBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  desistenciaBoxOff: {
+    backgroundColor: 'transparent',
+  },
+  desistenciaBoxOn: {
+    borderColor: '#DC2626',
+    backgroundColor: '#DC2626',
+  },
+  desistenciaLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   btnAplicarWrap: {
     width: '100%',

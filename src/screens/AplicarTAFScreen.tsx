@@ -123,6 +123,7 @@ import {
   calcularNotaLinhaTempo,
   calcularNotaLinhaReps,
   aplicarResultadoNoCadastro,
+  aplicarDesistenciaNoCadastro,
 } from './aplicarTafNotaHelpers';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
@@ -346,7 +347,7 @@ export default function AplicarTAFScreen() {
   const [numeroVoltas, setNumeroVoltas] = useState('');
   /** Voltas, chegadas e tempos em um único reducer (atualização atômica por clique). */
   const [trialTable, dispatchTrial] = useReducer(aplicarTafTrialReducer, initialTrialTableState);
-  const { checksVoltas, chegadaNatacao, temposMilitaresMs } = trialTable;
+  const { checksVoltas, chegadaNatacao, temposMilitaresMs, desistenciaParticipantes } = trialTable;
 
   /** Após “Aplicar Resultado”: tempos gravados no cadastro. */
   const [salvandoResultadosCorrida, setSalvandoResultadosCorrida] = useState(false);
@@ -588,7 +589,8 @@ export default function AplicarTAFScreen() {
   const mostrarColunaTempo =
     tipoProva === 'natacao' || tipoProva === 'abdominal_prancha'
       ? true
-      : mostrarColunaTempoCorrida;
+      : mostrarColunaTempoCorrida ||
+        (tipoProva === 'corrida' && desistenciaParticipantes.some(Boolean));
 
   /** Nota corrida: exige coluna de tempo visível. */
   const mostrarColunaNotaCorrida = tipoProva === 'corrida' && mostrarColunaTempo;
@@ -600,6 +602,10 @@ export default function AplicarTAFScreen() {
     if (!mostrarColunaNotaCorrida) return [] as string[];
     const out: string[] = [];
     for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+      if (desistenciaParticipantes[i]) {
+        out.push('REPROVADO');
+        continue;
+      }
       const fb = nipFeedbackLinhas[i];
       const ms = temposMilitaresMs[i];
       if (fb?.tipo !== 'ok' || ms == null) {
@@ -614,6 +620,7 @@ export default function AplicarTAFScreen() {
     nParticipantesConfirmado,
     nipFeedbackLinhas,
     temposMilitaresMs,
+    desistenciaParticipantes,
     modoTafNaval,
   ]);
 
@@ -648,6 +655,10 @@ export default function AplicarTAFScreen() {
     if (tipoProva !== 'natacao') return [] as string[];
     const out: string[] = [];
     for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+      if (desistenciaParticipantes[i]) {
+        out.push('REPROVADO');
+        continue;
+      }
       const fb = nipFeedbackLinhas[i];
       const ms = temposMilitaresMs[i];
       const marcado = chegadaNatacao[i] ?? false;
@@ -664,6 +675,7 @@ export default function AplicarTAFScreen() {
     nipFeedbackLinhas,
     temposMilitaresMs,
     chegadaNatacao,
+    desistenciaParticipantes,
     modoTafNaval,
   ]);
 
@@ -715,24 +727,42 @@ export default function AplicarTAFScreen() {
     return out;
   }, [tipoProva, nParticipantesConfirmado, nipFeedbackLinhas, repeticoesParticipantes]);
 
-  /** Todos com tempo registrado (corrida: última volta; natação: chegada). */
+  /** Todos com tempo registrado (corrida: última volta; natação: chegada) ou desistência. */
   const todosIntegrantesComTempoRegistrado = useMemo(() => {
     const p = nParticipantesConfirmado;
     if (p < 1) return false;
+    const completo = (i: number) =>
+      desistenciaParticipantes[i] === true || temposMilitaresMs[i] != null;
+
     if (tipoProva === 'natacao' || tipoProva === 'abdominal_prancha') {
-      if (temposMilitaresMs.length < p) return false;
+      if (temposMilitaresMs.length < p && desistenciaParticipantes.length < p) return false;
       for (let i = 0; i < p; i += 1) {
-        if (temposMilitaresMs[i] == null) return false;
+        if (!completo(i)) return false;
       }
       return true;
     }
-    if (nColunasVoltas < 1) return false;
-    if (temposMilitaresMs.length < p) return false;
+    if (nColunasVoltas < 1) {
+      // Corrida sem voltas: só libera se todos desistiram.
+      if (tipoProva === 'corrida') {
+        for (let i = 0; i < p; i += 1) {
+          if (!desistenciaParticipantes[i]) return false;
+        }
+        return true;
+      }
+      return false;
+    }
+    if (temposMilitaresMs.length < p && desistenciaParticipantes.length < p) return false;
     for (let i = 0; i < p; i += 1) {
-      if (temposMilitaresMs[i] == null) return false;
+      if (!completo(i)) return false;
     }
     return true;
-  }, [tipoProva, nParticipantesConfirmado, nColunasVoltas, temposMilitaresMs]);
+  }, [
+    tipoProva,
+    nParticipantesConfirmado,
+    nColunasVoltas,
+    temposMilitaresMs,
+    desistenciaParticipantes,
+  ]);
 
   /** Quando o último militar recebe tempo, encerra o cronômetro automaticamente. */
   useEffect(() => {
@@ -784,6 +814,12 @@ export default function AplicarTAFScreen() {
     dispatchTrial({ type: 'resizeTempos', p: nParticipantesConfirmado });
   }, [corridaEtapa, nParticipantesConfirmado]);
 
+  useEffect(() => {
+    if (corridaEtapa !== 'tabela_corrida') return;
+    if (tipoProva !== 'corrida' && tipoProva !== 'natacao') return;
+    dispatchTrial({ type: 'resizeDesistencia', p: nParticipantesConfirmado });
+  }, [corridaEtapa, tipoProva, nParticipantesConfirmado]);
+
   const toggleCheckVolta = useCallback(
     (participante: number, volta: number) => {
       const isLastVolta = nColunasVoltas > 0 && volta === nColunasVoltas - 1;
@@ -811,6 +847,14 @@ export default function AplicarTAFScreen() {
     },
     [getElapsedRaceMs],
   );
+
+  const confirmarDesistenciaParticipante = useCallback((participante: number) => {
+    dispatchTrial({ type: 'setDesistencia', participante, value: true });
+  }, []);
+
+  const limparDesistenciaParticipante = useCallback((participante: number) => {
+    dispatchTrial({ type: 'setDesistencia', participante, value: false });
+  }, []);
 
   const limparBufferAplicacao = useCallback(() => {
     pendingCadastrosRef.current = [];
@@ -963,6 +1007,25 @@ export default function AplicarTAFScreen() {
           ? (fb.nomeMilitar || '').trim() || `${labelAtletaLocal} ${i + 1}`
           : `${labelAtletaLocal} ${i + 1}`;
       const nip = nipsParticipantes[i] ?? '';
+      const desistiu =
+        (prova === 'corrida' || prova === 'natacao') && desistenciaParticipantes[i] === true;
+
+      if (desistiu) {
+        resultados.push({
+          corredor: i + 1,
+          nome: nomeBase,
+          tempoMs: 0,
+          nip,
+          prova,
+          desempenhoTexto: 'Desistência',
+          notaTexto: 'REPROVADO',
+          noraTexto: 'REPROVADO',
+          reprovacaoTexto: 'Desistência',
+          desistencia: true,
+        });
+        continue;
+      }
+
       const tempoMs = temposMilitaresMs[i] ?? 0;
       let notaTexto: string | undefined;
       if (fb?.tipo === 'ok' && temposMilitaresMs[i] != null) {
@@ -1005,10 +1068,12 @@ export default function AplicarTAFScreen() {
           naoEncontrados.push(r.nome);
           continue;
         }
-        const atualizado = aplicarResultadoNoCadastro(busca.cadastro, prova, {
-          tempoMs: r.tempoMs,
-          modoTafNaval,
-        });
+        const atualizado = r.desistencia && (prova === 'corrida' || prova === 'natacao')
+          ? aplicarDesistenciaNoCadastro(busca.cadastro, prova, { modoTafNaval })
+          : aplicarResultadoNoCadastro(busca.cadastro, prova, {
+              tempoMs: r.tempoMs,
+              modoTafNaval,
+            });
         if (!modoTafNaval && (prova === 'corrida' || prova === 'caminhada')) {
           const nip = (r.nip ?? '').trim();
           if (nip) {
@@ -1093,6 +1158,7 @@ export default function AplicarTAFScreen() {
     nipsParticipantes,
     salvandoResultadosCorrida,
     temposMilitaresMs,
+    desistenciaParticipantes,
     tipoProva,
     gravarSessaoAplicacao,
     iniciarFinalizacaoComAssinaturaAplicador,
@@ -3120,6 +3186,10 @@ export default function AplicarTAFScreen() {
         chegadaNatacao={chegadaNatacao}
         onToggleVolta={toggleCheckVolta}
         onToggleChegada={toggleMarcarChegadaNatacao}
+        desistenciaParticipantes={desistenciaParticipantes}
+        onConfirmDesistencia={confirmarDesistenciaParticipante}
+        onClearDesistencia={limparDesistenciaParticipante}
+        nipsParticipantes={nipsParticipantes}
         temposMilitaresMs={temposMilitaresMs}
         formatMs={formatMs}
         mostrarTempo={mostrarColunaTempo}

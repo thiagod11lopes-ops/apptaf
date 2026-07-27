@@ -80,7 +80,11 @@ export function buildResumoAplicacaoHtml(
         <td>${papel} ${r.corredor}</td>
         <td class="col-nome">${escapeHtmlPdf(r.nome)}</td>
         <td>${nip}</td>
-        <td class="tempo">${escapeHtmlPdf(formatMsByModality(r.prova ?? 'corrida', r.tempoMs))}</td>
+        <td class="tempo">${escapeHtmlPdf(
+          r.desistencia
+            ? 'Desistência'
+            : formatMsByModality(r.prova ?? 'corrida', r.tempoMs),
+        )}</td>
         <td class="nota">${nota}</td>
         <td class="repro">${situacao}</td>
         <td class="col-rubrica">${rubrica}</td>

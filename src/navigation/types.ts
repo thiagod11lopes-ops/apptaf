@@ -21,6 +21,8 @@ export type ResultadoCorridaItem = {
   reprovacaoTexto?: string;
   rubricaCandidato?: string;
   rubricaCandidatoSvg?: string;
+  /** Corrida/natação: desistência = REPROVADO sem tempo. */
+  desistencia?: boolean;
 };
 
 export type RootStackParamList = {

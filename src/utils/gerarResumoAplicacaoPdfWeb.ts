@@ -23,6 +23,7 @@ function cabecalhoColuna(resultados: ResultadoCorridaItem[]): string {
 const pdfTexto = pdfTextoParaJsPdf;
 
 function formatarTempo(r: ResultadoCorridaItem): string {
+  if (r.desistencia) return 'Desistência';
   if (r.desempenhoTexto?.trim()) return r.desempenhoTexto.trim();
   const prova = r.prova ?? 'corrida';
   if (prova === 'corrida' || prova === 'natacao') {

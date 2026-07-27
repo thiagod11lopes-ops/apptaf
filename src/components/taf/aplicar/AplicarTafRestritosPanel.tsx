@@ -51,6 +51,7 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
   const [editandoExistente, setEditandoExistente] = useState(false);
   const [restritoParaExcluir, setRestritoParaExcluir] = useState<RestritoRegistro | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [buscaLista, setBuscaLista] = useState('');
 
   const recarregarLista = useCallback(async () => {
     try {
@@ -241,6 +242,19 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
     }
   }, [nip, nome, dataInicio, dataFim, cadastros, editandoExistente, recarregarLista, onSalvo]);
 
+  const listaFiltrada = useMemo(() => {
+    const q = buscaLista.trim().toLowerCase();
+    if (!q) return lista;
+    const qDigitos = q.replace(/\D/g, '');
+    return lista.filter((reg) => {
+      const nomeOk = (reg.nome || '').toLowerCase().includes(q);
+      const nipOk =
+        qDigitos.length > 0 &&
+        nipDigitos(reg.nip).includes(qDigitos);
+      return nomeOk || nipOk;
+    });
+  }, [lista, buscaLista]);
+
   const confirmarExclusao = useCallback(async () => {
     if (!restritoParaExcluir) return;
     setExcluindo(true);
@@ -365,67 +379,91 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
         {lista.length > 0 ? (
           <View style={styles.listaWrap}>
             <Text style={[ts.label, { color: theme.primary, marginBottom: 8 }]}>
-              Dispensas registradas ({lista.length})
+              Dispensas registradas (
+              {buscaLista.trim()
+                ? `${listaFiltrada.length} de ${lista.length}`
+                : lista.length}
+              )
             </Text>
-            <ScrollView style={styles.listaScroll} nestedScrollEnabled>
-              {lista.map((reg) => {
-                const ativo = isDispensaAtiva(reg);
-                return (
-                  <View
-                    key={reg.nip}
-                    style={[
-                      styles.listaItem,
-                      {
-                        borderColor: glass.border,
-                        backgroundColor: theme.isDark ? 'rgba(2,6,23,0.35)' : 'rgba(255,255,255,0.55)',
-                      },
-                    ]}
-                  >
-                    <View style={styles.listaItemRow}>
-                      <View style={styles.listaItemText}>
-                        <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>
-                          {reg.nome || 'Sem nome'}
-                        </Text>
-                        <Text style={[ts.caption, { color: theme.textMuted }]}>
-                          NIP {formatNipInput(reg.nip)} · {reg.dataInicio} → {reg.dataFim}
-                          {ativo ? ' · Ativa' : ' · Fora do período'}
-                        </Text>
-                      </View>
-                      <View style={styles.listaAcoes}>
-                        <TouchableOpacity
-                          accessibilityLabel={`Editar dispensa de ${reg.nome || reg.nip}`}
-                          accessibilityRole="button"
-                          onPress={() => editarDaLista(reg)}
-                          style={[
-                            styles.acaoBtn,
-                            {
-                              borderColor: theme.primary,
-                              backgroundColor: theme.accentMuted,
-                            },
-                          ]}
-                        >
-                          <Pencil size={18} color={theme.primary} strokeWidth={2.3} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          accessibilityLabel={`Excluir dispensa de ${reg.nome || reg.nip}`}
-                          accessibilityRole="button"
-                          onPress={() => pedirExclusao(reg)}
-                          style={[
-                            styles.acaoBtn,
-                            {
-                              borderColor: theme.loss,
-                              backgroundColor: theme.lossMuted,
-                            },
-                          ]}
-                        >
-                          <Trash2 size={18} color={theme.loss} strokeWidth={2.3} />
-                        </TouchableOpacity>
+            <View style={styles.fieldBlock}>
+              <Text style={[ts.caption, styles.label, { color: ui.label }]}>
+                Buscar na lista
+              </Text>
+              <AplicarTafInput
+                value={buscaLista}
+                onChangeText={setBuscaLista}
+                placeholder="NIP ou nome"
+                autoCorrect={false}
+                accessibilityLabel="Buscar dispensas registradas por NIP ou nome"
+              />
+            </View>
+            {listaFiltrada.length === 0 ? (
+              <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 8 }]}>
+                Nenhuma dispensa encontrada para “{buscaLista.trim()}”.
+              </Text>
+            ) : (
+              <ScrollView style={styles.listaScroll} nestedScrollEnabled>
+                {listaFiltrada.map((reg) => {
+                  const ativo = isDispensaAtiva(reg);
+                  return (
+                    <View
+                      key={reg.nip}
+                      style={[
+                        styles.listaItem,
+                        {
+                          borderColor: glass.border,
+                          backgroundColor: theme.isDark
+                            ? 'rgba(2,6,23,0.35)'
+                            : 'rgba(255,255,255,0.55)',
+                        },
+                      ]}
+                    >
+                      <View style={styles.listaItemRow}>
+                        <View style={styles.listaItemText}>
+                          <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>
+                            {reg.nome || 'Sem nome'}
+                          </Text>
+                          <Text style={[ts.caption, { color: theme.textMuted }]}>
+                            NIP {formatNipInput(reg.nip)} · {reg.dataInicio} → {reg.dataFim}
+                            {ativo ? ' · Ativa' : ' · Fora do período'}
+                          </Text>
+                        </View>
+                        <View style={styles.listaAcoes}>
+                          <TouchableOpacity
+                            accessibilityLabel={`Editar dispensa de ${reg.nome || reg.nip}`}
+                            accessibilityRole="button"
+                            onPress={() => editarDaLista(reg)}
+                            style={[
+                              styles.acaoBtn,
+                              {
+                                borderColor: theme.primary,
+                                backgroundColor: theme.accentMuted,
+                              },
+                            ]}
+                          >
+                            <Pencil size={18} color={theme.primary} strokeWidth={2.3} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            accessibilityLabel={`Excluir dispensa de ${reg.nome || reg.nip}`}
+                            accessibilityRole="button"
+                            onPress={() => pedirExclusao(reg)}
+                            style={[
+                              styles.acaoBtn,
+                              {
+                                borderColor: theme.loss,
+                                backgroundColor: theme.lossMuted,
+                              },
+                            ]}
+                          >
+                            <Trash2 size={18} color={theme.loss} strokeWidth={2.3} />
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                );
-              })}
-            </ScrollView>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
         ) : null}
       </AplicarTafGlassPanel>

@@ -1,5 +1,9 @@
 import type { RestritoRegistro } from '../restritosStorage';
 import { nipDigitos } from '../../utils/nipFormat';
+import {
+  isLegacyNipCloudDocId,
+  resolveOpaqueCloudDocId,
+} from '../../utils/opaqueCloudDocId';
 import { deleteOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
 
 const TABLE = 'restritos';
@@ -9,10 +13,15 @@ export type RestritoCloudDoc = RestritoRegistro & {
   deleted?: boolean;
 };
 
-function toCloudPayload(reg: RestritoRegistro, deleted = false): Record<string, unknown> {
+function toCloudPayload(
+  reg: RestritoRegistro,
+  cloudId: string,
+  deleted = false,
+): Record<string, unknown> {
   const nip = nipDigitos(reg.nip);
   return {
-    id: nip,
+    id: cloudId,
+    cloudId,
     nip,
     nome: (reg.nome ?? '').trim(),
     dataInicio: reg.dataInicio,
@@ -25,10 +34,24 @@ function toCloudPayload(reg: RestritoRegistro, deleted = false): Record<string, 
 export async function getAllRestritosCloud(ownerUid: string): Promise<RestritoCloudDoc[]> {
   const rows = await listOwnerDocs(TABLE, ownerUid);
   return rows.map((row) => {
-    const raw = rowToDoc<RestritoCloudDoc>(row);
-    const nip = nipDigitos(raw.nip || row.id);
+    const raw = rowToDoc<RestritoCloudDoc & { cloudId?: string }>(row);
+    const nipFromData = nipDigitos(raw.nip ?? '');
+    const nip =
+      nipFromData.length === 8
+        ? nipFromData
+        : isLegacyNipCloudDocId(row.id)
+          ? row.id
+          : '';
+    const preferredCloudId =
+      typeof raw.cloudId === 'string' && !isLegacyNipCloudDocId(raw.cloudId)
+        ? raw.cloudId
+        : !isLegacyNipCloudDocId(row.id)
+          ? row.id
+          : undefined;
     return {
-      id: nip || row.id,
+      /** Sempre o `id` real da linha no Postgres (pode ser NIP legado). */
+      id: row.id,
+      cloudId: preferredCloudId,
       nip,
       nome: (raw.nome ?? '').trim(),
       dataInicio: raw.dataInicio ?? '',
@@ -43,41 +66,25 @@ export async function upsertRestritoCloud(
   ownerUid: string,
   reg: RestritoRegistro,
   deleted = false,
-): Promise<void> {
+): Promise<string> {
   const nip = nipDigitos(reg.nip);
   if (nip.length !== 8) throw new Error('NIP inválido para sync de restrito');
+  const cloudId = resolveOpaqueCloudDocId({ localCloudId: reg.cloudId });
   const updatedAt = reg.updatedAt ?? Date.now();
   await upsertOwnerDoc(
     TABLE,
     ownerUid,
-    nip,
-    toCloudPayload({ ...reg, nip, updatedAt }, deleted),
+    cloudId,
+    toCloudPayload({ ...reg, nip, cloudId, updatedAt }, cloudId, deleted),
     updatedAt,
     deleted,
   );
+  return cloudId;
 }
 
-export async function deleteRestritoCloud(
-  ownerUid: string,
-  nip: string,
-  updatedAt = Date.now(),
-): Promise<void> {
-  const key = nipDigitos(nip);
-  if (key.length !== 8) throw new Error('NIP inválido');
-  await upsertOwnerDoc(
-    TABLE,
-    ownerUid,
-    key,
-    toCloudPayload(
-      { nip: key, nome: '', dataInicio: '', dataFim: '', updatedAt },
-      true,
-    ),
-    updatedAt,
-    true,
-  );
-}
-
-/** Remoção física (wipe / heal). Preferir tombstone via deleteRestritoCloud no sync. */
-export async function hardDeleteRestritoCloud(ownerUid: string, nip: string): Promise<void> {
-  await deleteOwnerDoc(TABLE, ownerUid, nipDigitos(nip));
+/** Remove linha legada cujo id era o NIP em texto claro. */
+export async function hardDeleteRestritoCloud(ownerUid: string, cloudId: string): Promise<void> {
+  const id = (cloudId ?? '').trim();
+  if (!id) return;
+  await deleteOwnerDoc(TABLE, ownerUid, id);
 }

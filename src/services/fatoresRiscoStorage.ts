@@ -32,6 +32,8 @@ export type FatoresRiscoRegistro = {
   updatedAt: number;
   /** Tombstone local para sync LWW com a nuvem. */
   deleted?: boolean;
+  /** ID opaco da linha no Supabase (não é o NIP). */
+  cloudId?: string;
 };
 
 export const FATORES_RISCO_ITENS: ReadonlyArray<{ id: FatorRiscoId; label: string }> = [
@@ -235,6 +237,7 @@ export async function saveFatoresRisco(input: {
   }
 
   const map = await readMap();
+  const prev = map[key];
   const registro: FatoresRiscoRegistro = {
     nip: key,
     nome: input.nome.trim(),
@@ -245,6 +248,7 @@ export async function saveFatoresRisco(input: {
     imc: input.imc,
     updatedAt: Date.now(),
     deleted: false,
+    cloudId: prev?.cloudId,
   };
 
   map[key] = registro;

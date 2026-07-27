@@ -1,6 +1,7 @@
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 import {
   getAllRestritosCloud,
+  hardDeleteRestritoCloud,
   upsertRestritoCloud,
   type RestritoCloudDoc,
 } from '../../services/supabase/restritosCloud';
@@ -10,6 +11,10 @@ import {
   type RestritoRegistro,
 } from '../../services/restritosStorage';
 import { nipDigitos } from '../../utils/nipFormat';
+import {
+  isLegacyNipCloudDocId,
+  resolveOpaqueCloudDocId,
+} from '../../utils/opaqueCloudDocId';
 import { syncLogger } from './SyncLogger';
 
 function asActive(reg: RestritoRegistro | RestritoCloudDoc): boolean {
@@ -17,8 +22,9 @@ function asActive(reg: RestritoRegistro | RestritoCloudDoc): boolean {
 }
 
 /**
- * LWW por NIP: merge local ↔ nuvem e regrava o mapa local.
- * Em seguida envia cada registro (ativos e tombstones) que local venceu ou a nuvem não tem.
+ * LWW por NIP: merge local ↔ nuvem.
+ * Coluna `id` na nuvem é UUID opaco; NIP só no `data` cifrado.
+ * Migra linhas legadas (id = NIP) para id opaco e apaga o legado.
  */
 export async function syncRestritosWithCloud(ownerUid: string): Promise<string[]> {
   const errors: string[] = [];
@@ -31,13 +37,24 @@ export async function syncRestritosWithCloud(ownerUid: string): Promise<string[]
       getAllRestritosCloud(ownerUid),
     ]);
 
-    const remoteByNip = new Map<string, RestritoCloudDoc>();
+    const remoteByNip = new Map<string, RestritoCloudDoc & { legacyRowId?: string }>();
     for (const r of remoteList) {
-      const nip = nipDigitos(r.nip || r.id);
-      if (nip.length === 8) remoteByNip.set(nip, { ...r, nip, id: nip });
+      const nip = nipDigitos(r.nip);
+      if (nip.length !== 8) continue;
+      const prev = remoteByNip.get(nip);
+      const row: RestritoCloudDoc & { legacyRowId?: string } = {
+        ...r,
+        nip,
+        id: r.id,
+        cloudId: r.cloudId,
+        legacyRowId: isLegacyNipCloudDocId(r.id) ? r.id : undefined,
+      };
+      if (!prev || (r.updatedAt ?? 0) >= (prev.updatedAt ?? 0)) {
+        remoteByNip.set(nip, row);
+      }
     }
 
-    const merged: Record<string, RestritoRegistro & { deleted?: boolean }> = {};
+    const merged: Record<string, RestritoRegistro> = {};
     const allNips = new Set([...Object.keys(localMap), ...remoteByNip.keys()]);
 
     for (const nip of allNips) {
@@ -54,11 +71,19 @@ export async function syncRestritosWithCloud(ownerUid: string): Promise<string[]
           dataFim: remote.dataFim ?? '',
           updatedAt: remoteAt,
           deleted: remote.deleted === true,
+          cloudId: resolveOpaqueCloudDocId({
+            localCloudId: remote.cloudId,
+            remoteRowId: remote.id,
+          }),
         };
         continue;
       }
       if (local && !remote) {
-        merged[nip] = { ...local, nip };
+        merged[nip] = {
+          ...local,
+          nip,
+          cloudId: resolveOpaqueCloudDocId({ localCloudId: local.cloudId }),
+        };
         continue;
       }
       if (!local || !remote) continue;
@@ -71,9 +96,20 @@ export async function syncRestritosWithCloud(ownerUid: string): Promise<string[]
           dataFim: remote.dataFim ?? '',
           updatedAt: remoteAt,
           deleted: remote.deleted === true,
+          cloudId: resolveOpaqueCloudDocId({
+            localCloudId: local.cloudId,
+            remoteRowId: remote.id,
+          }),
         };
       } else {
-        merged[nip] = { ...local, nip };
+        merged[nip] = {
+          ...local,
+          nip,
+          cloudId: resolveOpaqueCloudDocId({
+            localCloudId: local.cloudId,
+            remoteRowId: remote.id,
+          }),
+        };
       }
     }
 
@@ -85,22 +121,36 @@ export async function syncRestritosWithCloud(ownerUid: string): Promise<string[]
       const remoteAt = remote?.updatedAt ?? 0;
       const localDeleted = !asActive(reg);
       const remoteDeleted = remote ? !asActive(remote) : undefined;
+      const legacyRemote = Boolean(remote?.legacyRowId);
 
       const needsUpload =
         !remote ||
+        legacyRemote ||
         localAt > remoteAt ||
-        (localAt === remoteAt && localDeleted !== remoteDeleted);
+        (localAt === remoteAt && localDeleted !== remoteDeleted) ||
+        (remote &&
+          !isLegacyNipCloudDocId(remote.id) &&
+          reg.cloudId &&
+          remote.id !== reg.cloudId);
 
       if (!needsUpload) continue;
 
       try {
-        await upsertRestritoCloud(ownerUid, reg, localDeleted);
+        const cloudId = await upsertRestritoCloud(ownerUid, reg, localDeleted);
+        if (reg.cloudId !== cloudId) {
+          merged[nip] = { ...reg, cloudId };
+        }
+        if (remote?.legacyRowId && remote.legacyRowId !== cloudId) {
+          await hardDeleteRestritoCloud(ownerUid, remote.legacyRowId);
+        }
       } catch (e) {
         errors.push(
           `restritos/${nip}: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
     }
+
+    await replaceAllRestritosMap(merged, ownerUid);
 
     if (errors.length === 0) {
       await syncLogger.info('sync', 'Restritos sincronizados com a nuvem (E2E)', {

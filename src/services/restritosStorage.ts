@@ -15,6 +15,8 @@ export type RestritoRegistro = {
   updatedAt: number;
   /** Tombstone local para sync LWW com a nuvem. */
   deleted?: boolean;
+  /** ID opaco da linha no Supabase (não é o NIP). */
+  cloudId?: string;
 };
 
 const STORAGE_KEY_LEGACY = 'restritos:registros';
@@ -227,6 +229,7 @@ export async function saveRestrito(input: {
   }
 
   const map = await readMap();
+  const prev = map[key];
   const registro: RestritoRegistro = {
     nip: key,
     nome: input.nome.trim(),
@@ -234,6 +237,7 @@ export async function saveRestrito(input: {
     dataFim: input.dataFim.trim(),
     updatedAt: Date.now(),
     deleted: false,
+    cloudId: prev?.cloudId,
   };
   map[key] = registro;
   await writeMap(map);

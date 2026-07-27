@@ -7,6 +7,7 @@ import {
 } from '../../services/supabase/restritosCloud';
 import {
   getAllRestritosIncludingDeleted,
+  purgeRestritosVencidos,
   replaceAllRestritosMap,
   type RestritoRegistro,
 } from '../../services/restritosStorage';
@@ -32,6 +33,8 @@ export async function syncRestritosWithCloud(ownerUid: string): Promise<string[]
   if (!getActiveTeamKey()) return errors;
 
   try {
+    await purgeRestritosVencidos(ownerUid);
+
     const [localMap, remoteList] = await Promise.all([
       getAllRestritosIncludingDeleted(ownerUid),
       getAllRestritosCloud(ownerUid),

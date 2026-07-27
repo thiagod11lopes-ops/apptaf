@@ -151,10 +151,48 @@ export function isDispensaAtiva(
   return inicioIso <= refIso && refIso <= fimIso;
 }
 
-/** Ativos (sem tombstones) — uso na UI e no balanço Home. */
+/**
+ * Vencida a partir do dia seguinte ao fim da dispensa (hoje > dataFim).
+ */
+export function isDispensaVencida(
+  reg: Pick<RestritoRegistro, 'dataFim'>,
+  refBr: string = dataHojeBr(),
+): boolean {
+  const fimIso = dataBrParaIso(reg.dataFim);
+  const refIso = dataBrParaIso(refBr);
+  if (!fimIso || !refIso) return false;
+  return refIso > fimIso;
+}
+
+/**
+ * Remove automaticamente da lista (soft-delete) as dispensas cujo fim já passou.
+ * Retorna quantos registros foram expirados nesta passagem.
+ */
+export async function purgeRestritosVencidos(
+  ownerUid?: string | null,
+  refBr: string = dataHojeBr(),
+): Promise<number> {
+  const map = await readMap(ownerUid);
+  let n = 0;
+  const now = Date.now();
+  const next: Record<string, RestritoRegistro> = { ...map };
+  for (const [nip, reg] of Object.entries(map)) {
+    if (reg.deleted === true) continue;
+    if (!isDispensaVencida(reg, refBr)) continue;
+    next[nip] = { ...reg, deleted: true, updatedAt: now };
+    n += 1;
+  }
+  if (n > 0) {
+    await writeMap(next, ownerUid);
+  }
+  return n;
+}
+
+/** Ativos (sem tombstones e sem vencidos) — uso na UI e no balanço Home. */
 export async function getAllRestritos(
   ownerUid?: string | null,
 ): Promise<Record<string, RestritoRegistro>> {
+  await purgeRestritosVencidos(ownerUid);
   return onlyActive(await readMap(ownerUid));
 }
 

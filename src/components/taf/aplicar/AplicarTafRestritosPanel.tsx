@@ -291,7 +291,7 @@ export function AplicarTafRestritosPanel({ onVoltar, onSalvo }: Props) {
         <AplicarTafSectionHeader
           kicker="DISPENSA"
           title="Restritos"
-          subtitle="Localize o militar pelo NIP ou nome e informe o período da dispensa. Só entram em Restritos na Home as dispensas ativas (hoje entre início e fim)."
+          subtitle="Localize o militar pelo NIP ou nome e informe o período da dispensa. Só entram em Restritos na Home as dispensas ativas (hoje entre início e fim). No dia seguinte ao fim, o militar sai automaticamente da lista."
         />
 
         <View style={styles.fieldBlock}>

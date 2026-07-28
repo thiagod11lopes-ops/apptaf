@@ -2,12 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { UserRound } from 'lucide-react-native';
-import { ModernModal } from '../sismav/ModernModal';
-import { PressableScale } from '../premium/PressableScale';
-import { useTheme } from '../../contexts/ThemeContext';
-import { getUiColors } from '../../theme/uiColors';
-import { idadeFromDataNascimento } from '../../utils/idadeFromDataNascimento';
-import { dataNascimentoCadastroValida } from '../../utils/cadastroDadosTaf';
+import { ModernModal } from '../../sismav/ModernModal';
+import { PressableScale } from '../../premium/PressableScale';
+import { useTheme } from '../../../contexts/ThemeContext';
+import { idadeFromDataNascimento } from '../../../utils/idadeFromDataNascimento';
+import { dataNascimentoCadastroValida } from '../../../utils/cadastroDadosTaf';
 import { AplicarTafInput } from './AplicarTafUi';
 
 function formatDateInput(value: string): string {
@@ -40,7 +39,6 @@ export function EditarIdadeGeneroMilitarModal({
   onSalvar,
 }: Props) {
   const { theme } = useTheme();
-  const ui = getUiColors(theme);
   const [dataNascimento, setDataNascimento] = useState(dataInicial);
   const [sexo, setSexo] = useState<'M' | 'F'>(sexoInicial === 'F' ? 'F' : 'M');
   const [erro, setErro] = useState('');

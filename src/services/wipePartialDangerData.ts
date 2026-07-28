@@ -2,6 +2,7 @@
  * Exclusões parciais da zona de perigo (chefe):
  * - testes/sessões (mantém cadastros, fatores, aplicadores…)
  * - fatores de risco (mantém o restante)
+ * - restritos / dispensas (mantém o restante)
  * - sessões do Modo Teste (demo-sess-*)
  */
 import { isFirebaseConfigured } from '../config/firebase';
@@ -19,6 +20,7 @@ import { forceNextFullRemoteFetch } from '../offline-first/sync/syncWatermark';
 import { getCachedLoginUid } from './firebase/authUid';
 import { clearLocalSessoesAplicacao } from './resultadosAplicadosIndexedDb';
 import { clearAllFatoresRisco } from './fatoresRiscoStorage';
+import { clearAllRestritos } from './restritosStorage';
 import {
   cadastroTemResultadoTaf,
   limparTodosResultadosTafCadastro,
@@ -34,6 +36,11 @@ export type WipeAllTestesResult = {
 
 export type WipeAllFatoresRiscoResult = {
   registrosRemovidos: number;
+};
+
+export type WipeAllRestritosResult = {
+  registrosRemovidos: number;
+  cloudCleared: boolean;
 };
 
 export type WipeAllModoTesteResult = {
@@ -94,6 +101,30 @@ export async function wipeAllFatoresRiscoData(): Promise<WipeAllFatoresRiscoResu
   const registrosRemovidos = await clearAllFatoresRisco();
   notifyDataChanged();
   return { registrosRemovidos };
+}
+
+/**
+ * Exclui todos os restritos/dispensas.
+ * Mantém cadastros, testes, fatores e aplicadores. Com wipeCloud, limpa a tabela na nuvem.
+ */
+export async function wipeAllRestritosData(options: {
+  uid: string | null;
+  wipeCloud: boolean;
+}): Promise<WipeAllRestritosResult> {
+  const canWipeCloud =
+    options.wipeCloud && Boolean(options.uid?.trim()) && isFirebaseConfigured();
+
+  if (canWipeCloud && options.uid) {
+    await wipeOwnerTable('restritos', options.uid.trim());
+    await forceNextFullRemoteFetch(options.uid.trim());
+  }
+
+  const registrosRemovidos = await clearAllRestritos(options.uid);
+  notifyDataChanged();
+  invalidateRemoteSnapshotCache();
+  syncManager.scheduleOnlineWriteFlush();
+
+  return { registrosRemovidos, cloudCleared: canWipeCloud };
 }
 
 /**

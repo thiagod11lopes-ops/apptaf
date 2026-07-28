@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, Platform, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AlertTriangle, ClipboardList, HeartPulse, Sparkles, Trash2 } from 'lucide-react-native';
+import { AlertTriangle, Ban, ClipboardList, HeartPulse, Sparkles, Trash2 } from 'lucide-react-native';
 import { ModernModal } from './sismav/ModernModal';
 import { PressableScale } from './premium/PressableScale';
 import { useTheme } from '../contexts/ThemeContext';
@@ -10,11 +10,12 @@ import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import {
   wipeAllFatoresRiscoData,
   wipeAllModoTesteSessoes,
+  wipeAllRestritosData,
   wipeAllTestesData,
 } from '../services/wipePartialDangerData';
 import { PREMIUM } from '../theme/premium';
 
-type Target = 'testes' | 'fatores' | 'modoTeste' | null;
+type Target = 'testes' | 'fatores' | 'restritos' | 'modoTeste' | null;
 
 type Props = {
   onDone?: () => void;
@@ -76,6 +77,22 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
             ? 'Nenhum teste de Modo Teste encontrado no Histórico.'
             : `${result.sessoesDeleted.toLocaleString('pt-BR')} teste(s) de Modo Teste excluído(s) do Histórico. Seus testes reais não foram alterados.`,
         );
+      } else if (target === 'restritos') {
+        const result = await wipeAllRestritosData({
+          uid: getCachedDataOwnerUid(),
+          wipeCloud: apagaNuvem,
+        });
+        const partes =
+          result.registrosRemovidos === 0
+            ? ['Nenhuma dispensa/restrito encontrado para excluir.']
+            : [
+                `${result.registrosRemovidos.toLocaleString('pt-BR')} registro(s) de restritos/dispensas excluído(s).`,
+                'Cadastros, testes, fatores de risco e aplicadores foram mantidos.',
+              ];
+        if (result.cloudCleared && result.registrosRemovidos > 0) {
+          partes.push('Restritos correspondentes na nuvem também foram removidos.');
+        }
+        setSucesso(partes.join(' '));
       } else {
         const result = await wipeAllFatoresRiscoData();
         setSucesso(
@@ -97,16 +114,21 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
 
   const isTestes = target === 'testes';
   const isModoTeste = target === 'modoTeste';
+  const isRestritos = target === 'restritos';
   const titulo = isTestes
     ? 'Excluir todos os testes?'
     : isModoTeste
       ? 'Excluir testes do Modo Teste?'
-      : 'Excluir fatores de risco?';
+      : isRestritos
+        ? 'Excluir restritos / dispensas?'
+        : 'Excluir fatores de risco?';
   const mensagem = isTestes
     ? 'Serão removidos todos os testes/sessões de TAF e os resultados vinculados aos cadastros. Cadastros (dados pessoais), fatores de risco, aplicadores e pré-cadastros permanecem.'
     : isModoTeste
       ? 'Serão removidos do Histórico apenas os testes aplicados no Modo Teste (tarja amarela). Seus testes reais, cadastros e demais dados permanecem intactos.'
-      : 'Serão removidos todos os fatores de risco cadastrados. Cadastros, testes, aplicadores e demais dados permanecem.';
+      : isRestritos
+        ? 'Serão removidas todas as dispensas/restritos. Cadastros, testes, fatores de risco, aplicadores e demais dados permanecem.'
+        : 'Serão removidos todos os fatores de risco cadastrados. Cadastros, testes, aplicadores e demais dados permanecem.';
   const lista = isTestes
     ? [
         'Sessões e histórico de testes',
@@ -118,7 +140,12 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
           'Cards do Histórico com tarja “Modo Teste”',
           'Sessões demo-sess-* neste aparelho',
         ]
-      : ['Todos os registros de fatores de risco neste aparelho'];
+      : isRestritos
+        ? [
+            'Todas as dispensas/restritos neste aparelho',
+            ...(apagaNuvem ? ['Restritos na nuvem do chefe'] : []),
+          ]
+        : ['Todos os registros de fatores de risco neste aparelho'];
 
   const footer = (
     <View style={styles.footerRow}>
@@ -256,6 +283,33 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
           <Text style={[styles.btnTriggerText, { color: theme.loss }]}>Excluir Fatores de Risco</Text>
           <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 16 }]}>
             Mantém todos os outros dados.
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        accessibilityLabel="Excluir restritos e dispensas mantendo os demais dados"
+        activeOpacity={0.85}
+        disabled={loading}
+        onPress={() => {
+          setErro(null);
+          setSucesso(null);
+          setTarget('restritos');
+        }}
+        style={[
+          styles.btnTrigger,
+          {
+            borderColor: theme.loss,
+            backgroundColor: theme.isDark ? 'rgba(127, 29, 29, 0.18)' : 'rgba(254, 226, 226, 0.55)',
+            opacity: loading ? 0.6 : 1,
+          },
+        ]}
+      >
+        <Ban size={18} color={theme.loss} strokeWidth={2.4} />
+        <View style={styles.btnTextCol}>
+          <Text style={[styles.btnTriggerText, { color: theme.loss }]}>Excluir Restritos</Text>
+          <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 16 }]}>
+            Remove todas as dispensas. Mantém cadastros, testes e fatores.
           </Text>
         </View>
       </TouchableOpacity>

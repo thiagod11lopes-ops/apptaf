@@ -526,7 +526,7 @@ export default function AplicacaoTAFScreen() {
       {etapa === 'form' && tipoProva ? (
         <TafGlassPanel accent={modoNaval ? 'violet' : 'cyan'} style={styles.formPanel}>
           <View style={styles.fieldBlock}>
-            <LabelNip color={theme.textMuted} fontSize={12} fontWeight="700" />
+            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>NIP</Text>
             <TextInput
               value={nip}
               onChangeText={onChangeNip}
@@ -535,7 +535,7 @@ export default function AplicacaoTAFScreen() {
               keyboardType="number-pad"
               maxLength={10}
               style={[
-                styles.inputFullFull,
+                styles.inputFull,
                 {
                   color: ui.text,
                   borderColor: theme.border,
@@ -554,7 +554,7 @@ export default function AplicacaoTAFScreen() {
               placeholder="Preenchido automaticamente pelo NIP"
               placeholderTextColor={theme.textMuted}
               style={[
-                styles.inputFullFull,
+                styles.inputFull,
                 {
                   color: ui.text,
                   borderColor: theme.border,
@@ -579,7 +579,7 @@ export default function AplicacaoTAFScreen() {
               maxLength={10}
               editable={Boolean(cadastro)}
               style={[
-                styles.inputFullFull,
+                styles.inputFull,
                 {
                   color: ui.text,
                   borderColor: theme.border,
@@ -620,7 +620,7 @@ export default function AplicacaoTAFScreen() {
             keyboardType="number-pad"
             maxLength={10}
             style={[
-              styles.inputFullFull,
+              styles.inputFull,
               {
                 color: ui.text,
                 borderColor: theme.border,
@@ -677,7 +677,7 @@ export default function AplicacaoTAFScreen() {
                 placeholderTextColor={theme.textMuted}
                 keyboardType="number-pad"
                 style={[
-                  styles.inputFullFull,
+                  styles.inputFull,
                   {
                     color: ui.text,
                     borderColor: theme.border,
@@ -699,7 +699,7 @@ export default function AplicacaoTAFScreen() {
                 keyboardType="number-pad"
                 maxLength={5}
                 style={[
-                  styles.inputFullFull,
+                  styles.inputFull,
                   {
                     color: ui.text,
                     borderColor: theme.border,

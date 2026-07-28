@@ -81,7 +81,8 @@ export function TopActionIcons({
 }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss, firebaseEnabled } = useAuth();
-  const { connectivity, syncing, appMode, pendingCount, uploadError } = useOfflineSyncState();
+  const { connectivity, syncing, appMode, pendingCount, uploadError, syncUi } =
+    useOfflineSyncState();
   const { e2eActive, status: e2eStatus, copy: e2eCopy } = useE2eEncryptionStatus();
   const cloudOnline = connectivity === 'ONLINE' || connectivity === 'SYNCING';
   /** Envio ou recebimento ativo com a nuvem → ícone azul. */
@@ -91,8 +92,14 @@ export function TopActionIcons({
       connectivity === 'SYNCING' ||
       appMode === 'ONLINE_SYNCING' ||
       appMode === 'ONLINE_PREPARING');
-  /** Há dados locais ainda não enviados — verde enganava (aparelhos divergiam). */
-  const cloudHasPending = cloudOnline && !cloudTransferring && pendingCount > 0;
+  const pendingDownloads = Math.max(0, syncUi.counters.pendingDownloads ?? 0);
+  const pendingUploads = Math.max(0, pendingCount, syncUi.counters.pendingUploads ?? 0);
+  /**
+   * Verde só quando local espelha a nuvem (sem pendência de envio nem de recebimento).
+   * Qualquer divergência conhecida → âmbar.
+   */
+  const cloudOutOfSync =
+    cloudOnline && !cloudTransferring && (pendingUploads > 0 || pendingDownloads > 0);
   const [e2eModalVisible, setE2eModalVisible] = useState(false);
   const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
 
@@ -133,32 +140,35 @@ export function TopActionIcons({
     ? theme.loss
     : cloudTransferring
       ? theme.primary
-      : cloudHasPending
+      : cloudOutOfSync
         ? theme.tokens.warning500
         : theme.gain;
   const cloudMutedBg = !cloudOnline
     ? 'rgba(220, 38, 38, 0.1)'
     : cloudTransferring
       ? theme.accentMuted
-      : cloudHasPending
+      : cloudOutOfSync
         ? 'rgba(245, 158, 11, 0.14)'
         : theme.gainMuted;
+  const cloudPendingParts: string[] = [];
+  if (pendingUploads > 0) cloudPendingParts.push(`${pendingUploads} envio(s)`);
+  if (pendingDownloads > 0) cloudPendingParts.push(`${pendingDownloads} recebimento(s)`);
   const cloudTooltipTitle = !cloudOnline
     ? 'Offline · local'
     : cloudTransferring
       ? 'Sincronizando · nuvem'
-      : cloudHasPending
-        ? `Pendente · ${pendingCount} envio(s)`
-        : 'Online · nuvem';
+      : cloudOutOfSync
+        ? `Pendente · ${cloudPendingParts.join(' · ')}`
+        : 'Online · igual à nuvem';
   const cloudTooltipDescription = !cloudOnline
     ? 'Sem internet — toque para ver o status. Alterações ficam no IndexedDB até reconectar.'
     : cloudTransferring
       ? 'Enviando ou recebendo dados da nuvem. Toque para ver o progresso.'
-      : cloudHasPending
+      : cloudOutOfSync
         ? uploadError
-          ? `Há dados neste aparelho ainda não enviados. Última tentativa: ${uploadError}. Toque para sincronizar.`
-          : 'Há dados neste aparelho ainda não enviados à nuvem. Toque para sincronizar e igualar os outros dispositivos.'
-        : 'Toque para ver o status: barras de recebimento e envio com a nuvem.';
+          ? `Há diferença com a nuvem. Última tentativa: ${uploadError}. Toque para sincronizar.`
+          : 'Há pendência de envio ou recebimento. Toque para sincronizar até o ícone ficar verde.'
+        : 'Dados deste aparelho alinhados com a nuvem. Toque para ver o status.';
 
   const openSyncStatus = useCallback(() => {
     setSyncStatusModalVisible(true);
@@ -187,9 +197,9 @@ export function TopActionIcons({
                   ? 'Offline: usando dados locais IndexedDB. Abrir status de sincronização.'
                   : cloudTransferring
                     ? 'Sincronizando com a nuvem: enviando ou recebendo dados. Abrir status.'
-                    : cloudHasPending
-                      ? `Há ${pendingCount} pendência(s) de envio neste aparelho. Abrir status de sincronização.`
-                      : 'Online: usando dados da nuvem. Abrir status de sincronização.'
+                    : cloudOutOfSync
+                      ? `Há pendência com a nuvem: ${cloudPendingParts.join(', ')}. Abrir status de sincronização.`
+                      : 'Online e alinhado com a nuvem. Abrir status de sincronização.'
               }
             >
               {cloudOnline ? (

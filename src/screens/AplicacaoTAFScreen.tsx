@@ -58,6 +58,7 @@ import {
   formatMinutosSegundosInput,
   tempoMinutosSegundosValido,
 } from '../utils/formatMinutosSegundos';
+import { EditarIdadeGeneroMilitarModal } from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
 import { SESSAO_REGISTRADOR_ID_PREFIX } from '../utils/sessoesUnificadasResultados';
 import { navigateTab } from '../navigation/navigationRef';
 
@@ -65,6 +66,17 @@ type Etapa = 'norma' | 'prova' | 'form';
 type NormaTaf = 'armada' | 'cfn';
 
 const NAVAL_CAMO_GRADIENT = ['#2a3320', '#4a5c38', '#5c4a32', '#3d4a28', '#6b5c45'] as const;
+
+function textoIdadeMilitar(dataNascimento: string): string {
+  const idade = idadeFromDataNascimento(dataNascimento);
+  return idade != null ? `${idade} anos` : 'Idade?';
+}
+
+function textoGeneroMilitar(sexo?: 'M' | 'F'): string {
+  if (sexo === 'M') return 'Masculino';
+  if (sexo === 'F') return 'Feminino';
+  return 'Gênero?';
+}
 
 function formatDateInput(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 8);
@@ -105,6 +117,7 @@ export default function AplicacaoTAFScreen() {
   const [cadastro, setCadastro] = useState<CadastroItemPersist | null>(null);
   const [avisoBusca, setAvisoBusca] = useState('');
   const [modalNaoCadastrado, setModalNaoCadastrado] = useState(false);
+  const [modalEditarIdadeGenero, setModalEditarIdadeGenero] = useState(false);
   const [tempo, setTempo] = useState('');
   const [repeticoes, setRepeticoes] = useState('');
   const [permanencia, setPermanencia] = useState<'aprovado' | 'reprovado' | null>(null);
@@ -133,6 +146,7 @@ export default function AplicacaoTAFScreen() {
     setCadastro(null);
     setAvisoBusca('');
     setModalNaoCadastrado(false);
+    setModalEditarIdadeGenero(false);
     setTempo('');
     setRepeticoes('');
     setPermanencia(null);
@@ -211,6 +225,29 @@ export default function AplicacaoTAFScreen() {
     if (!dataNascimentoValida(dataNascimento)) return null;
     return idadeFromDataNascimento(dataNascimento);
   }, [dataNascimento]);
+
+  const salvarEdicaoIdadeGenero = useCallback(
+    async (dados: { dataNascimento: string; sexo: 'M' | 'F' }) => {
+      if (!cadastro) return;
+      const atualizado: CadastroItemPersist = {
+        ...cadastro,
+        dataNascimento: dados.dataNascimento,
+        sexo: dados.sexo,
+        nome: nome.trim() || cadastro.nome,
+      };
+      await addCadastro(atualizado);
+      aplicarCadastroEncontrado(atualizado);
+      setCadastros((prev) => {
+        const idx = prev.findIndex((c) => c.id === atualizado.id);
+        if (idx < 0) return prev;
+        const next = [...prev];
+        next[idx] = atualizado;
+        return next;
+      });
+      setModalEditarIdadeGenero(false);
+    },
+    [aplicarCadastroEncontrado, cadastro, nome],
+  );
 
   const voltar = useCallback(() => {
     if (salvando) return;
@@ -564,38 +601,53 @@ export default function AplicacaoTAFScreen() {
               ]}
               accessibilityLabel="Nome do militar"
             />
-          </View>
-
-          <View style={styles.fieldBlock}>
-            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>
-              Data de nascimento
-            </Text>
-            <TextInput
-              value={dataNascimento}
-              onChangeText={(v) => setDataNascimento(formatDateInput(v))}
-              placeholder="DD/MM/AAAA"
-              placeholderTextColor={theme.textMuted}
-              keyboardType="number-pad"
-              maxLength={10}
-              editable={Boolean(cadastro)}
-              style={[
-                styles.inputFull,
-                {
-                  color: ui.text,
-                  borderColor: theme.border,
-                  backgroundColor: ui.inputBg,
-                  opacity: cadastro ? 1 : 0.7,
-                },
-              ]}
-              accessibilityLabel="Data de nascimento"
-            />
-            {idadePreview != null ? (
-              <Text style={[styles.hint, { color: theme.textSecondary }]}>
-                Idade: {idadePreview} anos
-              </Text>
-            ) : cadastro && !dataNascimento.trim() ? (
+            {cadastro ? (
+              <View style={styles.metaRow}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Editar idade"
+                  accessibilityHint="Abre edição de idade e gênero"
+                  onPress={() => setModalEditarIdadeGenero(true)}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                  style={[
+                    styles.metaChip,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: theme.isDark
+                        ? 'rgba(255,255,255,0.06)'
+                        : 'rgba(15,23,42,0.04)',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.metaChipText, { color: theme.textSecondary }]}>
+                    {textoIdadeMilitar(dataNascimento)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Editar gênero"
+                  accessibilityHint="Abre edição de idade e gênero"
+                  onPress={() => setModalEditarIdadeGenero(true)}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                  style={[
+                    styles.metaChip,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: theme.isDark
+                        ? 'rgba(255,255,255,0.06)'
+                        : 'rgba(15,23,42,0.04)',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.metaChipText, { color: theme.textSecondary }]}>
+                    {textoGeneroMilitar(cadastro.sexo)}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {cadastro && idadePreview == null ? (
               <Text style={[styles.hint, { color: theme.tokens.warning500 }]}>
-                Informe a data de nascimento para calcular a nota.
+                Toque em idade ou gênero para informar a data de nascimento.
               </Text>
             ) : null}
           </View>
@@ -785,6 +837,16 @@ export default function AplicacaoTAFScreen() {
         </Text>
       </ModernModal>
 
+      <EditarIdadeGeneroMilitarModal
+        visible={modalEditarIdadeGenero && cadastro != null}
+        nome={nome || (cadastro?.nome ?? '')}
+        nip={nip}
+        dataNascimento={dataNascimento}
+        sexo={cadastro?.sexo}
+        onClose={() => setModalEditarIdadeGenero(false)}
+        onSalvar={salvarEdicaoIdadeGenero}
+      />
+
       <RubricaCaptureModal
         visible={rubricaMilitarAberto && resultadoPendente != null}
         participante={resultadoPendente}
@@ -911,6 +973,23 @@ const styles = StyleSheet.create({
   },
   fieldBlock: {
     gap: 6,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  metaChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  metaChipText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   sectionLabel: {
     fontSize: 11,

@@ -54,6 +54,7 @@ import {
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { AplicarTafModoTesteBar } from '../components/taf/aplicar/AplicarTafModoTesteBar';
+import { EditarIdadeGeneroMilitarModal } from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -210,10 +211,16 @@ type NipFeedbackLinha =
   | { tipo: 'erro'; texto: string }
   | null;
 
-/** Sufixo ao lado do nome na identificação quando há data de nascimento válida. */
-function sufixoIdadeMilitar(dataNascimento: string): string {
+/** Sufixo de idade ao lado do nome. */
+function textoIdadeMilitar(dataNascimento: string): string {
   const idade = idadeFromDataNascimento(dataNascimento);
-  return idade != null ? ` · ${idade} anos` : '';
+  return idade != null ? `${idade} anos` : 'Idade?';
+}
+
+function textoGeneroMilitar(sexo?: 'M' | 'F'): string {
+  if (sexo === 'M') return 'Masculino';
+  if (sexo === 'F') return 'Feminino';
+  return 'Gênero?';
 }
 
 const MAX_VOLTAS_COLUNAS = 99;
@@ -312,6 +319,9 @@ export default function AplicarTAFScreen() {
     nip: string;
     fatores: string[];
   } | null>(null);
+  const [modalEditarIdadeGeneroIndex, setModalEditarIdadeGeneroIndex] = useState<number | null>(
+    null,
+  );
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
   const [modoTafNaval, setModoTafNaval] = useState(false);
   const [repeticoesParticipantes, setRepeticoesParticipantes] = useState<string[]>([]);
@@ -1734,6 +1744,34 @@ export default function AplicarTAFScreen() {
     [nipFeedbackLinhas, continuarAposCadastroEncontrado],
   );
 
+  const salvarEdicaoIdadeGenero = useCallback(
+    async (dados: { dataNascimento: string; sexo: 'M' | 'F' }) => {
+      const index = modalEditarIdadeGeneroIndex;
+      if (index == null) return;
+      const nipLinha = nipsParticipantes[index] ?? '';
+      const lista = await getAllCadastros({ includeDemo: true });
+      const busca = buscarCadastroPorNomeOuNip(lista, nipLinha);
+      if (busca.kind !== 'found') {
+        throw new Error('Militar não encontrado no cadastro.');
+      }
+      const atualizado: CadastroItemPersist = {
+        ...busca.cadastro,
+        dataNascimento: dados.dataNascimento,
+        sexo: dados.sexo,
+      };
+      await addCadastro(atualizado);
+      definirNipOk(index, atualizado);
+      setModalEditarIdadeGeneroIndex(null);
+    },
+    [modalEditarIdadeGeneroIndex, nipsParticipantes, definirNipOk],
+  );
+
+  const modalEditarFb =
+    modalEditarIdadeGeneroIndex != null
+      ? nipFeedbackLinhas[modalEditarIdadeGeneroIndex]
+      : null;
+  const modalEditarOk = modalEditarFb?.tipo === 'ok' ? modalEditarFb : null;
+
   const atualizarNip = useCallback((index: number, texto: string) => {
     setNipsParticipantes((prev) => {
       const next = [...prev];
@@ -3073,8 +3111,53 @@ export default function AplicarTAFScreen() {
                           numberOfLines={2}
                         >
                           {fb.nomeMilitar}
-                          {sufixoIdadeMilitar(fb.dataNascimento)}
                         </Text>
+                        <View style={styles.militarMetaRow}>
+                          <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Editar idade"
+                            accessibilityHint="Abre edição de idade e gênero"
+                            onPress={() => setModalEditarIdadeGeneroIndex(index)}
+                            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                            style={[
+                              styles.militarMetaChip,
+                              {
+                                borderColor: theme.border,
+                                backgroundColor: theme.isDark
+                                  ? 'rgba(255,255,255,0.06)'
+                                  : 'rgba(15,23,42,0.04)',
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[styles.militarMetaChipText, { color: theme.textSecondary }]}
+                            >
+                              {textoIdadeMilitar(fb.dataNascimento)}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Editar gênero"
+                            accessibilityHint="Abre edição de idade e gênero"
+                            onPress={() => setModalEditarIdadeGeneroIndex(index)}
+                            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                            style={[
+                              styles.militarMetaChip,
+                              {
+                                borderColor: theme.border,
+                                backgroundColor: theme.isDark
+                                  ? 'rgba(255,255,255,0.06)'
+                                  : 'rgba(15,23,42,0.04)',
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[styles.militarMetaChipText, { color: theme.textSecondary }]}
+                            >
+                              {textoGeneroMilitar(fb.sexo)}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                       <View
                         style={[
@@ -3197,6 +3280,20 @@ export default function AplicarTAFScreen() {
         nip={modalFatoresRiscoInfo?.nip ?? ''}
         fatores={modalFatoresRiscoInfo?.fatores ?? []}
         onClose={() => setModalFatoresRiscoInfo(null)}
+      />
+
+      <EditarIdadeGeneroMilitarModal
+        visible={modalEditarOk != null}
+        nome={modalEditarOk?.nomeMilitar ?? ''}
+        nip={
+          modalEditarIdadeGeneroIndex != null
+            ? (nipsParticipantes[modalEditarIdadeGeneroIndex] ?? '')
+            : ''
+        }
+        dataNascimento={modalEditarOk?.dataNascimento ?? ''}
+        sexo={modalEditarOk?.sexo}
+        onClose={() => setModalEditarIdadeGeneroIndex(null)}
+        onSalvar={salvarEdicaoIdadeGenero}
       />
 
       <TafProvaTempoModal
@@ -3434,6 +3531,23 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     fontSize: 14,
     fontWeight: '800',
     lineHeight: 18,
+  },
+  militarMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  militarMetaChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  militarMetaChipText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   militarHashBadge: {
     paddingHorizontal: 10,

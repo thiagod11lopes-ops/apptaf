@@ -17,7 +17,7 @@ export const SESSAO_REGISTRADOR_ID_PREFIX = 'registrador-';
 
 /** Sessão persistida do Registrador / cadastro manual: registrador-{cadastroId}-{tipo}. */
 export const REGISTRADOR_SESSAO_PERSISTIDA_RE =
-  /^registrador-(.+)-(corrida|natacao|permanencia|caminhada)$/;
+  /^registrador-(.+)-(corrida|natacao|permanencia|caminhada|flexao_barra|flexao_solo|abdominal_remador|abdominal_prancha)$/;
 
 export function isSessaoVirtualRegistrador(sessao: SessaoAplicacaoTaf): boolean {
   return sessao.id.startsWith(SESSAO_REGISTRADOR_ID_PREFIX);

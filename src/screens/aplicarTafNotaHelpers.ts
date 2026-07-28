@@ -63,9 +63,11 @@ export function aplicarResultadoNoCadastro(
     tempoMs?: number;
     repeticoes?: number;
     modoTafNaval: boolean;
+    /** Data do teste DD/MM/AAAA (padrão: hoje). */
+    dataAplicacaoBr?: string;
   },
 ): CadastroItemPersist {
-  const hoje = dataHojeBr();
+  const hoje = (opts.dataAplicacaoBr ?? '').trim() || dataHojeBr();
   const { tempoMs = 0, repeticoes, modoTafNaval } = opts;
   const idade = idadeFromDataNascimento(cadastro.dataNascimento);
   const sexo = cadastro.sexo;
@@ -154,6 +156,26 @@ export function aplicarResultadoNoCadastro(
   }
 
   return cadastro;
+}
+
+/** Permanência: aprovado/reprovado com data (Registrador / Aplicar). */
+export function aplicarPermanenciaNoCadastro(
+  cadastro: CadastroItemPersist,
+  resultado: 'aprovado' | 'reprovado',
+  opts?: { dataAplicacaoBr?: string; tempoPermanencia?: string },
+): CadastroItemPersist {
+  const data = (opts?.dataAplicacaoBr ?? '').trim() || dataHojeBr();
+  const tempo =
+    (opts?.tempoPermanencia ?? '').trim() ||
+    (cadastro.tempoPermanencia ?? '').trim() ||
+    '10:00';
+  return {
+    ...cadastro,
+    resultadoPermanencia: resultado,
+    resultadoNatacao: undefined,
+    tempoPermanencia: tempo,
+    dataTafPermanencia: data,
+  };
 }
 
 /** Desistência em corrida/natação: reprovado sem tempo, com data (teste aplicado). */

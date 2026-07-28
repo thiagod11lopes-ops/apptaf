@@ -6,61 +6,103 @@ import {
   Platform,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Anchor, Check, Search, Ship, Sparkles, X } from 'lucide-react-native';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useTheme } from '../contexts/ThemeContext';
-import { getUiColors, type UiColors } from '../theme/uiColors';
-import type { AppTheme } from '../theme/premium';
-import { Check, X } from 'lucide-react-native';
+import { getUiColors } from '../theme/uiColors';
+import { PREMIUM } from '../theme/premium';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
-import { TafCenteredTabHeader } from '../components/mobile/TafTabChrome';
+import {
+  TafBackLink,
+  TafCenteredTabHeader,
+  TafGlassPanel,
+  TafPrimaryButton,
+} from '../components/mobile/TafTabChrome';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
-import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
-import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import { AplicarTafProvaSelector } from '../components/taf/aplicar/AplicarTafProvaSelector';
+import { getAplicarTafGlass } from '../components/taf/aplicar/aplicarTafTheme';
+import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
+import { RubricaCaptureModal } from '../components/RubricaCaptureModal';
+import { FluxoAssinaturaAplicadorModal } from '../components/sismav/FluxoAssinaturaAplicadorModal';
+import {
+  addCadastro,
+  getAllCadastros,
+  type CadastroItemPersist,
+} from '../services/cadastrosIndexedDb';
 import { addSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
-import { persistirSessoesRegistradorFromCadastro } from '../utils/sessoesUnificadasResultados';
+import type { ResultadoCorridaItem } from '../navigation/types';
+import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import type { TipoProvaTAF } from '../taf/tafProvaTypes';
 import {
-  notaCorridaParaPersistencia,
-  textoNotaCorridaFromCadastro,
-} from '../taf/corrida2400Nota';
+  isProvaComCronometro,
+  isProvaComRepeticoes,
+  tituloProvaTaf,
+} from '../taf/tafProvaTypes';
+import { formatMsByModality, parseTafPerformanceInput } from '../taf/tafTimeFormat';
 import {
-  notaNatacaoParaPersistencia,
-  textoNotaNatacaoFromCadastro,
-} from '../taf/natacaoNota';
+  calcularNotaLinhaReps,
+  calcularNotaLinhaTempo,
+  aplicarPermanenciaNoCadastro,
+  aplicarResultadoNoCadastro,
+} from './aplicarTafNotaHelpers';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput } from '../utils/nipFormat';
-import { dataHojeBr } from '../utils/tafRegistro';
+import { dataBrParaIso, dataHojeBr } from '../utils/tafRegistro';
 import {
   formatMinutosSegundosInput,
   tempoMinutosSegundosValido,
-  tempoParaExibicao,
 } from '../utils/formatMinutosSegundos';
+import { SESSAO_REGISTRADOR_ID_PREFIX } from '../utils/sessoesUnificadasResultados';
+
+type Etapa = 'norma' | 'prova' | 'form';
+type NormaTaf = 'armada' | 'cfn';
+
+const NAVAL_CAMO_GRADIENT = ['#2a3320', '#4a5c38', '#5c4a32', '#3d4a28', '#6b5c45'] as const;
+
+function formatDateInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  const dd = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  const yyyy = digits.slice(4, 8);
+  if (digits.length <= 2) return dd;
+  if (digits.length <= 4) return `${dd}/${mm}`;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function dataAplicacaoValida(value: string): boolean {
+  return dataBrParaIso(value) != null;
+}
 
 export default function AplicacaoTAFScreen() {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
-  const styles = useMemo(() => createAplicacaoTafStyles(theme, ui), [theme, ui]);
+  const glass = getAplicarTafGlass(theme);
+  const { isNarrowPhone } = useAplicarTafLayout();
+
+  const [etapa, setEtapa] = useState<Etapa>('norma');
+  const [normaTaf, setNormaTaf] = useState<NormaTaf>('armada');
+  const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
+  const modoNaval = normaTaf === 'cfn';
 
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
-  const [modalBuscaAberto, setModalBuscaAberto] = useState(false);
-  const [nomeOuNip, setNomeOuNip] = useState('');
-  const [modalErroAberto, setModalErroAberto] = useState(false);
-  const [mensagemErro, setMensagemErro] = useState('');
+  const [busca, setBusca] = useState('');
+  const [cadastro, setCadastro] = useState<CadastroItemPersist | null>(null);
+  const [avisoBusca, setAvisoBusca] = useState('');
+  const [tempo, setTempo] = useState('');
+  const [repeticoes, setRepeticoes] = useState('');
+  const [permanencia, setPermanencia] = useState<'aprovado' | 'reprovado' | null>(null);
+  const [dataTeste, setDataTeste] = useState(dataHojeBr());
+  const [erro, setErro] = useState('');
+  const [sucesso, setSucesso] = useState('');
+  const [salvando, setSalvando] = useState(false);
 
-  const [modalTemposAberto, setModalTemposAberto] = useState(false);
-  const [cadastroSelecionado, setCadastroSelecionado] = useState<CadastroItemPersist | null>(null);
-  const [tempoCorrida, setTempoCorrida] = useState('');
-  const [tempoNatacao, setTempoNatacao] = useState('');
-  const [erroTempos, setErroTempos] = useState('');
-
-  const [modalNatacaoAberto, setModalNatacaoAberto] = useState(false);
-  const [cadastroAposTempos, setCadastroAposTempos] = useState<CadastroItemPersist | null>(null);
-  const [resultadoNatacaoOpcao, setResultadoNatacaoOpcao] = useState<'aprovado' | 'reprovado' | null>(null);
-  const [erroNatacao, setErroNatacao] = useState('');
-
-  const cardGlassEnabled = Platform.OS === 'web';
-  const inputBorder = theme.border;
-  const inputBg = ui.inputBg;
+  const [rubricaMilitarAberto, setRubricaMilitarAberto] = useState(false);
+  const [aplicadorAberto, setAplicadorAberto] = useState(false);
+  const [resultadoPendente, setResultadoPendente] = useState<ResultadoCorridaItem | null>(null);
+  const [cadastroPendente, setCadastroPendente] = useState<CadastroItemPersist | null>(null);
 
   const carregarCadastros = useCallback(() => {
     getAllCadastros()
@@ -70,578 +112,752 @@ export default function AplicacaoTAFScreen() {
 
   useAuthDataReload(carregarCadastros);
 
-  const abrirModalBusca = useCallback(() => {
-    setNomeOuNip('');
-    setModalBuscaAberto(true);
+  const resetForm = useCallback(() => {
+    setBusca('');
+    setCadastro(null);
+    setAvisoBusca('');
+    setTempo('');
+    setRepeticoes('');
+    setPermanencia(null);
+    setDataTeste(dataHojeBr());
+    setErro('');
+    setResultadoPendente(null);
+    setCadastroPendente(null);
   }, []);
 
-  const fecharModalBusca = useCallback(() => {
-    setModalBuscaAberto(false);
-  }, []);
-
-  const onChangeNomeOuNip = useCallback((texto: string) => {
-    const temLetras = /[a-zA-ZÀ-ÿ]/.test(texto);
-    if (!temLetras && texto.replace(/\D/g, '').length > 0) {
-      setNomeOuNip(formatNipInput(texto));
+  const voltar = useCallback(() => {
+    if (salvando) return;
+    setErro('');
+    setSucesso('');
+    if (etapa === 'form') {
+      resetForm();
+      setTipoProva(null);
+      setEtapa('prova');
       return;
     }
-    setNomeOuNip(texto);
-  }, []);
-
-  const fecharModalTempos = useCallback(() => {
-    setModalTemposAberto(false);
-    setCadastroSelecionado(null);
-    setTempoCorrida('');
-    setTempoNatacao('');
-    setErroTempos('');
-  }, []);
-
-  const fecharModalNatacao = useCallback(() => {
-    setModalNatacaoAberto(false);
-    setCadastroAposTempos(null);
-    setResultadoNatacaoOpcao(null);
-    setErroNatacao('');
-  }, []);
-
-  const confirmarBusca = useCallback(async () => {
-    const q = nomeOuNip.trim();
-    if (!q) {
-      setMensagemErro('Digite o nome ou o NIP do militar.');
-      setModalBuscaAberto(false);
-      setModalErroAberto(true);
-      return;
+    if (etapa === 'prova') {
+      setTipoProva(null);
+      setEtapa('norma');
     }
+  }, [etapa, resetForm, salvando]);
 
-    const lista = await getAllCadastros();
-    setCadastros(lista);
+  const iniciarNorma = useCallback((norma: NormaTaf) => {
+    setNormaTaf(norma);
+    setTipoProva(null);
+    resetForm();
+    setSucesso('');
+    setEtapa('prova');
+  }, [resetForm]);
 
-    const resultado = buscarCadastroPorNomeOuNip(lista, q);
-    setModalBuscaAberto(false);
-    setNomeOuNip('');
+  const selecionarProva = useCallback((id: TipoProvaTAF) => {
+    setTipoProva(id);
+    resetForm();
+    setSucesso('');
+    setEtapa('form');
+  }, [resetForm]);
 
-    if (resultado.kind === 'found') {
-      const c = resultado.cadastro;
-      const legacyTempo = (c as CadastroItemPersist & { tempo?: string }).tempo;
-      setCadastroSelecionado(c);
-      setTempoCorrida(tempoParaExibicao(c.tempoCorrida ?? legacyTempo));
-      setTempoNatacao(tempoParaExibicao(c.tempoNatacao));
-      setErroTempos('');
-      setModalTemposAberto(true);
-      return;
-    }
-
-    if (resultado.kind === 'ambiguous') {
-      setMensagemErro(
-        'Vários cadastros correspondem à busca. Informe o NIP completo (8 dígitos) ou o nome completo exatamente como está cadastrado.'
+  const resolverMilitar = useCallback(
+    (texto: string) => {
+      setErro('');
+      const t = texto.trim();
+      if (!t) {
+        setCadastro(null);
+        setAvisoBusca('');
+        return;
+      }
+      const res = buscarCadastroPorNomeOuNip(cadastros, t);
+      if (res.kind === 'found') {
+        setCadastro(res.cadastro);
+        setBusca(formatNipInput(res.cadastro.nip) || res.cadastro.nome);
+        setAvisoBusca('');
+        return;
+      }
+      setCadastro(null);
+      setAvisoBusca(
+        res.kind === 'ambiguous'
+          ? 'Vários cadastros correspondem. Informe o NIP completo.'
+          : 'Militar não encontrado. Cadastre-o antes de registrar o teste.',
       );
-    } else {
-      setMensagemErro(
-        'Nip ou Nome não encontrado. Cadastre o Militar antes de aplicar o TAF.'
+    },
+    [cadastros],
+  );
+
+  const notaPreview = useMemo(() => {
+    if (!cadastro || !tipoProva || tipoProva === 'permanencia') return null;
+    if (isProvaComRepeticoes(tipoProva)) {
+      const n = parseInt(repeticoes.replace(/\D/g, ''), 10);
+      if (!Number.isFinite(n) || n < 0) return null;
+      return calcularNotaLinhaReps(
+        tipoProva as 'flexao_barra' | 'flexao_solo' | 'abdominal_remador',
+        n,
+        cadastro,
       );
     }
-    setModalErroAberto(true);
-  }, [nomeOuNip]);
-
-  const salvarTempos = useCallback(async () => {
-    const c = cadastroSelecionado;
-    if (!c) return;
-
-    const tc = tempoCorrida.trim();
-    const tn = tempoNatacao.trim();
-
-    if (!tempoMinutosSegundosValido(tc)) {
-      setErroTempos(
-        'Corrida: use o formato MM:SS (ex.: 12:45). Minutos até 99 e segundos de 00 a 59. Deixe vazio se não for registrar.'
-      );
-      return;
+    if (isProvaComCronometro(tipoProva)) {
+      if (!tempo.trim() || !tempoMinutosSegundosValido(tempo) || !tempo.includes(':')) return null;
+      const modality = tipoProva === 'natacao' || tipoProva === 'abdominal_prancha' ? 'natacao' : 'corrida';
+      const ms = parseTafPerformanceInput(modality, tempo);
+      if (ms == null) return null;
+      const nota = calcularNotaLinhaTempo(tipoProva, ms, cadastro, modoNaval);
+      return nota === '—' ? null : nota;
     }
-    if (!tempoMinutosSegundosValido(tn)) {
-      setErroTempos(
-        'Natação: use o formato MM:SS (ex.: 12:45). Minutos até 99 e segundos de 00 a 59. Deixe vazio se não for registrar.'
-      );
-      return;
+    return null;
+  }, [cadastro, tipoProva, tempo, repeticoes, modoNaval]);
+
+  const montarResultadoECadastro = useCallback((): {
+    resultado: ResultadoCorridaItem;
+    cadastroAtualizado: CadastroItemPersist;
+  } | null => {
+    if (!cadastro || !tipoProva) {
+      setErro('Selecione o militar e o tipo de teste.');
+      return null;
+    }
+    if (!dataAplicacaoValida(dataTeste)) {
+      setErro('Informe a data do teste no formato DD/MM/AAAA.');
+      return null;
     }
 
-    setErroTempos('');
+    if (tipoProva === 'permanencia') {
+      if (!permanencia) {
+        setErro('Selecione Aprovado ou Reprovado na permanência.');
+        return null;
+      }
+      const cadastroAtualizado = aplicarPermanenciaNoCadastro(cadastro, permanencia, {
+        dataAplicacaoBr: dataTeste,
+      });
+      const resultado: ResultadoCorridaItem = {
+        corredor: 1,
+        nome: (cadastro.nome ?? '').trim() || '—',
+        nip: cadastro.nip ?? '',
+        tempoMs: 0,
+        prova: 'permanencia',
+        desempenhoTexto: permanencia === 'aprovado' ? 'Aprovado' : 'Reprovado',
+        notaTexto: permanencia === 'aprovado' ? 'Aprovado' : 'REPROVADO',
+        noraTexto: permanencia === 'aprovado' ? 'Aprovado' : 'REPROVADO',
+        reprovacaoTexto: permanencia === 'reprovado' ? 'Reprovado' : undefined,
+      };
+      return { resultado, cadastroAtualizado };
+    }
 
-    const hoje = dataHojeBr();
-    const atualizado: CadastroItemPersist = {
-      ...c,
-      ...(tc
-        ? {
-            tempoCorrida: tc,
-            dataTafCorrida: hoje,
-            notaCorrida: notaCorridaParaPersistencia(
-              textoNotaCorridaFromCadastro({
-                tempoCorrida: tc,
-                dataNascimento: c.dataNascimento,
-                sexo: c.sexo,
-              }),
-            ),
-          }
-        : {}),
-      ...(tn
-        ? {
-            tempoNatacao: tn,
-            dataTafNatacao: hoje,
-            notaNatacao: notaNatacaoParaPersistencia(
-              textoNotaNatacaoFromCadastro({
-                tempoNatacao: tn,
-                dataNascimento: c.dataNascimento,
-                sexo: c.sexo,
-              }),
-            ),
-          }
-        : {}),
+    if (isProvaComRepeticoes(tipoProva)) {
+      const n = parseInt(repeticoes.replace(/\D/g, ''), 10);
+      if (!Number.isFinite(n) || n < 0) {
+        setErro('Informe o número de repetições.');
+        return null;
+      }
+      const notaTexto = calcularNotaLinhaReps(
+        tipoProva as 'flexao_barra' | 'flexao_solo' | 'abdominal_remador',
+        n,
+        cadastro,
+      );
+      const cadastroAtualizado = aplicarResultadoNoCadastro(cadastro, tipoProva, {
+        repeticoes: n,
+        modoTafNaval: modoNaval,
+        dataAplicacaoBr: dataTeste,
+      });
+      const resultado: ResultadoCorridaItem = {
+        corredor: 1,
+        nome: (cadastro.nome ?? '').trim() || '—',
+        nip: cadastro.nip ?? '',
+        tempoMs: 0,
+        prova: tipoProva,
+        desempenhoTexto: String(n),
+        notaTexto: notaTexto === '—' ? undefined : notaTexto,
+        noraTexto: notaTexto === '—' ? undefined : notaTexto,
+        reprovacaoTexto: notaTexto === 'REPROVADO' ? 'Reprovado' : undefined,
+      };
+      return { resultado, cadastroAtualizado };
+    }
+
+    if (!tempo.trim() || !tempoMinutosSegundosValido(tempo) || !tempo.includes(':')) {
+      setErro('Informe o tempo no formato MM:SS.');
+      return null;
+    }
+    const modality =
+      tipoProva === 'natacao' || tipoProva === 'abdominal_prancha' ? 'natacao' : 'corrida';
+    const tempoMs = parseTafPerformanceInput(modality, tempo);
+    if (tempoMs == null) {
+      setErro('Tempo inválido.');
+      return null;
+    }
+    const notaTexto = calcularNotaLinhaTempo(tipoProva, tempoMs, cadastro, modoNaval);
+    const cadastroAtualizado = aplicarResultadoNoCadastro(cadastro, tipoProva, {
+      tempoMs,
+      modoTafNaval: modoNaval,
+      dataAplicacaoBr: dataTeste,
+    });
+    const resultado: ResultadoCorridaItem = {
+      corredor: 1,
+      nome: (cadastro.nome ?? '').trim() || '—',
+      nip: cadastro.nip ?? '',
+      tempoMs,
+      prova: tipoProva,
+      desempenhoTexto: formatMsByModality(modality, tempoMs),
+      notaTexto: notaTexto === '—' ? undefined : notaTexto,
+      noraTexto: notaTexto === '—' ? undefined : notaTexto,
+      reprovacaoTexto: notaTexto === 'REPROVADO' ? 'Reprovado' : undefined,
     };
+    return { resultado, cadastroAtualizado };
+  }, [
+    cadastro,
+    tipoProva,
+    dataTeste,
+    permanencia,
+    repeticoes,
+    tempo,
+    modoNaval,
+  ]);
 
-    await addCadastro(atualizado);
-    await persistirSessoesRegistradorFromCadastro(atualizado, addSessaoAplicacao);
-    const lista = await getAllCadastros();
-    setCadastros(lista);
+  const iniciarSalvar = useCallback(() => {
+    setErro('');
+    setSucesso('');
+    const montado = montarResultadoECadastro();
+    if (!montado) return;
+    setResultadoPendente(montado.resultado);
+    setCadastroPendente(montado.cadastroAtualizado);
+    setRubricaMilitarAberto(true);
+  }, [montarResultadoECadastro]);
 
-    setModalTemposAberto(false);
-    setCadastroSelecionado(null);
-    setTempoCorrida('');
-    setTempoNatacao('');
-    setErroTempos('');
+  const commitFinal = useCallback(
+    async (resultado: ResultadoCorridaItem, cadastroAtualizado: CadastroItemPersist, assinatura: AplicadorAssinaturaResumo) => {
+      if (!tipoProva) return;
+      setSalvando(true);
+      setErro('');
+      try {
+        const svg = resultado.rubricaCandidatoSvg?.trim();
+        let cadastroFinal = cadastroAtualizado;
+        if (svg) {
+          if (tipoProva === 'natacao') cadastroFinal = { ...cadastroFinal, rubricaNatacaoSvg: svg };
+          else if (tipoProva === 'permanencia') cadastroFinal = { ...cadastroFinal, rubricaPermanenciaSvg: svg };
+          else if (tipoProva === 'caminhada') cadastroFinal = { ...cadastroFinal, rubricaCaminhadaSvg: svg };
+          else if (tipoProva === 'corrida') cadastroFinal = { ...cadastroFinal, rubricaCorridaSvg: svg };
+        }
 
-    setCadastroAposTempos(atualizado);
-    setResultadoNatacaoOpcao(atualizado.resultadoPermanencia ?? null);
-    setErroNatacao('');
-    setModalNatacaoAberto(true);
-  }, [cadastroSelecionado, tempoCorrida, tempoNatacao]);
+        await addCadastro(cadastroFinal);
+        await addSessaoAplicacao({
+          id: `${SESSAO_REGISTRADOR_ID_PREFIX}${cadastroFinal.id}-${tipoProva}`,
+          dataAplicacao: dataTeste,
+          tipoProva,
+          resultados: [resultado],
+          aplicadorAssinatura: assinatura,
+          normaTaf,
+        });
 
-  const salvarResultadoNatacao = useCallback(async () => {
-    const base = cadastroAposTempos;
-    if (!base) return;
+        setSucesso(
+          `Teste de ${tituloProvaTaf(tipoProva, modoNaval)} registrado para ${(cadastroFinal.nome ?? '').trim() || 'militar'}.`,
+        );
+        resetForm();
+        setEtapa('norma');
+        setTipoProva(null);
+        carregarCadastros();
+      } catch (e) {
+        setErro(e instanceof Error ? e.message : 'Não foi possível salvar o registro.');
+      } finally {
+        setSalvando(false);
+        setAplicadorAberto(false);
+        setRubricaMilitarAberto(false);
+        setResultadoPendente(null);
+        setCadastroPendente(null);
+      }
+    },
+    [tipoProva, dataTeste, normaTaf, modoNaval, resetForm, carregarCadastros],
+  );
 
-    if (!resultadoNatacaoOpcao) {
-      setErroNatacao('Marque Aprovado ou Reprovado.');
-      return;
-    }
+  const tituloHeader =
+    etapa === 'norma'
+      ? 'Registrador de TAF'
+      : etapa === 'prova'
+        ? normaTaf === 'cfn'
+          ? 'TAF CFN'
+          : 'TAF Armada'
+        : tituloProvaTaf(tipoProva, modoNaval);
 
-    setErroNatacao('');
-
-    const hoje = dataHojeBr();
-    const atualizado: CadastroItemPersist = {
-      ...base,
-      resultadoPermanencia: resultadoNatacaoOpcao,
-      dataTafPermanencia: hoje,
-      tempoPermanencia: base.tempoPermanencia ?? '10:00',
-      resultadoNatacao: undefined,
-    };
-
-    await addCadastro(atualizado);
-    await persistirSessoesRegistradorFromCadastro(atualizado, addSessaoAplicacao);
-    const lista = await getAllCadastros();
-    setCadastros(lista);
-    fecharModalNatacao();
-  }, [cadastroAposTempos, resultadoNatacaoOpcao, fecharModalNatacao]);
+  const subHeader =
+    etapa === 'norma'
+      ? 'Lance resultados manuais no histórico e na nuvem'
+      : etapa === 'prova'
+        ? 'Escolha o tipo de teste'
+        : 'Busque o militar, informe o desempenho e confirme as rúbricas';
 
   return (
-    <>
-      <MobileScreenScaffold contentContainerStyle={styles.scrollContent}>
-        <TafCenteredTabHeader
-          title="Registrador de TAF"
-          subtitle="Registrar resultados manualmente no cadastro"
-          footer={<TopActionIcons activeRoute="AplicacaoTAF" inline centered />}
-        />
+    <MobileScreenScaffold scroll contentContainerStyle={styles.page}>
+      <TafCenteredTabHeader
+        title={tituloHeader}
+        subtitle={subHeader}
+        footer={<TopActionIcons activeRoute="AplicacaoTAF" />}
+      />
 
-          <View style={styles.aplicarBtnWrap}>
-            <TouchableOpacity
-              accessibilityLabel="Registrar"
-              activeOpacity={0.85}
-              onPress={abrirModalBusca}
-              style={styles.aplicarBtn}
+      {etapa !== 'norma' ? <TafBackLink label="Voltar" onPress={voltar} /> : null}
+
+      {etapa === 'norma' ? (
+        <View style={styles.launcher}>
+          <TouchableOpacity
+            accessibilityLabel="Registrar TAF Armada"
+            activeOpacity={0.92}
+            onPress={() => iniciarNorma('armada')}
+            style={[
+              styles.tileWrap,
+              Platform.OS === 'web' ? ({ boxShadow: '0 16px 40px rgba(37,99,235,0.28)' } as object) : null,
+            ]}
+          >
+            <LinearGradient
+              colors={[theme.primary, '#6366f1', '#4f46e5']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.tilePrimary}
             >
-              <Text style={styles.aplicarBtnText} numberOfLines={1}>
-                REGISTRAR
+              <View style={styles.tileBody}>
+                <View style={styles.iconRing}>
+                  <Ship size={26} color="#fff" strokeWidth={2.4} />
+                </View>
+                <View style={styles.textCol}>
+                  <Text style={[styles.tileTitlePrimary, isNarrowPhone ? styles.tileTitleCompact : null]}>
+                    TAF Armada
+                  </Text>
+                  <Text style={styles.tileSubPrimary}>Corrida, natação, permanência e caminhada</Text>
+                </View>
+                <Sparkles size={18} color="rgba(255,255,255,0.5)" />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            accessibilityLabel="Registrar TAF CFN"
+            activeOpacity={0.92}
+            onPress={() => iniciarNorma('cfn')}
+            style={styles.tileWrap}
+          >
+            <LinearGradient
+              colors={[...NAVAL_CAMO_GRADIENT]}
+              locations={[0, 0.22, 0.48, 0.72, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.tileNaval}
+            >
+              <View style={styles.tileBody}>
+                <View style={styles.iconRingNaval}>
+                  <Anchor size={24} color="#f0ebe0" strokeWidth={2.4} />
+                </View>
+                <View style={styles.textCol}>
+                  <Text style={[styles.tileTitleNaval, isNarrowPhone ? styles.tileTitleCompact : null]}>
+                    TAF CFN
+                  </Text>
+                  <Text style={styles.tileSubNaval}>Corrida 3200, natação 100 e provas FN</Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {etapa === 'prova' ? (
+        <AplicarTafProvaSelector variant={modoNaval ? 'naval' : 'padrao'} onSelect={selecionarProva} />
+      ) : null}
+
+      {etapa === 'form' && tipoProva ? (
+        <TafGlassPanel accent={modoNaval ? 'violet' : 'cyan'} style={styles.formPanel}>
+          <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Militar cadastrado</Text>
+          <View style={styles.buscaRow}>
+            <TextInput
+              value={busca}
+              onChangeText={(v) => {
+                setBusca(v);
+                setCadastro(null);
+                setAvisoBusca('');
+              }}
+              onSubmitEditing={() => resolverMilitar(busca)}
+              placeholder="NIP ou nome"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.input,
+                {
+                  color: ui.text,
+                  borderColor: theme.border,
+                  backgroundColor: ui.inputBg,
+                },
+              ]}
+              autoCapitalize="characters"
+              returnKeyType="search"
+            />
+            <TouchableOpacity
+              accessibilityLabel="Buscar militar"
+              onPress={() => resolverMilitar(busca)}
+              style={[styles.buscaBtn, { backgroundColor: theme.primary }]}
+            >
+              <Search size={18} color="#fff" strokeWidth={2.4} />
+            </TouchableOpacity>
+          </View>
+          {avisoBusca ? (
+            <Text style={[styles.hint, { color: theme.error }]}>{avisoBusca}</Text>
+          ) : null}
+          {cadastro ? (
+            <View style={[styles.militarCard, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+              <Text style={[styles.militarNome, { color: theme.text }]}>{cadastro.nome}</Text>
+              <Text style={[styles.militarMeta, { color: theme.textSecondary }]}>
+                NIP {formatNipInput(cadastro.nip) || cadastro.nip}
+                {cadastro.categoria ? ` · ${cadastro.categoria}` : ''}
               </Text>
-            </TouchableOpacity>
-          </View>
+            </View>
+          ) : null}
 
-          <View style={{ height: 16 }} />
-
-          <CadastroPlanilhaBlock
-            variant="aplicacaoTaf"
-            cadastros={cadastros}
-            cardGlassEnabled={cardGlassEnabled}
-            tableTitle="Registros TAF"
-            emptyMessageWhenNoData="Nenhum cadastro ainda. Cadastre militares na página de Cadastro."
-            showActions={false}
+          <Text style={[styles.sectionLabel, { color: theme.textMuted, marginTop: 14 }]}>
+            Data do teste
+          </Text>
+          <TextInput
+            value={dataTeste}
+            onChangeText={(v) => setDataTeste(formatDateInput(v))}
+            placeholder="DD/MM/AAAA"
+            placeholderTextColor={theme.textMuted}
+            keyboardType="number-pad"
+            maxLength={10}
+            style={[
+              styles.input,
+              {
+                color: ui.text,
+                borderColor: theme.border,
+                backgroundColor: ui.inputBg,
+              },
+            ]}
           />
-      </MobileScreenScaffold>
 
-      {modalBuscaAberto ? (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nome ou NIP</Text>
-              <TouchableOpacity
-                accessibilityLabel="Fechar"
-                onPress={fecharModalBusca}
-                style={styles.modalCloseBtn}
-              >
-                <X size={18} color={ui.icon} strokeWidth={3} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              Informe o nome completo ou o NIP do militar cadastrado.
-            </Text>
-
-            <TextInput
-              value={nomeOuNip}
-              onChangeText={onChangeNomeOuNip}
-              placeholder="Nome ou NIP (00.0000.00)"
-              placeholderTextColor={ui.placeholder}
-              style={[styles.modalInput, { borderColor: inputBorder, color: ui.text }]}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              autoCapitalize="words"
-              textContentType="none"
-              keyboardType={
-                nomeOuNip.length > 0 && !/[a-zA-ZÀ-ÿ]/.test(nomeOuNip)
-                  ? Platform.OS === 'web'
-                    ? 'default'
-                    : 'number-pad'
-                  : 'default'
-              }
-            />
-
-            <View style={styles.modalBtns}>
-              <TouchableOpacity
-                accessibilityLabel="Cancelar"
-                onPress={fecharModalBusca}
-                style={[styles.modalBtn, styles.modalBtnCancel]}
-              >
-                <Text style={styles.modalBtnTextCancel}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel="Confirmar"
-                onPress={confirmarBusca}
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-              >
-                <Text style={styles.modalBtnTextPrimary}>Confirmar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      ) : null}
-
-      {modalTemposAberto ? (
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, styles.modalCardTempos]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Tempos</Text>
-              <TouchableOpacity
-                accessibilityLabel="Fechar tempos"
-                onPress={fecharModalTempos}
-                style={styles.modalCloseBtn}
-              >
-                <X size={18} color={ui.icon} strokeWidth={3} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              Registre os tempos no formato MM:SS (minutos e segundos). Ex.: 12:45 para 12 minutos e 45 segundos.
-            </Text>
-
-            <Text style={styles.fieldLabel}>Corrida</Text>
-            <TextInput
-              value={tempoCorrida}
-              onChangeText={(t) => {
-                setErroTempos('');
-                setTempoCorrida(formatMinutosSegundosInput(t));
-              }}
-              placeholder="MM:SS"
-              placeholderTextColor={ui.placeholder}
-              style={[styles.modalInput, { borderColor: inputBorder, color: ui.text }]}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              autoCapitalize="none"
-              textContentType="none"
-              keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-              maxLength={5}
-            />
-
-            <Text style={styles.fieldLabel}>Natação</Text>
-            <TextInput
-              value={tempoNatacao}
-              onChangeText={(t) => {
-                setErroTempos('');
-                setTempoNatacao(formatMinutosSegundosInput(t));
-              }}
-              placeholder="MM:SS"
-              placeholderTextColor={ui.placeholder}
-              style={[styles.modalInput, { borderColor: inputBorder, color: ui.text }]}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              autoCapitalize="none"
-              textContentType="none"
-              keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-              maxLength={5}
-            />
-
-            {erroTempos ? <Text style={styles.erroTemposText}>{erroTempos}</Text> : null}
-
-            <View style={styles.modalBtns}>
-              <TouchableOpacity
-                accessibilityLabel="Cancelar"
-                onPress={fecharModalTempos}
-                style={[styles.modalBtn, styles.modalBtnCancel]}
-              >
-                <Text style={styles.modalBtnTextCancel}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel="Salvar tempos"
-                onPress={salvarTempos}
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-              >
-                <Text style={styles.modalBtnTextPrimary}>Salvar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      ) : null}
-
-      {modalNatacaoAberto ? (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Permanência</Text>
-              <TouchableOpacity
-                accessibilityLabel="Fechar resultado permanência"
-                onPress={fecharModalNatacao}
-                style={styles.modalCloseBtn}
-              >
-                <X size={18} color={ui.icon} strokeWidth={3} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              Marque o resultado da prova de permanência.
-            </Text>
-
-            <TouchableOpacity
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: resultadoNatacaoOpcao === 'aprovado' }}
-              onPress={() => {
-                setErroNatacao('');
-                setResultadoNatacaoOpcao('aprovado');
-              }}
-              style={styles.checkRow}
-              activeOpacity={0.85}
-            >
-              <View
+          {tipoProva === 'permanencia' ? (
+            <>
+              <Text style={[styles.sectionLabel, { color: theme.textMuted, marginTop: 14 }]}>
+                Situação
+              </Text>
+              <View style={styles.permRow}>
+                <TouchableOpacity
+                  onPress={() => setPermanencia('aprovado')}
+                  style={[
+                    styles.permBtn,
+                    {
+                      borderColor: permanencia === 'aprovado' ? theme.success : theme.border,
+                      backgroundColor:
+                        permanencia === 'aprovado' ? theme.gainMuted : theme.surface,
+                    },
+                  ]}
+                >
+                  <Check size={16} color={theme.success} strokeWidth={2.5} />
+                  <Text style={[styles.permText, { color: theme.success }]}>Aprovado</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setPermanencia('reprovado')}
+                  style={[
+                    styles.permBtn,
+                    {
+                      borderColor: permanencia === 'reprovado' ? theme.error : theme.border,
+                      backgroundColor:
+                        permanencia === 'reprovado' ? theme.lossMuted : theme.surface,
+                    },
+                  ]}
+                >
+                  <X size={16} color={theme.error} strokeWidth={2.5} />
+                  <Text style={[styles.permText, { color: theme.error }]}>Reprovado</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : isProvaComRepeticoes(tipoProva) ? (
+            <>
+              <Text style={[styles.sectionLabel, { color: theme.textMuted, marginTop: 14 }]}>
+                Repetições
+              </Text>
+              <TextInput
+                value={repeticoes}
+                onChangeText={(v) => setRepeticoes(v.replace(/\D/g, '').slice(0, 4))}
+                placeholder="0"
+                placeholderTextColor={theme.textMuted}
+                keyboardType="number-pad"
                 style={[
-                  styles.checkBox,
-                  resultadoNatacaoOpcao === 'aprovado' ? styles.checkBoxOn : styles.checkBoxOff,
+                  styles.input,
+                  {
+                    color: ui.text,
+                    borderColor: theme.border,
+                    backgroundColor: ui.inputBg,
+                  },
+                ]}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={[styles.sectionLabel, { color: theme.textMuted, marginTop: 14 }]}>
+                Tempo (MM:SS)
+              </Text>
+              <TextInput
+                value={tempo}
+                onChangeText={(v) => setTempo(formatMinutosSegundosInput(v))}
+                placeholder="00:00"
+                placeholderTextColor={theme.textMuted}
+                keyboardType="number-pad"
+                maxLength={5}
+                style={[
+                  styles.input,
+                  {
+                    color: ui.text,
+                    borderColor: theme.border,
+                    backgroundColor: ui.inputBg,
+                  },
+                ]}
+              />
+            </>
+          )}
+
+          {notaPreview ? (
+            <View style={[styles.notaBox, { borderColor: glass.border, backgroundColor: glass.bg }]}>
+              <Text style={[styles.notaLabel, { color: theme.textMuted }]}>Nota automática</Text>
+              <Text
+                style={[
+                  styles.notaValor,
+                  {
+                    color:
+                      notaPreview === 'REPROVADO' || notaPreview === 'Reprovado'
+                        ? theme.error
+                        : theme.success,
+                  },
                 ]}
               >
-                {resultadoNatacaoOpcao === 'aprovado' ? (
-                  <Check size={16} color="#FFFFFF" strokeWidth={3} />
-                ) : null}
-              </View>
-              <Text style={styles.checkLabel}>Aprovado</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: resultadoNatacaoOpcao === 'reprovado' }}
-              onPress={() => {
-                setErroNatacao('');
-                setResultadoNatacaoOpcao('reprovado');
-              }}
-              style={styles.checkRow}
-              activeOpacity={0.85}
-            >
-              <View
-                style={[
-                  styles.checkBox,
-                  resultadoNatacaoOpcao === 'reprovado' ? styles.checkBoxOn : styles.checkBoxOff,
-                ]}
-              >
-                {resultadoNatacaoOpcao === 'reprovado' ? (
-                  <Check size={16} color="#FFFFFF" strokeWidth={3} />
-                ) : null}
-              </View>
-              <Text style={styles.checkLabel}>Reprovado</Text>
-            </TouchableOpacity>
-
-            {erroNatacao ? <Text style={styles.erroTemposText}>{erroNatacao}</Text> : null}
-
-            <View style={[styles.modalBtns, { marginTop: 8 }]}>
-              <TouchableOpacity
-                accessibilityLabel="Cancelar"
-                onPress={fecharModalNatacao}
-                style={[styles.modalBtn, styles.modalBtnCancel]}
-              >
-                <Text style={styles.modalBtnTextCancel}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel="Confirmar resultado"
-                onPress={salvarResultadoNatacao}
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-              >
-                <Text style={styles.modalBtnTextPrimary}>Confirmar</Text>
-              </TouchableOpacity>
+                {notaPreview}
+              </Text>
             </View>
+          ) : null}
+
+          {erro ? <Text style={[styles.hint, { color: theme.error }]}>{erro}</Text> : null}
+
+          <View style={styles.saveBtn}>
+            <TafPrimaryButton
+              label={salvando ? 'Salvando…' : 'Continuar · Rúbricas'}
+              onPress={iniciarSalvar}
+              disabled={salvando || !cadastro}
+              loading={salvando}
+            />
           </View>
-        </View>
+        </TafGlassPanel>
       ) : null}
 
-      {modalErroAberto ? (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Atenção</Text>
-              <TouchableOpacity
-                accessibilityLabel="Fechar aviso"
-                onPress={() => setModalErroAberto(false)}
-                style={styles.modalCloseBtn}
-              >
-                <X size={18} color={ui.icon} strokeWidth={3} />
-              </TouchableOpacity>
-            </View>
+      {sucesso ? (
+        <Text style={[styles.sucesso, { color: theme.success }]}>{sucesso}</Text>
+      ) : null}
 
-            <Text style={styles.modalSubtitle}>{mensagemErro}</Text>
+      <RubricaCaptureModal
+        visible={rubricaMilitarAberto && resultadoPendente != null}
+        participante={resultadoPendente}
+        indice={0}
+        total={1}
+        tipoProva={tipoProva ?? 'corrida'}
+        ultimo
+        confirmLabel="Continuar · Aplicador"
+        onConfirm={(svg) => {
+          if (!resultadoPendente) return;
+          setResultadoPendente({
+            ...resultadoPendente,
+            rubricaCandidato: 'Rúbrica capturada',
+            rubricaCandidatoSvg: svg,
+          });
+          setRubricaMilitarAberto(false);
+          setAplicadorAberto(true);
+        }}
+        onSkip={() => {
+          setRubricaMilitarAberto(false);
+          setAplicadorAberto(true);
+        }}
+        onCancel={() => {
+          setRubricaMilitarAberto(false);
+          setResultadoPendente(null);
+          setCadastroPendente(null);
+        }}
+      />
 
-            <View style={styles.modalBtns}>
-              <TouchableOpacity
-                accessibilityLabel="Entendi"
-                onPress={() => setModalErroAberto(false)}
-                style={[styles.modalBtn, styles.modalBtnPrimary, { flex: 1 }]}
-              >
-                <Text style={styles.modalBtnTextPrimary}>Entendi</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+      <FluxoAssinaturaAplicadorModal
+        visible={aplicadorAberto}
+        onCancelar={() => {
+          if (salvando) return;
+          setAplicadorAberto(false);
+          setResultadoPendente(null);
+          setCadastroPendente(null);
+        }}
+        onConcluir={(assinatura) => {
+          if (!resultadoPendente || !cadastroPendente) return;
+          void commitFinal(resultadoPendente, cadastroPendente, assinatura);
+        }}
+      />
+
+      {salvando ? (
+        <View style={styles.savingOverlay} pointerEvents="none">
+          <ActivityIndicator color={theme.primary} size="large" />
         </View>
       ) : null}
-    </>
+    </MobileScreenScaffold>
   );
 }
 
-function createAplicacaoTafStyles(theme: AppTheme, ui: UiColors) {
-  return StyleSheet.create({
-  scrollContent: { paddingTop: 4, gap: 4 },
-  aplicarBtnWrap: {
-    width: '100%',
-    maxWidth: '100%',
-    alignSelf: 'stretch',
-    marginBottom: 0,
+const styles = StyleSheet.create({
+  page: {
+    gap: 12,
+    paddingBottom: 28,
   },
-  aplicarBtn: {
-    width: '100%',
-    paddingVertical: 16,
-    borderRadius: 14,
-    backgroundColor: ui.btnDarkBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0 8px 24px rgba(17,24,39,0.12)' } as object)
-      : {}),
+  launcher: {
+    gap: 12,
   },
-  aplicarBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 0.8,
+  tileWrap: {
+    borderRadius: PREMIUM.radiusLg + 6,
+    overflow: 'hidden',
   },
-
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
+  tilePrimary: {
+    padding: 18,
   },
-  modalCard: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 18,
-    backgroundColor: ui.modalBg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: theme.border,
+  tileNaval: {
+    padding: 18,
   },
-  modalCardTempos: {
-    maxHeight: '90%',
-  },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  modalTitle: { fontSize: 16, fontWeight: '900', color: ui.text },
-  modalSubtitle: { fontSize: 13, fontWeight: '700', color: ui.text, marginBottom: 12 },
-  modalCloseBtn: { padding: 8, borderRadius: 12, borderWidth: 1, borderColor: theme.border },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: ui.text,
-    marginBottom: 6,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 14,
-    backgroundColor: ui.inputBg,
-  },
-  modalBtns: { flexDirection: 'row', gap: 12, justifyContent: 'flex-end' },
-  modalBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, alignItems: 'center' },
-  modalBtnCancel: { borderColor: theme.border, backgroundColor: ui.toggleInactiveBg },
-  modalBtnTextCancel: { color: ui.text, fontSize: 13, fontWeight: '900' },
-  modalBtnPrimary: {
-    borderColor: theme.border,
-    backgroundColor: ui.btnDarkBg,
-  },
-  modalBtnTextPrimary: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
-  erroTemposText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.isDark ? ui.text : '#B91C1C',
-    marginBottom: 12,
-  },
-  checkRow: {
+  tileBody: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    marginBottom: 4,
+    gap: 14,
   },
-  checkBox: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+  iconRing: {
+    width: 50,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
   },
-  checkBoxOff: {
-    borderColor: theme.border,
-    backgroundColor: ui.inputBg,
+  iconRingNaval: {
+    width: 50,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: 'rgba(240,235,224,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(240,235,224,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  checkBoxOn: {
-    borderColor: ui.btnDarkBg,
-    backgroundColor: ui.btnDarkBg,
+  textCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
   },
-  checkLabel: {
+  tileTitlePrimary: {
+    color: '#fff',
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  tileTitleNaval: {
+    color: '#f0ebe0',
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  tileTitleCompact: {
+    fontSize: 19,
+  },
+  tileSubPrimary: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tileSubNaval: {
+    color: 'rgba(240,235,224,0.78)',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  formPanel: {
+    gap: 8,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  buscaRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'web' ? 10 : 12,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  buscaBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hint: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  militarCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 4,
+    gap: 2,
+  },
+  militarNome: {
     fontSize: 15,
     fontWeight: '800',
-    color: ui.text,
   },
-  });
-}
+  militarMeta: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  permRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  permBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  permText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  notaBox: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  notaLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  notaValor: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  saveBtn: {
+    marginTop: 12,
+  },
+  sucesso: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  savingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15,23,42,0.12)',
+  },
+});

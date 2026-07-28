@@ -1,12 +1,25 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import type { TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 
-export type ModalidadeResultadoTaf = 'corrida' | 'natacao' | 'permanencia' | 'caminhada';
+export type ModalidadeResultadoTaf =
+  | 'corrida'
+  | 'natacao'
+  | 'permanencia'
+  | 'caminhada'
+  | 'flexao_barra'
+  | 'flexao_solo'
+  | 'abdominal_remador'
+  | 'abdominal_prancha';
 
 const LABEL_MODALIDADE: Record<ModalidadeResultadoTaf, string> = {
   corrida: 'Corrida',
   natacao: 'Natação',
   permanencia: 'Permanência',
   caminhada: 'Caminhada',
+  flexao_barra: 'Flexão na barra',
+  flexao_solo: 'Flexão no solo',
+  abdominal_remador: 'Abdominal remador',
+  abdominal_prancha: 'Abdominal prancha',
 };
 
 export function labelModalidadeResultado(m: ModalidadeResultadoTaf): string {
@@ -16,7 +29,7 @@ export function labelModalidadeResultado(m: ModalidadeResultadoTaf): string {
 /** Remove todos os campos de resultado da modalidade no cadastro (mantém dados pessoais). */
 export function limparResultadoModalidadeCadastro(
   c: CadastroItemPersist,
-  modalidade: ModalidadeResultadoTaf,
+  modalidade: ModalidadeResultadoTaf | TipoProvaAplicada,
 ): CadastroItemPersist {
   const next: CadastroItemPersist = { ...c };
   const legado = next as CadastroItemPersist & { tempo?: string };
@@ -59,6 +72,26 @@ export function limparResultadoModalidadeCadastro(
       if (next.modalidadeDistanciaAtiva === 'caminhada') {
         next.modalidadeDistanciaAtiva = undefined;
       }
+      break;
+    case 'flexao_barra':
+      next.repsFlexaoBarra = undefined;
+      next.notaFlexaoBarra = undefined;
+      next.dataTafFlexaoBarra = undefined;
+      break;
+    case 'flexao_solo':
+      next.repsFlexaoSolo = undefined;
+      next.notaFlexaoSolo = undefined;
+      next.dataTafFlexaoSolo = undefined;
+      break;
+    case 'abdominal_remador':
+      next.repsAbdominalRemador = undefined;
+      next.notaAbdominalRemador = undefined;
+      next.dataTafAbdominalRemador = undefined;
+      break;
+    case 'abdominal_prancha':
+      next.tempoAbdominalPrancha = undefined;
+      next.notaAbdominalPrancha = undefined;
+      next.dataTafAbdominalPrancha = undefined;
       break;
   }
 

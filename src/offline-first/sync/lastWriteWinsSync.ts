@@ -317,9 +317,10 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
     const decision = decideLastWriteWins(local, remote);
 
     // Id só no local (já synced):
-    // - full fetch confiável: remover local — ausência na nuvem = verdade (chefe: todas;
-    //   membro: só aplicadores, SoT do e-mail chefe).
-    // - incremental / snapshot parcial / outras coleções do membro: NÃO apagar.
+    // - full + poda permitida (não sessões): remover local — ausência na nuvem = verdade.
+    // - sessões em full fetch: REENVIAR (cura órfão marcado synced sem existir na nuvem —
+    //   evita Parcial só num aparelho e poda destrutiva após falha de upload).
+    // - incremental / outras coleções do membro: NÃO apagar; cadastros preservam.
     if (
       decision.action === 'upload' &&
       decision.reason === 'somente_local' &&
@@ -327,6 +328,21 @@ function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }
       !isUnsyncedLocalStatus(local.syncStatus) &&
       !forceUploadIds?.has(id)
     ) {
+      if (collection === 'sessoes' && fetchMode === 'full') {
+        plan.push({
+          collection,
+          id,
+          action: 'upload',
+          local: {
+            ...local,
+            updatedAt: Math.max(readUpdatedAt(local) + 1, Date.now()),
+            syncStatus: 'updated',
+          },
+          remote,
+          hasRemote: false,
+        });
+        continue;
+      }
       if (
         fetchMode === 'full' &&
         decideSyncedLocalOnlyAbsence(allowCloudAbsencePrune) === 'prune'

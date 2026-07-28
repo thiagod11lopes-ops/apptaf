@@ -99,7 +99,7 @@ describe('decideSyncedLocalOnlyAbsence', () => {
     expect(decideSyncedLocalOnlyAbsence(true)).toBe('prune');
   });
 
-  it('allow=false → preserve (evita loop baixar→apagar→baixar)', () => {
+  it('allow=false → preserve (sessões órfãs são reenviadas no LWW em full fetch)', () => {
     expect(decideSyncedLocalOnlyAbsence(false)).toBe('preserve');
   });
 });

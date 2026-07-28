@@ -81,7 +81,7 @@ export function TopActionIcons({
 }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss, firebaseEnabled } = useAuth();
-  const { connectivity, syncing, appMode } = useOfflineSyncState();
+  const { connectivity, syncing, appMode, pendingCount, uploadError } = useOfflineSyncState();
   const { e2eActive, status: e2eStatus, copy: e2eCopy } = useE2eEncryptionStatus();
   const cloudOnline = connectivity === 'ONLINE' || connectivity === 'SYNCING';
   /** Envio ou recebimento ativo com a nuvem → ícone azul. */
@@ -91,6 +91,8 @@ export function TopActionIcons({
       connectivity === 'SYNCING' ||
       appMode === 'ONLINE_SYNCING' ||
       appMode === 'ONLINE_PREPARING');
+  /** Há dados locais ainda não enviados — verde enganava (aparelhos divergiam). */
+  const cloudHasPending = cloudOnline && !cloudTransferring && pendingCount > 0;
   const [e2eModalVisible, setE2eModalVisible] = useState(false);
   const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
 
@@ -131,22 +133,32 @@ export function TopActionIcons({
     ? theme.loss
     : cloudTransferring
       ? theme.primary
-      : theme.gain;
+      : cloudHasPending
+        ? theme.tokens.warning500
+        : theme.gain;
   const cloudMutedBg = !cloudOnline
     ? 'rgba(220, 38, 38, 0.1)'
     : cloudTransferring
       ? theme.accentMuted
-      : theme.gainMuted;
+      : cloudHasPending
+        ? 'rgba(245, 158, 11, 0.14)'
+        : theme.gainMuted;
   const cloudTooltipTitle = !cloudOnline
     ? 'Offline · local'
     : cloudTransferring
       ? 'Sincronizando · nuvem'
-      : 'Online · nuvem';
+      : cloudHasPending
+        ? `Pendente · ${pendingCount} envio(s)`
+        : 'Online · nuvem';
   const cloudTooltipDescription = !cloudOnline
     ? 'Sem internet — toque para ver o status. Alterações ficam no IndexedDB até reconectar.'
     : cloudTransferring
       ? 'Enviando ou recebendo dados da nuvem. Toque para ver o progresso.'
-      : 'Toque para ver o status: barras de recebimento e envio com a nuvem.';
+      : cloudHasPending
+        ? uploadError
+          ? `Há dados neste aparelho ainda não enviados. Última tentativa: ${uploadError}. Toque para sincronizar.`
+          : 'Há dados neste aparelho ainda não enviados à nuvem. Toque para sincronizar e igualar os outros dispositivos.'
+        : 'Toque para ver o status: barras de recebimento e envio com a nuvem.';
 
   const openSyncStatus = useCallback(() => {
     setSyncStatusModalVisible(true);
@@ -175,7 +187,9 @@ export function TopActionIcons({
                   ? 'Offline: usando dados locais IndexedDB. Abrir status de sincronização.'
                   : cloudTransferring
                     ? 'Sincronizando com a nuvem: enviando ou recebendo dados. Abrir status.'
-                    : 'Online: usando dados da nuvem. Abrir status de sincronização.'
+                    : cloudHasPending
+                      ? `Há ${pendingCount} pendência(s) de envio neste aparelho. Abrir status de sincronização.`
+                      : 'Online: usando dados da nuvem. Abrir status de sincronização.'
               }
             >
               {cloudOnline ? (

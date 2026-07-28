@@ -1060,16 +1060,25 @@ async function runSyncPipeline(
 
     if (silent && !forceUiError) {
       // Auto-sync: não trava a UI em "Falha"; agenda nova tentativa com cooldown.
-      backgroundSyncCooldownUntil = Date.now() + 45_000;
+      // Com pendências (ex.: sessão parcial no iOS), cooldown curto para convergência.
+      const pendingAfterFail = pendingSummary.total;
+      backgroundSyncCooldownUntil =
+        Date.now() + (pendingAfterFail > 0 ? 8_000 : 45_000);
       if (uiPhase !== 'success' && uiPhase !== 'already_up_to_date') {
         uiPhase = 'offline';
-        uploadError = null;
-        uploadErrorDetail = null;
-        syncMessage = '';
+        // Mantém último erro para o modal de status (não fingir que está tudo ok).
+        uploadError = detail.message;
+        uploadErrorDetail = detail;
+        syncMessage = pendingAfterFail > 0
+          ? `Envio pendente (${pendingAfterFail}). Nova tentativa em breve…`
+          : '';
         syncSteps = createInitialSyncSteps();
         errorStepId = null;
       }
       notifyListeners();
+      if (pendingAfterFail > 0) {
+        syncManager.scheduleBackgroundSync(8_500);
+      }
       return { ok: false, error: detail.message };
     }
 

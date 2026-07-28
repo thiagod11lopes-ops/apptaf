@@ -33,7 +33,7 @@ export type AbsencePlanAction = 'prune' | 'preserve';
 /**
  * Id só no local, já synced, sem force-upload:
  * - prune → tombstone sintético (download deleted)
- * - preserve → não apagar (membro / incremental / snapshot parcial)
+ * - preserve → não apagar; sessões em full fetch são reenviadas no LWW (cura órfão)
  */
 export function decideSyncedLocalOnlyAbsence(allowCloudAbsencePrune: boolean): AbsencePlanAction {
   return allowCloudAbsencePrune ? 'prune' : 'preserve';

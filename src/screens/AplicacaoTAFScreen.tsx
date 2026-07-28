@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Anchor, Check, Search, Ship, Sparkles, X } from 'lucide-react-native';
+import { AlertTriangle, Anchor, Check, Ship, Sparkles, UserPlus, X } from 'lucide-react-native';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
@@ -27,6 +27,8 @@ import { getAplicarTafGlass } from '../components/taf/aplicar/aplicarTafTheme';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 import { RubricaCaptureModal } from '../components/RubricaCaptureModal';
 import { FluxoAssinaturaAplicadorModal } from '../components/sismav/FluxoAssinaturaAplicadorModal';
+import { ModernModal } from '../components/sismav/ModernModal';
+import { PressableScale } from '../components/premium/PressableScale';
 import {
   addCadastro,
   getAllCadastros,
@@ -49,13 +51,15 @@ import {
   aplicarResultadoNoCadastro,
 } from './aplicarTafNotaHelpers';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
-import { formatNipInput } from '../utils/nipFormat';
+import { formatNipInput, nipDigitos } from '../utils/nipFormat';
 import { dataBrParaIso, dataHojeBr } from '../utils/tafRegistro';
+import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
 import {
   formatMinutosSegundosInput,
   tempoMinutosSegundosValido,
 } from '../utils/formatMinutosSegundos';
 import { SESSAO_REGISTRADOR_ID_PREFIX } from '../utils/sessoesUnificadasResultados';
+import { navigateTab } from '../navigation/navigationRef';
 
 type Etapa = 'norma' | 'prova' | 'form';
 type NormaTaf = 'armada' | 'cfn';
@@ -76,6 +80,13 @@ function dataAplicacaoValida(value: string): boolean {
   return dataBrParaIso(value) != null;
 }
 
+function dataNascimentoValida(value: string): boolean {
+  const t = value.trim();
+  if (!t) return false;
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(t)) return false;
+  return idadeFromDataNascimento(t) != null;
+}
+
 export default function AplicacaoTAFScreen() {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -88,9 +99,12 @@ export default function AplicacaoTAFScreen() {
   const modoNaval = normaTaf === 'cfn';
 
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
-  const [busca, setBusca] = useState('');
+  const [nip, setNip] = useState('');
+  const [nome, setNome] = useState('');
+  const [dataNascimento, setDataNascimento] = useState('');
   const [cadastro, setCadastro] = useState<CadastroItemPersist | null>(null);
   const [avisoBusca, setAvisoBusca] = useState('');
+  const [modalNaoCadastrado, setModalNaoCadastrado] = useState(false);
   const [tempo, setTempo] = useState('');
   const [repeticoes, setRepeticoes] = useState('');
   const [permanencia, setPermanencia] = useState<'aprovado' | 'reprovado' | null>(null);
@@ -113,9 +127,12 @@ export default function AplicacaoTAFScreen() {
   useAuthDataReload(carregarCadastros);
 
   const resetForm = useCallback(() => {
-    setBusca('');
+    setNip('');
+    setNome('');
+    setDataNascimento('');
     setCadastro(null);
     setAvisoBusca('');
+    setModalNaoCadastrado(false);
     setTempo('');
     setRepeticoes('');
     setPermanencia(null);
@@ -124,6 +141,76 @@ export default function AplicacaoTAFScreen() {
     setResultadoPendente(null);
     setCadastroPendente(null);
   }, []);
+
+  const aplicarCadastroEncontrado = useCallback((encontrado: CadastroItemPersist) => {
+    setCadastro(encontrado);
+    setNip(formatNipInput(encontrado.nip));
+    setNome((encontrado.nome ?? '').trim());
+    setDataNascimento((encontrado.dataNascimento ?? '').trim());
+    setAvisoBusca('');
+    setModalNaoCadastrado(false);
+    setErro('');
+  }, []);
+
+  const limparMilitar = useCallback(() => {
+    setCadastro(null);
+    setNome('');
+    setDataNascimento('');
+    setAvisoBusca('');
+  }, []);
+
+  const onChangeNip = useCallback(
+    (raw: string) => {
+      const formatado = formatNipInput(raw);
+      setNip(formatado);
+      setErro('');
+      const digits = nipDigitos(formatado);
+      if (!digits) {
+        limparMilitar();
+        return;
+      }
+
+      const res = buscarCadastroPorNomeOuNip(cadastros, formatado);
+      if (res.kind === 'found') {
+        aplicarCadastroEncontrado(res.cadastro);
+        return;
+      }
+
+      if (digits.length >= 4 && digits.length < 8) {
+        const prefixos = cadastros.filter((c) => nipDigitos(c.nip).startsWith(digits));
+        if (prefixos.length === 1) {
+          aplicarCadastroEncontrado(prefixos[0]);
+          return;
+        }
+        limparMilitar();
+        return;
+      }
+
+      limparMilitar();
+      if (digits.length >= 8) {
+        if (res.kind === 'ambiguous') {
+          setAvisoBusca('Vários cadastros correspondem a este NIP.');
+        } else {
+          setModalNaoCadastrado(true);
+        }
+      }
+    },
+    [aplicarCadastroEncontrado, cadastros, limparMilitar],
+  );
+
+  const cadastroEfetivo = useMemo((): CadastroItemPersist | null => {
+    if (!cadastro) return null;
+    return {
+      ...cadastro,
+      dataNascimento: dataNascimento.trim(),
+      nome: nome.trim() || cadastro.nome,
+    };
+  }, [cadastro, dataNascimento, nome]);
+
+  const idadePreview = useMemo(() => {
+    if (!dataNascimentoValida(dataNascimento)) return null;
+    return idadeFromDataNascimento(dataNascimento);
+  }, [dataNascimento]);
 
   const voltar = useCallback(() => {
     if (salvando) return;
@@ -156,41 +243,16 @@ export default function AplicacaoTAFScreen() {
     setEtapa('form');
   }, [resetForm]);
 
-  const resolverMilitar = useCallback(
-    (texto: string) => {
-      setErro('');
-      const t = texto.trim();
-      if (!t) {
-        setCadastro(null);
-        setAvisoBusca('');
-        return;
-      }
-      const res = buscarCadastroPorNomeOuNip(cadastros, t);
-      if (res.kind === 'found') {
-        setCadastro(res.cadastro);
-        setBusca(formatNipInput(res.cadastro.nip) || res.cadastro.nome);
-        setAvisoBusca('');
-        return;
-      }
-      setCadastro(null);
-      setAvisoBusca(
-        res.kind === 'ambiguous'
-          ? 'Vários cadastros correspondem. Informe o NIP completo.'
-          : 'Militar não encontrado. Cadastre-o antes de registrar o teste.',
-      );
-    },
-    [cadastros],
-  );
-
   const notaPreview = useMemo(() => {
-    if (!cadastro || !tipoProva || tipoProva === 'permanencia') return null;
+    if (!cadastroEfetivo || !tipoProva || tipoProva === 'permanencia') return null;
+    if (!dataNascimentoValida(dataNascimento)) return null;
     if (isProvaComRepeticoes(tipoProva)) {
       const n = parseInt(repeticoes.replace(/\D/g, ''), 10);
       if (!Number.isFinite(n) || n < 0) return null;
       return calcularNotaLinhaReps(
         tipoProva as 'flexao_barra' | 'flexao_solo' | 'abdominal_remador',
         n,
-        cadastro,
+        cadastroEfetivo,
       );
     }
     if (isProvaComCronometro(tipoProva)) {
@@ -198,37 +260,43 @@ export default function AplicacaoTAFScreen() {
       const modality = tipoProva === 'natacao' || tipoProva === 'abdominal_prancha' ? 'natacao' : 'corrida';
       const ms = parseTafPerformanceInput(modality, tempo);
       if (ms == null) return null;
-      const nota = calcularNotaLinhaTempo(tipoProva, ms, cadastro, modoNaval);
+      const nota = calcularNotaLinhaTempo(tipoProva, ms, cadastroEfetivo, modoNaval);
       return nota === '—' ? null : nota;
     }
     return null;
-  }, [cadastro, tipoProva, tempo, repeticoes, modoNaval]);
+  }, [cadastroEfetivo, tipoProva, tempo, repeticoes, modoNaval, dataNascimento]);
 
   const montarResultadoECadastro = useCallback((): {
     resultado: ResultadoCorridaItem;
     cadastroAtualizado: CadastroItemPersist;
   } | null => {
-    if (!cadastro || !tipoProva) {
-      setErro('Selecione o militar e o tipo de teste.');
+    if (!cadastroEfetivo || !tipoProva) {
+      setErro('Informe o NIP de um militar cadastrado.');
       return null;
     }
     if (!dataAplicacaoValida(dataTeste)) {
       setErro('Informe a data do teste no formato DD/MM/AAAA.');
       return null;
     }
+    if (tipoProva !== 'permanencia' && !dataNascimentoValida(dataNascimento)) {
+      setErro('Informe a data de nascimento (DD/MM/AAAA) para calcular a nota.');
+      return null;
+    }
+
+    const base = cadastroEfetivo;
 
     if (tipoProva === 'permanencia') {
       if (!permanencia) {
         setErro('Selecione Aprovado ou Reprovado na permanência.');
         return null;
       }
-      const cadastroAtualizado = aplicarPermanenciaNoCadastro(cadastro, permanencia, {
+      const cadastroAtualizado = aplicarPermanenciaNoCadastro(base, permanencia, {
         dataAplicacaoBr: dataTeste,
       });
       const resultado: ResultadoCorridaItem = {
         corredor: 1,
-        nome: (cadastro.nome ?? '').trim() || '—',
-        nip: cadastro.nip ?? '',
+        nome: (base.nome ?? '').trim() || '—',
+        nip: base.nip ?? '',
         tempoMs: 0,
         prova: 'permanencia',
         desempenhoTexto: permanencia === 'aprovado' ? 'Aprovado' : 'Reprovado',
@@ -248,17 +316,17 @@ export default function AplicacaoTAFScreen() {
       const notaTexto = calcularNotaLinhaReps(
         tipoProva as 'flexao_barra' | 'flexao_solo' | 'abdominal_remador',
         n,
-        cadastro,
+        base,
       );
-      const cadastroAtualizado = aplicarResultadoNoCadastro(cadastro, tipoProva, {
+      const cadastroAtualizado = aplicarResultadoNoCadastro(base, tipoProva, {
         repeticoes: n,
         modoTafNaval: modoNaval,
         dataAplicacaoBr: dataTeste,
       });
       const resultado: ResultadoCorridaItem = {
         corredor: 1,
-        nome: (cadastro.nome ?? '').trim() || '—',
-        nip: cadastro.nip ?? '',
+        nome: (base.nome ?? '').trim() || '—',
+        nip: base.nip ?? '',
         tempoMs: 0,
         prova: tipoProva,
         desempenhoTexto: String(n),
@@ -280,16 +348,16 @@ export default function AplicacaoTAFScreen() {
       setErro('Tempo inválido.');
       return null;
     }
-    const notaTexto = calcularNotaLinhaTempo(tipoProva, tempoMs, cadastro, modoNaval);
-    const cadastroAtualizado = aplicarResultadoNoCadastro(cadastro, tipoProva, {
+    const notaTexto = calcularNotaLinhaTempo(tipoProva, tempoMs, base, modoNaval);
+    const cadastroAtualizado = aplicarResultadoNoCadastro(base, tipoProva, {
       tempoMs,
       modoTafNaval: modoNaval,
       dataAplicacaoBr: dataTeste,
     });
     const resultado: ResultadoCorridaItem = {
       corredor: 1,
-      nome: (cadastro.nome ?? '').trim() || '—',
-      nip: cadastro.nip ?? '',
+      nome: (base.nome ?? '').trim() || '—',
+      nip: base.nip ?? '',
       tempoMs,
       prova: tipoProva,
       desempenhoTexto: formatMsByModality(modality, tempoMs),
@@ -299,9 +367,10 @@ export default function AplicacaoTAFScreen() {
     };
     return { resultado, cadastroAtualizado };
   }, [
-    cadastro,
+    cadastroEfetivo,
     tipoProva,
     dataTeste,
+    dataNascimento,
     permanencia,
     repeticoes,
     tempo,
@@ -456,48 +525,88 @@ export default function AplicacaoTAFScreen() {
 
       {etapa === 'form' && tipoProva ? (
         <TafGlassPanel accent={modoNaval ? 'violet' : 'cyan'} style={styles.formPanel}>
-          <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Militar cadastrado</Text>
-          <View style={styles.buscaRow}>
+          <View style={styles.fieldBlock}>
+            <LabelNip color={theme.textMuted} fontSize={12} fontWeight="700" />
             <TextInput
-              value={busca}
-              onChangeText={(v) => {
-                setBusca(v);
-                setCadastro(null);
-                setAvisoBusca('');
-              }}
-              onSubmitEditing={() => resolverMilitar(busca)}
-              placeholder="NIP ou nome"
+              value={nip}
+              onChangeText={onChangeNip}
+              placeholder="00.0000.00"
               placeholderTextColor={theme.textMuted}
+              keyboardType="number-pad"
+              maxLength={10}
               style={[
-                styles.input,
+                styles.inputFullFull,
                 {
                   color: ui.text,
                   borderColor: theme.border,
                   backgroundColor: ui.inputBg,
                 },
               ]}
-              autoCapitalize="characters"
-              returnKeyType="search"
+              accessibilityLabel="NIP do militar"
             />
-            <TouchableOpacity
-              accessibilityLabel="Buscar militar"
-              onPress={() => resolverMilitar(busca)}
-              style={[styles.buscaBtn, { backgroundColor: theme.primary }]}
-            >
-              <Search size={18} color="#fff" strokeWidth={2.4} />
-            </TouchableOpacity>
           </View>
+
+          <View style={styles.fieldBlock}>
+            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Nome</Text>
+            <TextInput
+              value={nome}
+              editable={false}
+              placeholder="Preenchido automaticamente pelo NIP"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.inputFullFull,
+                {
+                  color: ui.text,
+                  borderColor: theme.border,
+                  backgroundColor: theme.isDark ? 'rgba(15,23,42,0.35)' : 'rgba(248,250,252,0.95)',
+                  opacity: nome ? 1 : 0.85,
+                },
+              ]}
+              accessibilityLabel="Nome do militar"
+            />
+          </View>
+
+          <View style={styles.fieldBlock}>
+            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>
+              Data de nascimento
+            </Text>
+            <TextInput
+              value={dataNascimento}
+              onChangeText={(v) => setDataNascimento(formatDateInput(v))}
+              placeholder="DD/MM/AAAA"
+              placeholderTextColor={theme.textMuted}
+              keyboardType="number-pad"
+              maxLength={10}
+              editable={Boolean(cadastro)}
+              style={[
+                styles.inputFullFull,
+                {
+                  color: ui.text,
+                  borderColor: theme.border,
+                  backgroundColor: ui.inputBg,
+                  opacity: cadastro ? 1 : 0.7,
+                },
+              ]}
+              accessibilityLabel="Data de nascimento"
+            />
+            {idadePreview != null ? (
+              <Text style={[styles.hint, { color: theme.textSecondary }]}>
+                Idade: {idadePreview} anos
+              </Text>
+            ) : cadastro && !dataNascimento.trim() ? (
+              <Text style={[styles.hint, { color: theme.tokens.warning500 }]}>
+                Informe a data de nascimento para calcular a nota.
+              </Text>
+            ) : null}
+          </View>
+
           {avisoBusca ? (
             <Text style={[styles.hint, { color: theme.error }]}>{avisoBusca}</Text>
           ) : null}
           {cadastro ? (
-            <View style={[styles.militarCard, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-              <Text style={[styles.militarNome, { color: theme.text }]}>{cadastro.nome}</Text>
-              <Text style={[styles.militarMeta, { color: theme.textSecondary }]}>
-                NIP {formatNipInput(cadastro.nip) || cadastro.nip}
-                {cadastro.categoria ? ` · ${cadastro.categoria}` : ''}
-              </Text>
-            </View>
+            <Text style={[styles.hint, { color: theme.textSecondary }]}>
+              {cadastro.categoria}
+            </Text>
           ) : null}
 
           <Text style={[styles.sectionLabel, { color: theme.textMuted, marginTop: 14 }]}>
@@ -511,7 +620,7 @@ export default function AplicacaoTAFScreen() {
             keyboardType="number-pad"
             maxLength={10}
             style={[
-              styles.input,
+              styles.inputFullFull,
               {
                 color: ui.text,
                 borderColor: theme.border,
@@ -568,7 +677,7 @@ export default function AplicacaoTAFScreen() {
                 placeholderTextColor={theme.textMuted}
                 keyboardType="number-pad"
                 style={[
-                  styles.input,
+                  styles.inputFullFull,
                   {
                     color: ui.text,
                     borderColor: theme.border,
@@ -590,7 +699,7 @@ export default function AplicacaoTAFScreen() {
                 keyboardType="number-pad"
                 maxLength={5}
                 style={[
-                  styles.input,
+                  styles.inputFullFull,
                   {
                     color: ui.text,
                     borderColor: theme.border,
@@ -636,6 +745,45 @@ export default function AplicacaoTAFScreen() {
       {sucesso ? (
         <Text style={[styles.sucesso, { color: theme.success }]}>{sucesso}</Text>
       ) : null}
+
+      <ModernModal
+        visible={modalNaoCadastrado}
+        onClose={() => setModalNaoCadastrado(false)}
+        title="Militar não cadastrado"
+        icon={<AlertTriangle size={20} color="#FFFFFF" strokeWidth={2.2} />}
+        footer={
+          <View style={styles.modalFooter}>
+            <PressableScale
+              onPress={() => setModalNaoCadastrado(false)}
+              style={[styles.modalGhost, { borderColor: theme.border }]}
+            >
+              <Text style={[styles.modalGhostText, { color: theme.textSecondary }]}>Fechar</Text>
+            </PressableScale>
+            <PressableScale
+              onPress={() => {
+                setModalNaoCadastrado(false);
+                navigateTab('Cadastro');
+              }}
+              style={styles.modalPrimaryOuter}
+            >
+              <LinearGradient
+                colors={[...theme.tokens.gradientPrimaryBtn]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.modalPrimary}
+              >
+                <UserPlus size={16} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.modalPrimaryText}>Ir para Cadastro</Text>
+              </LinearGradient>
+            </PressableScale>
+          </View>
+        }
+      >
+        <Text style={[styles.modalMsg, { color: theme.text }]}>
+          Não há militar com o NIP {nip || 'informado'} no banco. Cadastre-o na aba Cadastro
+          antes de registrar o teste.
+        </Text>
+      </ModernModal>
 
       <RubricaCaptureModal
         visible={rubricaMilitarAberto && resultadoPendente != null}
@@ -761,19 +909,17 @@ const styles = StyleSheet.create({
   formPanel: {
     gap: 8,
   },
+  fieldBlock: {
+    gap: 6,
+  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-  buscaRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
+  inputFull: {
+    width: '100%',
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 12,
@@ -781,32 +927,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  buscaBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   hint: {
     fontSize: 13,
     lineHeight: 18,
     marginTop: 4,
-  },
-  militarCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 4,
-    gap: 2,
-  },
-  militarNome: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  militarMeta: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   permRow: {
     flexDirection: 'row',
@@ -859,5 +983,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(15,23,42,0.12)',
+  },
+  modalMsg: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  modalGhost: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalGhostText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalPrimaryOuter: {
+    flex: 1,
+  },
+  modalPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  modalPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

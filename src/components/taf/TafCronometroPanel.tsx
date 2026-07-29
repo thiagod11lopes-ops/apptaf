@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   Platform,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Pause, Play, Timer } from 'lucide-react-native';
@@ -81,8 +81,6 @@ export function TafCronometroPanel({
   tempoExibido,
   estado,
   pausadoTexto,
-  onPausadoTextoChange,
-  onBlurPausado,
   onIniciar,
   onPausar,
   onContinuar,
@@ -95,6 +93,34 @@ export function TafCronometroPanel({
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const status = statusMeta(estado, theme);
   const compact = variant === 'compact';
+  const blinkOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (estado !== 'pausado') {
+      blinkOpacity.stopAnimation();
+      blinkOpacity.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blinkOpacity, {
+          toValue: 0.22,
+          duration: 480,
+          useNativeDriver: true,
+        }),
+        Animated.timing(blinkOpacity, {
+          toValue: 1,
+          duration: 480,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      blinkOpacity.setValue(1);
+    };
+  }, [estado, blinkOpacity]);
 
   const displayColor =
     estado === 'rodando'
@@ -114,8 +140,11 @@ export function TafCronometroPanel({
 
   const monoWeb = Platform.OS === 'web' ? ({ fontVariantNumeric: 'tabular-nums' } as object) : null;
 
+  /** Pausado mantém o mesmo formato MM:SS:CS (não vira campo de edição). */
+  const tempoMostrado = estado === 'pausado' ? pausadoTexto || tempoExibido : tempoExibido;
+
   const splitTempo = (() => {
-    const parts = (estado === 'pausado' ? pausadoTexto : tempoExibido).split(':');
+    const parts = tempoMostrado.split(':');
     if (parts.length >= 3) {
       return { mm: parts[0] || '00', ss: parts[1] || '00', cs: parts[2] || '00' };
     }
@@ -140,41 +169,24 @@ export function TafCronometroPanel({
     </View>
   );
 
-  const timeNode =
-    estado === 'pausado' ? (
-      <TextInput
-        value={pausadoTexto}
-        onChangeText={onPausadoTextoChange}
-        onBlur={onBlurPausado}
-        selectTextOnFocus
-        accessibilityLabel="Editar tempo do cronômetro pausado"
-        placeholder="MM:SS:CS"
-        placeholderTextColor="rgba(148, 163, 184, 0.65)"
-        autoCorrect={false}
-        autoComplete="off"
-        spellCheck={false}
-        {...(Platform.OS === 'ios' ? { textContentType: 'none' as const } : {})}
-        keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
-        style={[
-          compact ? styles.displayInputCompact : styles.displayInput,
-          { color: displayColor },
-          monoWeb,
-          Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null,
-        ]}
-      />
-    ) : (
-      <View style={styles.digitsRow} accessibilityLabel={`Tempo ${tempoExibido}`}>
-        {digitBlock(splitTempo.mm, 'min')}
-        <Text style={[compact ? styles.digitSepCompact : styles.digitSep, { color: displayColor }]}>
-          :
-        </Text>
-        {digitBlock(splitTempo.ss, 'seg')}
-        <Text style={[compact ? styles.digitSepCompact : styles.digitSep, { color: displayColor }]}>
-          :
-        </Text>
-        {digitBlock(splitTempo.cs, 'cs')}
-      </View>
-    );
+  const timeNode = (
+    <Animated.View
+      style={[styles.digitsRow, estado === 'pausado' ? { opacity: blinkOpacity } : null]}
+      accessibilityLabel={
+        estado === 'pausado' ? `Cronômetro pausado em ${tempoMostrado}` : `Tempo ${tempoMostrado}`
+      }
+    >
+      {digitBlock(splitTempo.mm, 'min')}
+      <Text style={[compact ? styles.digitSepCompact : styles.digitSep, { color: displayColor }]}>
+        :
+      </Text>
+      {digitBlock(splitTempo.ss, 'seg')}
+      <Text style={[compact ? styles.digitSepCompact : styles.digitSep, { color: displayColor }]}>
+        :
+      </Text>
+      {digitBlock(splitTempo.cs, 'cs')}
+    </Animated.View>
+  );
 
   const rodando = estado === 'rodando';
   const toggleLabel = rodando ? 'Pausar' : 'Iniciar';

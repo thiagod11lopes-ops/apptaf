@@ -21,16 +21,26 @@ import {
 } from '../../premium/ConfirmacaoModoDemonstracaoModal';
 
 type Props = {
-  /** Preenche os NIPs com militares de exemplo (chamado ao ativar o Modo Teste). */
-  onPreencherNips: () => void | Promise<void>;
+  /** Preenche NIPs/nomes de exemplo para a quantidade informada (ao ativar). */
+  onPreencherNips: (quantidade: number) => void | Promise<void>;
   /** Limpa os NIPs preenchidos (chamado ao desativar o Modo Teste). */
   onLimparNips: () => void;
+  /** Quantidade sugerida no modal (ex.: participantes já na tela). */
+  quantidadeInicial?: number;
+  /** Máximo de participantes no Modo Teste. */
+  quantidadeMaxima?: number;
 };
 
 /**
- * Modo Teste na etapa de NIPs: ao ativar preenche NIPs; ao desativar limpa os campos.
+ * Modo Teste na etapa de NIPs: ao ativar pergunta a quantidade e preenche NIPs/nomes;
+ * ao desativar limpa os campos.
  */
-export function AplicarTafModoTesteBar({ onPreencherNips, onLimparNips }: Props) {
+export function AplicarTafModoTesteBar({
+  onPreencherNips,
+  onLimparNips,
+  quantidadeInicial = 1,
+  quantidadeMaxima = 50,
+}: Props) {
   const { theme } = useTheme();
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [demoCarregando, setDemoCarregando] = useState(false);
@@ -52,30 +62,34 @@ export function AplicarTafModoTesteBar({ onPreencherNips, onLimparNips }: Props)
     setDemoModal({ phase: 'confirm', ativar: !demoAtivo });
   }, [demoAtivo, demoCarregando]);
 
-  const confirmar = useCallback(() => {
-    if (!demoModal || demoCarregando) return;
-    const { ativar } = demoModal;
-    setDemoModal({ phase: 'loading', ativar });
-    setDemoCarregando(true);
-    void toggleModoDemonstracaoSistema()
-      .then(async ({ ativo }) => {
-        setDemoAtivo(ativo);
-        if (ativo) {
-          await onPreencherNips();
-        } else {
-          onLimparNips();
-        }
-        setDemoModal({ phase: 'success', ativar: ativo });
-      })
-      .catch((e) => {
-        setDemoModal({
-          phase: 'error',
-          ativar,
-          errorMessage: e instanceof Error ? e.message : 'Tente novamente.',
-        });
-      })
-      .finally(() => setDemoCarregando(false));
-  }, [demoModal, demoCarregando, onPreencherNips, onLimparNips]);
+  const confirmar = useCallback(
+    (quantidadeParticipantes?: number) => {
+      if (!demoModal || demoCarregando) return;
+      const { ativar } = demoModal;
+      setDemoModal({ phase: 'loading', ativar });
+      setDemoCarregando(true);
+      void toggleModoDemonstracaoSistema()
+        .then(async ({ ativo }) => {
+          setDemoAtivo(ativo);
+          if (ativo) {
+            const n = Math.max(1, quantidadeParticipantes ?? quantidadeInicial);
+            await onPreencherNips(n);
+          } else {
+            onLimparNips();
+          }
+          setDemoModal({ phase: 'success', ativar: ativo });
+        })
+        .catch((e) => {
+          setDemoModal({
+            phase: 'error',
+            ativar,
+            errorMessage: e instanceof Error ? e.message : 'Tente novamente.',
+          });
+        })
+        .finally(() => setDemoCarregando(false));
+    },
+    [demoModal, demoCarregando, onPreencherNips, onLimparNips, quantidadeInicial],
+  );
 
   return (
     <>
@@ -85,7 +99,7 @@ export function AplicarTafModoTesteBar({ onPreencherNips, onLimparNips }: Props)
           accessibilityHint={
             demoAtivo
               ? 'Desliga o Modo Teste e limpa os NIPs preenchidos'
-              : 'Ativa o Modo Teste e preenche os NIPs automaticamente'
+              : 'Ativa o Modo Teste: informe a quantidade e preencha NIPs automaticamente'
           }
           accessibilityRole="button"
           activeOpacity={0.85}
@@ -132,6 +146,8 @@ export function AplicarTafModoTesteBar({ onPreencherNips, onLimparNips }: Props)
         phase={demoModal?.phase ?? 'confirm'}
         ativar={demoModal?.ativar ?? false}
         errorMessage={demoModal?.errorMessage}
+        quantidadeInicial={Math.max(1, quantidadeInicial)}
+        quantidadeMaxima={quantidadeMaxima}
         onClose={fecharModal}
         onConfirm={confirmar}
       />

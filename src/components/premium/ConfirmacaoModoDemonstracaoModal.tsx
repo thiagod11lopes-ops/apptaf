@@ -1,5 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Platform,
+  ActivityIndicator,
+  TextInput,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react-native';
 import { ModernModal } from '../sismav/ModernModal';
@@ -14,8 +21,13 @@ type Props = {
   /** true = ativar Modo Teste; false = desativar */
   ativar: boolean;
   errorMessage?: string | null;
+  /** Valor inicial do campo de quantidade (ao ativar). */
+  quantidadeInicial?: number;
+  /** Máximo permitido de participantes de exemplo. */
+  quantidadeMaxima?: number;
   onClose: () => void;
-  onConfirm: () => void;
+  /** Ao ativar, recebe a quantidade escolhida; ao desativar, sem argumento. */
+  onConfirm: (quantidadeParticipantes?: number) => void;
 };
 
 function tituloModal(phase: ModoDemonstracaoModalPhase, ativar: boolean): string {
@@ -36,6 +48,8 @@ export function ConfirmacaoModoDemonstracaoModal({
   phase,
   ativar,
   errorMessage = null,
+  quantidadeInicial = 1,
+  quantidadeMaxima = 50,
   onClose,
   onConfirm,
 }: Props) {
@@ -43,6 +57,32 @@ export function ConfirmacaoModoDemonstracaoModal({
   const t = theme.tokens;
   const loading = phase === 'loading';
   const concluido = phase === 'success' || phase === 'error';
+  const [qtdTexto, setQtdTexto] = useState(String(quantidadeInicial));
+  const [erroQtd, setErroQtd] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible || phase !== 'confirm') return;
+    setQtdTexto(String(Math.max(1, quantidadeInicial)));
+    setErroQtd(null);
+  }, [visible, phase, quantidadeInicial, ativar]);
+
+  const confirmarComQuantidade = () => {
+    if (!ativar) {
+      onConfirm();
+      return;
+    }
+    const n = Number.parseInt(qtdTexto.replace(/\D/g, ''), 10);
+    if (!Number.isFinite(n) || n < 1) {
+      setErroQtd('Informe um número de participantes maior que zero.');
+      return;
+    }
+    if (n > quantidadeMaxima) {
+      setErroQtd(`Máximo de ${quantidadeMaxima} participantes no Modo Teste.`);
+      return;
+    }
+    setErroQtd(null);
+    onConfirm(n);
+  };
 
   const footer = concluido ? (
     <View style={styles.footerRow}>
@@ -71,7 +111,11 @@ export function ConfirmacaoModoDemonstracaoModal({
       >
         <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>Cancelar</Text>
       </PressableScale>
-      <PressableScale onPress={onConfirm} disabled={loading} style={styles.btnPrimaryOuter}>
+      <PressableScale
+        onPress={confirmarComQuantidade}
+        disabled={loading}
+        style={styles.btnPrimaryOuter}
+      >
         <LinearGradient
           colors={ativar ? [...t.gradientPrimaryBtn] : [...t.gradientDangerBtn]}
           start={{ x: 0, y: 0 }}
@@ -123,14 +167,49 @@ export function ConfirmacaoModoDemonstracaoModal({
           <>
             <Text style={[styles.message, { color: theme.text }]}>
               {ativar
-                ? 'Disponibiliza militares fictícios só na aba Aplicar TAF e preenche os NIPs automaticamente. Os testes só entram no Histórico depois de aplicados, com a tarja “Modo Teste”. Não alteram planilhas, backup nem sincronização.'
+                ? 'Disponibiliza militares fictícios só na aba Aplicar TAF. Os testes só entram no Histórico depois de aplicados, com a tarja “Modo Teste”. Não alteram planilhas, backup nem sincronização.'
                 : 'Remove os militares fictícios da aba Aplicar e limpa os NIPs preenchidos nesta tela. Sessões de Modo Teste já aplicadas permanecem no Histórico.'}
             </Text>
-            <Text style={[styles.hint, { color: theme.textMuted }]}>
-              {ativar
-                ? 'Ao confirmar, os NIPs dos participantes serão preenchidos automaticamente com militares de exemplo.'
-                : 'Os NIPs preenchidos nesta tela serão apagados. Seus dados reais não são afetados.'}
-            </Text>
+
+            {ativar ? (
+              <View style={styles.qtdBlock}>
+                <Text style={[styles.qtdLabel, { color: theme.textSecondary }]}>
+                  Número de participantes
+                </Text>
+                <TextInput
+                  value={qtdTexto}
+                  onChangeText={(t) => {
+                    setQtdTexto(t.replace(/\D/g, '').slice(0, 3));
+                    setErroQtd(null);
+                  }}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  maxLength={3}
+                  placeholder="Ex.: 5"
+                  placeholderTextColor={theme.textMuted}
+                  accessibilityLabel="Número de participantes do Modo Teste"
+                  style={[
+                    styles.qtdInput,
+                    {
+                      color: theme.text,
+                      borderColor: erroQtd ? theme.loss : theme.border,
+                      backgroundColor: theme.backgroundSecondary,
+                    },
+                  ]}
+                />
+                <Text style={[styles.hint, { color: theme.textMuted }]}>
+                  Ao confirmar, os NIPs e nomes de exemplo serão preenchidos automaticamente
+                  (máx. {quantidadeMaxima}).
+                </Text>
+                {erroQtd ? (
+                  <Text style={[styles.erroQtd, { color: theme.loss }]}>{erroQtd}</Text>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={[styles.hint, { color: theme.textMuted }]}>
+                Os NIPs preenchidos nesta tela serão apagados. Seus dados reais não são afetados.
+              </Text>
+            )}
           </>
         ) : null}
 
@@ -139,7 +218,7 @@ export function ConfirmacaoModoDemonstracaoModal({
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={[styles.message, { color: theme.textSecondary, textAlign: 'center' }]}>
               {ativar
-                ? 'Preparando militares de exemplo para Aplicar TAF…'
+                ? 'Preparando militares de exemplo e preenchendo NIPs…'
                 : 'Desativando Modo Teste…'}
             </Text>
           </View>
@@ -148,7 +227,7 @@ export function ConfirmacaoModoDemonstracaoModal({
         {phase === 'success' ? (
           <Text style={[styles.message, { color: theme.text }]}>
             {ativar
-              ? 'Modo Teste pronto. Os NIPs já foram preenchidos; aplique as provas normalmente. Ao finalizar, elas aparecem no Histórico com a tarja amarela.'
+              ? 'Modo Teste pronto. NIPs e nomes de exemplo já foram preenchidos; aplique as provas normalmente. Ao finalizar, elas aparecem no Histórico com a tarja amarela.'
               : 'Modo Teste desativado. Os NIPs desta tela foram limpos; as sessões já aplicadas continuam no Histórico.'}
           </Text>
         ) : null}
@@ -176,6 +255,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     fontWeight: '500',
+  },
+  qtdBlock: {
+    gap: 8,
+  },
+  qtdLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  qtdInput: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'web' ? 12 : 11,
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  erroQtd: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   loadingBox: {
     alignItems: 'center',

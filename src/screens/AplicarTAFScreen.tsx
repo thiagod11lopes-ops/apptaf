@@ -105,6 +105,7 @@ import {
   filtrarCadastrosDemonstracao,
   nipFeedbackOkFromCadastro,
 } from '../utils/aplicarTafDemonstracao';
+import { DEMO_TOTAL_CFN, DEMO_TOTAL_MILITARES } from '../utils/gerarDadosDemonstracaoTaf';
 import {
   isModoDemonstracaoAtivo,
   subscribeModoDemonstracao,
@@ -1887,30 +1888,32 @@ export default function AplicarTAFScreen() {
     [modalCadastroRapido, continuarAposCadastroEncontrado],
   );
 
-  const preencherNipsDemonstracao = useCallback(async () => {
-    if (preenchendoNipsDemo || nParticipantesConfirmado < 1) return;
-    setPreenchendoNipsDemo(true);
-    try {
-      const cadastros = await getAllCadastros({ includeDemo: true });
-      const pool = filtrarCadastrosDemonstracao(cadastros, modoTafNaval);
-      const n = nParticipantesConfirmado;
-      if (pool.length < n) {
-        Alert.alert(
-          'Cadastros insuficientes',
-          `Há ${pool.length} militar(es) de exemplo disponível(is) para esta prova. Remova participantes até caber no modo teste.`,
-        );
-        return;
+  const preencherNipsDemonstracao = useCallback(
+    async (quantidade: number) => {
+      if (preenchendoNipsDemo) return;
+      const n = Math.max(1, Math.floor(quantidade));
+      setPreenchendoNipsDemo(true);
+      try {
+        const cadastros = await getAllCadastros({ includeDemo: true });
+        const pool = filtrarCadastrosDemonstracao(cadastros, modoTafNaval);
+        if (pool.length < n) {
+          throw new Error(
+            `Há apenas ${pool.length} militar(es) de exemplo disponível(is) para esta prova. Informe no máximo ${pool.length}.`,
+          );
+        }
+        const selecionados = pool.slice(0, n);
+        setErroParticipantes('');
+        setNipsParticipantes(selecionados.map((c) => c.nip));
+        setNipFeedbackLinhas(selecionados.map((c) => nipFeedbackOkFromCadastro(c)));
+        nipsRepeticaoAutorizadaRef.current = new Set(Array.from({ length: n }, (_, i) => i));
+        setModalTesteExistente(null);
+        setModalModalidadeExcludente(null);
+      } finally {
+        setPreenchendoNipsDemo(false);
       }
-      const selecionados = pool.slice(0, n);
-      setNipsParticipantes(selecionados.map((c) => c.nip));
-      setNipFeedbackLinhas(selecionados.map((c) => nipFeedbackOkFromCadastro(c)));
-      nipsRepeticaoAutorizadaRef.current = new Set(Array.from({ length: n }, (_, i) => i));
-      setModalTesteExistente(null);
-      setModalModalidadeExcludente(null);
-    } finally {
-      setPreenchendoNipsDemo(false);
-    }
-  }, [modoTafNaval, nParticipantesConfirmado, preenchendoNipsDemo]);
+    },
+    [modoTafNaval, preenchendoNipsDemo],
+  );
 
   /** Limpa NIPs da etapa atual ao desativar o Modo Teste. */
   const limparNipsDemonstracao = useCallback(() => {
@@ -3008,6 +3011,10 @@ export default function AplicarTAFScreen() {
               <AplicarTafModoTesteBar
                 onPreencherNips={preencherNipsDemonstracao}
                 onLimparNips={limparNipsDemonstracao}
+                quantidadeInicial={Math.max(1, nParticipantesConfirmado)}
+                quantidadeMaxima={
+                  modoTafNaval ? DEMO_TOTAL_CFN : DEMO_TOTAL_MILITARES - DEMO_TOTAL_CFN
+                }
               />
 
             {nipsParticipantes.map((nip, index) => {

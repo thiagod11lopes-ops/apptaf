@@ -20,7 +20,13 @@ import { getAplicarTafBackdrop, getAplicarTafGlass } from './aplicar/aplicarTafT
 import { useAplicarTafLayout } from './aplicar/useAplicarTafLayout';
 import { ConfirmacaoDesistenciaModal } from './aplicar/ConfirmacaoDesistenciaModal';
 import { ConfirmacaoVoltarIdentificacaoModal } from './aplicar/ConfirmacaoVoltarIdentificacaoModal';
+import { ParticipantesEscalaScrollBar } from './aplicar/ParticipantesEscalaScrollBar';
 import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPanel';
+
+/** Escala dos cards dos militares (barra horizontal na prova ativa). */
+const PARTICIPANTES_ESCALA_MIN = 0.7;
+const PARTICIPANTES_ESCALA_MAX = 1.35;
+const PARTICIPANTES_ESCALA_DEFAULT = 0.5; // ~1.025×
 import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import { LogombWatermark } from '../mobile/LogombWatermark';
 import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
@@ -393,6 +399,10 @@ export function TafProvaTempoModal({
   const [modalLayout, setModalLayout] = useState({ width: 0, height: 0 });
   const [desistenciaPendente, setDesistenciaPendente] = useState<number | null>(null);
   const [confirmarVoltarIdentificacao, setConfirmarVoltarIdentificacao] = useState(false);
+  const [escalaParticipantesNorm, setEscalaParticipantesNorm] = useState(
+    PARTICIPANTES_ESCALA_DEFAULT,
+  );
+  const [participantesBaseHeight, setParticipantesBaseHeight] = useState(0);
 
   const onModalLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -406,8 +416,17 @@ export function TafProvaTempoModal({
       setVoltasConfirmadas(false);
       setDesistenciaPendente(null);
       setConfirmarVoltarIdentificacao(false);
+      setEscalaParticipantesNorm(PARTICIPANTES_ESCALA_DEFAULT);
+      setParticipantesBaseHeight(0);
     }
   }, [visible]);
+
+  const escalaParticipantes = useMemo(
+    () =>
+      PARTICIPANTES_ESCALA_MIN +
+      escalaParticipantesNorm * (PARTICIPANTES_ESCALA_MAX - PARTICIPANTES_ESCALA_MIN),
+    [escalaParticipantesNorm],
+  );
 
   useEffect(() => {
     if (!numeroVoltas) setVoltasConfirmadas(false);
@@ -444,11 +463,25 @@ export function TafProvaTempoModal({
     onVoltasConfirmadas?.();
   };
 
+  const onParticipantesBaseLayout = useCallback((event: LayoutChangeEvent) => {
+    const h = event.nativeEvent.layout.height;
+    if (h > 0) setParticipantesBaseHeight(h);
+  }, []);
+
   const participantesList = (
     <View
-      style={
-        isLandscape ? styles.participantesGridLandscape : styles.participantesStack
-      }
+      onLayout={onParticipantesBaseLayout}
+      style={[
+        isLandscape ? styles.participantesGridLandscape : styles.participantesStack,
+        styles.participantesScaledWrap,
+        {
+          transform: [{ scale: escalaParticipantes }],
+          width: `${100 / escalaParticipantes}%`,
+        },
+        Platform.OS === 'web'
+          ? ({ transformOrigin: 'top left' } as object)
+          : { alignSelf: 'flex-start' as const },
+      ]}
     >
       {Array.from({ length: nParticipantes }, (_, index) => {
         const nome = nomesParticipantes[index] ?? '—';
@@ -709,7 +742,23 @@ export function TafProvaTempoModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator
         >
-          {participantesList}
+          {nParticipantes > 0 ? (
+            <ParticipantesEscalaScrollBar
+              value={escalaParticipantesNorm}
+              onChange={setEscalaParticipantesNorm}
+              scaleLabel={escalaParticipantes}
+            />
+          ) : null}
+          <View
+            style={[
+              styles.participantesScaleSlot,
+              participantesBaseHeight > 0
+                ? { height: participantesBaseHeight * escalaParticipantes }
+                : null,
+            ]}
+          >
+            {participantesList}
+          </View>
           {erroAplicar ? (
             <Text style={[styles.erroText, { color: theme.loss }]}>{erroAplicar}</Text>
           ) : null}
@@ -833,6 +882,13 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 6,
     gap: 3,
+  },
+  participantesScaleSlot: {
+    width: '100%',
+    overflow: 'visible',
+  },
+  participantesScaledWrap: {
+    alignSelf: 'flex-start',
   },
   participantesStack: {
     gap: 3,

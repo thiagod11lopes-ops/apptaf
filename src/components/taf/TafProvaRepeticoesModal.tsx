@@ -100,59 +100,68 @@ export function TafProvaRepeticoesModal({
                       { borderColor: glass.border, backgroundColor: theme.cardBg },
                     ]}
                   >
-                    <View style={styles.rowHead}>
-                      <Text style={[styles.rowNum, { color: theme.primary }]}>#{index + 1}</Text>
-                      <Text
-                        accessibilityRole={temFatorRisco ? 'button' : undefined}
-                        onPress={
-                          temFatorRisco && onPressNomeParticipante
-                            ? () => onPressNomeParticipante(index)
-                            : undefined
-                        }
-                        style={[
-                          styles.rowNome,
-                          {
-                            color: temFatorRisco ? '#ea580c' : ui.text,
-                            textDecorationLine: temFatorRisco ? 'underline' : 'none',
-                          },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {nome}
-                      </Text>
-                    </View>
-                    <View style={styles.rowFields}>
-                      <View style={styles.inputWrap}>
-                        <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Repetições</Text>
-                        <TextInput
-                          value={valores[index] ?? ''}
-                          onChangeText={(t) => onChangeValor(index, t.replace(/\D/g, ''))}
-                          placeholder="0"
-                          placeholderTextColor={theme.textMuted}
-                          keyboardType="number-pad"
-                          inputMode="numeric"
+                    <View style={styles.rowBody}>
+                      <View style={styles.rowHead}>
+                        <Text
+                          accessibilityRole={temFatorRisco ? 'button' : undefined}
+                          onPress={
+                            temFatorRisco && onPressNomeParticipante
+                              ? () => onPressNomeParticipante(index)
+                              : undefined
+                          }
                           style={[
-                            styles.input,
+                            styles.rowNome,
                             {
-                              borderColor: theme.border,
-                              color: ui.text,
-                              backgroundColor: theme.backgroundSecondary,
+                              color: temFatorRisco ? '#ea580c' : ui.text,
+                              textDecorationLine: temFatorRisco ? 'underline' : 'none',
                             },
                           ]}
-                          accessibilityLabel={`Repetições do participante ${index + 1}`}
-                        />
-                      </View>
-                      <View style={styles.notaWrap}>
-                        <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Nota</Text>
-                        <Text
-                          style={[
-                            styles.notaValue,
-                            { color: reprov ? theme.loss : nota !== '—' ? theme.gain : theme.textSecondary },
-                          ]}
+                          numberOfLines={1}
                         >
-                          {nota}
+                          {nome}
                         </Text>
                       </View>
+                      <View style={styles.rowFields}>
+                        <View style={styles.inputWrap}>
+                          <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Repetições</Text>
+                          <TextInput
+                            value={valores[index] ?? ''}
+                            onChangeText={(t) => onChangeValor(index, t.replace(/\D/g, ''))}
+                            placeholder="0"
+                            placeholderTextColor={theme.textMuted}
+                            keyboardType="number-pad"
+                            inputMode="numeric"
+                            style={[
+                              styles.input,
+                              {
+                                borderColor: theme.border,
+                                color: ui.text,
+                                backgroundColor: theme.backgroundSecondary,
+                              },
+                            ]}
+                            accessibilityLabel={`Repetições do participante ${index + 1}`}
+                          />
+                        </View>
+                        <View style={styles.notaWrap}>
+                          <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Nota</Text>
+                          <Text
+                            style={[
+                              styles.notaValue,
+                              { color: reprov ? theme.loss : nota !== '—' ? theme.gain : theme.textSecondary },
+                            ]}
+                          >
+                            {nota}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View
+                      style={[styles.rowNumSide, { backgroundColor: PREMIUM.accentMuted }]}
+                      accessibilityLabel={`Participante ${index + 1}`}
+                    >
+                      <Text style={[styles.rowNumSideText, { color: theme.primary }]}>
+                        {index + 1}
+                      </Text>
                     </View>
                   </View>
                 );
@@ -220,17 +229,37 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   row: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     borderWidth: 1,
     borderRadius: PREMIUM.radiusLg,
-    padding: 14,
-    gap: 10,
+    paddingLeft: 12,
+    paddingRight: 0,
+    paddingVertical: 0,
+    gap: 0,
+    overflow: 'hidden',
   },
   rowLandscape: {
     width: '48.5%',
   },
-  rowHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  rowNum: { fontSize: 14, fontWeight: '900', width: 28 },
-  rowNome: { flex: 1, fontSize: 16, fontWeight: '800' },
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+    paddingVertical: 10,
+    paddingRight: 8,
+    justifyContent: 'center',
+  },
+  rowHead: { flexDirection: 'row', alignItems: 'center', gap: 0 },
+  rowNumSide: {
+    width: 32,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  rowNumSideText: { fontSize: 16, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  rowNome: { flex: 1, fontSize: 15, fontWeight: '800', lineHeight: 18 },
   rowFields: { flexDirection: 'row', gap: 12, alignItems: 'flex-end' },
   inputWrap: { flex: 1, gap: 4 },
   notaWrap: { minWidth: 72, gap: 4, alignItems: 'center' },

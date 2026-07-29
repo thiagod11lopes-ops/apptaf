@@ -516,167 +516,170 @@ export function TafProvaTempoModal({
               },
             ]}
           >
-            <View
-              style={[
-                styles.participantTopRow,
-                isProvaLayoutPreparado || isPermanencia ? styles.participantTopRowAdaptive : null,
-              ]}
-            >
+            <View style={styles.participantCardBody}>
               <View
                 style={[
-                  styles.identityCol,
-                  isNativeMobile && !isProvaLayoutPreparado && !isPermanencia
-                    ? styles.identityColCompact
-                    : null,
-                  isProvaLayoutPreparado || isPermanencia ? styles.identityColAdaptive : null,
-                  temChecks ? styles.identityColWithChecksBelow : null,
+                  styles.participantTopRow,
+                  isProvaLayoutPreparado || isPermanencia ? styles.participantTopRowAdaptive : null,
                 ]}
               >
                 <View
                   style={[
-                    styles.numBadge,
-                    isNativeMobile ? styles.numBadgeCompact : null,
-                    {
-                      backgroundColor: desistiu
-                        ? theme.isDark
-                          ? 'rgba(220,38,38,0.25)'
-                          : 'rgba(254,226,226,0.95)'
-                        : theme.isDark
-                          ? 'rgba(34,197,94,0.2)'
-                          : PREMIUM.accentMuted,
-                    },
+                    styles.identityCol,
+                    isNativeMobile && !isProvaLayoutPreparado && !isPermanencia
+                      ? styles.identityColCompact
+                      : null,
+                    isProvaLayoutPreparado || isPermanencia ? styles.identityColAdaptive : null,
+                    temChecks ? styles.identityColWithChecksBelow : null,
                   ]}
                 >
                   <Text
+                    accessibilityRole={temFatorRisco ? 'button' : undefined}
+                    onPress={
+                      temFatorRisco && onPressNomeParticipante
+                        ? () => onPressNomeParticipante(index)
+                        : undefined
+                    }
                     style={[
-                      styles.numBadgeText,
-                      isNativeMobile ? styles.numBadgeTextCompact : null,
-                      { color: desistiu ? theme.loss : theme.success },
+                      styles.participantNome,
+                      isNativeMobile && !isProvaLayoutPreparado && !isPermanencia
+                        ? styles.participantNomeCompact
+                        : null,
+                      isProvaLayoutPreparado || isPermanencia ? styles.participantNomeAdaptive : null,
+                      {
+                        color: desistiu ? theme.loss : temFatorRisco ? '#ea580c' : ui.text,
+                        textDecorationLine: temFatorRisco ? 'underline' : 'none',
+                      },
                     ]}
+                    numberOfLines={1}
                   >
-                    {index + 1}
+                    {nome}
                   </Text>
                 </View>
-                <Text
-                  accessibilityRole={temFatorRisco ? 'button' : undefined}
-                  onPress={
-                    temFatorRisco && onPressNomeParticipante
-                      ? () => onPressNomeParticipante(index)
-                      : undefined
-                  }
-                  style={[
-                    styles.participantNome,
-                    isNativeMobile && !isProvaLayoutPreparado && !isPermanencia
-                      ? styles.participantNomeCompact
-                      : null,
-                    isProvaLayoutPreparado || isPermanencia ? styles.participantNomeAdaptive : null,
-                    {
-                      color: desistiu ? theme.loss : temFatorRisco ? '#ea580c' : ui.text,
-                      textDecorationLine: temFatorRisco ? 'underline' : 'none',
-                    },
-                  ]}
-                >
-                  {nome}
-                </Text>
+
+                {mostrarTempo || mostrarNota ? (
+                  <View
+                    style={[
+                      styles.metaStrip,
+                      isProvaLayoutPreparado ? styles.metaStripAdaptive : null,
+                    ]}
+                  >
+                      {mostrarTempo ? (
+                        <MetaResultadoField
+                          label="Tempo"
+                          value={tempoStr}
+                          tone="tempo"
+                          theme={theme}
+                          ui={ui}
+                          scale={metaScale}
+                          adaptive={isProvaLayoutPreparado}
+                        />
+                      ) : null}
+                      {mostrarNota ? (
+                        <MetaResultadoField
+                          label="Nota"
+                          value={nota}
+                          tone={notaReprov ? 'notaReprov' : 'nota'}
+                          theme={theme}
+                          ui={ui}
+                          scale={metaScale}
+                          adaptive={isProvaLayoutPreparado}
+                        />
+                      ) : null}
+                  </View>
+                ) : null}
               </View>
 
-              {mostrarTempo || mostrarNota ? (
-                <View
-                  style={[
-                    styles.metaStrip,
-                    isProvaLayoutPreparado ? styles.metaStripAdaptive : null,
+              {temChecks ? (
+                <ScrollView
+                  horizontal
+                  nestedScrollEnabled
+                  showsHorizontalScrollIndicator={isNativeMobile}
+                  style={[styles.checksRowBelow, isPermanencia ? styles.checksRowPermanencia : null]}
+                  contentContainerStyle={[
+                    styles.checksTrackContent,
+                    isPermanencia ? styles.checksTrackPermanencia : null,
                   ]}
+                  keyboardShouldPersistTaps="handled"
                 >
-                    {mostrarTempo ? (
-                      <MetaResultadoField
-                        label="Tempo"
-                        value={tempoStr}
-                        tone="tempo"
-                        theme={theme}
-                        ui={ui}
-                        scale={metaScale}
-                        adaptive={isProvaLayoutPreparado}
+                  {permiteDesistencia ? (
+                    <CheckDesistencia
+                      checked={desistiu}
+                      touchLarge={isNativeMobile}
+                      onPress={() => onPressDesistencia(index)}
+                    />
+                  ) : null}
+
+                  {prova === 'permanencia' && onTogglePermanencia ? (
+                    <>
+                      <CheckPermanenciaModal
+                        label="Aprovado"
+                        checked={resultadosPermanencia[index] === 'aprovado'}
+                        variant="aprovado"
+                        touchLarge={isNativeMobile}
+                        onPress={() => onTogglePermanencia(index, 'aprovado')}
                       />
-                    ) : null}
-                    {mostrarNota ? (
-                      <MetaResultadoField
-                        label="Nota"
-                        value={nota}
-                        tone={notaReprov ? 'notaReprov' : 'nota'}
-                        theme={theme}
-                        ui={ui}
-                        scale={metaScale}
-                        adaptive={isProvaLayoutPreparado}
+                      <CheckPermanenciaModal
+                        label="Reprovado"
+                        checked={resultadosPermanencia[index] === 'reprovado'}
+                        variant="reprovado"
+                        touchLarge={isNativeMobile}
+                        onPress={() => onTogglePermanencia(index, 'reprovado')}
                       />
-                    ) : null}
-                </View>
+                    </>
+                  ) : null}
+
+                  {prova === 'natacao' && onToggleChegada && !desistiu ? (
+                    <CheckVolta
+                      checked={chegadaNatacao[index] ?? false}
+                      a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
+                      touchLarge={isNativeMobile}
+                      onPress={() => onToggleChegada(index)}
+                    />
+                  ) : null}
+
+                  {(prova === 'corrida' || prova === 'caminhada') &&
+                  nColunasVoltasAtivas > 0 &&
+                  onToggleVolta &&
+                  !desistiu
+                    ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
+                        <CheckVolta
+                          key={`volta-${index}-${v}`}
+                          checked={checksVoltas[index]?.[v] ?? false}
+                          a11y={`Volta ${v + 1}, participante ${index + 1}`}
+                          touchLarge={isNativeMobile}
+                          onPress={() => onToggleVolta(index, v)}
+                        />
+                      ))
+                    : null}
+                </ScrollView>
               ) : null}
             </View>
 
-            {temChecks ? (
-              <ScrollView
-                horizontal
-                nestedScrollEnabled
-                showsHorizontalScrollIndicator={isNativeMobile}
-                style={[styles.checksRowBelow, isPermanencia ? styles.checksRowPermanencia : null]}
-                contentContainerStyle={[
-                  styles.checksTrackContent,
-                  isPermanencia ? styles.checksTrackPermanencia : null,
+            <View
+              style={[
+                styles.numBadgeSide,
+                {
+                  backgroundColor: desistiu
+                    ? theme.isDark
+                      ? 'rgba(220,38,38,0.25)'
+                      : 'rgba(254,226,226,0.95)'
+                    : theme.isDark
+                      ? 'rgba(34,197,94,0.2)'
+                      : PREMIUM.accentMuted,
+                },
+              ]}
+              accessibilityLabel={`Participante ${index + 1}`}
+            >
+              <Text
+                style={[
+                  styles.numBadgeSideText,
+                  { color: desistiu ? theme.loss : theme.success },
                 ]}
-                keyboardShouldPersistTaps="handled"
               >
-                {permiteDesistencia ? (
-                  <CheckDesistencia
-                    checked={desistiu}
-                    touchLarge={isNativeMobile}
-                    onPress={() => onPressDesistencia(index)}
-                  />
-                ) : null}
-
-                {prova === 'permanencia' && onTogglePermanencia ? (
-                  <>
-                    <CheckPermanenciaModal
-                      label="Aprovado"
-                      checked={resultadosPermanencia[index] === 'aprovado'}
-                      variant="aprovado"
-                      touchLarge={isNativeMobile}
-                      onPress={() => onTogglePermanencia(index, 'aprovado')}
-                    />
-                    <CheckPermanenciaModal
-                      label="Reprovado"
-                      checked={resultadosPermanencia[index] === 'reprovado'}
-                      variant="reprovado"
-                      touchLarge={isNativeMobile}
-                      onPress={() => onTogglePermanencia(index, 'reprovado')}
-                    />
-                  </>
-                ) : null}
-
-                {prova === 'natacao' && onToggleChegada && !desistiu ? (
-                  <CheckVolta
-                    checked={chegadaNatacao[index] ?? false}
-                    a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
-                    touchLarge={isNativeMobile}
-                    onPress={() => onToggleChegada(index)}
-                  />
-                ) : null}
-
-                {(prova === 'corrida' || prova === 'caminhada') &&
-                nColunasVoltasAtivas > 0 &&
-                onToggleVolta &&
-                !desistiu
-                  ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
-                      <CheckVolta
-                        key={`volta-${index}-${v}`}
-                        checked={checksVoltas[index]?.[v] ?? false}
-                        a11y={`Volta ${v + 1}, participante ${index + 1}`}
-                        touchLarge={isNativeMobile}
-                        onPress={() => onToggleVolta(index, v)}
-                      />
-                    ))
-                  : null}
-              </ScrollView>
-            ) : null}
+                {index + 1}
+              </Text>
+            </View>
           </View>
         );
       })}
@@ -852,48 +855,59 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   participantCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     borderWidth: 1,
     borderRadius: PREMIUM.radiusMd,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
+    paddingLeft: 6,
+    paddingRight: 0,
+    paddingVertical: 0,
     marginBottom: 2,
-    overflow: 'visible',
-    gap: 6,
+    overflow: 'hidden',
+    gap: 0,
   },
   participantCardLandscape: {
     width: '48.5%',
     marginBottom: 0,
+  },
+  participantCardBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+    paddingVertical: 4,
+    paddingRight: 4,
+    justifyContent: 'center',
   },
   participantTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 6,
-    minHeight: 34,
+    minHeight: 0,
     width: '100%',
   },
   participantTopRowAdaptive: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   identityCol: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 0,
     flexShrink: 1,
     minWidth: 0,
-    maxWidth: '34%',
+    maxWidth: '42%',
   },
   identityColCompact: {
-    maxWidth: '30%',
+    maxWidth: '38%',
   },
   identityColAdaptive: {
     flex: 1,
     flexShrink: 1,
     minWidth: 0,
     maxWidth: undefined,
-    alignSelf: 'stretch',
-    alignItems: 'flex-start',
-    paddingTop: 1,
+    alignSelf: 'center',
+    alignItems: 'center',
+    paddingTop: 0,
   },
   identityColWithChecksBelow: {
     flex: 1,
@@ -902,10 +916,10 @@ const styles = StyleSheet.create({
     maxWidth: undefined,
   },
   participantNomeAdaptive: {
-    flexShrink: 0,
+    flexShrink: 1,
     flexGrow: 1,
     flexBasis: 'auto',
-    lineHeight: 14,
+    lineHeight: 13,
   },
   rowDivider: {
     width: 1,
@@ -918,19 +932,21 @@ const styles = StyleSheet.create({
     width: '100%',
     flexGrow: 0,
     flexShrink: 0,
+    marginTop: 0,
   },
   checkOuterLarge: {
-    padding: 4,
+    padding: 2,
   },
   checksTrackContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 2,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   checksTrackPermanencia: {
     gap: 18,
-    paddingVertical: 2,
+    paddingVertical: 0,
   },
   checksRowPermanencia: {
     flexGrow: 0,
@@ -949,7 +965,21 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     minWidth: 0,
     marginLeft: 'auto',
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
+  },
+  numBadgeSide: {
+    width: 28,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopRightRadius: PREMIUM.radiusMd - 1,
+    borderBottomRightRadius: PREMIUM.radiusMd - 1,
+    flexShrink: 0,
+  },
+  numBadgeSideText: {
+    fontSize: 14,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
   },
   numBadge: {
     width: 22,
@@ -976,11 +1006,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 11,
     fontWeight: '700',
-    lineHeight: 14,
+    lineHeight: 13,
   },
   participantNomeCompact: {
     fontSize: 10,
-    lineHeight: 13,
+    lineHeight: 12,
   },
   metaField: {
     minWidth: 104,
@@ -1115,9 +1145,9 @@ const styles = StyleSheet.create({
   desistenciaChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     borderRadius: 999,
     borderWidth: 1,
     marginRight: 6,

@@ -203,72 +203,9 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
         </View>
       ) : (
         <View style={styles.body}>
-          <View style={styles.nipLabelWrap}>
-            <LabelNip color={theme.textMuted} fontSize={11} fontWeight="700" />
-          </View>
-          <AplicarTafInput
-            value={nipFmt}
-            editable={false}
-            accessibilityLabel="NIP do militar"
-          />
-
-          <Text style={[styles.label, { color: theme.textMuted }]}>Nome</Text>
-          <AplicarTafInput
-            value={nome}
-            onChangeText={setNome}
-            placeholder="Nome completo"
-            autoCapitalize="characters"
-            accessibilityLabel="Nome do militar"
-          />
-
-          <Text style={[styles.label, { color: theme.textMuted }]}>Data de nascimento</Text>
-          <AplicarTafInput
-            value={dataNascimento}
-            onChangeText={(t) => setDataNascimento(formatDateInput(t))}
-            placeholder="DD/MM/AAAA"
-            keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-            inputMode="numeric"
-            maxLength={10}
-            accessibilityLabel="Data de nascimento"
-          />
-          <Text style={[styles.idadeHint, { color: theme.textSecondary }]}>
-            {idade != null ? `Idade: ${idade} anos` : 'Necessária para calcular a nota'}
+          <Text style={[styles.label, styles.labelFirst, { color: theme.textMuted }]}>
+            Categoria
           </Text>
-
-          <Text style={[styles.label, { color: theme.textMuted }]}>Gênero</Text>
-          <View style={[styles.segmented, { borderColor: theme.border }]}>
-            {(['M', 'F'] as const).map((sx) => {
-              const active = sexo === sx;
-              return (
-                <TouchableOpacity
-                  key={sx}
-                  accessibilityLabel={sx === 'M' ? 'Masculino' : 'Feminino'}
-                  onPress={() => setSexo(sx)}
-                  style={[
-                    styles.segmentBtn,
-                    {
-                      backgroundColor: active
-                        ? theme.isDark
-                          ? 'rgba(37,99,235,0.35)'
-                          : 'rgba(37,99,235,0.12)'
-                        : theme.backgroundSecondary,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      { color: active ? theme.primary : theme.textSecondary },
-                    ]}
-                  >
-                    {sx === 'M' ? 'Masculino' : 'Feminino'}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <Text style={[styles.label, { color: theme.textMuted }]}>Categoria</Text>
           <View style={[styles.segmented, { borderColor: theme.border }]}>
             {(['Oficiais', 'Praças'] as const).map((cat) => {
               const active = categoria === cat;
@@ -335,6 +272,71 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
             })}
           </View>
 
+          <View style={styles.nipLabelWrap}>
+            <LabelNip color={theme.textMuted} fontSize={11} fontWeight="700" />
+          </View>
+          <AplicarTafInput
+            value={nipFmt}
+            editable={false}
+            accessibilityLabel="NIP do militar"
+          />
+
+          <Text style={[styles.label, { color: theme.textMuted }]}>Nome</Text>
+          <AplicarTafInput
+            value={nome}
+            onChangeText={setNome}
+            placeholder="Nome completo"
+            autoCapitalize="characters"
+            accessibilityLabel="Nome do militar"
+          />
+
+          <Text style={[styles.label, { color: theme.textMuted }]}>Data de nascimento</Text>
+          <AplicarTafInput
+            value={dataNascimento}
+            onChangeText={(t) => setDataNascimento(formatDateInput(t))}
+            placeholder="DD/MM/AAAA"
+            keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+            inputMode="numeric"
+            maxLength={10}
+            accessibilityLabel="Data de nascimento"
+          />
+          <Text style={[styles.idadeHint, { color: theme.textSecondary }]}>
+            {idade != null ? `Idade: ${idade} anos` : 'Necessária para calcular a nota'}
+          </Text>
+
+          <Text style={[styles.label, { color: theme.textMuted }]}>Gênero</Text>
+          <View style={[styles.segmented, { borderColor: theme.border }]}>
+            {(['M', 'F'] as const).map((sx) => {
+              const active = sexo === sx;
+              return (
+                <TouchableOpacity
+                  key={sx}
+                  accessibilityLabel={sx === 'M' ? 'Masculino' : 'Feminino'}
+                  onPress={() => setSexo(sx)}
+                  style={[
+                    styles.segmentBtn,
+                    {
+                      backgroundColor: active
+                        ? theme.isDark
+                          ? 'rgba(37,99,235,0.35)'
+                          : 'rgba(37,99,235,0.12)'
+                        : theme.backgroundSecondary,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: active ? theme.primary : theme.textSecondary },
+                    ]}
+                  >
+                    {sx === 'M' ? 'Masculino' : 'Feminino'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           {erro ? <Text style={[styles.erro, { color: theme.error }]}>{erro}</Text> : null}
         </View>
       )}
@@ -353,6 +355,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.45,
     textTransform: 'uppercase',
     marginTop: 6,
+  },
+  labelFirst: {
+    marginTop: 0,
   },
   nipLabelWrap: {
     marginTop: 6,

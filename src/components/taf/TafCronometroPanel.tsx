@@ -225,6 +225,14 @@ export function TafCronometroPanel({
           ]}
         >
           <View style={styles.compactMergedRow}>
+            <View style={styles.compactTitleCol}>
+              <Text style={styles.compactKicker} numberOfLines={1}>
+                PROVA ATIVA
+              </Text>
+              <Text style={styles.compactTitulo} numberOfLines={2}>
+                {tituloProva} preparada
+              </Text>
+            </View>
             <View style={styles.compactTimeCol}>{timeNode}</View>
             <View style={styles.compactControlsCol}>{controlsNode}</View>
           </View>
@@ -457,6 +465,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  compactTitleCol: {
+    flexShrink: 1,
+    maxWidth: '34%',
+    minWidth: 88,
+    justifyContent: 'center',
+    gap: 2,
+    paddingRight: 2,
+  },
+  compactKicker: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    color: 'rgba(148, 163, 184, 0.95)',
+  },
+  compactTitulo: {
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 15,
+    color: '#f8fafc',
   },
   compactTimeCol: {
     flex: 1,

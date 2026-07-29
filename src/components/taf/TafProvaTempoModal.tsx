@@ -398,7 +398,6 @@ export function TafProvaTempoModal({
   const ts = theme.textStyles;
   const { isNativeMobile, modalBottomPad, horizontalPad, isLandscape } = useAplicarTafLayout();
 
-  const tituloModal = `${tituloProva} preparada`;
   const glass = getAplicarTafGlass(theme);
   const permiteDesistencia =
     (prova === 'corrida' || prova === 'natacao') &&
@@ -711,12 +710,7 @@ export function TafProvaTempoModal({
         <View style={styles.modalForeground}>
         <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
           <View style={[styles.header, { borderBottomColor: glass.border }]}>
-            <View style={styles.headerTextCol}>
-              <Text style={[styles.headerKicker, { color: theme.primary }]}>PROVA ATIVA</Text>
-              <Text style={[styles.headerTitle, { color: ui.text }]} numberOfLines={1}>
-                {tituloModal}
-              </Text>
-            </View>
+            <View style={styles.headerSpacer} />
             <TouchableOpacity
               accessibilityLabel="Fechar modal da prova"
               activeOpacity={0.88}
@@ -846,26 +840,14 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
   },
-  headerTextCol: {
+  headerSpacer: {
     flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  headerKicker: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.3,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: -0.3,
   },
   closeBtn: {
     width: 44,

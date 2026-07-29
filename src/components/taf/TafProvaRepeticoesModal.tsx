@@ -12,7 +12,6 @@ import {
 import { AppModal } from '../premium/AppModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
@@ -79,9 +78,6 @@ export function TafProvaRepeticoesModal({
                   <Text style={[styles.hint, { color: theme.textSecondary }]}>{hint}</Text>
                 ) : null}
               </View>
-              <TouchableOpacity accessibilityLabel="Fechar" onPress={onClose} style={styles.closeBtn}>
-                <X size={22} color={theme.textSecondary} />
-              </TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -215,7 +211,6 @@ const styles = StyleSheet.create({
   kicker: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
   title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.3 },
   hint: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
-  closeBtn: { padding: 6 },
   scroll: { paddingHorizontal: 18, paddingBottom: 12, gap: 10 },
   rowsStack: { gap: 10 },
   rowsGridLandscape: {

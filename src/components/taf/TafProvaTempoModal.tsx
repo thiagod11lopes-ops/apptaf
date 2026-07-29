@@ -12,7 +12,7 @@ import {
 import { AppModal } from '../premium/AppModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, X, Flag } from 'lucide-react-native';
+import { Check, Flag } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
@@ -709,18 +709,6 @@ export function TafProvaTempoModal({
         ) : null}
         <View style={styles.modalForeground}>
         <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-          <View style={[styles.header, { borderBottomColor: glass.border }]}>
-            <View style={styles.headerSpacer} />
-            <TouchableOpacity
-              accessibilityLabel="Fechar modal da prova"
-              activeOpacity={0.88}
-              onPress={onClose}
-              style={[styles.closeBtn, { borderColor: glass.border, backgroundColor: glass.highlight }]}
-            >
-              <X size={22} color={ui.iconStrong} strokeWidth={2.5} />
-            </TouchableOpacity>
-          </View>
-
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
@@ -837,33 +825,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  headerSpacer: {
-    flex: 1,
-  },
-  closeBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 10,
-    paddingTop: 6,
+    paddingTop: 8,
     paddingBottom: 6,
     gap: 3,
   },

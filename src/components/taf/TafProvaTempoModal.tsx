@@ -285,8 +285,8 @@ function CheckPermanenciaModal({
   );
 }
 
-/** Checklist ultra-moderno de desistência (corrida/natação). */
-function CheckDesistencia({
+/** Ícone de desistência (bandeira) — clicável, sem texto. */
+function IconDesistencia({
   checked,
   onPress,
   touchLarge,
@@ -296,54 +296,38 @@ function CheckDesistencia({
   touchLarge?: boolean;
 }) {
   const { theme } = useTheme();
+  const size = touchLarge ? 28 : 26;
+  const iconSize = touchLarge ? 15 : 14;
 
   return (
     <TouchableOpacity
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
       accessibilityLabel={checked ? 'Desistência marcada' : 'Marcar desistência'}
-      activeOpacity={0.88}
+      activeOpacity={0.85}
       onPress={onPress}
-      hitSlop={touchLarge ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined}
+      hitSlop={touchLarge ? { top: 8, bottom: 8, left: 8, right: 8 } : { top: 6, bottom: 6, left: 6, right: 6 }}
       style={[
-        styles.desistenciaChip,
-        checked ? styles.desistenciaChipOn : styles.desistenciaChipOff,
+        styles.desistenciaIconBtn,
         {
+          width: size,
+          height: size,
           borderColor: checked ? theme.loss : theme.border,
           backgroundColor: checked
             ? theme.isDark
-              ? 'rgba(220, 38, 38, 0.22)'
-              : 'rgba(254, 226, 226, 0.95)'
+              ? 'rgba(220, 38, 38, 0.28)'
+              : 'rgba(254, 226, 226, 0.98)'
             : theme.isDark
-              ? 'rgba(15, 23, 42, 0.55)'
-              : 'rgba(255, 255, 255, 0.92)',
+              ? 'rgba(15, 23, 42, 0.45)'
+              : 'rgba(255, 255, 255, 0.95)',
         },
-        Platform.OS === 'web'
-          ? ({
-              boxShadow: checked
-                ? '0 4px 14px rgba(220, 38, 38, 0.28)'
-                : '0 2px 8px rgba(15, 23, 42, 0.06)',
-            } as object)
-          : null,
       ]}
     >
-      <View
-        style={[
-          styles.desistenciaBox,
-          checked ? styles.desistenciaBoxOn : styles.desistenciaBoxOff,
-          { borderColor: checked ? theme.loss : theme.border },
-        ]}
-      >
-        {checked ? <Flag size={12} color="#FFFFFF" strokeWidth={2.6} /> : null}
-      </View>
-      <Text
-        style={[
-          styles.desistenciaLabel,
-          { color: checked ? theme.loss : theme.textSecondary },
-        ]}
-      >
-        Desistência
-      </Text>
+      <Flag
+        size={iconSize}
+        color={checked ? theme.loss : theme.textSecondary}
+        strokeWidth={checked ? 2.8 : 2.4}
+      />
     </TouchableOpacity>
   );
 }
@@ -473,12 +457,12 @@ export function TafProvaTempoModal({
         const notaReprov = desistiu || (isNotaReprovado?.(index) ?? false);
 
         const temChecks =
-          permiteDesistencia ||
           (prova === 'permanencia' && onTogglePermanencia != null) ||
-          (prova === 'natacao' && onToggleChegada != null) ||
+          (prova === 'natacao' && onToggleChegada != null && !desistiu) ||
           ((prova === 'corrida' || prova === 'caminhada') &&
             nColunasVoltasAtivas > 0 &&
-            onToggleVolta != null);
+            onToggleVolta != null &&
+            !desistiu);
 
         const isCorridaCaminhada = prova === 'corrida' || prova === 'caminhada';
         const isNatacao = prova === 'natacao';
@@ -486,12 +470,10 @@ export function TafProvaTempoModal({
         /** Corrida, caminhada e natação compartilham o mesmo layout de card preparado. */
         const isProvaLayoutPreparado = isCorridaCaminhada || isNatacao;
         const colunasChecksLayout = isCorridaCaminhada
-          ? nColunasVoltasAtivas + (permiteDesistencia ? 1 : 0)
+          ? nColunasVoltasAtivas
           : isNatacao && temChecks
-            ? 1 + (permiteDesistencia ? 1 : 0)
-            : permiteDesistencia
-              ? 1
-              : 0;
+            ? 1
+            : 0;
         const metaScale: MetaFieldScale =
           isProvaLayoutPreparado && (mostrarTempo || mostrarNota)
             ? resolveMetaScaleForNome(
@@ -531,8 +513,16 @@ export function TafProvaTempoModal({
                       : null,
                     isProvaLayoutPreparado || isPermanencia ? styles.identityColAdaptive : null,
                     temChecks ? styles.identityColWithChecksBelow : null,
+                    permiteDesistencia ? styles.identityColWithDesistencia : null,
                   ]}
                 >
+                  {permiteDesistencia ? (
+                    <IconDesistencia
+                      checked={desistiu}
+                      touchLarge={isNativeMobile}
+                      onPress={() => onPressDesistencia(index)}
+                    />
+                  ) : null}
                   <Text
                     accessibilityRole={temFatorRisco ? 'button' : undefined}
                     onPress={
@@ -602,14 +592,6 @@ export function TafProvaTempoModal({
                   ]}
                   keyboardShouldPersistTaps="handled"
                 >
-                  {permiteDesistencia ? (
-                    <CheckDesistencia
-                      checked={desistiu}
-                      touchLarge={isNativeMobile}
-                      onPress={() => onPressDesistencia(index)}
-                    />
-                  ) : null}
-
                   {prova === 'permanencia' && onTogglePermanencia ? (
                     <>
                       <CheckPermanenciaModal
@@ -915,6 +897,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: undefined,
   },
+  identityColWithDesistencia: {
+    gap: 8,
+    alignItems: 'center',
+  },
   participantNomeAdaptive: {
     flexShrink: 1,
     flexGrow: 1,
@@ -1142,37 +1128,12 @@ const styles = StyleSheet.create({
     borderColor: '#B91C1C',
     backgroundColor: '#B91C1C',
   },
-  desistenciaChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    marginRight: 6,
-  },
-  desistenciaChipOff: {},
-  desistenciaChipOn: {},
-  desistenciaBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
+  desistenciaIconBtn: {
+    borderRadius: 8,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  desistenciaBoxOff: {
-    backgroundColor: 'transparent',
-  },
-  desistenciaBoxOn: {
-    borderColor: '#DC2626',
-    backgroundColor: '#DC2626',
-  },
-  desistenciaLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+    flexShrink: 0,
   },
   btnAplicarWrap: {
     width: '100%',

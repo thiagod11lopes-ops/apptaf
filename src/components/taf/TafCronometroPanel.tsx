@@ -7,7 +7,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pause, Play, Timer } from 'lucide-react-native';
+import { ArrowLeft, Pause, Play, Timer } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
@@ -72,6 +72,8 @@ export type TafCronometroPanelProps = {
   footer?: React.ReactNode;
   /** Modal de prova: só display + controles integrados, sem cabeçalho extra. */
   variant?: 'full' | 'compact';
+  /** Voltar à identificação (exibido à esquerda de PROVA ATIVA no modo compact). */
+  onVoltarIdentificacao?: () => void;
 };
 
 export function TafCronometroPanel({
@@ -87,6 +89,7 @@ export function TafCronometroPanel({
   hint,
   footer,
   variant = 'full',
+  onVoltarIdentificacao,
 }: TafCronometroPanelProps) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -253,12 +256,28 @@ export function TafCronometroPanel({
         >
           <View style={styles.compactMergedRow}>
             <View style={styles.compactTitleCol}>
-              <Text style={styles.compactKicker} numberOfLines={1}>
-                PROVA ATIVA
-              </Text>
-              <Text style={styles.compactTitulo} numberOfLines={2}>
-                {tituloProva} preparada
-              </Text>
+              <View style={styles.compactTitleHeader}>
+                {onVoltarIdentificacao ? (
+                  <PressableScale
+                    accessibilityRole="button"
+                    accessibilityLabel="Voltar à identificação"
+                    accessibilityHint="Abre confirmação. O teste atual será perdido."
+                    onPress={onVoltarIdentificacao}
+                    hitSlop={8}
+                    style={styles.compactBackBtn}
+                  >
+                    <ArrowLeft size={18} color="#e2e8f0" strokeWidth={2.6} />
+                  </PressableScale>
+                ) : null}
+                <View style={styles.compactTitleTexts}>
+                  <Text style={styles.compactKicker} numberOfLines={1}>
+                    PROVA ATIVA
+                  </Text>
+                  <Text style={styles.compactTitulo} numberOfLines={2}>
+                    {tituloProva} preparada
+                  </Text>
+                </View>
+              </View>
             </View>
             <View style={styles.compactTimeCol}>{timeNode}</View>
             <View style={styles.compactControlsCol}>{controlsNode}</View>
@@ -581,11 +600,32 @@ const styles = StyleSheet.create({
   },
   compactTitleCol: {
     flexShrink: 1,
-    maxWidth: '34%',
-    minWidth: 88,
+    maxWidth: '38%',
+    minWidth: 108,
     justifyContent: 'center',
-    gap: 2,
     paddingRight: 2,
+  },
+  compactTitleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
+  compactBackBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(148, 163, 184, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.22)',
+    flexShrink: 0,
+  },
+  compactTitleTexts: {
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 2,
   },
   compactKicker: {
     fontSize: 9,

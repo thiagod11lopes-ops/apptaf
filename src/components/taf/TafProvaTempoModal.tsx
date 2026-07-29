@@ -19,6 +19,7 @@ import { PREMIUM } from '../../theme/premium';
 import { getAplicarTafBackdrop, getAplicarTafGlass } from './aplicar/aplicarTafTheme';
 import { useAplicarTafLayout } from './aplicar/useAplicarTafLayout';
 import { ConfirmacaoDesistenciaModal } from './aplicar/ConfirmacaoDesistenciaModal';
+import { ConfirmacaoVoltarIdentificacaoModal } from './aplicar/ConfirmacaoVoltarIdentificacaoModal';
 import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPanel';
 import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import { LogombWatermark } from '../mobile/LogombWatermark';
@@ -391,6 +392,7 @@ export function TafProvaTempoModal({
   const [voltasConfirmadas, setVoltasConfirmadas] = useState(false);
   const [modalLayout, setModalLayout] = useState({ width: 0, height: 0 });
   const [desistenciaPendente, setDesistenciaPendente] = useState<number | null>(null);
+  const [confirmarVoltarIdentificacao, setConfirmarVoltarIdentificacao] = useState(false);
 
   const onModalLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -403,6 +405,7 @@ export function TafProvaTempoModal({
     if (!visible) {
       setVoltasConfirmadas(false);
       setDesistenciaPendente(null);
+      setConfirmarVoltarIdentificacao(false);
     }
   }, [visible]);
 
@@ -676,7 +679,7 @@ export function TafProvaTempoModal({
       visible={visible}
       transparent={false}
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={() => setConfirmarVoltarIdentificacao(true)}
       accessibilityViewIsModal
     >
       <View style={styles.modalRoot} onLayout={onModalLayout}>
@@ -760,6 +763,7 @@ export function TafProvaTempoModal({
               onPausar={onPausarCronometro}
               onContinuar={onContinuarCronometro}
               hint={cronometroHint}
+              onVoltarIdentificacao={() => setConfirmarVoltarIdentificacao(true)}
             />
           )}
         </View>
@@ -789,6 +793,15 @@ export function TafProvaTempoModal({
         if (desistenciaPendente == null) return;
         onConfirmDesistencia?.(desistenciaPendente);
         setDesistenciaPendente(null);
+      }}
+    />
+    <ConfirmacaoVoltarIdentificacaoModal
+      visible={confirmarVoltarIdentificacao}
+      provaLabel={tituloProva}
+      onClose={() => setConfirmarVoltarIdentificacao(false)}
+      onConfirm={() => {
+        setConfirmarVoltarIdentificacao(false);
+        onClose();
       }}
     />
     </>

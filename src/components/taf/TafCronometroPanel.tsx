@@ -12,6 +12,7 @@ import { Pause, Play, Timer } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
+import { PressableScale } from '../premium/PressableScale';
 import type { TafCronometroEstado } from '../../hooks/useTafReactStopwatch';
 
 export type { TafCronometroEstado };
@@ -173,58 +174,78 @@ export function TafCronometroPanel({
       </View>
     );
 
-  const controlsNode =
-    estado === 'inicial' || estado === 'finalizado' ? (
-      <TouchableOpacity
-        accessibilityLabel={`Iniciar ${tituloProva}`}
-        activeOpacity={0.88}
-        onPress={onIniciar}
-        style={[
-          compact ? styles.btnCompactPrimary : styles.btnPrimary,
-          { backgroundColor: theme.primary },
-        ]}
+  const rodando = estado === 'rodando';
+  const toggleLabel = rodando ? 'Pausar' : 'Iniciar';
+  const toggleA11y = rodando
+    ? 'Pausar cronômetro'
+    : estado === 'pausado'
+      ? 'Retomar cronômetro'
+      : `Iniciar ${tituloProva}`;
+  const onTogglePress = rodando
+    ? onPausar
+    : estado === 'pausado'
+      ? onContinuar
+      : onIniciar;
+  const toggleColors: [string, string, string] = rodando
+    ? ['#f59e0b', '#f97316', '#ef4444']
+    : ['#22d3ee', '#10b981', '#059669'];
+  const toggleGlow = rodando
+    ? '0 8px 28px rgba(249, 115, 22, 0.45), 0 0 0 1px rgba(251, 191, 36, 0.35)'
+    : '0 8px 28px rgba(16, 185, 129, 0.42), 0 0 0 1px rgba(45, 212, 191, 0.35)';
+  const mostrarParar = estado === 'rodando' || estado === 'pausado';
+
+  const toggleBtn = (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel={toggleA11y}
+      onPress={onTogglePress}
+      style={[
+        compact ? styles.toggleOuterCompact : styles.toggleOuter,
+        mostrarParar ? styles.toggleOuterFlex : null,
+        Platform.OS === 'web' ? ({ boxShadow: toggleGlow } as object) : null,
+      ]}
+    >
+      <LinearGradient
+        colors={toggleColors}
+        locations={[0, 0.55, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={compact ? styles.toggleGradientCompact : styles.toggleGradient}
       >
-        <Play
-          size={compact ? 16 : 18}
-          color={theme.tokens.textOnPrimary}
-          strokeWidth={2.6}
-          fill={theme.tokens.textOnPrimary}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.08)', 'transparent']}
+          start={{ x: 0.15, y: 0 }}
+          end={{ x: 0.85, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
         />
-        {!compact ? (
-          <Text style={[styles.btnPrimaryText, { color: theme.tokens.textOnPrimary }]}>
-            Iniciar {tituloProva}
-          </Text>
-        ) : (
-          <Text style={[styles.btnCompactPrimaryText, { color: theme.tokens.textOnPrimary }]}>
-            Iniciar
-          </Text>
-        )}
-      </TouchableOpacity>
-    ) : (
-      <View style={compact ? styles.controlsCompactRow : styles.controlsRow}>
-        <TouchableOpacity
-          accessibilityLabel={estado === 'pausado' ? 'Continuar cronômetro' : 'Pausar cronômetro'}
-          activeOpacity={0.88}
-          onPress={estado === 'pausado' ? onContinuar : onPausar}
-          style={[
-            compact ? styles.btnIconCompact : styles.btnIcon,
-            {
-              borderColor: theme.border,
-              backgroundColor: theme.backgroundSecondary,
-            },
-          ]}
-        >
-          {estado === 'pausado' ? (
-            <Play
-              size={compact ? 18 : 22}
-              color={ui.iconStrong}
-              strokeWidth={2.5}
-              fill={ui.iconStrong}
+        <View style={compact ? styles.toggleIconWrapCompact : styles.toggleIconWrap}>
+          {rodando ? (
+            <Pause
+              size={compact ? 16 : 20}
+              color="#FFFFFF"
+              strokeWidth={2.8}
+              fill="#FFFFFF"
             />
           ) : (
-            <Pause size={compact ? 18 : 22} color={ui.iconStrong} strokeWidth={2.5} />
+            <Play
+              size={compact ? 16 : 20}
+              color="#FFFFFF"
+              strokeWidth={2.6}
+              fill="#FFFFFF"
+            />
           )}
-        </TouchableOpacity>
+        </View>
+        <Text style={compact ? styles.toggleLabelCompact : styles.toggleLabel}>
+          {compact ? toggleLabel : rodando ? 'Pausar' : `Iniciar ${tituloProva}`}
+        </Text>
+      </LinearGradient>
+    </PressableScale>
+  );
+
+  const controlsNode = (
+    <View style={compact ? styles.controlsCompactRow : styles.controlsRow}>
+      {toggleBtn}
+      {mostrarParar ? (
         <TouchableOpacity
           accessibilityLabel={`Parar ${tituloProva}`}
           activeOpacity={0.88}
@@ -238,8 +259,9 @@ export function TafCronometroPanel({
             {compact ? 'Parar' : `Parar ${tituloProva}`}
           </Text>
         </TouchableOpacity>
-      </View>
-    );
+      ) : null}
+    </View>
+  );
 
   if (compact) {
     return (
@@ -493,32 +515,80 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     gap: 10,
   },
-  btnPrimary: {
+  toggleOuter: {
     flex: 1,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  toggleOuterFlex: {
+    flex: 1,
+  },
+  toggleOuterCompact: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    minWidth: 104,
+  },
+  toggleGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 12,
+    minHeight: 56,
     paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: PREMIUM.radiusMd + 2,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    overflow: 'hidden',
   },
-  btnPrimaryText: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  btnIcon: {
-    width: 56,
-    minHeight: 52,
-    borderRadius: PREMIUM.radiusMd + 2,
-    borderWidth: 1,
+  toggleGradientCompact: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    minHeight: 42,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  toggleIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  toggleIconWrapCompact: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  toggleLabel: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    textShadowColor: 'rgba(15, 23, 42, 0.28)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  toggleLabelCompact: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
   btnStop: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: PREMIUM.radiusMd + 2,
+    flex: 0.72,
+    minHeight: 56,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -592,32 +662,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  btnCompactPrimary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: PREMIUM.radiusMd,
-    minWidth: 88,
-  },
-  btnCompactPrimaryText: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  btnIconCompact: {
-    width: 40,
-    height: 40,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   btnStopCompact: {
-    minHeight: 40,
-    minWidth: 64,
-    borderRadius: PREMIUM.radiusMd,
+    minHeight: 42,
+    minWidth: 58,
+    borderRadius: 14,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',

@@ -742,13 +742,6 @@ export function TafProvaTempoModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator
         >
-          {nParticipantes > 0 ? (
-            <ParticipantesEscalaScrollBar
-              value={escalaParticipantesNorm}
-              onChange={setEscalaParticipantesNorm}
-              scaleLabel={escalaParticipantes}
-            />
-          ) : null}
           <View
             style={[
               styles.participantesScaleSlot,
@@ -775,6 +768,13 @@ export function TafProvaTempoModal({
             },
           ]}
         >
+          {nParticipantes > 0 ? (
+            <ParticipantesEscalaScrollBar
+              value={escalaParticipantesNorm}
+              onChange={setEscalaParticipantesNorm}
+              scaleLabel={escalaParticipantes}
+            />
+          ) : null}
           {podeAplicar ? (
             <TouchableOpacity
               accessibilityLabel={`Aplicar resultado da ${tituloProva.toLowerCase()}`}

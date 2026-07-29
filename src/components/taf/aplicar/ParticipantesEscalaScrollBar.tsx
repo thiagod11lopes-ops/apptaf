@@ -8,7 +8,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Minus, Plus, Scaling } from 'lucide-react-native';
+import { Minus, Plus, ZoomIn } from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 
 type Props = {
@@ -116,7 +116,7 @@ export function ParticipantesEscalaScrollBar({ value, onChange, scaleLabel }: Pr
               },
             ]}
           >
-            <Scaling
+            <ZoomIn
               size={14}
               color={theme.isDark ? '#7dd3fc' : theme.primary}
               strokeWidth={2.4}
@@ -207,13 +207,14 @@ export function ParticipantesEscalaScrollBar({ value, onChange, scaleLabel }: Pr
 const styles = StyleSheet.create({
   shell: {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 8,
-    gap: 8,
-    marginBottom: 8,
+    paddingTop: 8,
+    paddingBottom: 6,
+    gap: 6,
+    marginBottom: 0,
+    flexShrink: 0,
   },
   headerRow: {
     flexDirection: 'row',

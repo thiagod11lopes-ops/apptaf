@@ -3,6 +3,7 @@ import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedD
 import type { NormaTafPreCadastro } from '../services/preCadastroTafStorage';
 import { isProvaNavalExclusiva } from '../taf/tafProvaTypes';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
+import { agruparSessoesHistoricoPorTeste } from './agruparSessoesHistoricoPorTeste';
 import {
   temAvaliacaoCaminhada,
   temAvaliacaoCorrida,
@@ -90,7 +91,9 @@ export function prepararDadosResultadosNorma(
   const sessoesSemDemo = sessoes.filter((s) => !s.id.startsWith('demo-sess-'));
   const cadastrosSemDemo = cadastros.filter((c) => !c.id.startsWith('demo-cad-'));
   const unificadas = unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
-  const sessoesNorma = filtrarSessoesPorNorma(unificadas, norma);
+  const sessoesNorma = agruparSessoesHistoricoPorTeste(
+    filtrarSessoesPorNorma(unificadas, norma),
+  );
   const cadastrosNorma = filtrarCadastrosPorNorma(cadastrosSemDemo, norma, sessoesNorma);
   return { sessoesNorma, cadastrosNorma };
 }

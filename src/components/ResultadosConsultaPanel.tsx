@@ -21,6 +21,7 @@ import { HistoricoCalendarioTaf } from './sismav/HistoricoCalendarioTaf';
 import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao, type SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import { unificarSessoesComCadastroRegistrador } from '../utils/sessoesUnificadasResultados';
+import { agruparSessoesHistoricoPorTeste } from '../utils/agruparSessoesHistoricoPorTeste';
 import { ProvaComColunaRubrica } from './ProvaComColunaRubrica';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput, nipDigitos } from '../utils/nipFormat';
@@ -237,7 +238,9 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     setBuscou(true);
     const sessoes = sessoesHistorico.length
       ? sessoesHistorico
-      : unificarSessoesComCadastroRegistrador(await getAllSessoesAplicacao(), lista);
+      : agruparSessoesHistoricoPorTeste(
+          unificarSessoesComCadastroRegistrador(await getAllSessoesAplicacao(), lista),
+        );
     setLinhas(linhasComRubricasMescladas(comResultado, rubSessoes, rubCadastros, sessoes));
 
     if (cadastrados.length === 0) {
@@ -252,7 +255,9 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
 
     const lista = todosCadastros.length ? todosCadastros : await carregarBase();
     const sessoesRaw = sessoesHistorico.length ? sessoesHistorico : await getAllSessoesAplicacao();
-    const sessoes = unificarSessoesComCadastroRegistrador(sessoesRaw, lista);
+    const sessoes = sessoesHistorico.length
+      ? sessoesRaw
+      : agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoesRaw, lista));
     const baseLinhas = listarResultadosCompletosFromHistorico(sessoes, lista);
     const [rubSessoes, rubCadastros] = await Promise.all([
       rubricasSessoes.size > 0 ? Promise.resolve(rubricasSessoes) : carregarRubricasDasSessoesPorNip(),
@@ -348,7 +353,9 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       const sessoes = await getAllSessoesAplicacao();
       const novaBase = lista.map((c) => (c.id === atualizado.id ? atualizado : c));
       setTodosCadastros(novaBase);
-      setSessoesHistorico(unificarSessoesComCadastroRegistrador(sessoes, novaBase));
+      setSessoesHistorico(
+        agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoes, novaBase)),
+      );
       setLinhas((prev) => {
         if (!cadastroComAlgumResultadoTaf(atualizado)) {
           setMensagemBusca('Militar Cadastrado não realizou TAF');
@@ -379,7 +386,9 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       setTodosCadastros(novaBase);
 
       const sessoes = await getAllSessoesAplicacao();
-      setSessoesHistorico(unificarSessoesComCadastroRegistrador(sessoes, novaBase));
+      setSessoesHistorico(
+        agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoes, novaBase)),
+      );
 
       const key = nipDigitos(atualizado.nip);
       const [rubSessoes, rubCadastros] = await Promise.all([

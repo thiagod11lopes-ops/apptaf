@@ -37,6 +37,7 @@ import {
   sessoesDoDiaIso,
   tituloMesAno,
 } from '../../utils/historicoPorDia';
+import { agruparSessoesHistoricoPorTeste } from '../../utils/agruparSessoesHistoricoPorTeste';
 import { listarResultadosGeralFromHistorico } from '../../utils/resultadoGeralHistorico';
 import { enriquecerLinhasComRubricas } from '../../utils/resultadoTafCadastro';
 import { carregarRubricasDasSessoesPorNip } from '../../utils/rubricasDasSessoes';
@@ -151,7 +152,7 @@ export function HistoricoCalendarioTaf({
 
   const sessoesDoDia = useMemo(() => {
     if (!diaSelecionado) return [];
-    return sessoesDoDiaIso(sessoes, diaSelecionado);
+    return agruparSessoesHistoricoPorTeste(sessoesDoDiaIso(sessoes, diaSelecionado));
   }, [sessoes, diaSelecionado]);
 
   const dataBrSelecionada = diaSelecionado ? dataBrDoDiaIso(diaSelecionado) : '';

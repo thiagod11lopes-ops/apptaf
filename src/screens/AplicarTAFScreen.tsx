@@ -20,6 +20,7 @@ import {
   GestureResponderEvent,
   KeyboardAvoidingView,
 } from 'react-native';
+import { Trash2 } from 'lucide-react-native';
 import { AppModal } from '../components/premium/AppModal';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { SafeAreaView as SafeAreaViewInsets } from 'react-native-safe-area-context';
@@ -177,7 +178,6 @@ const PERMANENCIA_DURACAO_MS = 10 * 60 * 1000;
 
 type CorridaEtapa =
   | 'menu'
-  | 'participantes'
   | 'nips'
   | 'tabela_corrida'
   | 'tabela_permanencia'
@@ -343,10 +343,9 @@ export default function AplicarTAFScreen() {
   const formatMsDisplayRef = useRef(formatMs);
   formatMsDisplayRef.current = formatMs;
   const [corridaEtapa, setCorridaEtapa] = useState<CorridaEtapa>('menu');
-  const [numeroParticipantesCorrida, setNumeroParticipantesCorrida] = useState('');
   const [erroParticipantes, setErroParticipantes] = useState('');
-  const [nParticipantesConfirmado, setNParticipantesConfirmado] = useState(0);
   const [nipsParticipantes, setNipsParticipantes] = useState<string[]>([]);
+  const nParticipantesConfirmado = nipsParticipantes.length;
   const [nipFeedbackLinhas, setNipFeedbackLinhas] = useState<NipFeedbackLinha[]>([]);
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [preenchendoNipsDemo, setPreenchendoNipsDemo] = useState(false);
@@ -1437,82 +1436,65 @@ export default function AplicarTAFScreen() {
     };
   }, [modalRubricaNatacaoVisible]);
 
-  const onChangeParticipantes = useCallback((text: string) => {
-    const apenasDigitos = text.replace(/\D/g, '');
-    setNumeroParticipantesCorrida(apenasDigitos);
+  const iniciarIdentificacaoNips = useCallback((tipo: TipoProvaTAF) => {
+    tipoProvaRef.current = tipo;
+    setTipoProva(tipo);
     setErroParticipantes('');
+    setNipsParticipantes(['']);
+    setNipFeedbackLinhas([null]);
+    nipsRepeticaoAutorizadaRef.current = new Set();
+    setModalEditarIdadeGeneroIndex(null);
+    setCorridaEtapa('nips');
   }, []);
 
   const abrirCorrida = useCallback(() => {
-    tipoProvaRef.current = 'corrida';
-    setTipoProva('corrida');
-    setCorridaEtapa('participantes');
-  }, []);
+    iniciarIdentificacaoNips('corrida');
+  }, [iniciarIdentificacaoNips]);
 
   const abrirNatacao = useCallback(() => {
-    tipoProvaRef.current = 'natacao';
-    setTipoProva('natacao');
-    setCorridaEtapa('participantes');
-  }, []);
+    iniciarIdentificacaoNips('natacao');
+  }, [iniciarIdentificacaoNips]);
 
   const abrirPermanencia = useCallback(() => {
-    tipoProvaRef.current = 'permanencia';
-    setTipoProva('permanencia');
-    setCorridaEtapa('participantes');
-  }, []);
+    iniciarIdentificacaoNips('permanencia');
+  }, [iniciarIdentificacaoNips]);
 
   const abrirCaminhada = useCallback(() => {
-    tipoProvaRef.current = 'caminhada';
-    setTipoProva('caminhada');
-    setCorridaEtapa('participantes');
-  }, []);
+    iniciarIdentificacaoNips('caminhada');
+  }, [iniciarIdentificacaoNips]);
 
   const abrirFlexaoBarra = useCallback(() => {
-    tipoProvaRef.current = 'flexao_barra';
-    setTipoProva('flexao_barra');
-    setCorridaEtapa('participantes');
-  }, []);
+    iniciarIdentificacaoNips('flexao_barra');
+  }, [iniciarIdentificacaoNips]);
 
   const abrirFlexaoSolo = useCallback(() => {
-    tipoProvaRef.current = 'flexao_solo';
-    setTipoProva('flexao_solo');
-    setCorridaEtapa('participantes');
-  }, []);
+    iniciarIdentificacaoNips('flexao_solo');
+  }, [iniciarIdentificacaoNips]);
 
   const abrirAbdominalRemador = useCallback(() => {
-    tipoProvaRef.current = 'abdominal_remador';
-    setTipoProva('abdominal_remador');
-    setCorridaEtapa('participantes');
-  }, []);
+    iniciarIdentificacaoNips('abdominal_remador');
+  }, [iniciarIdentificacaoNips]);
 
   const abrirAbdominalPrancha = useCallback(() => {
-    tipoProvaRef.current = 'abdominal_prancha';
-    setTipoProva('abdominal_prancha');
-    setCorridaEtapa('participantes');
-  }, []);
+    iniciarIdentificacaoNips('abdominal_prancha');
+  }, [iniciarIdentificacaoNips]);
 
   const voltarMenuProvas = useCallback(() => {
     tipoProvaRef.current = null;
     setTipoProva(null);
+    setErroParticipantes('');
+    setNipsParticipantes([]);
+    setNipFeedbackLinhas([]);
+    nipsRepeticaoAutorizadaRef.current = new Set();
+    setModalEditarIdadeGeneroIndex(null);
     setCorridaEtapa('menu');
   }, []);
 
-  const voltarParticipantes = useCallback(() => {
-    setCorridaEtapa('participantes');
-    setNipsParticipantes([]);
-    setNipFeedbackLinhas([]);
-  }, []);
-
-  const confirmarParticipantes = useCallback(() => {
-    const n = parseInt(numeroParticipantesCorrida, 10);
+  const adicionarParticipanteNip = useCallback(() => {
     const limite = modoPreCadastro
       ? limiteParticipantesPreCadastro(tipoProva)
       : MAX_PARTICIPANTES;
-    if (!Number.isFinite(n) || n < 1) {
-      setErroParticipantes('Informe um número válido (mínimo 1).');
-      return;
-    }
-    if (n > limite) {
+    if (nipsParticipantes.length >= limite) {
       setErroParticipantes(
         modoPreCadastro && tipoProva !== 'caminhada'
           ? `Máximo de ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes no pré-cadastro.`
@@ -1521,11 +1503,33 @@ export default function AplicarTAFScreen() {
       return;
     }
     setErroParticipantes('');
-    setNParticipantesConfirmado(n);
-    setNipsParticipantes(Array.from({ length: n }, () => ''));
-    setNipFeedbackLinhas(Array.from({ length: n }, () => null));
-    setCorridaEtapa('nips');
-  }, [numeroParticipantesCorrida, modoPreCadastro, tipoProva]);
+    setNipsParticipantes((prev) => [...prev, '']);
+    setNipFeedbackLinhas((prev) => [...prev, null]);
+  }, [modoPreCadastro, tipoProva, nipsParticipantes.length]);
+
+  const removerParticipanteNip = useCallback((index: number) => {
+    setErroParticipantes('');
+    setModalEditarIdadeGeneroIndex((cur) => {
+      if (cur == null) return null;
+      if (cur === index) return null;
+      if (cur > index) return cur - 1;
+      return cur;
+    });
+    setNipsParticipantes((prev) => {
+      if (prev.length <= 1) return [''];
+      return prev.filter((_, i) => i !== index);
+    });
+    setNipFeedbackLinhas((prev) => {
+      if (prev.length <= 1) return [null];
+      return prev.filter((_, i) => i !== index);
+    });
+    const rep = new Set<number>();
+    for (const i of nipsRepeticaoAutorizadaRef.current) {
+      if (i === index) continue;
+      rep.add(i > index ? i - 1 : i);
+    }
+    nipsRepeticaoAutorizadaRef.current = rep;
+  }, []);
 
   const definirNipOk = useCallback((index: number, c: CadastroItemPersist) => {
     const nome = (c.nome || '').trim() || 'Sem nome';
@@ -1842,7 +1846,7 @@ export default function AplicarTAFScreen() {
       if (pool.length < n) {
         Alert.alert(
           'Cadastros insuficientes',
-          `Há ${pool.length} militar(es) de exemplo disponível(is) para esta prova. Reduza o número de participantes.`,
+          `Há ${pool.length} militar(es) de exemplo disponível(is) para esta prova. Remova participantes até caber no modo teste.`,
         );
         return;
       }
@@ -2166,9 +2170,7 @@ export default function AplicarTAFScreen() {
     setMostrarProvas(true);
     setTipoProva(null);
     setCorridaEtapa('menu');
-    setNumeroParticipantesCorrida('');
     setErroParticipantes('');
-    setNParticipantesConfirmado(0);
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
@@ -2191,9 +2193,7 @@ export default function AplicarTAFScreen() {
     setMostrarProvas(true);
     setTipoProva(null);
     setCorridaEtapa('menu');
-    setNumeroParticipantesCorrida('');
     setErroParticipantes('');
-    setNParticipantesConfirmado(0);
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
@@ -2279,8 +2279,6 @@ export default function AplicarTAFScreen() {
       setMostrarFatoresRisco(false);
     setMostrarRestritos(false);
       setMostrarProvas(true);
-      setNumeroParticipantesCorrida(String(n));
-      setNParticipantesConfirmado(n);
       setNipsParticipantes(pre.participantes.map((p) => p.nip));
       setNipFeedbackLinhas(
         pre.participantes.map((p) => ({
@@ -2350,9 +2348,7 @@ export default function AplicarTAFScreen() {
     setMostrarProvas(true);
     setTipoProva(null);
     setCorridaEtapa('menu');
-    setNumeroParticipantesCorrida('');
     setErroParticipantes('');
-    setNParticipantesConfirmado(0);
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
@@ -2376,9 +2372,7 @@ export default function AplicarTAFScreen() {
     setMostrarProvas(true);
     setTipoProva(null);
     setCorridaEtapa('menu');
-    setNumeroParticipantesCorrida('');
     setErroParticipantes('');
-    setNParticipantesConfirmado(0);
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
@@ -2510,16 +2504,13 @@ export default function AplicarTAFScreen() {
               : 'Escolha a prova que será aplicada agora',
         };
       }
-      if (corridaEtapa === 'participantes') {
-        return {
-          title: tituloProvaCurta,
-          subtitle: 'Defina quantos militares participarão',
-        };
-      }
       if (corridaEtapa === 'nips') {
         return {
           title: tituloProvaCurta,
-          subtitle: `Confirme os NIPs de ${nParticipantesConfirmado} participante(s)`,
+          subtitle:
+            nParticipantesConfirmado === 1
+              ? 'Informe o NIP do participante'
+              : `Confirme os NIPs de ${nParticipantesConfirmado} participantes`,
         };
       }
     }
@@ -2911,7 +2902,7 @@ export default function AplicarTAFScreen() {
                       : `Armada: corrida, natação e permanência (até ${MAX_PRE_CADASTRO_PARTICIPANTES}). Caminhada: até ${MAX_PARTICIPANTES}.`
                     : modoTafNaval
                       ? 'Corrida 3200 m, natação 100 m, flexões, abdominais e permanência — CGCFN-108 § 5.5.2'
-                      : 'Toque na modalidade para configurar participantes e iniciar'
+                      : 'Toque na modalidade para identificar os participantes e iniciar'
                 }
               />
               <AplicarTafProvaSelector
@@ -2922,48 +2913,17 @@ export default function AplicarTAFScreen() {
           </AplicarTafGlassPanel>
         ) : null}
 
-        {mostrarProvas && corridaEtapa === 'participantes' ? (
-          <AplicarTafGlassPanel accent="cyan">
-            <View style={styles.section}>
-              <AplicarTafBackLink label="Voltar para seleção de provas" onPress={voltarMenuProvas} />
-              <AplicarTafSectionHeader
-                kicker="EQUIPE"
-                title="Número de participantes"
-                subtitle={
-                  modoPreCadastro
-                    ? tipoProva === 'caminhada'
-                      ? `Informe de 1 a ${MAX_PARTICIPANTES} participantes.`
-                      : `Informe de 1 a ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes.`
-                    : `Quantos militares participarão da ${tituloProvaCurta.toLowerCase()}?`
-                }
-              />
-              <AplicarTafInput
-                value={numeroParticipantesCorrida}
-                onChangeText={onChangeParticipantes}
-                placeholder="0"
-                keyboardType="number-pad"
-                maxLength={5}
-                autoCorrect={false}
-                spellCheck={false}
-                accessibilityLabel={`Número de participantes da ${tituloProvaCurta.toLowerCase()}`}
-              />
-              {erroParticipantes ? <Text style={styles.erroText}>{erroParticipantes}</Text> : null}
-              <AplicarTafPrimaryButton label="Confirmar" onPress={confirmarParticipantes} />
-            </View>
-          </AplicarTafGlassPanel>
-        ) : null}
-
         {mostrarProvas && corridaEtapa === 'nips' ? (
           <AplicarTafGlassPanel accent="violet">
             <View style={styles.section}>
-              <AplicarTafBackLink label="Voltar para número de participantes" onPress={voltarParticipantes} />
+              <AplicarTafBackLink label="Voltar para seleção de provas" onPress={voltarMenuProvas} />
               <AplicarTafSectionHeader
                 kicker="IDENTIFICAÇÃO"
                 title={`${tituloProvaCurta} — NIPs`}
                 subtitle={
                   demoAtivo
                     ? `NIPs dos ${nParticipantesConfirmado} participantes (Modo Teste).`
-                    : `Preencha o NIP de cada um dos ${nParticipantesConfirmado} participantes.`
+                    : 'Informe o NIP de cada participante. Use Adicionar Participante para incluir mais.'
                 }
               />
 
@@ -2983,7 +2943,18 @@ export default function AplicarTAFScreen() {
                 ]}
               >
                 <View style={styles.nipFieldBlock}>
-                  <LabelNip color={ui.label} fontSize={11} fontWeight="800" />
+                  <View style={styles.nipLabelRow}>
+                    <LabelNip color={ui.label} fontSize={11} fontWeight="800" />
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remover participante ${index + 1}`}
+                      onPress={() => removerParticipanteNip(index)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={styles.nipTrashBtn}
+                    >
+                      <Trash2 size={18} color={theme.loss} strokeWidth={2.3} />
+                    </TouchableOpacity>
+                  </View>
                   <View style={styles.nipInputRow}>
                     <AplicarTafInput
                       value={nip}
@@ -3256,6 +3227,12 @@ export default function AplicarTAFScreen() {
             );
             })}
 
+            {erroParticipantes ? <Text style={styles.erroText}>{erroParticipantes}</Text> : null}
+            <AplicarTafPrimaryButton
+              label="Adicionar Participante"
+              variant="outline"
+              onPress={adicionarParticipanteNip}
+            />
             <AplicarTafPrimaryButton
               label={modoPreCadastro ? 'Salvar Pré Cadastro' : `Preparar ${tituloProvaCurta}`}
               onPress={
@@ -3459,6 +3436,16 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   },
   nipFieldBlock: {
     gap: 6,
+  },
+  nipLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  nipTrashBtn: {
+    padding: 4,
+    borderRadius: 8,
   },
   nipInputRow: {
     flexDirection: 'row',

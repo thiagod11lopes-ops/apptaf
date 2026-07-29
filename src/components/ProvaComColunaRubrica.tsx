@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { RubricaCell } from './RubricaThumb';
 
@@ -10,7 +10,11 @@ type Props = {
   rubricaSvg?: string | null;
   /** Tarja vermelha para corrida/caminhada substituída ou não aplicada (TAF Armada). */
   dispensavel?: boolean;
+  /** Duplo clique / duplo toque na área da rúbrica (desenho ou espaço em branco). */
+  onDuploCliqueRubrica?: () => void;
 };
+
+const DUPLO_MS = 320;
 
 /** Bloco de prova com coluna dedicada "Rúbrica" ao lado dos dados. */
 export function ProvaComColunaRubrica({
@@ -19,8 +23,49 @@ export function ProvaComColunaRubrica({
   children,
   rubricaSvg,
   dispensavel = false,
+  onDuploCliqueRubrica,
 }: Props) {
   const { theme } = useTheme();
+  const lastTapRef = useRef(0);
+
+  const dispararDuplo = useCallback(() => {
+    onDuploCliqueRubrica?.();
+  }, [onDuploCliqueRubrica]);
+
+  const onPressRubrica = useCallback(() => {
+    if (!onDuploCliqueRubrica) return;
+    if (Platform.OS === 'web') return;
+    const now = Date.now();
+    if (now - lastTapRef.current < DUPLO_MS) {
+      lastTapRef.current = 0;
+      dispararDuplo();
+    } else {
+      lastTapRef.current = now;
+    }
+  }, [onDuploCliqueRubrica, dispararDuplo]);
+
+  const temRubrica = !!(rubricaSvg && String(rubricaSvg).trim());
+
+  const rubricaArea = (
+    <View
+      style={[
+        styles.rubricaHit,
+        !temRubrica && onDuploCliqueRubrica
+          ? {
+              borderColor: theme.border,
+              backgroundColor: theme.backgroundSecondary,
+            }
+          : null,
+      ]}
+    >
+      <RubricaCell svgUri={rubricaSvg} />
+      {!temRubrica && onDuploCliqueRubrica ? (
+        <Text style={[styles.rubricaHint, { color: theme.textMuted }]}>
+          Duplo clique para assinar
+        </Text>
+      ) : null}
+    </View>
+  );
 
   return (
     <View
@@ -52,7 +97,28 @@ export function ProvaComColunaRubrica({
         <View style={styles.dadosCol}>{children}</View>
         <View style={styles.rubricaCol}>
           <Text style={[styles.rubricaLabel, { color: theme.textMuted }]}>Rúbrica</Text>
-          <RubricaCell svgUri={rubricaSvg} />
+          {onDuploCliqueRubrica ? (
+            <Pressable
+              onPress={onPressRubrica}
+              accessibilityLabel={
+                temRubrica
+                  ? 'Duplo clique para substituir a rúbrica'
+                  : 'Duplo clique para adicionar a rúbrica'
+              }
+              accessibilityHint="Toque duas vezes para abrir o campo de assinatura"
+              {...(Platform.OS === 'web'
+                ? ({
+                    onClick: (e: { detail?: number }) => {
+                      if (e?.detail === 2) dispararDuplo();
+                    },
+                  } as object)
+                : null)}
+            >
+              {rubricaArea}
+            </Pressable>
+          ) : (
+            rubricaArea
+          )}
         </View>
       </View>
       {dispensavel ? (
@@ -113,6 +179,23 @@ const styles = StyleSheet.create({
     letterSpacing: 0.55,
     marginBottom: 6,
     alignSelf: 'flex-start',
+  },
+  rubricaHit: {
+    width: '100%',
+    minHeight: 56,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    gap: 4,
+  },
+  rubricaHint: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   dispensavelOverlay: {
     ...StyleSheet.absoluteFillObject,

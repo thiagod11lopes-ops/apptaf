@@ -1,6 +1,12 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import {
+  getAllSessoesAplicacao,
+  updateSessaoAplicacao,
+  type TipoProvaAplicada,
+} from '../services/resultadosAplicadosIndexedDb';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
+import { nipDigitos } from './nipFormat';
 
 function patchRubricaPorProva(
   prova: ResultadoCorridaItem['prova'],
@@ -82,4 +88,55 @@ export async function persistirRubricasNoCadastro(
   }
 
   return ok;
+}
+
+/**
+ * Grava/substitui a rúbrica de uma modalidade no cadastro e nas sessões do histórico
+ * com o mesmo NIP e tipo de prova.
+ */
+export async function persistirRubricaModalidadeParticipante(
+  nip: string,
+  nome: string,
+  modalidade: TipoProvaAplicada,
+  svg: string,
+): Promise<{ cadastroOk: boolean; sessoesAtualizadas: number }> {
+  const svgTrim = svg.trim();
+  if (!svgTrim) return { cadastroOk: false, sessoesAtualizadas: 0 };
+
+  const cadastroOk =
+    (await persistirRubricasNoCadastro([
+      {
+        corredor: 1,
+        nome: nome.trim() || 'Militar',
+        nip: nip.trim(),
+        tempoMs: 0,
+        prova: modalidade,
+        rubricaCandidatoSvg: svgTrim,
+        rubricaCandidato: 'Rúbrica capturada',
+      },
+    ])) > 0;
+
+  const alvo = nipDigitos(nip);
+  let sessoesAtualizadas = 0;
+  if (alvo) {
+    const sessoes = await getAllSessoesAplicacao();
+    for (const sessao of sessoes) {
+      if (sessao.tipoProva !== modalidade) continue;
+      let mudou = false;
+      const resultados = sessao.resultados.map((r) => {
+        if (nipDigitos(r.nip) !== alvo) return r;
+        mudou = true;
+        return {
+          ...r,
+          rubricaCandidatoSvg: svgTrim,
+          rubricaCandidato: 'Rúbrica capturada',
+        };
+      });
+      if (!mudou) continue;
+      await updateSessaoAplicacao({ ...sessao, resultados });
+      sessoesAtualizadas += 1;
+    }
+  }
+
+  return { cadastroOk, sessoesAtualizadas };
 }

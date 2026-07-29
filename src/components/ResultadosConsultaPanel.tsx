@@ -23,8 +23,11 @@ import { getAllSessoesAplicacao, type SessaoAplicacaoTaf } from '../services/res
 import { unificarSessoesComCadastroRegistrador } from '../utils/sessoesUnificadasResultados';
 import { agruparSessoesHistoricoPorTeste } from '../utils/agruparSessoesHistoricoPorTeste';
 import { ProvaComColunaRubrica } from './ProvaComColunaRubrica';
+import { RubricaCaptureModal } from './RubricaCaptureModal';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput, nipDigitos } from '../utils/nipFormat';
+import { persistirRubricaModalidadeParticipante } from '../utils/persistirRubricaCadastro';
+import type { ResultadoCorridaItem } from '../navigation/types';
 import {
   cadastroComAlgumResultadoTaf,
   cadastroParaLinhaResultado,
@@ -155,6 +158,13 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     modalidade: ModalidadeResultadoTaf;
   } | null>(null);
   const [cadastroEmEdicao, setCadastroEmEdicao] = useState<CadastroItemPersist | null>(null);
+  const [rubricaEdicao, setRubricaEdicao] = useState<{
+    linhaId: string;
+    nome: string;
+    nip: string;
+    modalidade: ModalidadeResultadoTaf;
+  } | null>(null);
+  const [salvandoRubrica, setSalvandoRubrica] = useState(false);
 
   const carregarBase = useCallback(async () => {
     const [lista, sessoes] = await Promise.all([
@@ -413,6 +423,83 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     [todosCadastros],
   );
 
+  const abrirEdicaoRubrica = useCallback(
+    (linha: ResultadoTafLinha, modalidade: ModalidadeResultadoTaf) => {
+      if (salvandoRubrica) return;
+      setAviso(null);
+      setRubricaEdicao({
+        linhaId: linha.id,
+        nome: (linha.nome ?? '').trim() || 'Militar',
+        nip: (linha.nip ?? '').trim(),
+        modalidade,
+      });
+    },
+    [salvandoRubrica],
+  );
+
+  const participanteRubricaEdicao = useMemo((): ResultadoCorridaItem | null => {
+    if (!rubricaEdicao) return null;
+    return {
+      corredor: 1,
+      nome: rubricaEdicao.nome,
+      nip: rubricaEdicao.nip,
+      tempoMs: 0,
+      prova: rubricaEdicao.modalidade,
+    };
+  }, [rubricaEdicao]);
+
+  const confirmarRubricaEdicao = useCallback(
+    async (svg: string) => {
+      if (!rubricaEdicao || salvandoRubrica) return;
+      setSalvandoRubrica(true);
+      setAviso(null);
+      try {
+        const { cadastroOk, sessoesAtualizadas } = await persistirRubricaModalidadeParticipante(
+          rubricaEdicao.nip,
+          rubricaEdicao.nome,
+          rubricaEdicao.modalidade,
+          svg,
+        );
+        if (!cadastroOk && sessoesAtualizadas === 0) {
+          setAviso('Não foi possível salvar a rúbrica. Verifique o NIP no cadastro.');
+          return;
+        }
+
+        const patchLinha = (l: ResultadoTafLinha): ResultadoTafLinha => {
+          if (l.id !== rubricaEdicao.linhaId) return l;
+          switch (rubricaEdicao.modalidade) {
+            case 'caminhada':
+              return { ...l, rubricaCaminhadaSvg: svg };
+            case 'natacao':
+              return { ...l, rubricaNatacaoSvg: svg };
+            case 'permanencia':
+              return { ...l, rubricaPermanenciaSvg: svg };
+            default:
+              return { ...l, rubricaCorridaSvg: svg };
+          }
+        };
+        setLinhas((prev) => prev.map(patchLinha));
+
+        const lista = await getAllCadastros();
+        setTodosCadastros(lista);
+        const rubSessoes = await carregarRubricasDasSessoesPorNip();
+        setRubricasSessoes(rubSessoes);
+        const sessoes = await getAllSessoesAplicacao();
+        setSessoesHistorico(
+          agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoes, lista)),
+        );
+
+        setRubricaEdicao(null);
+        setAviso('Rúbrica salva com sucesso.');
+      } catch (e) {
+        setAviso(e instanceof Error ? e.message : 'Falha ao salvar a rúbrica.');
+      } finally {
+        setSalvandoRubrica(false);
+      }
+    },
+    [rubricaEdicao, salvandoRubrica],
+  );
+
   const inputStyle = [
     styles.input,
     {
@@ -555,6 +642,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
               titulo="Corrida"
               rubricaSvg={r.rubricaCorridaSvg}
               dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'corrida')}
+              onDuploCliqueRubrica={() => abrirEdicaoRubrica(r, 'corrida')}
               headerRight={
                 podeExcluirCorrida ? (
                   <PressableScale
@@ -580,6 +668,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
               titulo="Caminhada"
               rubricaSvg={r.rubricaCaminhadaSvg}
               dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'caminhada')}
+              onDuploCliqueRubrica={() => abrirEdicaoRubrica(r, 'caminhada')}
               headerRight={
                 podeExcluirCaminhada ? (
                   <PressableScale
@@ -604,6 +693,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
             <ProvaComColunaRubrica
               titulo="Natação"
               rubricaSvg={r.rubricaNatacaoSvg}
+              onDuploCliqueRubrica={() => abrirEdicaoRubrica(r, 'natacao')}
               headerRight={
                 podeExcluirNatacao ? (
                   <PressableScale
@@ -628,6 +718,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
             <ProvaComColunaRubrica
               titulo="Permanência"
               rubricaSvg={r.rubricaPermanenciaSvg}
+              onDuploCliqueRubrica={() => abrirEdicaoRubrica(r, 'permanencia')}
               headerRight={
                 podeExcluirPermanencia ? (
                   <PressableScale
@@ -657,6 +748,25 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
         cadastro={cadastroEmEdicao}
         onClose={() => setCadastroEmEdicao(null)}
         onSalvo={(atualizado) => void aoSalvarEdicao(atualizado)}
+      />
+
+      <RubricaCaptureModal
+        visible={!!rubricaEdicao}
+        participante={participanteRubricaEdicao}
+        indice={0}
+        total={1}
+        tipoProva={rubricaEdicao?.modalidade ?? 'corrida'}
+        ultimo
+        confirmLabel={salvandoRubrica ? 'Salvando…' : 'Salvar rúbrica'}
+        onConfirm={(svg) => {
+          if (!salvandoRubrica) void confirmarRubricaEdicao(svg);
+        }}
+        onSkip={() => {
+          if (!salvandoRubrica) setRubricaEdicao(null);
+        }}
+        onCancel={() => {
+          if (!salvandoRubrica) setRubricaEdicao(null);
+        }}
       />
 
       <ConfirmacaoExcluirResultadoModal

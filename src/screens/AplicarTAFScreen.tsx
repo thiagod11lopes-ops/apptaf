@@ -57,6 +57,7 @@ import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { AplicarTafModoTesteBar } from '../components/taf/aplicar/AplicarTafModoTesteBar';
 import { EditarIdadeGeneroMilitarModal } from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
 import { ConfirmacaoExcluirParticipanteNipModal } from '../components/taf/aplicar/ConfirmacaoExcluirParticipanteNipModal';
+import { CadastroRapidoMilitarModal } from '../components/taf/aplicar/CadastroRapidoMilitarModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -324,6 +325,10 @@ export default function AplicarTAFScreen() {
     null,
   );
   const [participanteNipParaExcluir, setParticipanteNipParaExcluir] = useState<number | null>(null);
+  const [modalCadastroRapido, setModalCadastroRapido] = useState<{
+    index: number;
+    nip: string;
+  } | null>(null);
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
   const [modoTafNaval, setModoTafNaval] = useState(false);
   const [repeticoesParticipantes, setRepeticoesParticipantes] = useState<string[]>([]);
@@ -1447,6 +1452,7 @@ export default function AplicarTAFScreen() {
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalEditarIdadeGeneroIndex(null);
     setParticipanteNipParaExcluir(null);
+    setModalCadastroRapido(null);
     setCorridaEtapa('nips');
   }, []);
 
@@ -1491,6 +1497,7 @@ export default function AplicarTAFScreen() {
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalEditarIdadeGeneroIndex(null);
     setParticipanteNipParaExcluir(null);
+    setModalCadastroRapido(null);
     setCorridaEtapa('menu');
   }, []);
 
@@ -1834,20 +1841,22 @@ export default function AplicarTAFScreen() {
     const resultado = buscarCadastroPorNomeOuNip(cadastros, nip);
 
     if (resultado.kind !== 'found') {
+      if (resultado.kind === 'none') {
+        setModalCadastroRapido({ index, nip });
+        setNipFeedbackLinhas((prev) => {
+          const next = [...prev];
+          next[index] = null;
+          return next;
+        });
+        return;
+      }
       setNipFeedbackLinhas((prev) => {
         const next = [...prev];
-        if (resultado.kind === 'none') {
-          next[index] = {
-            tipo: 'erro',
-            texto: 'Este militar precisa ser cadastrado na página Cadastro.',
-          };
-        } else {
-          next[index] = {
-            tipo: 'erro',
-            texto:
-              'Vários cadastros correspondem à busca. Informe o NIP completo (8 dígitos).',
-          };
-        }
+        next[index] = {
+          tipo: 'erro',
+          texto:
+            'Vários cadastros correspondem à busca. Informe o NIP completo (8 dígitos).',
+        };
         return next;
       });
       return;
@@ -1856,6 +1865,22 @@ export default function AplicarTAFScreen() {
     const c = resultado.cadastro;
     await continuarAposCadastroEncontrado(index, c);
   }, [nipsParticipantes, continuarAposCadastroEncontrado]);
+
+  const onMilitarCadastradoRapido = useCallback(
+    async (cadastro: CadastroItemPersist) => {
+      const ctx = modalCadastroRapido;
+      if (!ctx) return;
+      const { index } = ctx;
+      setNipsParticipantes((prev) => {
+        const next = [...prev];
+        next[index] = formatNipInput(cadastro.nip);
+        return next;
+      });
+      setModalCadastroRapido(null);
+      await continuarAposCadastroEncontrado(index, cadastro);
+    },
+    [modalCadastroRapido, continuarAposCadastroEncontrado],
+  );
 
   const preencherNipsDemonstracao = useCallback(async () => {
     if (preenchendoNipsDemo || nParticipantesConfirmado < 1) return;
@@ -3301,6 +3326,13 @@ export default function AplicarTAFScreen() {
         nome={nomeExclusaoParticipante}
         onClose={() => setParticipanteNipParaExcluir(null)}
         onConfirm={confirmarExclusaoParticipanteNip}
+      />
+
+      <CadastroRapidoMilitarModal
+        visible={modalCadastroRapido != null}
+        nip={modalCadastroRapido?.nip ?? ''}
+        onClose={() => setModalCadastroRapido(null)}
+        onCadastrado={onMilitarCadastradoRapido}
       />
 
       <TafProvaTempoModal

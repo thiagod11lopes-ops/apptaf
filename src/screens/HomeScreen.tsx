@@ -28,6 +28,7 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   restritos: 0,
   fatoresRisco: 0,
   cadastroIncompleto: 0,
+  reprovados: 0,
 };
 
 /** Parte local do e-mail + "@" — ex.: lopes.thiago.oliveira@marinha.mil.br → lopes.thiago.oliveira@ */
@@ -228,6 +229,13 @@ export default function HomeScreen() {
                 navigateTab('Cadastro', { abrirPlanilhaIncompletos: true })
               }
             />
+            <StatCard
+              label="Reprovados"
+              value={(resumo.reprovados ?? 0).toLocaleString('pt-BR')}
+              variant="negative"
+              stretch
+              accessibilityLabel={`Reprovados em pelo menos um teste: ${resumo.reprovados ?? 0}`}
+            />
           </View>
         </View>
 
@@ -390,6 +398,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 72,
     maxWidth: 120,
+    gap: 10,
   },
   statsRow: {
     flexDirection: 'row',

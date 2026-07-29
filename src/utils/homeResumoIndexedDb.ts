@@ -24,6 +24,7 @@ const RESUMO_VAZIO: ResumoInicioTafHistorico = {
   restritos: 0,
   fatoresRisco: 0,
   cadastroIncompleto: 0,
+  reprovados: 0,
 };
 
 function stripCadastro(row: Record<string, unknown>): CadastroItemPersist {

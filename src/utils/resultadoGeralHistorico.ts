@@ -466,6 +466,8 @@ export type ResumoInicioTafHistorico = {
    * (ou só um dos dois).
    */
   cadastroIncompleto: number;
+  /** Cadastrados reprovados em pelo menos um teste (qualquer modalidade). */
+  reprovados: number;
 };
 
 function findAggRowForCadastro(aggs: AggRow[], c: CadastroItemPersist): AggRow | undefined {
@@ -483,6 +485,63 @@ function classificarAggNoResumo(agg: AggRow): 'completo' | 'parcial' | 'vazio' {
   if (requisitoCorrida && temNatacao && temPerm) return 'completo';
   if (requisitoCorrida || temNatacao || temPerm) return 'parcial';
   return 'vazio';
+}
+
+function modalidadeEhReprovada(m?: ModalidadeHistorico): boolean {
+  if (!m) return false;
+  if ((m.situacao ?? '').trim().toLowerCase() === 'reprovado') return true;
+  return (m.nota ?? '').trim().toUpperCase() === 'REPROVADO';
+}
+
+function aggTemReprovacao(agg: AggRow): boolean {
+  return (
+    modalidadeEhReprovada(agg.corrida) ||
+    modalidadeEhReprovada(agg.caminhada) ||
+    modalidadeEhReprovada(agg.natacao) ||
+    modalidadeEhReprovada(agg.permanencia)
+  );
+}
+
+function resultadoItemEhReprovado(r: ResultadoCorridaItem): boolean {
+  const rep = (r.reprovacaoTexto ?? '').trim().toLowerCase();
+  if (rep.includes('reprov')) return true;
+  const nota = (r.notaTexto ?? r.noraTexto ?? '').trim().toUpperCase();
+  if (nota === 'REPROVADO') return true;
+  const desempenho = (r.desempenhoTexto ?? '').trim().toLowerCase();
+  return desempenho === 'reprovado';
+}
+
+function cadastroTemReprovacaoDireta(c: CadastroItemPersist): boolean {
+  for (const nota of [c.notaCorrida, c.notaCaminhada, c.notaNatacao]) {
+    if ((nota || '').trim().toUpperCase() === 'REPROVADO') return true;
+  }
+  return c.resultadoPermanencia === 'reprovado' || c.resultadoNatacao === 'reprovado';
+}
+
+/** Chaves (NIP normalizado ou id) de participantes com ao menos um teste reprovado nas sessões. */
+function chavesComReprovacaoEmSessoes(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[],
+): Set<string> {
+  const keys = new Set<string>();
+  for (const sessao of sessoes) {
+    for (const r of sessao.resultados ?? []) {
+      if (!resultadoItemEhReprovado(r)) continue;
+      const busca = buscarCadastroPorNomeOuNip(
+        cadastros,
+        (r.nip ?? '').trim() || (r.nome ?? '').trim(),
+      );
+      if (busca.kind === 'found') {
+        const nipKey = nipChaveCadastro(busca.cadastro.nip);
+        if (nipKey) keys.add(nipKey);
+        keys.add(busca.cadastro.id);
+        continue;
+      }
+      const nipKey = nipChaveCadastro(r.nip ?? '');
+      if (nipKey) keys.add(nipKey);
+    }
+  }
+  return keys;
 }
 
 /** Resumo da aba Iniciar com base no Histórico de aplicações. */
@@ -523,12 +582,15 @@ export function calcularResumoInicioTafFromHistorico(
     if (key) nipsFatoresPreenchidosNorm.add(key);
   }
 
+  const chavesReprovados = chavesComReprovacaoEmSessoes(unificadas, cadastrosReais);
+
   let completos = 0;
   let parcial = 0;
   let semTeste = 0;
   let restritos = 0;
   let fatoresRisco = 0;
   let cadastroIncompleto = 0;
+  let reprovados = 0;
   for (const c of cadastrosReais) {
     const nipC = nipChaveCadastro(c.nip);
     if (nipC && nipsFatoresNorm.has(nipC)) {
@@ -537,11 +599,19 @@ export function calcularResumoInicioTafFromHistorico(
     if (cadastroIncompletoNascimentoOuFatores(c, nipsFatoresPreenchidosNorm)) {
       cadastroIncompleto += 1;
     }
+    const agg = findAggRowForCadastro(aggs, c);
+    const reprovadoEmTeste =
+      cadastroTemReprovacaoDireta(c) ||
+      (agg ? aggTemReprovacao(agg) : false) ||
+      (!!nipC && chavesReprovados.has(nipC)) ||
+      chavesReprovados.has(c.id);
+    if (reprovadoEmTeste) {
+      reprovados += 1;
+    }
     if (nipC && nipsRestritosNorm.has(nipC)) {
       restritos += 1;
       continue;
     }
-    const agg = findAggRowForCadastro(aggs, c);
     if (!agg) {
       semTeste += 1;
       continue;
@@ -560,5 +630,6 @@ export function calcularResumoInicioTafFromHistorico(
     restritos,
     fatoresRisco,
     cadastroIncompleto,
+    reprovados,
   };
 }

@@ -182,6 +182,53 @@ describe('calcularResumoInicioTafFromHistorico', () => {
     );
     expect(resumo.cadastroIncompleto).toBe(2);
   });
+
+  it('conta militares reprovados em pelo menos um teste', () => {
+    const cadastros = [
+      cadastro({ id: 'c1', nip: '11.1111.11', nome: 'Reprovado um' }),
+      cadastro({ id: 'c2', nip: '22.2222.22', nome: 'Aprovado' }),
+      cadastro({
+        id: 'c3',
+        nip: '33.3333.33',
+        nome: 'Reprovado cadastro',
+        notaNatacao: 'REPROVADO',
+        tempoNatacao: '05:00',
+      }),
+    ];
+    const sessoes: SessaoAplicacaoTaf[] = [
+      sessao({
+        id: 's-rep',
+        tipoProva: 'corrida',
+        resultados: [
+          {
+            corredor: 1,
+            nome: 'Reprovado um',
+            nip: '11.1111.11',
+            tempoMs: 20 * 60 * 1000,
+            notaTexto: 'REPROVADO',
+            prova: 'corrida',
+          },
+        ],
+      }),
+      sessao({
+        id: 's-ok',
+        tipoProva: 'corrida',
+        resultados: [
+          {
+            corredor: 1,
+            nome: 'Aprovado',
+            nip: '22.2222.22',
+            tempoMs: 12 * 60 * 1000,
+            notaTexto: '90',
+            prova: 'corrida',
+          },
+        ],
+      }),
+    ];
+
+    const resumo = calcularResumoInicioTafFromHistorico(sessoes, cadastros);
+    expect(resumo.reprovados).toBe(2);
+  });
   it('une o mesmo NIP vindo com chaves diferentes em um único participante', () => {
     const cadastros = [cadastro()];
     const sessoes: SessaoAplicacaoTaf[] = [

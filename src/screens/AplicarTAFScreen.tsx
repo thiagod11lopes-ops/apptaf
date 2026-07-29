@@ -58,6 +58,7 @@ import { AplicarTafModoTesteBar } from '../components/taf/aplicar/AplicarTafModo
 import { EditarIdadeGeneroMilitarModal } from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
 import { ConfirmacaoExcluirParticipanteNipModal } from '../components/taf/aplicar/ConfirmacaoExcluirParticipanteNipModal';
 import { CadastroRapidoMilitarModal } from '../components/taf/aplicar/CadastroRapidoMilitarModal';
+import { OrientacaoLandscapeProvaModal } from '../components/taf/aplicar/OrientacaoLandscapeProvaModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -329,6 +330,9 @@ export default function AplicarTAFScreen() {
     index: number;
     nip: string;
   } | null>(null);
+  const [preparoPendenteAposOrientacao, setPreparoPendenteAposOrientacao] = useState<
+    'tempo' | 'repeticoes' | 'permanencia' | null
+  >(null);
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
   const [modoTafNaval, setModoTafNaval] = useState(false);
   const [repeticoesParticipantes, setRepeticoesParticipantes] = useState<string[]>([]);
@@ -1498,6 +1502,7 @@ export default function AplicarTAFScreen() {
     setModalEditarIdadeGeneroIndex(null);
     setParticipanteNipParaExcluir(null);
     setModalCadastroRapido(null);
+    setPreparoPendenteAposOrientacao(null);
     setCorridaEtapa('menu');
   }, []);
 
@@ -1934,6 +1939,58 @@ export default function AplicarTAFScreen() {
     setModalTesteExistente(null);
   }, [modalTesteExistente, definirNipOk]);
 
+  const validarNipsConfirmados = useCallback((): boolean => {
+    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+      if (nipFeedbackLinhas[i]?.tipo !== 'ok') {
+        Alert.alert(
+          'NIPs pendentes',
+          'Confirme o NIP de todos os participantes (OK em cada linha) e preencha data de nascimento e gênero quando solicitado.',
+        );
+        return false;
+      }
+    }
+    return true;
+  }, [nParticipantesConfirmado, nipFeedbackLinhas]);
+
+  const executarPrepararProvaTempo = useCallback(() => {
+    if (
+      tipoProva !== 'corrida' &&
+      tipoProva !== 'natacao' &&
+      tipoProva !== 'caminhada' &&
+      tipoProva !== 'abdominal_prancha'
+    ) {
+      Alert.alert(
+        'Tipo de prova não definido',
+        'Volte ao menu e escolha a prova antes de continuar.',
+      );
+      return;
+    }
+    resetCronometroCorrida();
+    dispatchTrial({
+      type: 'prepararProva',
+      nParticipantes: nParticipantesConfirmado,
+      tipoProva: trialTipoFromProva(tipoProva),
+    });
+    setCorridaEtapa('tabela_corrida');
+  }, [resetCronometroCorrida, nParticipantesConfirmado, tipoProva]);
+
+  const executarPrepararProvaRepeticoes = useCallback(() => {
+    if (!tipoProva || !isProvaComRepeticoes(tipoProva)) return;
+    setRepeticoesParticipantes(Array.from({ length: nParticipantesConfirmado }, () => ''));
+    setCorridaEtapa('tabela_repeticoes');
+  }, [nParticipantesConfirmado, tipoProva]);
+
+  const executarPrepararPermanencia = useCallback(() => {
+    permanenciaLimiteAtingidoRef.current = false;
+    setModalPermanenciaFinalizadaVisible(false);
+    setErroPermanencia('');
+    setResultadoPermanenciaLinhas(
+      Array.from({ length: nParticipantesConfirmado }, () => null),
+    );
+    resetCronometroCorrida();
+    setCorridaEtapa('tabela_permanencia');
+  }, [nParticipantesConfirmado, resetCronometroCorrida]);
+
   const prepararProva = useCallback(() => {
     if (
       tipoProva !== 'corrida' &&
@@ -1947,58 +2004,33 @@ export default function AplicarTAFScreen() {
       );
       return;
     }
-    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
-      if (nipFeedbackLinhas[i]?.tipo !== 'ok') {
-        Alert.alert(
-          'NIPs pendentes',
-          'Confirme o NIP de todos os participantes (OK em cada linha) e preencha data de nascimento e gênero quando solicitado.',
-        );
-        return;
-      }
-    }
-    resetCronometroCorrida();
-    dispatchTrial({
-      type: 'prepararProva',
-      nParticipantes: nParticipantesConfirmado,
-      tipoProva: trialTipoFromProva(tipoProva),
-    });
-    setCorridaEtapa('tabela_corrida');
-  }, [resetCronometroCorrida, nParticipantesConfirmado, tipoProva, nipFeedbackLinhas]);
+    if (!validarNipsConfirmados()) return;
+    setPreparoPendenteAposOrientacao('tempo');
+  }, [tipoProva, validarNipsConfirmados]);
 
   const prepararProvaRepeticoes = useCallback(() => {
     if (!tipoProva || !isProvaComRepeticoes(tipoProva)) return;
-    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
-      if (nipFeedbackLinhas[i]?.tipo !== 'ok') {
-        Alert.alert(
-          'NIPs pendentes',
-          'Confirme o NIP de todos os participantes (OK em cada linha) e preencha data de nascimento e gênero quando solicitado.',
-        );
-        return;
-      }
-    }
-    setRepeticoesParticipantes(Array.from({ length: nParticipantesConfirmado }, () => ''));
-    setCorridaEtapa('tabela_repeticoes');
-  }, [nParticipantesConfirmado, tipoProva, nipFeedbackLinhas]);
+    if (!validarNipsConfirmados()) return;
+    setPreparoPendenteAposOrientacao('repeticoes');
+  }, [tipoProva, validarNipsConfirmados]);
 
   const prepararPermanencia = useCallback(() => {
-    for (let i = 0; i < nParticipantesConfirmado; i += 1) {
-      if (nipFeedbackLinhas[i]?.tipo !== 'ok') {
-        Alert.alert(
-          'NIPs pendentes',
-          'Confirme o NIP de todos os participantes (OK em cada linha) e preencha data de nascimento e gênero quando solicitado.',
-        );
-        return;
-      }
-    }
-    permanenciaLimiteAtingidoRef.current = false;
-    setModalPermanenciaFinalizadaVisible(false);
-    setErroPermanencia('');
-    setResultadoPermanenciaLinhas(
-      Array.from({ length: nParticipantesConfirmado }, () => null),
-    );
-    resetCronometroCorrida();
-    setCorridaEtapa('tabela_permanencia');
-  }, [nParticipantesConfirmado, nipFeedbackLinhas, resetCronometroCorrida]);
+    if (!validarNipsConfirmados()) return;
+    setPreparoPendenteAposOrientacao('permanencia');
+  }, [validarNipsConfirmados]);
+
+  const confirmarOrientacaoEPreparar = useCallback(() => {
+    const tipo = preparoPendenteAposOrientacao;
+    setPreparoPendenteAposOrientacao(null);
+    if (tipo === 'tempo') executarPrepararProvaTempo();
+    else if (tipo === 'repeticoes') executarPrepararProvaRepeticoes();
+    else if (tipo === 'permanencia') executarPrepararPermanencia();
+  }, [
+    preparoPendenteAposOrientacao,
+    executarPrepararProvaTempo,
+    executarPrepararProvaRepeticoes,
+    executarPrepararPermanencia,
+  ]);
 
   const togglePermanenciaResultado = useCallback(
     (index: number, opcao: 'aprovado' | 'reprovado') => {
@@ -3333,6 +3365,12 @@ export default function AplicarTAFScreen() {
         nip={modalCadastroRapido?.nip ?? ''}
         onClose={() => setModalCadastroRapido(null)}
         onCadastrado={onMilitarCadastradoRapido}
+      />
+
+      <OrientacaoLandscapeProvaModal
+        visible={preparoPendenteAposOrientacao != null}
+        onClose={() => setPreparoPendenteAposOrientacao(null)}
+        onContinuar={confirmarOrientacaoEPreparar}
       />
 
       <TafProvaTempoModal

@@ -393,7 +393,7 @@ export function TafProvaTempoModal({
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const ts = theme.textStyles;
-  const { isNativeMobile, modalBottomPad, horizontalPad } = useAplicarTafLayout();
+  const { isNativeMobile, modalBottomPad, horizontalPad, isLandscape } = useAplicarTafLayout();
 
   const tituloModal = `${tituloProva} preparada`;
   const glass = getAplicarTafGlass(theme);
@@ -454,7 +454,11 @@ export function TafProvaTempoModal({
   };
 
   const participantesList = (
-    <>
+    <View
+      style={
+        isLandscape ? styles.participantesGridLandscape : styles.participantesStack
+      }
+    >
       {Array.from({ length: nParticipantes }, (_, index) => {
         const nome = nomesParticipantes[index] ?? '—';
         const temFatorRisco = participantesComFatorRisco[index] === true;
@@ -501,6 +505,7 @@ export function TafProvaTempoModal({
             key={`prov-modal-${index}`}
             style={[
               styles.participantCard,
+              isLandscape ? styles.participantCardLandscape : null,
               {
                 borderColor: desistiu ? theme.loss : glass.border,
                 backgroundColor: glass.bg,
@@ -671,7 +676,7 @@ export function TafProvaTempoModal({
           </View>
         );
       })}
-    </>
+    </View>
   );
 
   return (
@@ -875,6 +880,16 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     gap: 3,
   },
+  participantesStack: {
+    gap: 3,
+  },
+  participantesGridLandscape: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   bottomBar: {
     paddingHorizontal: 12,
     paddingTop: 8,
@@ -890,6 +905,10 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     overflow: 'visible',
     gap: 6,
+  },
+  participantCardLandscape: {
+    width: '48.5%',
+    marginBottom: 0,
   },
   participantTopRow: {
     flexDirection: 'row',

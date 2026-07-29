@@ -59,7 +59,7 @@ export function TafProvaRepeticoesModal({
   const ui = getUiColors(theme);
   const glass = getAplicarTafGlass(theme);
   const backdropColors = getAplicarTafBackdrop(theme);
-  const { isNarrowPhone } = useAplicarTafLayout();
+  const { isNarrowPhone, isLandscape } = useAplicarTafLayout();
 
   const rows = useMemo(
     () => Array.from({ length: nParticipantes }, (_, i) => i),
@@ -85,6 +85,11 @@ export function TafProvaRepeticoesModal({
             </View>
 
             <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+              <View
+                style={
+                  isLandscape ? styles.rowsGridLandscape : styles.rowsStack
+                }
+              >
               {rows.map((index) => {
                 const nome = nomesParticipantes[index] ?? `Militar ${index + 1}`;
                 const temFatorRisco = participantesComFatorRisco[index] === true;
@@ -93,7 +98,11 @@ export function TafProvaRepeticoesModal({
                 return (
                   <View
                     key={`rep-row-${index}`}
-                    style={[styles.row, { borderColor: glass.border, backgroundColor: theme.cardBg }]}
+                    style={[
+                      styles.row,
+                      isLandscape ? styles.rowLandscape : null,
+                      { borderColor: glass.border, backgroundColor: theme.cardBg },
+                    ]}
                   >
                     <View style={styles.rowHead}>
                       <Text style={[styles.rowNum, { color: theme.primary }]}>#{index + 1}</Text>
@@ -152,6 +161,7 @@ export function TafProvaRepeticoesModal({
                   </View>
                 );
               })}
+              </View>
             </ScrollView>
 
             <View style={styles.footer}>
@@ -207,11 +217,21 @@ const styles = StyleSheet.create({
   hint: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
   closeBtn: { padding: 6 },
   scroll: { paddingHorizontal: 18, paddingBottom: 12, gap: 10 },
+  rowsStack: { gap: 10 },
+  rowsGridLandscape: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
   row: {
     borderWidth: 1,
     borderRadius: PREMIUM.radiusLg,
     padding: 14,
     gap: 10,
+  },
+  rowLandscape: {
+    width: '48.5%',
   },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rowNum: { fontSize: 14, fontWeight: '900', width: 28 },

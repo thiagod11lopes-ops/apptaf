@@ -27,6 +27,7 @@ export function useAplicarTafLayout() {
     isNativeMobile,
     isPhoneWidth,
     isNarrowPhone,
+    isLandscape: width > height,
     participantStacked,
     provaTileWidth: Math.max(provaTileWidth, 140),
     horizontalPad,

@@ -222,7 +222,7 @@ export default function HomeScreen() {
               variant="negative"
             />
             <StatCard
-              label="Cadastros Incompletos"
+              label="CADAS. INCOMP"
               value={(resumo.cadastroIncompleto ?? 0).toLocaleString('pt-BR')}
               variant="warning"
               accessibilityLabel={`Cadastros incompletos: ${resumo.cadastroIncompleto ?? 0}. Abrir planilha filtrada.`}

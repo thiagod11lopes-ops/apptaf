@@ -90,6 +90,8 @@ export type TafProvaTempoModalProps = {
   cronometroHint?: string;
   numeroVoltas?: string;
   onChangeNumeroVoltas?: (text: string) => void;
+  /** Chamado após confirmar o número de voltas (corrida/caminhada). */
+  onVoltasConfirmadas?: () => void;
   nColunasVoltas?: number;
   nParticipantes: number;
   nomesParticipantes: string[];
@@ -364,6 +366,7 @@ export function TafProvaTempoModal({
   cronometroHint,
   numeroVoltas = '',
   onChangeNumeroVoltas,
+  onVoltasConfirmadas,
   nColunasVoltas = 0,
   nParticipantes,
   nomesParticipantes,
@@ -450,7 +453,9 @@ export function TafProvaTempoModal({
   const nColunasVoltasAtivas = voltasConfirmadas ? nColunasVoltas : 0;
 
   const confirmarVoltas = () => {
-    if (voltasValidas) setVoltasConfirmadas(true);
+    if (!voltasValidas) return;
+    setVoltasConfirmadas(true);
+    onVoltasConfirmadas?.();
   };
 
   const participantesList = (

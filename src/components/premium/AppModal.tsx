@@ -48,14 +48,11 @@ export function AppModal({ visible, children, ...rest }: ModalProps) {
     </View>
   );
 
-  if (useTabletFrame) {
-    if (Platform.OS === 'web') {
-      if (!portalTarget) return null;
-      return portalToHost(tabletOverlay, portalTarget);
-    }
-    return tabletOverlay;
+  if (useTabletFrame && Platform.OS === 'web' && portalTarget) {
+    return portalToHost(tabletOverlay, portalTarget);
   }
 
+  // Fallback: Modal nativo (também quando o host do frame ainda não está no DOM).
   return (
     <Modal visible animationType="fade" {...rest}>
       {content}

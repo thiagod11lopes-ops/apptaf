@@ -63,7 +63,7 @@ export function ConfirmacaoExcluirResultadoModal({
           ) : (
             <>
               <Trash2 size={16} color="#FFFFFF" strokeWidth={2.5} />
-              <Text style={styles.btnDangerText}>Excluir resultado</Text>
+              <Text style={styles.btnDangerText}>Excluir participante</Text>
             </>
           )}
         </LinearGradient>
@@ -75,8 +75,9 @@ export function ConfirmacaoExcluirResultadoModal({
     <ModernModal
       visible={visible}
       onClose={onClose}
-      title="Excluir resultado?"
+      title="Excluir participante?"
       icon={<AlertTriangle size={20} color="#FFFFFF" strokeWidth={2.2} />}
+      dismissable={false}
       footer={footer}
     >
       <View style={styles.bodyInner}>
@@ -84,16 +85,15 @@ export function ConfirmacaoExcluirResultadoModal({
           <Trash2 size={28} color={theme.loss} strokeWidth={2} />
         </View>
         <Text style={[styles.message, { color: theme.text }]}>
-          O resultado de{' '}
-          <Text style={styles.strong}>{modLabel}</Text> de{' '}
-          <Text style={styles.strong}>{nome}</Text>
+          Remover <Text style={styles.strong}>{nome}</Text>
           {nip && nip !== '—' ? (
             <>
               {' '}
               (NIP <Text style={styles.strong}>{nip}</Text>)
             </>
           ) : null}{' '}
-          será removido permanentemente do cadastro.
+          da prova de <Text style={styles.strong}>{modLabel}</Text>? O resultado será excluído
+          permanentemente do cadastro e do histórico.
         </Text>
         <Text style={[styles.hint, { color: theme.textMuted }]}>
           Esta ação não pode ser desfeita. Os demais resultados do militar serão mantidos.

@@ -55,11 +55,8 @@ import { removerParticipanteModalidadeDoHistorico } from '../../utils/registroMo
 import { RubricaCell } from '../RubricaThumb';
 import { PREMIUM } from '../../theme/premium';
 
-function modalidadeExcluivel(tipo: TipoProvaAplicada): ModalidadeResultadoTaf | null {
-  if (tipo === 'corrida' || tipo === 'natacao' || tipo === 'permanencia' || tipo === 'caminhada') {
-    return tipo;
-  }
-  return null;
+function modalidadeExcluivel(tipo: TipoProvaAplicada): ModalidadeResultadoTaf {
+  return tipo;
 }
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as const;
@@ -269,6 +266,7 @@ export function HistoricoCalendarioTaf({
   }, [confirmarExclusao, excluindo, cadastros, onAviso, onResultadosCadastrados]);
 
   return (
+    <>
     <SectionCard title="Calendário de aplicações" style={styles.section}>
       <View style={styles.navRow}>
         <PressableScale
@@ -557,21 +555,19 @@ export function HistoricoCalendarioTaf({
                         maxHeight={52}
                       />
                     </View>
-                    {modalidade ? (
-                      <PressableScale
-                        onPress={() =>
-                          setConfirmarExclusao({
-                            nome: (r.nome ?? '').trim() || 'Militar',
-                            nip: (r.nip ?? '').trim(),
-                            modalidade,
-                          })
-                        }
-                        style={[styles.trashBtn, { borderColor: theme.border }]}
-                        accessibilityLabel={`Excluir resultado de ${tituloTipoProva(sessao.tipoProva)}`}
-                      >
-                        <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
-                      </PressableScale>
-                    ) : null}
+                    <PressableScale
+                      onPress={() =>
+                        setConfirmarExclusao({
+                          nome: (r.nome ?? '').trim() || 'Militar',
+                          nip: (r.nip ?? '').trim(),
+                          modalidade,
+                        })
+                      }
+                      style={[styles.trashBtn, { borderColor: theme.border }]}
+                      accessibilityLabel={`Excluir participante de ${tituloTipoProva(sessao.tipoProva)}`}
+                    >
+                      <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                    </PressableScale>
                   </View>
                 );
               })}
@@ -593,18 +589,20 @@ export function HistoricoCalendarioTaf({
         }}
       />
 
-      <ConfirmacaoExcluirResultadoModal
-        visible={!!confirmarExclusao}
-        nome={confirmarExclusao?.nome ?? ''}
-        nip={confirmarExclusao?.nip ?? ''}
-        modalidade={confirmarExclusao?.modalidade ?? null}
-        loading={excluindo}
-        onClose={() => {
-          if (!excluindo) setConfirmarExclusao(null);
-        }}
-        onConfirm={() => void executarExclusao()}
-      />
     </SectionCard>
+
+    <ConfirmacaoExcluirResultadoModal
+      visible={!!confirmarExclusao}
+      nome={confirmarExclusao?.nome ?? ''}
+      nip={confirmarExclusao?.nip ?? ''}
+      modalidade={confirmarExclusao?.modalidade ?? null}
+      loading={excluindo}
+      onClose={() => {
+        if (!excluindo) setConfirmarExclusao(null);
+      }}
+      onConfirm={() => void executarExclusao()}
+    />
+    </>
   );
 }
 

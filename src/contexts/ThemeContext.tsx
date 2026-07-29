@@ -45,7 +45,7 @@ function resolveInitialThemeMode(): ThemeMode {
       if (stored === 'light' || stored === 'dark') return stored;
     }
   }
-  return 'dark';
+  return 'light';
 }
 
 if (Platform.OS === 'web') {

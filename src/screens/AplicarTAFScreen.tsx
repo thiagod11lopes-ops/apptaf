@@ -1556,6 +1556,7 @@ export default function AplicarTAFScreen() {
 
   const atualizarDadosNipLinha = useCallback(
     (index: number, patch: Partial<{ dataNascimento: string; sexo: 'M' | 'F' }>) => {
+      if (isModoDemonstracaoAtivo()) return;
       setNipFeedbackLinhas((prev) => {
         const fb = prev[index];
         if (fb?.tipo !== 'completar_dados') return prev;
@@ -1569,6 +1570,7 @@ export default function AplicarTAFScreen() {
 
   const confirmarDadosNipLinha = useCallback(
     async (index: number) => {
+      if (isModoDemonstracaoAtivo()) return;
       const fb = nipFeedbackLinhas[index];
       if (fb?.tipo !== 'completar_dados') return;
 
@@ -1616,6 +1618,9 @@ export default function AplicarTAFScreen() {
 
   const salvarEdicaoIdadeGenero = useCallback(
     async (dados: { dataNascimento: string; sexo: 'M' | 'F' }) => {
+      if (isModoDemonstracaoAtivo()) {
+        throw new Error('No Modo Teste não é permitido alterar idade ou gênero.');
+      }
       const index = modalEditarIdadeGeneroIndex;
       if (index == null) return;
       const nipLinha = nipsParticipantes[index] ?? '';
@@ -1643,6 +1648,7 @@ export default function AplicarTAFScreen() {
   const modalEditarOk = modalEditarFb?.tipo === 'ok' ? modalEditarFb : null;
 
   const atualizarNip = useCallback((index: number, texto: string) => {
+    if (isModoDemonstracaoAtivo()) return;
     setNipsParticipantes((prev) => {
       const next = [...prev];
       next[index] = formatNipInput(texto);
@@ -2840,7 +2846,7 @@ export default function AplicarTAFScreen() {
                 title={`${tituloProvaCurta} — NIPs`}
                 subtitle={
                   demoAtivo
-                    ? `NIPs dos ${nParticipantesConfirmado} participantes (Modo Teste).`
+                    ? `NIPs, idade e gênero dos ${nParticipantesConfirmado} participantes ficam bloqueados no Modo Teste. Use a barra acima para preencher.`
                     : 'Informe o NIP de cada participante. Use Adicionar Participante para incluir mais.'
                 }
               />
@@ -2883,26 +2889,35 @@ export default function AplicarTAFScreen() {
                       onChangeText={(t) => atualizarNip(index, t)}
                       placeholder="00.0000.00"
                       keyboardType="number-pad"
-                      style={styles.inputNipFlex}
+                      style={[
+                        styles.inputNipFlex,
+                        demoAtivo ? { opacity: 0.85 } : null,
+                      ]}
                       autoCorrect={false}
                       spellCheck={false}
+                      editable={!demoAtivo}
                       accessibilityLabel={`NIP do participante ${index + 1}`}
+                      accessibilityState={{ disabled: demoAtivo }}
                     />
-                    <TouchableOpacity
-                      accessibilityLabel={`Confirmar NIP do participante ${index + 1}`}
-                      activeOpacity={0.9}
-                      onPress={() => verificarNipNoCadastro(index)}
-                      style={styles.nipOkBtnWrap}
-                    >
-                      <LinearGradient
-                        colors={[theme.primary, '#6366f1']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.nipOkBtn}
+                    {!demoAtivo ? (
+                      <TouchableOpacity
+                        accessibilityLabel={`Confirmar NIP do participante ${index + 1}`}
+                        activeOpacity={0.9}
+                        onPress={() => verificarNipNoCadastro(index)}
+                        style={styles.nipOkBtnWrap}
                       >
-                        <Text style={[styles.nipOkBtnText, { color: theme.tokens.textOnPrimary }]}>OK</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
+                        <LinearGradient
+                          colors={[theme.primary, '#6366f1']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.nipOkBtn}
+                        >
+                          <Text style={[styles.nipOkBtnText, { color: theme.tokens.textOnPrimary }]}>
+                            OK
+                          </Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 </View>
 
@@ -3006,50 +3021,107 @@ export default function AplicarTAFScreen() {
                           {fb.nomeMilitar}
                         </Text>
                         <View style={styles.militarMetaRow}>
-                          <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel="Editar idade"
-                            accessibilityHint="Abre edição de idade e gênero"
-                            onPress={() => setModalEditarIdadeGeneroIndex(index)}
-                            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                            style={[
-                              styles.militarMetaChip,
-                              {
-                                borderColor: theme.border,
-                                backgroundColor: theme.isDark
-                                  ? 'rgba(255,255,255,0.06)'
-                                  : 'rgba(15,23,42,0.04)',
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[styles.militarMetaChipText, { color: theme.textSecondary }]}
-                            >
-                              {textoIdadeMilitar(fb.dataNascimento)}
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel="Editar gênero"
-                            accessibilityHint="Abre edição de idade e gênero"
-                            onPress={() => setModalEditarIdadeGeneroIndex(index)}
-                            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                            style={[
-                              styles.militarMetaChip,
-                              {
-                                borderColor: theme.border,
-                                backgroundColor: theme.isDark
-                                  ? 'rgba(255,255,255,0.06)'
-                                  : 'rgba(15,23,42,0.04)',
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[styles.militarMetaChipText, { color: theme.textSecondary }]}
-                            >
-                              {textoGeneroMilitar(fb.sexo)}
-                            </Text>
-                          </TouchableOpacity>
+                          {demoAtivo ? (
+                            <>
+                              <View
+                                style={[
+                                  styles.militarMetaChip,
+                                  {
+                                    borderColor: theme.border,
+                                    backgroundColor: theme.isDark
+                                      ? 'rgba(255,255,255,0.06)'
+                                      : 'rgba(15,23,42,0.04)',
+                                    opacity: 0.9,
+                                  },
+                                ]}
+                                accessibilityLabel={`Idade: ${textoIdadeMilitar(fb.dataNascimento)}`}
+                              >
+                                <Text
+                                  style={[
+                                    styles.militarMetaChipText,
+                                    { color: theme.textSecondary },
+                                  ]}
+                                >
+                                  {textoIdadeMilitar(fb.dataNascimento)}
+                                </Text>
+                              </View>
+                              <View
+                                style={[
+                                  styles.militarMetaChip,
+                                  {
+                                    borderColor: theme.border,
+                                    backgroundColor: theme.isDark
+                                      ? 'rgba(255,255,255,0.06)'
+                                      : 'rgba(15,23,42,0.04)',
+                                    opacity: 0.9,
+                                  },
+                                ]}
+                                accessibilityLabel={`Gênero: ${textoGeneroMilitar(fb.sexo)}`}
+                              >
+                                <Text
+                                  style={[
+                                    styles.militarMetaChipText,
+                                    { color: theme.textSecondary },
+                                  ]}
+                                >
+                                  {textoGeneroMilitar(fb.sexo)}
+                                </Text>
+                              </View>
+                            </>
+                          ) : (
+                            <>
+                              <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel="Editar idade"
+                                accessibilityHint="Abre edição de idade e gênero"
+                                onPress={() => setModalEditarIdadeGeneroIndex(index)}
+                                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                                style={[
+                                  styles.militarMetaChip,
+                                  {
+                                    borderColor: theme.border,
+                                    backgroundColor: theme.isDark
+                                      ? 'rgba(255,255,255,0.06)'
+                                      : 'rgba(15,23,42,0.04)',
+                                  },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.militarMetaChipText,
+                                    { color: theme.textSecondary },
+                                  ]}
+                                >
+                                  {textoIdadeMilitar(fb.dataNascimento)}
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel="Editar gênero"
+                                accessibilityHint="Abre edição de idade e gênero"
+                                onPress={() => setModalEditarIdadeGeneroIndex(index)}
+                                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                                style={[
+                                  styles.militarMetaChip,
+                                  {
+                                    borderColor: theme.border,
+                                    backgroundColor: theme.isDark
+                                      ? 'rgba(255,255,255,0.06)'
+                                      : 'rgba(15,23,42,0.04)',
+                                  },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.militarMetaChipText,
+                                    { color: theme.textSecondary },
+                                  ]}
+                                >
+                                  {textoGeneroMilitar(fb.sexo)}
+                                </Text>
+                              </TouchableOpacity>
+                            </>
+                          )}
                         </View>
                       </View>
                       <View
@@ -3182,7 +3254,7 @@ export default function AplicarTAFScreen() {
       />
 
       <EditarIdadeGeneroMilitarModal
-        visible={modalEditarOk != null}
+        visible={!demoAtivo && modalEditarOk != null}
         nome={modalEditarOk?.nomeMilitar ?? ''}
         nip={
           modalEditarIdadeGeneroIndex != null

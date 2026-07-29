@@ -9,9 +9,9 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Smartphone, RotateCw, Maximize2 } from 'lucide-react-native';
-import { ModernModal } from '../sismav/ModernModal';
-import { PressableScale } from '../premium/PressableScale';
-import { useTheme } from '../../contexts/ThemeContext';
+import { ModernModal } from '../../sismav/ModernModal';
+import { PressableScale } from '../../premium/PressableScale';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 type Props = {
   visible: boolean;

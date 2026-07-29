@@ -1,4 +1,8 @@
-import { tempoStringParaSegundos } from './calcularIdade';
+/**
+ * Formatação de tempo de prova / cronômetro.
+ * Exibição oficial: **MM:SS:CS** (minutos : segundos : centésimos).
+ * Notas nas tabelas continuam usando segundos inteiros truncados.
+ */
 
 export function pad2(n: number) {
   return n.toString().padStart(2, '0');
@@ -14,28 +18,66 @@ export function msParaSegundosProvaInteiros(ms: number): number {
 }
 
 /**
- * Formata ms em **MM:SS** (primeiro campo = **minutos totais**, segundo = **segundos**).
- * Ex.: 303000 ms → `05:03` (5 min 3 s). Minutos podem passar de 59.
- * Usa o mesmo critério que `msParaSegundosProvaInteiros` (truncagem, não arredondamento).
+ * Formata ms em **MM:SS:CS** (minutos totais : segundos : centésimos 00–99).
+ * Ex.: 303_450 ms → `05:03:45`. Minutos podem passar de 59.
  */
 export function formatElapsedMs(ms: number): string {
-  const totalSec = msParaSegundosProvaInteiros(ms);
+  if (!Number.isFinite(ms) || ms < 0) ms = 0;
+  const totalCs = Math.floor(ms / 10);
+  const cs = totalCs % 100;
+  const totalSec = Math.floor(totalCs / 100);
   const s = totalSec % 60;
   const totalMin = Math.floor(totalSec / 60);
-  return `${totalMin.toString().padStart(2, '0')}:${pad2(s)}`;
+  return `${totalMin.toString().padStart(2, '0')}:${pad2(s)}:${pad2(cs)}`;
 }
 
 /**
- * Interpreta o mesmo formato que `formatElapsedMs` gera: **minutos:segundos** → segundos totais.
- * Ex.: `05:03` → 303 (não “5 segundos e 3 centésimos”).
+ * Interpreta `MM:SS:CS` (ou legado `MM:SS`) → milissegundos.
+ * `MM:SS` assume centésimos 00.
  */
-export function parseFormatoElapsedParaSegundos(s: string): number | null {
-  return tempoStringParaSegundos(s.trim());
+export function parseFormatoElapsedParaMs(s: string): number | null {
+  const t = s.trim();
+  if (!t) return null;
+  const partes = t.split(':').map((p) => p.replace(/\D/g, ''));
+  if (partes.length === 2) {
+    const minutos = parseInt(partes[0], 10);
+    const segundos = parseInt(partes[1], 10);
+    if (!Number.isFinite(minutos) || !Number.isFinite(segundos) || segundos > 59) return null;
+    if (minutos < 0 || segundos < 0) return null;
+    return minutos * 60_000 + segundos * 1000;
+  }
+  if (partes.length === 3) {
+    const minutos = parseInt(partes[0], 10);
+    const segundos = parseInt(partes[1], 10);
+    const centesimos = parseInt(partes[2], 10);
+    if (
+      !Number.isFinite(minutos) ||
+      !Number.isFinite(segundos) ||
+      !Number.isFinite(centesimos) ||
+      minutos < 0 ||
+      segundos < 0 ||
+      centesimos < 0 ||
+      segundos > 59 ||
+      centesimos > 99
+    ) {
+      return null;
+    }
+    return minutos * 60_000 + segundos * 1000 + centesimos * 10;
+  }
+  return null;
 }
 
-/** `MM:SS` de exibição → milissegundos. */
-export function parseFormatoElapsedParaMs(s: string): number | null {
-  const sec = tempoStringParaSegundos(s.trim());
-  if (sec == null) return null;
-  return sec * 1000;
+/**
+ * Interpreta o formato de exibição → segundos totais (truncados).
+ */
+export function parseFormatoElapsedParaSegundos(s: string): number | null {
+  const ms = parseFormatoElapsedParaMs(s);
+  if (ms == null) return null;
+  return msParaSegundosProvaInteiros(ms);
+}
+
+/** Offset Date para `useStopwatch().reset(offset)` = tempo inicial em ms. */
+export function stopwatchOffsetFromElapsedMs(ms: number): Date {
+  const safe = Number.isFinite(ms) && ms > 0 ? ms : 0;
+  return new Date(Date.now() + safe);
 }

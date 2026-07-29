@@ -133,6 +133,7 @@ import {
   aplicarDesistenciaNoCadastro,
 } from './aplicarTafNotaHelpers';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
+import { useTafReactStopwatch } from '../hooks/useTafReactStopwatch';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import {
@@ -199,8 +200,7 @@ function limiteParticipantesPreCadastro(tipo: TipoProvaTAF | null): number {
   return MAX_PRE_CADASTRO_PARTICIPANTES;
 }
 
-/** Cronômetro da corrida: pode pausar e retomar antes de parar de vez. */
-type CronometroCorridaEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
+/** Cronômetro da prova: controlado por react-timer-hook (MM:SS:CS). */
 
 type NipFeedbackLinha =
   | { tipo: 'ok'; texto: string; nomeMilitar: string; dataNascimento: string; sexo?: 'M' | 'F' }
@@ -352,10 +352,7 @@ export default function AplicarTAFScreen() {
   useEffect(() => subscribeModoDemonstracao(() => setDemoAtivo(isModoDemonstracaoAtivo())), []);
   const modalityTime: TafModality =
     tipoProva === 'natacao' || tipoProva === 'abdominal_prancha' ? 'natacao' : 'corrida';
-  const { formatMs, parseInput } = useTafTimeFormat(modalityTime);
-  /** Sempre o `formatMs` da modalidade atual (corrida e natação: MM:SS). */
-  const formatMsDisplayRef = useRef(formatMs);
-  formatMsDisplayRef.current = formatMs;
+  const { formatMs } = useTafTimeFormat(modalityTime);
   const [corridaEtapa, setCorridaEtapa] = useState<CorridaEtapa>('menu');
   const [erroParticipantes, setErroParticipantes] = useState('');
   const [nipsParticipantes, setNipsParticipantes] = useState<string[]>([]);
@@ -400,19 +397,6 @@ export default function AplicarTAFScreen() {
   const [rubricaStrokeAtual, setRubricaStrokeAtual] = useState<RubricaStroke>([]);
   const [rubricaCanvasWidth, setRubricaCanvasWidth] = useState(420);
 
-  const [cronometroEstado, setCronometroEstado] = useState<CronometroCorridaEstado>('inicial');
-  const [tempoExibido, setTempoExibido] = useState('00:00');
-  /** Edição manual do tempo enquanto o cronômetro está pausado (MM:SS ou HH:MM:SS). */
-  const [cronometroPausadoTexto, setCronometroPausadoTexto] = useState('00:00');
-  const cronometroPausadoTextoRef = useRef('00:00');
-  const cronometroInicioRef = useRef<number | null>(null);
-  /** Ms já decorridos antes do trecho atual (somados a cada pausa). */
-  const segmentoAcumuladoMsRef = useRef(0);
-  /** Tempo final (ms) após “Parar corrida” — usado ao marcar última volta com corrida parada. */
-  const tempoParadoMsRef = useRef<number | null>(null);
-  const cronometroIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const permanenciaLimiteAtingidoRef = useRef(false);
-
   const [resultadoPermanenciaLinhas, setResultadoPermanenciaLinhas] = useState<
     ResultadoPermanenciaOpcao[]
   >([]);
@@ -420,173 +404,41 @@ export default function AplicarTAFScreen() {
     useState(false);
   const [erroPermanencia, setErroPermanencia] = useState('');
 
-  const finalizarPermanenciaPorTempo = useCallback(() => {
-    if (permanenciaLimiteAtingidoRef.current) return;
-    permanenciaLimiteAtingidoRef.current = true;
-    if (cronometroIntervalRef.current) {
-      clearInterval(cronometroIntervalRef.current);
-      cronometroIntervalRef.current = null;
-    }
-    cronometroInicioRef.current = null;
-    segmentoAcumuladoMsRef.current = PERMANENCIA_DURACAO_MS;
-    tempoParadoMsRef.current = PERMANENCIA_DURACAO_MS;
-    const fmt = formatMs(PERMANENCIA_DURACAO_MS);
-    setTempoExibido(fmt);
-    setCronometroPausadoTexto(fmt);
-    cronometroPausadoTextoRef.current = fmt;
-    setCronometroEstado('finalizado');
-    setModalPermanenciaFinalizadaVisible(true);
-  }, [formatMs]);
+  const stopwatch = useTafReactStopwatch({
+    getMaxMs: () =>
+      tipoProvaRef.current === 'permanencia' ? PERMANENCIA_DURACAO_MS : null,
+    onMaxReached: () => setModalPermanenciaFinalizadaVisible(true),
+  });
 
-  const tickCronometroDisplay = useCallback(() => {
-    if (cronometroInicioRef.current == null) return;
-    const ms = segmentoAcumuladoMsRef.current + Date.now() - cronometroInicioRef.current;
-    if (tipoProvaRef.current === 'permanencia' && ms >= PERMANENCIA_DURACAO_MS) {
-      finalizarPermanenciaPorTempo();
-      return;
-    }
-    setTempoExibido(formatMsDisplayRef.current(ms));
-  }, [finalizarPermanenciaPorTempo]);
+  const cronometroEstado = stopwatch.estado;
+  const tempoExibido = stopwatch.tempoExibido;
+  const cronometroPausadoTexto = stopwatch.pausadoTexto;
+  const cronometroPausadoTextoRef = stopwatch.pausadoTextoRef;
+  const tempoParadoMsRef = stopwatch.tempoParadoMsRef;
+  const resetCronometroCorrida = stopwatch.resetCronometro;
+  const getElapsedRaceMs = stopwatch.getElapsedMs;
+  const onCronometroPausadoTextoChange = stopwatch.onPausadoTextoChange;
+  const onBlurCronometroPausado = stopwatch.onBlurPausado;
 
-  const getElapsedRaceMs = useCallback((): number | null => {
-    const mod: TafModality = modalityTime;
-    if (cronometroEstado === 'rodando' && cronometroInicioRef.current != null) {
-      return segmentoAcumuladoMsRef.current + Date.now() - cronometroInicioRef.current;
-    }
-    if (cronometroEstado === 'pausado') {
-      const parsed = parseTafPerformanceInput(mod, cronometroPausadoTextoRef.current.trim());
-      if (parsed != null) return parsed;
-      return segmentoAcumuladoMsRef.current;
-    }
-    if (cronometroEstado === 'finalizado' && tempoParadoMsRef.current != null) {
-      return tempoParadoMsRef.current;
-    }
-    return null;
-  }, [cronometroEstado, modalityTime]);
-
-  const aplicarTempoCronometroPausado = useCallback((): boolean => {
-    const ms = parseInput(cronometroPausadoTexto.trim());
-    if (ms == null) {
+  const iniciarCronometroCorrida = stopwatch.iniciar;
+  const pausarCronometroCorrida = stopwatch.pausar;
+  const continuarCronometroCorrida = useCallback(() => {
+    if (!stopwatch.continuar()) {
       Alert.alert(
         'Tempo inválido',
-        'Use MM:SS ou HH:MM:SS (ex.: 01:30 ou 01:05:30). Segundos entre 00 e 59.',
+        'Use MM:SS:CS (ex.: 01:30:00). Segundos 00–59 e centésimos 00–99.',
       );
-      return false;
     }
-    segmentoAcumuladoMsRef.current = ms;
-    const fmt = formatMs(ms);
-    setTempoExibido(fmt);
-    setCronometroPausadoTexto(fmt);
-    cronometroPausadoTextoRef.current = fmt;
-    return true;
-  }, [cronometroPausadoTexto, parseInput, formatMs, tipoProva]);
-
-  const onCronometroPausadoTextoChange = useCallback((text: string) => {
-    setCronometroPausadoTexto(text);
-    cronometroPausadoTextoRef.current = text;
-  }, []);
-
-  /** Ao sair do campo: aplica tempo válido ou restaura o último valor do ref (sem alerta). */
-  const onBlurCronometroPausado = useCallback(() => {
-    const ms = parseInput(cronometroPausadoTexto.trim());
-    if (ms == null) {
-      const cur = formatMs(segmentoAcumuladoMsRef.current);
-      setCronometroPausadoTexto(cur);
-      cronometroPausadoTextoRef.current = cur;
-      return;
-    }
-    segmentoAcumuladoMsRef.current = ms;
-    const fmt = formatMs(ms);
-    setTempoExibido(fmt);
-    setCronometroPausadoTexto(fmt);
-    cronometroPausadoTextoRef.current = fmt;
-  }, [cronometroPausadoTexto, parseInput, formatMs]);
-
-  const resetCronometroCorrida = useCallback(() => {
-    if (cronometroIntervalRef.current) {
-      clearInterval(cronometroIntervalRef.current);
-      cronometroIntervalRef.current = null;
-    }
-    cronometroInicioRef.current = null;
-    segmentoAcumuladoMsRef.current = 0;
-    tempoParadoMsRef.current = null;
-    permanenciaLimiteAtingidoRef.current = false;
-    setCronometroEstado('inicial');
-    const z = formatMsDisplayRef.current(0);
-    setTempoExibido(z);
-    setCronometroPausadoTexto(z);
-    cronometroPausadoTextoRef.current = z;
-  }, []);
-
-  const iniciarCronometroCorrida = useCallback(() => {
-    if (cronometroEstado !== 'inicial' && cronometroEstado !== 'finalizado') return;
-    if (cronometroIntervalRef.current) {
-      clearInterval(cronometroIntervalRef.current);
-      cronometroIntervalRef.current = null;
-    }
-    segmentoAcumuladoMsRef.current = 0;
-    cronometroInicioRef.current = Date.now();
-    tempoParadoMsRef.current = null;
-    setCronometroEstado('rodando');
-    const zero = formatMs(0);
-    setTempoExibido(zero);
-    setCronometroPausadoTexto(zero);
-    cronometroPausadoTextoRef.current = zero;
-    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
-  }, [cronometroEstado, tickCronometroDisplay, formatMs]);
-
-  const pausarCronometroCorrida = useCallback(() => {
-    if (cronometroEstado !== 'rodando' || cronometroInicioRef.current == null) return;
-    if (cronometroIntervalRef.current) {
-      clearInterval(cronometroIntervalRef.current);
-      cronometroIntervalRef.current = null;
-    }
-    segmentoAcumuladoMsRef.current += Date.now() - cronometroInicioRef.current;
-    cronometroInicioRef.current = null;
-    const fmt = formatMs(segmentoAcumuladoMsRef.current);
-    setTempoExibido(fmt);
-    setCronometroPausadoTexto(fmt);
-    cronometroPausadoTextoRef.current = fmt;
-    setCronometroEstado('pausado');
-  }, [cronometroEstado, formatMs]);
-
-  const continuarCronometroCorrida = useCallback(() => {
-    if (cronometroEstado !== 'pausado') return;
-    if (!aplicarTempoCronometroPausado()) return;
-    cronometroInicioRef.current = Date.now();
-    setCronometroEstado('rodando');
-    tickCronometroDisplay();
-    cronometroIntervalRef.current = setInterval(tickCronometroDisplay, 1000);
-  }, [cronometroEstado, tickCronometroDisplay, aplicarTempoCronometroPausado]);
+  }, [stopwatch.continuar]);
 
   const pararCronometroCorrida = useCallback(() => {
-    if (cronometroEstado !== 'rodando' && cronometroEstado !== 'pausado') return;
-    if (cronometroEstado === 'pausado' && !aplicarTempoCronometroPausado()) return;
-    if (cronometroIntervalRef.current) {
-      clearInterval(cronometroIntervalRef.current);
-      cronometroIntervalRef.current = null;
+    if (!stopwatch.parar()) {
+      Alert.alert(
+        'Tempo inválido',
+        'Use MM:SS:CS (ex.: 01:30:00). Segundos 00–59 e centésimos 00–99.',
+      );
     }
-    let totalMs = segmentoAcumuladoMsRef.current;
-    if (cronometroEstado === 'rodando' && cronometroInicioRef.current != null) {
-      totalMs += Date.now() - cronometroInicioRef.current;
-    }
-    cronometroInicioRef.current = null;
-    segmentoAcumuladoMsRef.current = 0;
-    tempoParadoMsRef.current = totalMs;
-    const fmtParado = formatMsDisplayRef.current(totalMs);
-    setTempoExibido(fmtParado);
-    setCronometroPausadoTexto(fmtParado);
-    cronometroPausadoTextoRef.current = fmtParado;
-    setCronometroEstado('finalizado');
-  }, [cronometroEstado, aplicarTempoCronometroPausado]);
-
-  useEffect(() => {
-    return () => {
-      if (cronometroIntervalRef.current) {
-        clearInterval(cronometroIntervalRef.current);
-      }
-    };
-  }, []);
+  }, [stopwatch.parar]);
 
   const onChangeNumeroVoltas = useCallback((text: string) => {
     setNumeroVoltas(text.replace(/\D/g, '').slice(0, 4));
@@ -792,31 +644,8 @@ export default function AplicarTAFScreen() {
   useEffect(() => {
     if (!todosIntegrantesComTempoRegistrado) return;
     if (cronometroEstado !== 'rodando' && cronometroEstado !== 'pausado') return;
-    const mod: TafModality = tipoProva === 'natacao' ? 'natacao' : 'corrida';
-    if (cronometroEstado === 'pausado') {
-      const parsed = parseTafPerformanceInput(
-        mod,
-        cronometroPausadoTextoRef.current.trim(),
-      );
-      if (parsed != null) segmentoAcumuladoMsRef.current = parsed;
-    }
-    if (cronometroIntervalRef.current) {
-      clearInterval(cronometroIntervalRef.current);
-      cronometroIntervalRef.current = null;
-    }
-    let totalMs = segmentoAcumuladoMsRef.current;
-    if (cronometroEstado === 'rodando' && cronometroInicioRef.current != null) {
-      totalMs += Date.now() - cronometroInicioRef.current;
-    }
-    cronometroInicioRef.current = null;
-    segmentoAcumuladoMsRef.current = 0;
-    tempoParadoMsRef.current = totalMs;
-    const fmt = formatMsDisplayRef.current(totalMs);
-    setTempoExibido(fmt);
-    setCronometroPausadoTexto(fmt);
-    cronometroPausadoTextoRef.current = fmt;
-    setCronometroEstado('finalizado');
-  }, [todosIntegrantesComTempoRegistrado, cronometroEstado, tipoProva]);
+    stopwatch.parar();
+  }, [todosIntegrantesComTempoRegistrado, cronometroEstado, stopwatch.parar]);
 
   useEffect(() => {
     if (corridaEtapa !== 'tabela_corrida' || !isProvaComVoltas(tipoProva)) return;
@@ -1987,7 +1816,6 @@ export default function AplicarTAFScreen() {
   }, [nParticipantesConfirmado, tipoProva]);
 
   const executarPrepararPermanencia = useCallback(() => {
-    permanenciaLimiteAtingidoRef.current = false;
     setModalPermanenciaFinalizadaVisible(false);
     setErroPermanencia('');
     setResultadoPermanenciaLinhas(
@@ -2068,7 +1896,7 @@ export default function AplicarTAFScreen() {
     setSalvandoResultadosCorrida(true);
     const tempoMs =
       tempoParadoMsRef.current ??
-      segmentoAcumuladoMsRef.current ??
+      getElapsedRaceMs() ??
       PERMANENCIA_DURACAO_MS;
     const tempoStr = formatMsByModality('corrida', tempoMs);
 
@@ -2386,7 +2214,6 @@ export default function AplicarTAFScreen() {
       resetCronometroCorrida();
 
       if (tipo === 'permanencia') {
-        permanenciaLimiteAtingidoRef.current = false;
         setModalPermanenciaFinalizadaVisible(false);
         setErroPermanencia('');
         setResultadoPermanenciaLinhas(Array.from({ length: n }, () => null));
@@ -3406,7 +3233,7 @@ export default function AplicarTAFScreen() {
         onPausarCronometro={pausarCronometroCorrida}
         onContinuarCronometro={continuarCronometroCorrida}
         cronometroHint={
-          corridaEtapa === 'tabela_permanencia' ? 'Limite da prova: 10:00' : undefined
+          corridaEtapa === 'tabela_permanencia' ? 'Limite da prova: 10:00:00' : undefined
         }
         numeroVoltas={numeroVoltas}
         onChangeNumeroVoltas={onChangeNumeroVoltas}

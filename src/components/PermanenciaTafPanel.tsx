@@ -150,7 +150,7 @@ export function PermanenciaTafPanel({
         onParar={onPararCronometro}
         onPausar={onPausarCronometro}
         onContinuar={onContinuarCronometro}
-        hint="Limite da prova: 10:00"
+        hint="Limite da prova: 10:00:00"
         footer={
           todosMarcados ? (
             <TouchableOpacity

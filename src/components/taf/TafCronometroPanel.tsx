@@ -12,8 +12,9 @@ import { Pause, Play, Timer } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
+import type { TafCronometroEstado } from '../../hooks/useTafReactStopwatch';
 
-export type TafCronometroEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
+export type { TafCronometroEstado };
 
 type StatusMeta = {
   label: string;
@@ -110,6 +111,32 @@ export function TafCronometroPanel({
 
   const monoWeb = Platform.OS === 'web' ? ({ fontVariantNumeric: 'tabular-nums' } as object) : null;
 
+  const splitTempo = (() => {
+    const parts = (estado === 'pausado' ? pausadoTexto : tempoExibido).split(':');
+    if (parts.length >= 3) {
+      return { mm: parts[0] || '00', ss: parts[1] || '00', cs: parts[2] || '00' };
+    }
+    if (parts.length === 2) {
+      return { mm: parts[0] || '00', ss: parts[1] || '00', cs: '00' };
+    }
+    return { mm: '00', ss: '00', cs: '00' };
+  })();
+
+  const digitBlock = (value: string, label: string) => (
+    <View style={styles.digitBlock}>
+      <Text
+        style={[
+          compact ? styles.digitValueCompact : styles.digitValue,
+          { color: displayColor },
+          monoWeb,
+        ]}
+      >
+        {value.padStart(2, '0')}
+      </Text>
+      <Text style={styles.digitLabel}>{label}</Text>
+    </View>
+  );
+
   const timeNode =
     estado === 'pausado' ? (
       <TextInput
@@ -118,7 +145,7 @@ export function TafCronometroPanel({
         onBlur={onBlurPausado}
         selectTextOnFocus
         accessibilityLabel="Editar tempo do cronômetro pausado"
-        placeholder="MM:SS"
+        placeholder="MM:SS:CS"
         placeholderTextColor="rgba(148, 163, 184, 0.65)"
         autoCorrect={false}
         autoComplete="off"
@@ -133,15 +160,17 @@ export function TafCronometroPanel({
         ]}
       />
     ) : (
-      <Text
-        style={[
-          compact ? styles.displayTextCompact : styles.displayText,
-          { color: displayColor },
-          monoWeb,
-        ]}
-      >
-        {tempoExibido}
-      </Text>
+      <View style={styles.digitsRow} accessibilityLabel={`Tempo ${tempoExibido}`}>
+        {digitBlock(splitTempo.mm, 'min')}
+        <Text style={[compact ? styles.digitSepCompact : styles.digitSep, { color: displayColor }]}>
+          :
+        </Text>
+        {digitBlock(splitTempo.ss, 'seg')}
+        <Text style={[compact ? styles.digitSepCompact : styles.digitSep, { color: displayColor }]}>
+          :
+        </Text>
+        {digitBlock(splitTempo.cs, 'cs')}
+      </View>
     );
 
   const controlsNode =
@@ -291,7 +320,7 @@ export function TafCronometroPanel({
         ]}
       >
         {timeNode}
-        <Text style={styles.displayHint}>tempo oficial da prova</Text>
+        <Text style={styles.displayHint}>min · seg · centésimos</Text>
       </View>
 
       {controlsNode}
@@ -367,11 +396,55 @@ const styles = StyleSheet.create({
   displayShell: {
     borderRadius: 18,
     borderWidth: 1,
-    paddingVertical: 22,
+    paddingVertical: 18,
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 118,
+  },
+  digitsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  digitBlock: {
+    alignItems: 'center',
+    minWidth: Platform.select({ web: 56, default: 44 }),
+  },
+  digitValue: {
+    fontSize: Platform.select({ web: 48, default: 40 }),
+    fontWeight: '800',
+    letterSpacing: 1,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    lineHeight: Platform.select({ web: 54, default: 46 }),
+  },
+  digitValueCompact: {
+    fontSize: Platform.select({ web: 26, default: 22 }),
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    lineHeight: Platform.select({ web: 30, default: 26 }),
+  },
+  digitLabel: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: 'rgba(148, 163, 184, 0.85)',
+  },
+  digitSep: {
+    fontSize: Platform.select({ web: 42, default: 36 }),
+    fontWeight: '800',
+    marginBottom: 14,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+  },
+  digitSepCompact: {
+    fontSize: Platform.select({ web: 22, default: 18 }),
+    fontWeight: '800',
+    marginBottom: 10,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
   },
   displayText: {
     fontSize: Platform.select({ web: 56, default: 48 }),
@@ -381,11 +454,11 @@ const styles = StyleSheet.create({
     lineHeight: Platform.select({ web: 62, default: 54 }),
   },
   displayInput: {
-    fontSize: Platform.select({ web: 56, default: 48 }),
+    fontSize: Platform.select({ web: 40, default: 32 }),
     fontWeight: '800',
-    letterSpacing: Platform.select({ web: 3, default: 2 }),
+    letterSpacing: Platform.select({ web: 2, default: 1 }),
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    minWidth: 180,
+    minWidth: 200,
     textAlign: 'center',
     padding: 0,
     borderWidth: 0,
@@ -397,6 +470,23 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     color: 'rgba(148, 163, 184, 0.85)',
     textTransform: 'uppercase',
+  },
+  displayInputCompact: {
+    fontSize: Platform.select({ web: 22, default: 18 }),
+    fontWeight: '800',
+    letterSpacing: 1,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    minWidth: 120,
+    textAlign: 'center',
+    padding: 0,
+    borderWidth: 0,
+  },
+  displayTextCompact: {
+    fontSize: Platform.select({ web: 32, default: 28 }),
+    fontWeight: '800',
+    letterSpacing: Platform.select({ web: 2, default: 1.5 }),
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    lineHeight: Platform.select({ web: 36, default: 32 }),
   },
   controlsRow: {
     flexDirection: 'row',
@@ -496,23 +586,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     alignItems: 'stretch',
     justifyContent: 'center',
-  },
-  displayTextCompact: {
-    fontSize: Platform.select({ web: 32, default: 28 }),
-    fontWeight: '800',
-    letterSpacing: Platform.select({ web: 2, default: 1.5 }),
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    lineHeight: Platform.select({ web: 36, default: 32 }),
-  },
-  displayInputCompact: {
-    fontSize: Platform.select({ web: 32, default: 28 }),
-    fontWeight: '800',
-    letterSpacing: Platform.select({ web: 2, default: 1.5 }),
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    minWidth: 100,
-    textAlign: 'center',
-    padding: 0,
-    borderWidth: 0,
   },
   controlsCompactRow: {
     flexDirection: 'row',

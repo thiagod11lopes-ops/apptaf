@@ -1,13 +1,13 @@
 /**
  * Formatação de tempo por modalidade TAF (UI e persistência de strings).
- * Corrida e natação: exibição e entrada em **MM:SS** (minutos:segundos).
+ * Corrida e natação: exibição e entrada em **MM:SS:CS** (minutos:segundos:centésimos).
  */
 
 import { formatElapsedMs, parseFormatoElapsedParaMs } from '../utils/formatRaceTime';
 
 export type TafModality = 'corrida' | 'natacao';
 
-/** Exibe milissegundos em MM:SS (corrida e natação). */
+/** Exibe milissegundos em MM:SS:CS (corrida e natação). */
 export function formatMsByModality(modality: TafModality, ms: number): string {
   void modality;
   if (!Number.isFinite(ms) || ms < 0) ms = 0;
@@ -16,14 +16,14 @@ export function formatMsByModality(modality: TafModality, ms: number): string {
 
 /**
  * Interpreta texto de performance → milissegundos.
- * MM:SS / HH:MM:SS. Natação aceita também legado "90 S" / só dígitos (segundos).
+ * MM:SS:CS / MM:SS. Natação aceita também legado "90 S" / só dígitos (segundos).
  */
 export function parseTafPerformanceInput(modality: TafModality, text: string): number | null {
   const t = text.trim();
   if (!t) return null;
 
-  const mmssMs = parseFormatoElapsedParaMs(t);
-  if (mmssMs != null) return mmssMs;
+  const mmssCsMs = parseFormatoElapsedParaMs(t);
+  if (mmssCsMs != null) return mmssCsMs;
 
   if (modality === 'natacao') {
     let n = t
@@ -41,7 +41,7 @@ export function parseTafPerformanceInput(modality: TafModality, text: string): n
   return null;
 }
 
-/** Normaliza tempo salvo para exibição MM:SS (inclui conversão de "90 S" antigo). */
+/** Normaliza tempo salvo para exibição MM:SS:CS (inclui conversão de "90 S" antigo). */
 export function formatTempoNatacaoParaExibicao(tempo: string | undefined): string {
   const t = (tempo ?? '').trim();
   if (!t) return '';

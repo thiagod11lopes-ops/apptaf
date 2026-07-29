@@ -56,6 +56,7 @@ import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayo
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { AplicarTafModoTesteBar } from '../components/taf/aplicar/AplicarTafModoTesteBar';
 import { EditarIdadeGeneroMilitarModal } from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
+import { ConfirmacaoExcluirParticipanteNipModal } from '../components/taf/aplicar/ConfirmacaoExcluirParticipanteNipModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -322,6 +323,7 @@ export default function AplicarTAFScreen() {
   const [modalEditarIdadeGeneroIndex, setModalEditarIdadeGeneroIndex] = useState<number | null>(
     null,
   );
+  const [participanteNipParaExcluir, setParticipanteNipParaExcluir] = useState<number | null>(null);
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
   const [modoTafNaval, setModoTafNaval] = useState(false);
   const [repeticoesParticipantes, setRepeticoesParticipantes] = useState<string[]>([]);
@@ -1444,6 +1446,7 @@ export default function AplicarTAFScreen() {
     setNipFeedbackLinhas([null]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalEditarIdadeGeneroIndex(null);
+    setParticipanteNipParaExcluir(null);
     setCorridaEtapa('nips');
   }, []);
 
@@ -1487,6 +1490,7 @@ export default function AplicarTAFScreen() {
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalEditarIdadeGeneroIndex(null);
+    setParticipanteNipParaExcluir(null);
     setCorridaEtapa('menu');
   }, []);
 
@@ -1509,6 +1513,7 @@ export default function AplicarTAFScreen() {
 
   const removerParticipanteNip = useCallback((index: number) => {
     setErroParticipantes('');
+    setParticipanteNipParaExcluir(null);
     setModalEditarIdadeGeneroIndex((cur) => {
       if (cur == null) return null;
       if (cur === index) return null;
@@ -1530,6 +1535,22 @@ export default function AplicarTAFScreen() {
     }
     nipsRepeticaoAutorizadaRef.current = rep;
   }, []);
+
+  const confirmarExclusaoParticipanteNip = useCallback(() => {
+    if (participanteNipParaExcluir == null) return;
+    removerParticipanteNip(participanteNipParaExcluir);
+  }, [participanteNipParaExcluir, removerParticipanteNip]);
+
+  const fbExclusaoParticipante =
+    participanteNipParaExcluir != null ? nipFeedbackLinhas[participanteNipParaExcluir] : null;
+  const nomeExclusaoParticipante =
+    fbExclusaoParticipante?.tipo === 'ok' || fbExclusaoParticipante?.tipo === 'completar_dados'
+      ? fbExclusaoParticipante.nomeMilitar
+      : '';
+  const nipExclusaoParticipante =
+    participanteNipParaExcluir != null
+      ? (nipsParticipantes[participanteNipParaExcluir] ?? '')
+      : '';
 
   const definirNipOk = useCallback((index: number, c: CadastroItemPersist) => {
     const nome = (c.nome || '').trim() || 'Sem nome';
@@ -2948,7 +2969,7 @@ export default function AplicarTAFScreen() {
                     <TouchableOpacity
                       accessibilityRole="button"
                       accessibilityLabel={`Remover participante ${index + 1}`}
-                      onPress={() => removerParticipanteNip(index)}
+                      onPress={() => setParticipanteNipParaExcluir(index)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       style={styles.nipTrashBtn}
                     >
@@ -3271,6 +3292,15 @@ export default function AplicarTAFScreen() {
         sexo={modalEditarOk?.sexo}
         onClose={() => setModalEditarIdadeGeneroIndex(null)}
         onSalvar={salvarEdicaoIdadeGenero}
+      />
+
+      <ConfirmacaoExcluirParticipanteNipModal
+        visible={participanteNipParaExcluir != null}
+        index={participanteNipParaExcluir ?? 0}
+        nip={nipExclusaoParticipante}
+        nome={nomeExclusaoParticipante}
+        onClose={() => setParticipanteNipParaExcluir(null)}
+        onConfirm={confirmarExclusaoParticipanteNip}
       />
 
       <TafProvaTempoModal

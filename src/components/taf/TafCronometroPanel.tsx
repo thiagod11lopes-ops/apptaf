@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   TextInput,
   Platform,
 } from 'react-native';
@@ -65,7 +64,8 @@ export type TafCronometroPanelProps = {
   onPausadoTextoChange: (text: string) => void;
   onBlurPausado: () => void;
   onIniciar: () => void;
-  onParar: () => void;
+  /** Mantido por compatibilidade; o botão Parar foi removido da UI. */
+  onParar?: () => void;
   onPausar: () => void;
   onContinuar: () => void;
   hint?: string;
@@ -82,7 +82,6 @@ export function TafCronometroPanel({
   onPausadoTextoChange,
   onBlurPausado,
   onIniciar,
-  onParar,
   onPausar,
   onContinuar,
   hint,
@@ -192,16 +191,14 @@ export function TafCronometroPanel({
   const toggleGlow = rodando
     ? '0 8px 28px rgba(249, 115, 22, 0.45), 0 0 0 1px rgba(251, 191, 36, 0.35)'
     : '0 8px 28px rgba(16, 185, 129, 0.42), 0 0 0 1px rgba(45, 212, 191, 0.35)';
-  const mostrarParar = estado === 'rodando' || estado === 'pausado';
 
-  const toggleBtn = (
+  const controlsNode = (
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={toggleA11y}
       onPress={onTogglePress}
       style={[
         compact ? styles.toggleOuterCompact : styles.toggleOuter,
-        mostrarParar ? styles.toggleOuterFlex : null,
         Platform.OS === 'web' ? ({ boxShadow: toggleGlow } as object) : null,
       ]}
     >
@@ -240,27 +237,6 @@ export function TafCronometroPanel({
         </Text>
       </LinearGradient>
     </PressableScale>
-  );
-
-  const controlsNode = (
-    <View style={compact ? styles.controlsCompactRow : styles.controlsRow}>
-      {toggleBtn}
-      {mostrarParar ? (
-        <TouchableOpacity
-          accessibilityLabel={`Parar ${tituloProva}`}
-          activeOpacity={0.88}
-          onPress={onParar}
-          style={[
-            compact ? styles.btnStopCompact : styles.btnStop,
-            { backgroundColor: ui.btnDarkBg, borderColor: theme.border },
-          ]}
-        >
-          <Text style={compact ? styles.btnStopCompactText : styles.btnStopText}>
-            {compact ? 'Parar' : `Parar ${tituloProva}`}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
   );
 
   if (compact) {
@@ -510,18 +486,10 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
     lineHeight: Platform.select({ web: 36, default: 32 }),
   },
-  controlsRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 10,
-  },
   toggleOuter: {
     flex: 1,
     borderRadius: 18,
     overflow: 'hidden',
-  },
-  toggleOuterFlex: {
-    flex: 1,
   },
   toggleOuterCompact: {
     borderRadius: 14,
@@ -585,21 +553,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.3,
   },
-  btnStop: {
-    flex: 0.72,
-    minHeight: 56,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-  },
-  btnStopText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
   hint: {
     fontSize: 12,
     fontWeight: '600',
@@ -656,25 +609,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     alignItems: 'stretch',
     justifyContent: 'center',
-  },
-  controlsCompactRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  btnStopCompact: {
-    minHeight: 42,
-    minWidth: 58,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-  },
-  btnStopCompactText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
   },
   hintCompact: {
     fontSize: 10,

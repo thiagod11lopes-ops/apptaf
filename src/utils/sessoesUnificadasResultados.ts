@@ -12,6 +12,7 @@ import {
   temAvaliacaoPermanencia,
   temAvaliacaoCaminhada,
 } from './resultadoTafCadastro';
+import { upsertParticipanteSessaoGrupoHistorico } from './upsertParticipanteSessaoGrupoHistorico';
 
 export const SESSAO_REGISTRADOR_ID_PREFIX = 'registrador-';
 
@@ -250,10 +251,10 @@ export function unificarSessoesComCadastroRegistrador(
   return [...reais, ...virtuais].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 
-/** Cria sessões persistidas a partir de um cadastro recém-atualizado no Registrador. */
+/** Cria/atualiza sessões de grupo a partir de um cadastro recém-atualizado no Registrador. */
 export async function persistirSessoesRegistradorFromCadastro(
   c: CadastroItemPersist,
-  addSessao: (
+  _addSessao: (
     input: Omit<SessaoAplicacaoTaf, 'id' | 'criadoEm'> & { id?: string },
   ) => Promise<string>,
   aplicadorAssinatura?: AplicadorAssinaturaResumo,
@@ -265,11 +266,11 @@ export async function persistirSessoesRegistradorFromCadastro(
     if (!data) continue;
     const resultado = resultadoFromCadastro(c, tipo, 1);
     if (!resultado) continue;
-    await addSessao({
-      id: `${SESSAO_REGISTRADOR_ID_PREFIX}${c.id}-${tipo}`,
+    await upsertParticipanteSessaoGrupoHistorico({
       dataAplicacao: data,
       tipoProva: tipo,
-      resultados: [resultado],
+      normaTaf: 'armada',
+      resultado,
       aplicadorAssinatura,
     });
   }

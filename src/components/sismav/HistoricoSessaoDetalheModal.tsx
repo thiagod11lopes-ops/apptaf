@@ -377,6 +377,17 @@ export function HistoricoSessaoDetalheModal({
       setErro('');
       try {
         await updateSessaoAplicacao(atualizada);
+        const idsExtra = (sessao as SessaoAplicacaoTaf & { idsOrigem?: string[] }).idsOrigem;
+        if (idsExtra && idsExtra.length > 1) {
+          for (const id of idsExtra) {
+            if (id === sessao.id) continue;
+            try {
+              await deleteSessaoAplicacao(id);
+            } catch {
+              // Sessão auxiliar já removida.
+            }
+          }
+        }
 
         for (let i = 0; i < resultados.length; i++) {
           const r = resultados[i];
@@ -927,6 +938,17 @@ export function HistoricoSessaoDetalheModal({
         updatedAt: Date.now(),
       };
       await updateSessaoAplicacao(atualizada);
+      const idsExtra = (sessao as SessaoAplicacaoTaf & { idsOrigem?: string[] }).idsOrigem;
+      if (idsExtra && idsExtra.length > 1) {
+        for (const id of idsExtra) {
+          if (id === sessao.id) continue;
+          try {
+            await deleteSessaoAplicacao(id);
+          } catch {
+            // Sessão auxiliar já removida.
+          }
+        }
+      }
       setLinhas(nextLinhas);
       setMetas(nextMetas);
       setExcluirIdx(null);

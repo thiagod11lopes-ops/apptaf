@@ -26,12 +26,18 @@ import { getAllCadastros, type CadastroItemPersist } from '../services/cadastros
 import {
   getAllSessoesAplicacao,
   getDeletedSessoesAplicacao,
+  deleteSessaoAplicacao,
   tituloTipoProva,
   type SessaoAplicacaoTaf,
 } from '../services/resultadosAplicadosIndexedDb';
 import {
   deleteSessaoFromHistorico,
 } from '../services/deleteSessaoHistorico';
+import {
+  agruparSessoesHistoricoPorTeste,
+  idsSessaoHistoricoParaExcluir,
+  type SessaoHistoricoAgrupada,
+} from '../utils/agruparSessoesHistoricoPorTeste';
 import {
   filtrarSessoesPorNorma,
   NORMA_TAF_LABEL,
@@ -72,8 +78,8 @@ export default function ResultadosScreen() {
     null,
   );
   const [carregando, setCarregando] = useState(true);
-  const [sessaoParaExcluir, setSessaoParaExcluir] = useState<SessaoAplicacaoTaf | null>(null);
-  const [sessaoDetalhe, setSessaoDetalhe] = useState<SessaoAplicacaoTaf | null>(null);
+  const [sessaoParaExcluir, setSessaoParaExcluir] = useState<SessaoHistoricoAgrupada | null>(null);
+  const [sessaoDetalhe, setSessaoDetalhe] = useState<SessaoHistoricoAgrupada | null>(null);
   const [excluindo, setExcluindo] = useState(false);
   const [erroExclusao, setErroExclusao] = useState<string | null>(null);
   const ultimoToqueCardRef = useRef<{ id: string; at: number } | null>(null);
@@ -107,9 +113,10 @@ export default function ResultadosScreen() {
   const sessoesHistoricoVisiveis = useMemo(() => {
     if (!normaVista) return [];
     const base = sessoesPorNorma;
-    return historicoFiltroMilitar
+    const filtradas = historicoFiltroMilitar
       ? filtrarSessoesHistoricoMilitar(base, historicoFiltroMilitar, cadastros)
       : base;
+    return agruparSessoesHistoricoPorTeste(filtradas);
   }, [sessoesPorNorma, historicoFiltroMilitar, cadastros, normaVista]);
 
   const abrirHistoricoMilitar = useCallback((filtro: FiltroHistoricoMilitar) => {
@@ -128,12 +135,12 @@ export default function ResultadosScreen() {
     setAba(novaAba);
   }, []);
 
-  const abrirDetalheSessao = useCallback((sessao: SessaoAplicacaoTaf) => {
+  const abrirDetalheSessao = useCallback((sessao: SessaoHistoricoAgrupada) => {
     setSessaoDetalhe(sessao);
   }, []);
 
   const abrirSessao = useCallback(
-    (sessao: SessaoAplicacaoTaf) => {
+    (sessao: SessaoHistoricoAgrupada) => {
       navigation.navigate('CadastrarResultados', {
         resultados: sessao.resultados,
         aplicadorAssinatura: sessao.aplicadorAssinatura,
@@ -145,7 +152,7 @@ export default function ResultadosScreen() {
 
   /** Dois toques/cliques no card abrem a tabela do histórico. */
   const onPressCardHistorico = useCallback(
-    (sessao: SessaoAplicacaoTaf) => {
+    (sessao: SessaoHistoricoAgrupada) => {
       const agora = Date.now();
       const ultimo = ultimoToqueCardRef.current;
       if (ultimo && ultimo.id === sessao.id && agora - ultimo.at < 320) {
@@ -163,7 +170,16 @@ export default function ResultadosScreen() {
     setExcluindo(true);
     setErroExclusao(null);
     try {
+      const ids = idsSessaoHistoricoParaExcluir(sessaoParaExcluir);
       await deleteSessaoFromHistorico(sessaoParaExcluir);
+      for (const id of ids) {
+        if (id === sessaoParaExcluir.id) continue;
+        try {
+          await deleteSessaoAplicacao(id);
+        } catch {
+          // Sessão já removida ou só virtual.
+        }
+      }
       setSessaoParaExcluir(null);
       await carregar();
     } catch (e) {

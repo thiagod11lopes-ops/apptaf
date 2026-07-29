@@ -34,7 +34,6 @@ import {
   getAllCadastros,
   type CadastroItemPersist,
 } from '../services/cadastrosIndexedDb';
-import { addSessaoAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import type { TipoProvaTAF } from '../taf/tafProvaTypes';
@@ -59,7 +58,7 @@ import {
   tempoMinutosSegundosValido,
 } from '../utils/formatMinutosSegundos';
 import { EditarIdadeGeneroMilitarModal } from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
-import { SESSAO_REGISTRADOR_ID_PREFIX } from '../utils/sessoesUnificadasResultados';
+import { upsertParticipanteSessaoGrupoHistorico } from '../utils/upsertParticipanteSessaoGrupoHistorico';
 import { navigateTab } from '../navigation/navigationRef';
 
 type Etapa = 'norma' | 'prova' | 'form';
@@ -440,13 +439,12 @@ export default function AplicacaoTAFScreen() {
         }
 
         await addCadastro(cadastroFinal);
-        await addSessaoAplicacao({
-          id: `${SESSAO_REGISTRADOR_ID_PREFIX}${cadastroFinal.id}-${tipoProva}`,
+        await upsertParticipanteSessaoGrupoHistorico({
           dataAplicacao: dataTeste,
           tipoProva,
-          resultados: [resultado],
-          aplicadorAssinatura: assinatura,
           normaTaf,
+          resultado,
+          aplicadorAssinatura: assinatura,
         });
 
         setSucesso(

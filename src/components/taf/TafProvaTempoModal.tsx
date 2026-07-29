@@ -512,7 +512,6 @@ export function TafProvaTempoModal({
                       ? styles.identityColCompact
                       : null,
                     isProvaLayoutPreparado || isPermanencia ? styles.identityColAdaptive : null,
-                    temChecks ? styles.identityColWithChecksBelow : null,
                     permiteDesistencia ? styles.identityColWithDesistencia : null,
                   ]}
                 >
@@ -547,6 +546,66 @@ export function TafProvaTempoModal({
                   </Text>
                 </View>
 
+                {temChecks ? (
+                  <ScrollView
+                    horizontal
+                    nestedScrollEnabled
+                    showsHorizontalScrollIndicator={isNativeMobile}
+                    style={[
+                      styles.checksRowInline,
+                      isPermanencia ? styles.checksRowPermanencia : null,
+                    ]}
+                    contentContainerStyle={[
+                      styles.checksTrackContent,
+                      isPermanencia ? styles.checksTrackPermanencia : null,
+                    ]}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {prova === 'permanencia' && onTogglePermanencia ? (
+                      <>
+                        <CheckPermanenciaModal
+                          label="Aprovado"
+                          checked={resultadosPermanencia[index] === 'aprovado'}
+                          variant="aprovado"
+                          touchLarge={isNativeMobile}
+                          onPress={() => onTogglePermanencia(index, 'aprovado')}
+                        />
+                        <CheckPermanenciaModal
+                          label="Reprovado"
+                          checked={resultadosPermanencia[index] === 'reprovado'}
+                          variant="reprovado"
+                          touchLarge={isNativeMobile}
+                          onPress={() => onTogglePermanencia(index, 'reprovado')}
+                        />
+                      </>
+                    ) : null}
+
+                    {prova === 'natacao' && onToggleChegada && !desistiu ? (
+                      <CheckVolta
+                        checked={chegadaNatacao[index] ?? false}
+                        a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
+                        touchLarge={isNativeMobile}
+                        onPress={() => onToggleChegada(index)}
+                      />
+                    ) : null}
+
+                    {(prova === 'corrida' || prova === 'caminhada') &&
+                    nColunasVoltasAtivas > 0 &&
+                    onToggleVolta &&
+                    !desistiu
+                      ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
+                          <CheckVolta
+                            key={`volta-${index}-${v}`}
+                            checked={checksVoltas[index]?.[v] ?? false}
+                            a11y={`Volta ${v + 1}, participante ${index + 1}`}
+                            touchLarge={isNativeMobile}
+                            onPress={() => onToggleVolta(index, v)}
+                          />
+                        ))
+                      : null}
+                  </ScrollView>
+                ) : null}
+
                 {mostrarTempo || mostrarNota ? (
                   <View
                     style={[
@@ -554,88 +613,31 @@ export function TafProvaTempoModal({
                       isProvaLayoutPreparado ? styles.metaStripAdaptive : null,
                     ]}
                   >
-                      {mostrarTempo ? (
-                        <MetaResultadoField
-                          label="Tempo"
-                          value={tempoStr}
-                          tone="tempo"
-                          theme={theme}
-                          ui={ui}
-                          scale={metaScale}
-                          adaptive={isProvaLayoutPreparado}
-                        />
-                      ) : null}
-                      {mostrarNota ? (
-                        <MetaResultadoField
-                          label="Nota"
-                          value={nota}
-                          tone={notaReprov ? 'notaReprov' : 'nota'}
-                          theme={theme}
-                          ui={ui}
-                          scale={metaScale}
-                          adaptive={isProvaLayoutPreparado}
-                        />
-                      ) : null}
+                    {mostrarTempo ? (
+                      <MetaResultadoField
+                        label="Tempo"
+                        value={tempoStr}
+                        tone="tempo"
+                        theme={theme}
+                        ui={ui}
+                        scale={metaScale}
+                        adaptive={isProvaLayoutPreparado}
+                      />
+                    ) : null}
+                    {mostrarNota ? (
+                      <MetaResultadoField
+                        label="Nota"
+                        value={nota}
+                        tone={notaReprov ? 'notaReprov' : 'nota'}
+                        theme={theme}
+                        ui={ui}
+                        scale={metaScale}
+                        adaptive={isProvaLayoutPreparado}
+                      />
+                    ) : null}
                   </View>
                 ) : null}
               </View>
-
-              {temChecks ? (
-                <ScrollView
-                  horizontal
-                  nestedScrollEnabled
-                  showsHorizontalScrollIndicator={isNativeMobile}
-                  style={[styles.checksRowBelow, isPermanencia ? styles.checksRowPermanencia : null]}
-                  contentContainerStyle={[
-                    styles.checksTrackContent,
-                    isPermanencia ? styles.checksTrackPermanencia : null,
-                  ]}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {prova === 'permanencia' && onTogglePermanencia ? (
-                    <>
-                      <CheckPermanenciaModal
-                        label="Aprovado"
-                        checked={resultadosPermanencia[index] === 'aprovado'}
-                        variant="aprovado"
-                        touchLarge={isNativeMobile}
-                        onPress={() => onTogglePermanencia(index, 'aprovado')}
-                      />
-                      <CheckPermanenciaModal
-                        label="Reprovado"
-                        checked={resultadosPermanencia[index] === 'reprovado'}
-                        variant="reprovado"
-                        touchLarge={isNativeMobile}
-                        onPress={() => onTogglePermanencia(index, 'reprovado')}
-                      />
-                    </>
-                  ) : null}
-
-                  {prova === 'natacao' && onToggleChegada && !desistiu ? (
-                    <CheckVolta
-                      checked={chegadaNatacao[index] ?? false}
-                      a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
-                      touchLarge={isNativeMobile}
-                      onPress={() => onToggleChegada(index)}
-                    />
-                  ) : null}
-
-                  {(prova === 'corrida' || prova === 'caminhada') &&
-                  nColunasVoltasAtivas > 0 &&
-                  onToggleVolta &&
-                  !desistiu
-                    ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
-                        <CheckVolta
-                          key={`volta-${index}-${v}`}
-                          checked={checksVoltas[index]?.[v] ?? false}
-                          a11y={`Volta ${v + 1}, participante ${index + 1}`}
-                          touchLarge={isNativeMobile}
-                          onPress={() => onToggleVolta(index, v)}
-                        />
-                      ))
-                    : null}
-                </ScrollView>
-              ) : null}
             </View>
 
             <View
@@ -883,19 +885,13 @@ const styles = StyleSheet.create({
     maxWidth: '38%',
   },
   identityColAdaptive: {
-    flex: 1,
+    flexGrow: 0,
     flexShrink: 1,
-    minWidth: 0,
-    maxWidth: undefined,
+    minWidth: 72,
+    maxWidth: '36%',
     alignSelf: 'center',
     alignItems: 'center',
     paddingTop: 0,
-  },
-  identityColWithChecksBelow: {
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 0,
-    maxWidth: undefined,
   },
   identityColWithDesistencia: {
     gap: 8,
@@ -914,11 +910,12 @@ const styles = StyleSheet.create({
     marginVertical: 2,
     flexShrink: 0,
   },
-  checksRowBelow: {
-    width: '100%',
-    flexGrow: 0,
-    flexShrink: 0,
-    marginTop: 0,
+  checksRowInline: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 48,
+    alignSelf: 'center',
   },
   checkOuterLarge: {
     padding: 2,

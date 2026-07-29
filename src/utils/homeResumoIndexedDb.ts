@@ -11,7 +11,10 @@ import {
 } from './resultadoGeralHistorico';
 import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
 import { getNipsRestritosAtivos } from '../services/restritosStorage';
-import { getNipsComFatorRiscoSim } from '../services/fatoresRiscoStorage';
+import {
+  getNipsComFatorRiscoSim,
+  getNipsComFatoresRiscoPreenchidos,
+} from '../services/fatoresRiscoStorage';
 
 const RESUMO_VAZIO: ResumoInicioTafHistorico = {
   totalCadastrados: 0,
@@ -20,6 +23,7 @@ const RESUMO_VAZIO: ResumoInicioTafHistorico = {
   semTeste: 0,
   restritos: 0,
   fatoresRisco: 0,
+  cadastroIncompleto: 0,
 };
 
 function stripCadastro(row: Record<string, unknown>): CadastroItemPersist {
@@ -91,9 +95,10 @@ export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHi
       .filter((row) => row.deleted === true && !isDemoSessaoId(row.id))
       .map((row) => stripSessao(row as unknown as Record<string, unknown>));
 
-    const [nipsRestritos, nipsFatores] = await Promise.all([
+    const [nipsRestritos, nipsFatores, nipsFatoresPreenchidos] = await Promise.all([
       getNipsRestritosAtivos(),
       getNipsComFatorRiscoSim(),
+      getNipsComFatoresRiscoPreenchidos(),
     ]);
 
     return calcularResumoInicioTafFromHistorico(
@@ -102,6 +107,7 @@ export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHi
       sessoesExcluidas,
       nipsRestritos,
       nipsFatores,
+      nipsFatoresPreenchidos,
     );
   } catch (error) {
     console.warn('[home-resumo] leitura IndexedDB falhou:', error);

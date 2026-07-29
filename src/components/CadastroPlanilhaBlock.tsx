@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform } from 'r
 import { Pencil, Trash2, Search, ListFilter, ShieldAlert } from 'lucide-react-native';
 import { CorrigirNipCadastroModal } from './CorrigirNipCadastroModal';
 import { FatoresRiscoCadastroModal } from './FatoresRiscoCadastroModal';
-import { contarCadastrosComErroNip, nipDigitos } from '../utils/nipFormat';
+import { contarCadastrosComErroNip, nipChaveCadastro, nipDigitos } from '../utils/nipFormat';
 import { Card } from './Card';
 import { LabelNip } from './LabelNip';
 import { LabelSO } from './LabelSO';
@@ -17,6 +17,10 @@ import {
   getFatoresRiscoByNip,
   type FatoresRiscoRegistro,
 } from '../services/fatoresRiscoStorage';
+import {
+  cadastroIncompletoNascimentoOuFatores,
+  fatoresRiscoRegistroPreenchido,
+} from '../utils/cadastroIncompleto';
 import { idadeDisplayFromDataNascimento } from '../utils/idadeFromDataNascimento';
 import { textoNotaCorridaFromCadastro } from '../taf/corrida2400Nota';
 import { textoNotaNatacaoFromCadastro } from '../taf/natacaoNota';
@@ -81,6 +85,10 @@ export type CadastroPlanilhaBlockProps = {
   onRequestDelete?: (item: CadastroItemPersist) => void;
   /** Chamado após corrigir NIP no modal de erros. */
   onCadastroCorrigido?: (item: CadastroItemPersist) => void;
+  /** Lista só militares sem data de nascimento e/ou sem fatores preenchidos. */
+  somenteCadastroIncompleto?: boolean;
+  /** Remove o filtro de cadastro incompleto (chip na planilha). */
+  onLimparFiltroIncompleto?: () => void;
 };
 
 export function CadastroPlanilhaBlock({
@@ -93,6 +101,8 @@ export function CadastroPlanilhaBlock({
   onEdit,
   onRequestDelete,
   onCadastroCorrigido,
+  somenteCadastroIncompleto = false,
+  onLimparFiltroIncompleto,
 }: CadastroPlanilhaBlockProps) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -118,6 +128,16 @@ export function CadastroPlanilhaBlock({
       .then(setFatoresPorNip)
       .catch(() => setFatoresPorNip({}));
   }, [isAplicacaoTaf, cadastros]);
+
+  const nipsFatoresPreenchidos = useMemo(() => {
+    const out = new Set<string>();
+    for (const [nip, reg] of Object.entries(fatoresPorNip)) {
+      if (!fatoresRiscoRegistroPreenchido(reg)) continue;
+      const key = nipChaveCadastro(nip) || nipChaveCadastro(reg.nip);
+      if (key) out.add(key);
+    }
+    return out;
+  }, [fatoresPorNip]);
 
   const abrirFatoresRiscoCadastro = useCallback(async (c: CadastroItemPersist) => {
     const key = nipDigitos(c.nip ?? '');
@@ -168,6 +188,12 @@ export function CadastroPlanilhaBlock({
       });
     }
     return cadastros.filter((c) => {
+      if (
+        somenteCadastroIncompleto &&
+        !cadastroIncompletoNascimentoOuFatores(c, nipsFatoresPreenchidos)
+      ) {
+        return false;
+      }
       const categoriaOk = filtroCategoria === 'Todos' || c.categoria === filtroCategoria;
       if (!categoriaOk) return false;
 
@@ -175,7 +201,16 @@ export function CadastroPlanilhaBlock({
       const postoGrad = c.categoria === 'Oficiais' ? c.oficial || '' : c.praca || '';
       return postoGrad === filtroPostoGrad;
     });
-  }, [cadastros, filtroCategoria, filtroPostoGrad, isAplicacaoTaf, filtroModalidade, filtroData]);
+  }, [
+    cadastros,
+    filtroCategoria,
+    filtroPostoGrad,
+    isAplicacaoTaf,
+    filtroModalidade,
+    filtroData,
+    somenteCadastroIncompleto,
+    nipsFatoresPreenchidos,
+  ]);
 
   const cadastrosFiltradosComBusca = useMemo(() => {
     const q = filtroBusca.trim().toLowerCase();
@@ -463,6 +498,35 @@ export function CadastroPlanilhaBlock({
             </View>
           )}
 
+          {!isAplicacaoTaf && somenteCadastroIncompleto ? (
+            <View style={styles.incompletoBanner}>
+              <View
+                style={[
+                  styles.incompletoChip,
+                  {
+                    borderColor: theme.isDark ? 'rgba(217,119,6,0.5)' : 'rgba(217,119,6,0.4)',
+                    backgroundColor: theme.isDark
+                      ? 'rgba(217,119,6,0.16)'
+                      : 'rgba(255,247,237,0.95)',
+                  },
+                ]}
+              >
+                <Text style={[styles.incompletoChipText, { color: '#d97706' }]}>
+                  Cadastro incompleto — sem data de nascimento e/ou fatores de risco
+                </Text>
+                {onLimparFiltroIncompleto ? (
+                  <TouchableOpacity
+                    accessibilityLabel="Mostrar todos os cadastros"
+                    onPress={onLimparFiltroIncompleto}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={[styles.incompletoClear, { color: theme.primary }]}>Ver todos</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
           {!isAplicacaoTaf ? (
           <View style={[styles.filtersWrap, useModernCadastro ? styles.filtersWrapModern : null]}>
             <View style={styles.filterBlock}>
@@ -536,7 +600,11 @@ export function CadastroPlanilhaBlock({
           ) : null}
 
           {cadastrosFiltradosComBusca.length === 0 ? (
-            <Text style={[styles.tableEmpty, { color: theme.textSecondary }]}>Nenhum resultado encontrado.</Text>
+            <Text style={[styles.tableEmpty, { color: theme.textSecondary }]}>
+              {somenteCadastroIncompleto
+                ? 'Nenhum cadastro incompleto encontrado.'
+                : 'Nenhum resultado encontrado.'}
+            </Text>
           ) : isAplicacaoTaf ? (
             <ResultadosGeralTable data={registrosTafCards} buscaLower={buscaLower} />
           ) : useModernCadastro ? (
@@ -897,6 +965,31 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     marginBottom: 10,
     textTransform: 'uppercase',
+  },
+  incompletoBanner: {
+    marginBottom: 10,
+  },
+  incompletoChip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  incompletoChipText: {
+    flex: 1,
+    minWidth: 160,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 15,
+  },
+  incompletoClear: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   modernList: { gap: 10 },
   modernRow: {

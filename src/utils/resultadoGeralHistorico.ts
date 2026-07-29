@@ -15,6 +15,7 @@ import {
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 import { compareByNomePtBr } from './compareNomePtBr';
 import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
+import { cadastroIncompletoNascimentoOuFatores } from './cadastroIncompleto';
 
 type ModalidadeHistorico = {
   nota: string;
@@ -460,6 +461,11 @@ export type ResumoInicioTafHistorico = {
   restritos: number;
   /** Cadastrados com ao menos um fator de risco “sim”. */
   fatoresRisco: number;
+  /**
+   * Sem data de nascimento válida e/ou sem fatores de risco preenchidos
+   * (ou só um dos dois).
+   */
+  cadastroIncompleto: number;
 };
 
 function findAggRowForCadastro(aggs: AggRow[], c: CadastroItemPersist): AggRow | undefined {
@@ -486,6 +492,7 @@ export function calcularResumoInicioTafFromHistorico(
   sessoesExcluidas: SessaoAplicacaoTaf[] = [],
   nipsRestritosAtivos: Set<string> | ReadonlySet<string> = new Set(),
   nipsFatoresRisco: Set<string> | ReadonlySet<string> = new Set(),
+  nipsFatoresPreenchidos: Set<string> | ReadonlySet<string> = new Set(),
 ): ResumoInicioTafHistorico {
   const cadastrosReais = cadastros.filter((c) => !isDemoCadastroId(c.id));
   const sessoesReais = sessoes.filter((s) => !isDemoSessaoId(s.id));
@@ -510,16 +517,25 @@ export function calcularResumoInicioTafFromHistorico(
     const key = nipChaveCadastro(n) || (nipDigitos(n).length === 8 ? nipDigitos(n) : '');
     if (key) nipsFatoresNorm.add(key);
   }
+  const nipsFatoresPreenchidosNorm = new Set<string>();
+  for (const n of nipsFatoresPreenchidos) {
+    const key = nipChaveCadastro(n) || (nipDigitos(n).length === 8 ? nipDigitos(n) : '');
+    if (key) nipsFatoresPreenchidosNorm.add(key);
+  }
 
   let completos = 0;
   let parcial = 0;
   let semTeste = 0;
   let restritos = 0;
   let fatoresRisco = 0;
+  let cadastroIncompleto = 0;
   for (const c of cadastrosReais) {
     const nipC = nipChaveCadastro(c.nip);
     if (nipC && nipsFatoresNorm.has(nipC)) {
       fatoresRisco += 1;
+    }
+    if (cadastroIncompletoNascimentoOuFatores(c, nipsFatoresPreenchidosNorm)) {
+      cadastroIncompleto += 1;
     }
     if (nipC && nipsRestritosNorm.has(nipC)) {
       restritos += 1;
@@ -543,5 +559,6 @@ export function calcularResumoInicioTafFromHistorico(
     semTeste,
     restritos,
     fatoresRisco,
+    cadastroIncompleto,
   };
 }

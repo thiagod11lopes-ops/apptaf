@@ -28,7 +28,7 @@ export type ResultadoCorridaItem = {
 export type RootStackParamList = {
   Home: undefined;
   Normas: undefined;
-  Cadastro: undefined;
+  Cadastro: { abrirPlanilhaIncompletos?: boolean } | undefined;
   AplicacaoTAF: undefined;
   CadastroAplicador: undefined;
   AplicarTAF: undefined;

@@ -12,6 +12,7 @@ import { loadResumoInicioFromIndexedDb } from '../utils/homeResumoIndexedDb';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 import { TafGlassPanel } from '../components/mobile/TafTabChrome';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
+import { navigateTab } from '../navigation/navigationRef';
 import {
   ensureDatabaseBankCode,
   readCachedDatabaseBankCode,
@@ -26,6 +27,7 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   semTeste: 0,
   restritos: 0,
   fatoresRisco: 0,
+  cadastroIncompleto: 0,
 };
 
 /** Parte local do e-mail + "@" — ex.: lopes.thiago.oliveira@marinha.mil.br → lopes.thiago.oliveira@ */
@@ -178,39 +180,53 @@ export default function HomeScreen() {
       </View>
 
       <TafGlassPanel accent="cyan" style={styles.statsPanel}>
-        <View style={styles.statsGrid}>
-          <View style={styles.statsRow}>
-            <StatCard
-              label="Cadastrados"
-              value={resumo.totalCadastrados.toLocaleString('pt-BR')}
-              variant="primary"
-            />
-            <StatCard
-              label="Pendente"
-              value={resumo.semTeste.toLocaleString('pt-BR')}
-              variant="negative"
-            />
-            <StatCard
-              label="Restritos"
-              value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
-              variant="warning"
-            />
+        <View style={styles.statsMainRow}>
+          <View style={styles.statsGrid}>
+            <View style={styles.statsRow}>
+              <StatCard
+                label="Cadastrados"
+                value={resumo.totalCadastrados.toLocaleString('pt-BR')}
+                variant="primary"
+              />
+              <StatCard
+                label="Pendente"
+                value={resumo.semTeste.toLocaleString('pt-BR')}
+                variant="negative"
+              />
+              <StatCard
+                label="Restritos"
+                value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
+                variant="warning"
+              />
+            </View>
+            <View style={styles.statsRow}>
+              <StatCard
+                label="Concluídos"
+                value={resumo.completos.toLocaleString('pt-BR')}
+                variant="positive"
+              />
+              <StatCard
+                label="Parcial"
+                value={resumo.parcial.toLocaleString('pt-BR')}
+                variant="warning"
+              />
+              <StatCard
+                label="Fatores de risco"
+                value={(resumo.fatoresRisco ?? 0).toLocaleString('pt-BR')}
+                variant="negative"
+              />
+            </View>
           </View>
-          <View style={styles.statsRow}>
+          <View style={styles.statsSideCard}>
             <StatCard
-              label="Concluídos"
-              value={resumo.completos.toLocaleString('pt-BR')}
-              variant="positive"
-            />
-            <StatCard
-              label="Parcial"
-              value={resumo.parcial.toLocaleString('pt-BR')}
+              label="Cadastro Incompleto"
+              value={(resumo.cadastroIncompleto ?? 0).toLocaleString('pt-BR')}
               variant="warning"
-            />
-            <StatCard
-              label="Fatores de risco"
-              value={(resumo.fatoresRisco ?? 0).toLocaleString('pt-BR')}
-              variant="negative"
+              stretch
+              accessibilityLabel={`Cadastro incompleto: ${resumo.cadastroIncompleto ?? 0}. Abrir planilha filtrada.`}
+              onPress={() =>
+                navigateTab('Cadastro', { abrirPlanilhaIncompletos: true })
+              }
             />
           </View>
         </View>
@@ -359,8 +375,21 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     gap: 12,
   },
-  statsGrid: {
+  statsMainRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     gap: 10,
+    width: '100%',
+  },
+  statsGrid: {
+    flex: 3,
+    minWidth: 0,
+    gap: 10,
+  },
+  statsSideCard: {
+    flex: 1,
+    minWidth: 72,
+    maxWidth: 120,
   },
   statsRow: {
     flexDirection: 'row',

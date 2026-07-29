@@ -215,6 +215,25 @@ export async function getNipsComFatorRiscoSim(
   return out;
 }
 
+/** NIPs com questionário de fatores de risco totalmente preenchido (Sim/Não em todos). */
+export async function getNipsComFatoresRiscoPreenchidos(
+  ownerUid?: string | null,
+): Promise<Set<string>> {
+  const map = await getAllFatoresRisco(ownerUid);
+  const out = new Set<string>();
+  for (const [nip, reg] of Object.entries(map)) {
+    if (!FATORES_RISCO_ITENS.every((item) => {
+      const v = reg.respostas?.[item.id];
+      return v === 'sim' || v === 'nao';
+    })) {
+      continue;
+    }
+    const key = nipChaveCadastro(nip) || nipChaveCadastro(reg.nip);
+    if (key) out.add(key);
+  }
+  return out;
+}
+
 /** Inclui tombstones — sync LWW. */
 export async function getAllFatoresRiscoIncludingDeleted(
   ownerUid?: string | null,

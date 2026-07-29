@@ -127,13 +127,21 @@ describe('calcularResumoInicioTafFromHistorico', () => {
       cadastro({ id: 'c1', nip: '11.1111.11', nome: 'Dispensado' }),
       cadastro({ id: 'c2', nip: '22.2222.22', nome: 'Pendente' }),
     ];
-    const resumo = calcularResumoInicioTafFromHistorico([], cadastros, [], new Set(['11111111']));
+    const resumo = calcularResumoInicioTafFromHistorico(
+      [],
+      cadastros,
+      [],
+      new Set(['11111111']),
+      new Set(),
+      new Set(['11111111', '22222222']),
+    );
     expect(resumo.totalCadastrados).toBe(2);
     expect(resumo.restritos).toBe(1);
     expect(resumo.semTeste).toBe(1);
     expect(resumo.completos).toBe(0);
     expect(resumo.parcial).toBe(0);
     expect(resumo.fatoresRisco).toBe(0);
+    expect(resumo.cadastroIncompleto).toBe(0);
     expect(resumo.completos + resumo.parcial + resumo.semTeste + resumo.restritos).toBe(
       resumo.totalCadastrados,
     );
@@ -150,12 +158,30 @@ describe('calcularResumoInicioTafFromHistorico', () => {
       [],
       new Set(),
       new Set(['11111111']),
+      new Set(['11111111']),
     );
     expect(resumo.fatoresRisco).toBe(1);
     expect(resumo.semTeste).toBe(2);
     expect(resumo.restritos).toBe(0);
+    expect(resumo.cadastroIncompleto).toBe(1);
   });
 
+  it('conta cadastro incompleto sem nascimento ou sem fatores preenchidos', () => {
+    const cadastros = [
+      cadastro({ id: 'c1', nip: '11.1111.11', dataNascimento: '' }),
+      cadastro({ id: 'c2', nip: '22.2222.22', dataNascimento: '01/01/1990' }),
+      cadastro({ id: 'c3', nip: '33.3333.33', dataNascimento: '02/02/1992' }),
+    ];
+    const resumo = calcularResumoInicioTafFromHistorico(
+      [],
+      cadastros,
+      [],
+      new Set(),
+      new Set(),
+      new Set(['22222222']),
+    );
+    expect(resumo.cadastroIncompleto).toBe(2);
+  });
   it('une o mesmo NIP vindo com chaves diferentes em um único participante', () => {
     const cadastros = [cadastro()];
     const sessoes: SessaoAplicacaoTaf[] = [

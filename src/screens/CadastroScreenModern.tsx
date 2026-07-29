@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,8 @@ import {
   TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,7 +34,7 @@ import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold'
 import { TafGlassPanel } from '../components/mobile/TafTabChrome';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
-
+import type { RootStackParamList } from '../navigation/types';
 type Categoria = 'Oficiais' | 'Praças';
 
 type CadastroItem = {
@@ -87,6 +88,8 @@ export default function CadastroScreenModern() {
   const { theme, fontsLoaded } = useTheme();
   const { isNarrowPhone } = useAplicarTafLayout();
   const { isAuthorizedMember, isBoss } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Cadastro'>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'Cadastro'>>();
   const ts = theme.textStyles;
   const regularFont = fontFamily('regular', fontsLoaded);
   const boldFont = fontFamily('bold', fontsLoaded);
@@ -104,13 +107,45 @@ export default function CadastroScreenModern() {
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [mostrarTabela, setMostrarTabela] = useState(false);
+  const [somenteCadastroIncompleto, setSomenteCadastroIncompleto] = useState(false);
+  /** Mantém a planilha de incompletos aberta após limpar o param da rota. */
+  const incompletosSessionRef = useRef(false);
   const podeImportarPdf = isBoss || !isAuthorizedMember;
+
+  const abrirPlanilhaIncompletos = useCallback(() => {
+    incompletosSessionRef.current = true;
+    setMostrarFormulario(false);
+    setMostrarTabela(true);
+    setSomenteCadastroIncompleto(true);
+  }, []);
+
+  useEffect(() => {
+    if (route.params?.abrirPlanilhaIncompletos !== true) return;
+    abrirPlanilhaIncompletos();
+    navigation.setParams({ abrirPlanilhaIncompletos: undefined });
+  }, [abrirPlanilhaIncompletos, navigation, route.params?.abrirPlanilhaIncompletos]);
 
   useFocusEffect(
     useCallback(() => {
+      return () => {
+        incompletosSessionRef.current = false;
+      };
+    }, []),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (incompletosSessionRef.current || route.params?.abrirPlanilhaIncompletos === true) {
+        if (route.params?.abrirPlanilhaIncompletos === true) {
+          abrirPlanilhaIncompletos();
+          navigation.setParams({ abrirPlanilhaIncompletos: undefined });
+        }
+        return;
+      }
       setMostrarFormulario(false);
       setMostrarTabela(false);
-    }, []),
+      setSomenteCadastroIncompleto(false);
+    }, [abrirPlanilhaIncompletos, navigation, route.params?.abrirPlanilhaIncompletos]),
   );
 
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -680,8 +715,18 @@ export default function CadastroScreenModern() {
             <CadastroPlanilhaBlock
               cadastros={cadastros}
               cardGlassEnabled={false}
-              tableTitle="Planilha de Cadastro"
+              tableTitle={
+                somenteCadastroIncompleto
+                  ? 'Planilha — Cadastro Incompleto'
+                  : 'Planilha de Cadastro'
+              }
               showActions
+              somenteCadastroIncompleto={somenteCadastroIncompleto}
+              onLimparFiltroIncompleto={
+                somenteCadastroIncompleto
+                  ? () => setSomenteCadastroIncompleto(false)
+                  : undefined
+              }
               onEdit={handleEditar}
               onRequestDelete={(c) => setExcluirId(c.id)}
               onCadastroCorrigido={(atualizado) =>

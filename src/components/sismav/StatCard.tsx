@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
@@ -10,9 +10,21 @@ type Props = {
   label: string;
   value: string | number;
   variant?: 'default' | 'positive' | 'negative' | 'primary' | 'warning';
+  /** Quando definido, o card fica clicável. */
+  onPress?: () => void;
+  /** Preenche a altura do container (ex.: coluna lateral). */
+  stretch?: boolean;
+  accessibilityLabel?: string;
 };
 
-export function StatCard({ label, value, variant = 'default' }: Props) {
+export function StatCard({
+  label,
+  value,
+  variant = 'default',
+  onPress,
+  stretch = false,
+  accessibilityLabel,
+}: Props) {
   const { theme } = useTheme();
   const { usePhoneFrame, width } = useDeviceLayout();
   const compactGrid = usePhoneFrame || width < 420;
@@ -41,42 +53,60 @@ export function StatCard({ label, value, variant = 'default' }: Props) {
             ? ['#2563eb', '#38bdf8']
             : ['#64748b', '#94a3b8'];
 
-  return (
-    <View
-      style={[
-        styles.card,
-        compactGrid ? styles.cardCompact : styles.cardRegular,
-        {
-          backgroundColor: useGlass ? glass.bg : theme.surface,
-          borderColor: useGlass ? glass.border : theme.border,
-        },
-        Platform.OS === 'web'
-          ? ({ boxShadow: t.shadowCard } as object)
-          : {
-              elevation: useGlass ? 6 : 2,
-              shadowColor: '#0f172a',
-              shadowOffset: { width: 0, height: useGlass ? 8 : 3 },
-              shadowOpacity: useGlass ? 0.12 : 0.06,
-              shadowRadius: useGlass ? 16 : 6,
-            },
-      ]}
-    >
+  const body = (
+    <>
       {useGlass ? (
         <LinearGradient colors={accentColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.stripe} />
       ) : null}
-      <Text
-        style={[styles.label, compactGrid && styles.labelCompact, { color: theme.textMuted }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-      >
-        {label}
-      </Text>
-      <Text style={[styles.value, compactGrid && styles.valueCompact, { color: valueColor }]}>
-        {value}
-      </Text>
-    </View>
+      <View style={[styles.content, stretch && styles.contentStretch]}>
+        <Text
+          style={[styles.label, compactGrid && styles.labelCompact, { color: theme.textMuted }]}
+          numberOfLines={stretch ? 2 : 1}
+          adjustsFontSizeToFit={!stretch}
+          minimumFontScale={0.7}
+        >
+          {label}
+        </Text>
+        <Text style={[styles.value, compactGrid && styles.valueCompact, { color: valueColor }]}>
+          {value}
+        </Text>
+      </View>
+    </>
   );
+
+  const cardStyle = [
+    styles.card,
+    compactGrid ? styles.cardCompact : styles.cardRegular,
+    stretch && styles.cardStretch,
+    {
+      backgroundColor: useGlass ? glass.bg : theme.surface,
+      borderColor: useGlass ? glass.border : theme.border,
+    },
+    Platform.OS === 'web'
+      ? ({ boxShadow: t.shadowCard } as object)
+      : {
+          elevation: useGlass ? 6 : 2,
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: useGlass ? 8 : 3 },
+          shadowOpacity: useGlass ? 0.12 : 0.06,
+          shadowRadius: useGlass ? 16 : 6,
+        },
+  ];
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? label}
+        onPress={onPress}
+        style={({ pressed }) => [cardStyle, pressed && styles.cardPressed]}
+      >
+        {body}
+      </Pressable>
+    );
+  }
+
+  return <View style={cardStyle}>{body}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -85,12 +115,26 @@ const styles = StyleSheet.create({
     minWidth: 0,
     borderRadius: 10,
     borderWidth: 1,
-    gap: 2,
     overflow: 'hidden',
+  },
+  cardStretch: {
+    height: '100%',
+    justifyContent: 'center',
+  },
+  cardPressed: {
+    opacity: 0.88,
   },
   stripe: {
     height: 1,
     width: '100%',
+  },
+  content: {
+    gap: 2,
+  },
+  contentStretch: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 6,
   },
   cardRegular: {
     padding: 8,

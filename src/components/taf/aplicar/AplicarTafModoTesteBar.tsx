@@ -42,7 +42,8 @@ export function AplicarTafModoTesteBar({
   quantidadeMaxima = 50,
 }: Props) {
   const { theme } = useTheme();
-  const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
+  /** Sempre inicia desligado na montagem; o estado real vem do subscribe / ativação do usuário. */
+  const [demoAtivo, setDemoAtivo] = useState(false);
   const [demoCarregando, setDemoCarregando] = useState(false);
   const [demoModal, setDemoModal] = useState<{
     phase: ModoDemonstracaoModalPhase;
@@ -50,7 +51,10 @@ export function AplicarTafModoTesteBar({
     errorMessage?: string;
   } | null>(null);
 
-  useEffect(() => subscribeModoDemonstracao(() => setDemoAtivo(isModoDemonstracaoAtivo())), []);
+  useEffect(() => {
+    setDemoAtivo(isModoDemonstracaoAtivo());
+    return subscribeModoDemonstracao(() => setDemoAtivo(isModoDemonstracaoAtivo()));
+  }, []);
 
   const fecharModal = useCallback(() => {
     if (demoCarregando) return;
@@ -160,8 +164,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 10,
-    marginBottom: 14,
+    flexShrink: 0,
   },
   toggleBtn: {
     flexDirection: 'row',

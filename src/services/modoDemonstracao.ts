@@ -58,6 +58,19 @@ export async function toggleModoDemonstracaoSistema(): Promise<{ ativo: boolean 
   return { ativo: !estavaAtivo };
 }
 
+/** Garante Modo Teste desligado (ex.: ao abrir a identificação). Retorna se estava ativo. */
+export async function desativarModoDemonstracaoSeAtivo(): Promise<boolean> {
+  await limparResiduoModoDemoAntigo();
+  if (!isModoDemonstracaoAtivo()) return false;
+
+  const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
+  await removeDemoCadastrosAndAplicador(ownerUid);
+  await removeAppMeta(DEMO_MODO_ATIVO_KEY);
+  notifyDataChanged();
+  notifyListeners();
+  return true;
+}
+
 async function limparResiduoModoDemoAntigo(): Promise<void> {
   const backupRaw = await readAppMeta(DEMO_BACKUP_ID_KEY);
   if (!backupRaw?.trim()) return;

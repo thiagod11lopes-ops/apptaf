@@ -108,6 +108,7 @@ import {
 import { DEMO_TOTAL_CFN, DEMO_TOTAL_MILITARES } from '../utils/gerarDadosDemonstracaoTaf';
 import {
   isModoDemonstracaoAtivo,
+  desativarModoDemonstracaoSeAtivo,
   subscribeModoDemonstracao,
 } from '../services/modoDemonstracao';
 import { cadastroPrecisaCompletarDadosTaf, dataNascimentoCadastroValida } from '../utils/cadastroDadosTaf';
@@ -1280,16 +1281,20 @@ export default function AplicarTAFScreen() {
   }, [modalRubricaNatacaoVisible]);
 
   const iniciarIdentificacaoNips = useCallback((tipo: TipoProvaTAF) => {
-    tipoProvaRef.current = tipo;
-    setTipoProva(tipo);
-    setErroParticipantes('');
-    setNipsParticipantes(['']);
-    setNipFeedbackLinhas([null]);
-    nipsRepeticaoAutorizadaRef.current = new Set();
-    setModalEditarIdadeGeneroIndex(null);
-    setParticipanteNipParaExcluir(null);
-    setModalCadastroRapido(null);
-    setCorridaEtapa('nips');
+    // Identificação só abre depois de garantir Modo Teste desligado.
+    void desativarModoDemonstracaoSeAtivo().then(() => {
+      setDemoAtivo(false);
+      tipoProvaRef.current = tipo;
+      setTipoProva(tipo);
+      setErroParticipantes('');
+      setNipsParticipantes(['']);
+      setNipFeedbackLinhas([null]);
+      nipsRepeticaoAutorizadaRef.current = new Set();
+      setModalEditarIdadeGeneroIndex(null);
+      setParticipanteNipParaExcluir(null);
+      setModalCadastroRapido(null);
+      setCorridaEtapa('nips');
+    });
   }, []);
 
   const abrirCorrida = useCallback(() => {
@@ -2840,23 +2845,29 @@ export default function AplicarTAFScreen() {
         {mostrarProvas && corridaEtapa === 'nips' ? (
           <AplicarTafGlassPanel accent="violet">
             <View style={styles.section}>
-              <AplicarTafBackLink label="Voltar para seleção de provas" onPress={voltarMenuProvas} />
+              <View style={styles.identTopRow}>
+                <View style={styles.identTopBack}>
+                  <AplicarTafBackLink
+                    label="Voltar para seleção de provas"
+                    onPress={voltarMenuProvas}
+                  />
+                </View>
+                <AplicarTafModoTesteBar
+                  onPreencherNips={preencherNipsDemonstracao}
+                  onLimparNips={limparNipsDemonstracao}
+                  quantidadeInicial={Math.max(1, nParticipantesConfirmado)}
+                  quantidadeMaxima={
+                    modoTafNaval ? DEMO_TOTAL_CFN : DEMO_TOTAL_MILITARES - DEMO_TOTAL_CFN
+                  }
+                />
+              </View>
               <AplicarTafSectionHeader
                 kicker="IDENTIFICAÇÃO"
                 title={`${tituloProvaCurta} — NIPs`}
                 subtitle={
                   demoAtivo
-                    ? `NIPs, idade e gênero dos ${nParticipantesConfirmado} participantes ficam bloqueados no Modo Teste. Use a barra acima para preencher.`
+                    ? `NIPs, idade e gênero dos ${nParticipantesConfirmado} participantes ficam bloqueados no Modo Teste. Use o botão acima para preencher.`
                     : 'Informe o NIP de cada participante. Use Adicionar Participante para incluir mais.'
-                }
-              />
-
-              <AplicarTafModoTesteBar
-                onPreencherNips={preencherNipsDemonstracao}
-                onLimparNips={limparNipsDemonstracao}
-                quantidadeInicial={Math.max(1, nParticipantesConfirmado)}
-                quantidadeMaxima={
-                  modoTafNaval ? DEMO_TOTAL_CFN : DEMO_TOTAL_MILITARES - DEMO_TOTAL_CFN
                 }
               />
 
@@ -3394,6 +3405,18 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   scrollContentCadastro: { paddingVertical: 12 },
   centerWrap: { flex: 1, alignItems: 'stretch' as const, maxWidth: 720, alignSelf: 'center', width: '100%' },
   section: { width: '100%' },
+  identTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+    width: '100%',
+  },
+  identTopBack: {
+    flex: 1,
+    minWidth: 0,
+  },
   preCadastroVazio: {
     marginBottom: 16,
     textAlign: 'center',

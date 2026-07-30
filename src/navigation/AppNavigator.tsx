@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
 import { GlassBottomBar } from '../components/premium/GlassBottomBar';
 import { SettingsTopButton } from '../components/premium/SettingsTopButton';
+import { PageBrasaoBadge } from '../components/branding/PageBrasaoBadge';
 import { AppShell } from '../components/sismav/AppShell';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { navigationRef, getCurrentRouteName, navigateTab } from './navigationRef';
@@ -140,6 +141,7 @@ export default function AppNavigator() {
           />
           </Stack.Navigator>
         </AppShell>
+        <PageBrasaoBadge activeRoute={activeRoute} />
         <SettingsTopButton activeRoute={activeRoute} />
         <GlassBottomBar activeRoute={activeRoute} />
         </View>

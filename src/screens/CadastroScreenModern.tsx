@@ -32,6 +32,7 @@ import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 import { TafGlassPanel } from '../components/mobile/TafTabChrome';
+import { TabTitleIcon } from '../components/branding/TabTitleIcon';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 import type { RootStackParamList } from '../navigation/types';
@@ -365,15 +366,18 @@ export default function CadastroScreenModern() {
         <View style={styles.centerWrap}>
           <View style={styles.headerBlock}>
             <View style={styles.titleBlock}>
-              <Text
-                style={[
-                  theme.textStyles.brandTitle,
-                  styles.titleCenter,
-                  { fontSize: isNarrowPhone ? 26 : 28 },
-                ]}
-              >
-                Cadastro
-              </Text>
+              <View style={styles.titleRow}>
+                <TabTitleIcon size={isNarrowPhone ? 32 : 38} />
+                <Text
+                  style={[
+                    theme.textStyles.brandTitle,
+                    styles.titleCenter,
+                    { fontSize: isNarrowPhone ? 26 : 28 },
+                  ]}
+                >
+                  Cadastro
+                </Text>
+              </View>
               <LinearGradient
                 colors={[theme.primary, '#6366f1']}
                 start={{ x: 0, y: 0 }}
@@ -847,9 +851,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 8,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    maxWidth: '100%',
+  },
   titleCenter: {
     textAlign: 'center',
-    width: '100%',
+    flexShrink: 1,
   },
   titleRule: {
     width: 32,

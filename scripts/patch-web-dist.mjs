@@ -32,11 +32,13 @@ if (/<meta\s+name="viewport"[^>]*>/i.test(html)) {
 
 const headInject = `
     <meta name="description" content="Sistema TAF — Teste de Aptidão Física" />
-    <meta name="theme-color" content="#1C1C22" />
+    <meta name="theme-color" content="#000000" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TAF" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="${prefix}/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="512x512" href="${prefix}/assets/icon.png" />
     <link rel="apple-touch-icon" href="${prefix}/assets/icon.png" />
     <style id="taf-pwa-no-zoom">
       html, body, #root {
@@ -82,10 +84,11 @@ if (!html.includes('manifest.webmanifest')) {
 }
 
 const faviconPng = path.join(distDir, 'assets', 'icon.png');
-const faviconLink = `<link rel="icon" type="image/png" href="${prefix}/favicon.ico" />`;
-if (!html.includes('type="image/png"')) {
-  html = html.replace(/<link rel="icon"[^>]*>/, faviconLink);
-}
+// Prioriza o PNG oficial do TAF (ícone circular) sobre favicon.ico legado.
+html = html.replace(
+  /<link rel="icon"[^>]*>/i,
+  `<link rel="icon" type="image/png" sizes="512x512" href="${prefix}/assets/icon.png" />`,
+);
 
 fs.writeFileSync(indexPath, html);
 
@@ -98,24 +101,38 @@ const manifest = {
   display: 'standalone',
   display_override: ['standalone', 'fullscreen'],
   orientation: 'any',
-  background_color: '#1C1C22',
-  theme_color: '#1C1C22',
+  background_color: '#000000',
+  theme_color: '#000000',
   lang: 'pt-BR',
-  icons: [
-    {
-      src: `${prefix}/favicon.ico`,
-      sizes: '48x48',
-      type: 'image/x-icon',
-    },
-  ],
+  icons: [],
 };
 
 if (fs.existsSync(faviconPng)) {
+  manifest.icons.push(
+    {
+      src: `${prefix}/assets/icon.png`,
+      sizes: '192x192',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: `${prefix}/assets/icon.png`,
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: `${prefix}/assets/icon.png`,
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'maskable',
+    },
+  );
+} else {
   manifest.icons.push({
-    src: `${prefix}/assets/icon.png`,
-    sizes: '512x512',
-    type: 'image/png',
-    purpose: 'any maskable',
+    src: `${prefix}/favicon.ico`,
+    sizes: '48x48',
+    type: 'image/x-icon',
   });
 }
 

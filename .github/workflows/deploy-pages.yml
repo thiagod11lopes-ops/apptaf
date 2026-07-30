@@ -56,7 +56,12 @@ jobs:
         run: node scripts/patch-web-dist.mjs
 
       - name: Copiar ícone PWA
-        run: mkdir -p dist/assets && cp assets/icon.png dist/assets/icon.png
+        run: |
+          mkdir -p dist/assets
+          cp assets/icon.png dist/assets/icon.png
+          cp assets/favicon.png dist/favicon.png
+          # Garante que o favicon do build Expo também use o ícone TAF
+          if [ -f dist/favicon.ico ]; then cp assets/icon.png dist/favicon.png; fi
 
       - name: Impedir deploy Vercel na branch gh-pages
         run: cp scripts/vercel-gh-pages.json dist/vercel.json

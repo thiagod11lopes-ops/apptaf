@@ -32,6 +32,8 @@ export const APP_META_KEYS = [
   'demo:modoAtivo',
   'demo:backupId',
   'provaAtiva:session',
+  'backup:lastDailyDateBr',
+  'backup:pendingAfterCloudSync',
 ] as const;
 
 export const DEMO_MODO_ATIVO_KEY = 'demo:modoAtivo';

@@ -24,10 +24,14 @@ import { AppModal } from './premium/AppModal';
 import { PressableScale } from './premium/PressableScale';
 import { PREMIUM } from '../theme/premium';
 import {
+  clearDailyBackupPendingAfterCloudSync,
   downloadPreparedDailyBackup,
+  isDailyBackupPendingAfterCloudSync,
   isDailyBackupRequired,
   markDailyBackupComplete,
+  markDailyBackupPendingAfterCloudSync,
   prepareDailySystemBackup,
+  reopenDailyBackupAfterCloudSync,
   runDailySystemBackup,
   type DailyBackupPrepared,
   type DailyBackupProgress,
@@ -139,11 +143,14 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
   const startedAtRef = useRef<number | null>(null);
   const syncStartedRef = useRef(false);
   const cancelledRef = useRef(false);
+  /** True se a verificação/atualização na nuvem concluiu nesta sessão do modal. */
+  const cloudSyncedThisSessionRef = useRef(false);
+  const reopenAfterSyncLockRef = useRef(false);
 
   const blocked = enabled && phase !== 'idle';
 
   const releaseApp = useCallback(async () => {
-    await markDailyBackupComplete();
+    await markDailyBackupComplete({ cloudSynced: cloudSyncedThisSessionRef.current });
     setPhase('idle');
     setPrepared(null);
     setError(null);
@@ -180,13 +187,15 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     const hasSession = Boolean(getFirebaseAuth()?.currentUser) && isAuthenticated;
 
     if (!authReady || !hasSession || !online) {
+      cloudSyncedThisSessionRef.current = false;
+      await markDailyBackupPendingAfterCloudSync();
       setCloudBars({
         verifyPercent: 100,
         verifyLabel: !online
           ? 'Sem internet — verificação concluída com dados locais'
           : 'Sem sessão na nuvem — verificação concluída com dados locais',
         updatePercent: 100,
-        updateLabel: 'Nenhuma atualização baixada (modo local)',
+        updateLabel: 'Backup será pedido de novo após a 1ª sync com a nuvem',
       });
       await wait(450);
       if (!cancelledRef.current) setPhase('awaiting_backup');
@@ -230,11 +239,13 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     if (!result.ok) {
       const msg = result.error?.trim() || 'Não foi possível sincronizar com a nuvem.';
       if (msg === SYNC_AUTH_REQUIRED_MESSAGE || msg.toLowerCase().includes('sessão')) {
+        cloudSyncedThisSessionRef.current = false;
+        await markDailyBackupPendingAfterCloudSync();
         setCloudBars({
           verifyPercent: 100,
           verifyLabel: 'Sessão indisponível — seguindo com dados locais',
           updatePercent: 100,
-          updateLabel: 'Atualização na nuvem ignorada',
+          updateLabel: 'Backup será pedido de novo após a 1ª sync com a nuvem',
         });
         await wait(400);
         if (!cancelledRef.current) setPhase('awaiting_backup');
@@ -242,11 +253,13 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
         return;
       }
       if (msg.toLowerCase().includes('offline') || msg.toLowerCase().includes('internet')) {
+        cloudSyncedThisSessionRef.current = false;
+        await markDailyBackupPendingAfterCloudSync();
         setCloudBars({
           verifyPercent: 100,
           verifyLabel: 'Sem conexão — verificação local concluída',
           updatePercent: 100,
-          updateLabel: 'Atualização adiada (offline)',
+          updateLabel: 'Backup será pedido de novo após a 1ª sync com a nuvem',
         });
         await wait(400);
         if (!cancelledRef.current) setPhase('awaiting_backup');
@@ -261,6 +274,8 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     }
 
     const last = getSyncManagerState().syncUi.lastSync;
+    cloudSyncedThisSessionRef.current = true;
+    await clearDailyBackupPendingAfterCloudSync();
     setCloudBars({
       verifyPercent: 100,
       verifyLabel: 'Verificação na nuvem concluída',
@@ -388,6 +403,33 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
   const runCloudSyncRef = useRef(runCloudSyncBeforeBackup);
   runCloudSyncRef.current = runCloudSyncBeforeBackup;
 
+  const openBackupModalAfterCloudSync = useCallback(async () => {
+    if (reopenAfterSyncLockRef.current) return;
+    reopenAfterSyncLockRef.current = true;
+    try {
+      const pending = await isDailyBackupPendingAfterCloudSync();
+      if (!pending) return;
+
+      await reopenDailyBackupAfterCloudSync();
+      cloudSyncedThisSessionRef.current = true;
+      setError(null);
+      setPrepared(null);
+      startedAtRef.current = Date.now();
+      setCloudBars({
+        verifyPercent: 100,
+        verifyLabel: 'Nuvem sincronizada',
+        updatePercent: 100,
+        updateLabel: 'Dados atualizados — conclua o backup do dia',
+      });
+      setPhase('awaiting_backup');
+    } finally {
+      // Libera após um tick para não reabrir em loop no mesmo evento de sync.
+      setTimeout(() => {
+        reopenAfterSyncLockRef.current = false;
+      }, 1500);
+    }
+  }, []);
+
   useEffect(() => {
     if (!enabled) {
       setPhase('idle');
@@ -417,6 +459,38 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
       }
     })();
   }, [enabled, authReady]);
+
+  // Sem internet no boot: quando a 1ª sync com a nuvem concluir, reabre o modal.
+  useEffect(() => {
+    if (!enabled) return;
+    if (phase !== 'idle') return;
+    if (syncUi.isSyncing) return;
+    if (syncUi.phase !== 'success' && syncUi.phase !== 'already_up_to_date') return;
+    if (!syncUi.lastSyncAt) return;
+
+    void (async () => {
+      if (await isDailyBackupPendingAfterCloudSync()) {
+        await openBackupModalAfterCloudSync();
+      }
+    })();
+  }, [enabled, phase, syncUi.isSyncing, syncUi.phase, syncUi.lastSyncAt, openBackupModalAfterCloudSync]);
+
+  // Se ainda está no modal (aguardando backup) e a sync conclui depois, marca nuvem OK.
+  useEffect(() => {
+    if (phase !== 'awaiting_backup') return;
+    if (cloudSyncedThisSessionRef.current) return;
+    if (syncUi.isSyncing) return;
+    if (syncUi.phase !== 'success' && syncUi.phase !== 'already_up_to_date') return;
+
+    cloudSyncedThisSessionRef.current = true;
+    void clearDailyBackupPendingAfterCloudSync();
+    setCloudBars({
+      verifyPercent: 100,
+      verifyLabel: 'Nuvem sincronizada',
+      updatePercent: 100,
+      updateLabel: 'Dados atualizados — pode iniciar o backup do dia',
+    });
+  }, [phase, syncUi.isSyncing, syncUi.phase, syncUi.lastSyncAt]);
 
   useEffect(() => {
     if (!blocked || phase === 'done') return;
@@ -453,7 +527,9 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
       return 'Antes do backup, o AppTAF confere e baixa atualizações da nuvem automaticamente.';
     }
     if (phase === 'awaiting_backup') {
-      return 'Dados locais atualizados. Toque para gerar e baixar o backup diário obrigatório.';
+      return cloudSyncedThisSessionRef.current
+        ? 'Dados sincronizados com a nuvem. Toque para gerar e baixar o backup diário obrigatório.'
+        : 'Sem verificação na nuvem agora. Após a 1ª sincronização, o backup será pedido novamente.';
     }
     if (phase === 'awaiting_download') {
       return 'Baixe o arquivo para liberar o uso do AppTAF hoje.';

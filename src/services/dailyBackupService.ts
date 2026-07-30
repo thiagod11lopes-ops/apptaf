@@ -16,6 +16,8 @@ import type { CadastroItemPersist } from './cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from './resultadosAplicadosIndexedDb';
 
 export const DAILY_BACKUP_META_KEY = 'backup:lastDailyDateBr';
+/** '1' = backup do dia foi liberado sem sync na nuvem; reabrir modal após a 1ª sync. */
+export const DAILY_BACKUP_PENDING_AFTER_SYNC_KEY = 'backup:pendingAfterCloudSync';
 
 export type DailyBackupProgress = {
   percent: number;
@@ -48,8 +50,38 @@ export async function isDailyBackupRequired(): Promise<boolean> {
   return last !== formatBrDateKey();
 }
 
-export async function markDailyBackupComplete(): Promise<void> {
+export async function isDailyBackupPendingAfterCloudSync(): Promise<boolean> {
+  return (await readAppMeta(DAILY_BACKUP_PENDING_AFTER_SYNC_KEY)) === '1';
+}
+
+/** Marca que o backup do dia ainda precisa ser refeito após sincronizar com a nuvem. */
+export async function markDailyBackupPendingAfterCloudSync(): Promise<void> {
+  await writeAppMeta(DAILY_BACKUP_PENDING_AFTER_SYNC_KEY, '1');
+}
+
+export async function clearDailyBackupPendingAfterCloudSync(): Promise<void> {
+  await writeAppMeta(DAILY_BACKUP_PENDING_AFTER_SYNC_KEY, '');
+}
+
+/**
+ * Conclui o backup do dia.
+ * `cloudSynced`: se false, mantém pendência para reabrir o modal na 1ª sync com a nuvem.
+ */
+export async function markDailyBackupComplete(options?: {
+  cloudSynced?: boolean;
+}): Promise<void> {
   await writeAppMeta(DAILY_BACKUP_META_KEY, formatBrDateKey());
+  if (options?.cloudSynced) {
+    await clearDailyBackupPendingAfterCloudSync();
+  } else {
+    await markDailyBackupPendingAfterCloudSync();
+  }
+}
+
+/** Invalida o “já feito hoje” para forçar o modal após sync (mantém a pendência). */
+export async function reopenDailyBackupAfterCloudSync(): Promise<void> {
+  await writeAppMeta(DAILY_BACKUP_META_KEY, '');
+  await markDailyBackupPendingAfterCloudSync();
 }
 
 export async function prepareDailySystemBackup(

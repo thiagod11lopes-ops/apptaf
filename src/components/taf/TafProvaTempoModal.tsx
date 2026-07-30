@@ -384,7 +384,7 @@ export function TafProvaTempoModal({
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const ts = theme.textStyles;
-  const { isNativeMobile, modalBottomPad, horizontalPad, isLandscape } = useAplicarTafLayout();
+  const { isNativeMobile, modalBottomPad, horizontalPad } = useAplicarTafLayout();
 
   const glass = getAplicarTafGlass(theme);
   const permiteDesistencia =

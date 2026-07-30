@@ -496,7 +496,7 @@ export function TafProvaTempoModal({
     <View
       onLayout={onParticipantesBaseLayout}
       style={[
-        isLandscape ? styles.participantesGridLandscape : styles.participantesStack,
+        styles.participantesStack,
         styles.participantesScaledWrap,
         {
           transform: [{ scale: escalaParticipantes }],
@@ -551,7 +551,6 @@ export function TafProvaTempoModal({
             key={`prov-modal-${index}`}
             style={[
               styles.participantCard,
-              isLandscape ? styles.participantCardLandscape : null,
               {
                 borderColor: desistiu ? theme.loss : glass.border,
                 backgroundColor: glass.bg,
@@ -919,13 +918,8 @@ const styles = StyleSheet.create({
   },
   participantesStack: {
     gap: 3,
-  },
-  participantesGridLandscape: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 8,
+    width: '100%',
+    flexDirection: 'column',
   },
   bottomBar: {
     paddingHorizontal: 12,
@@ -945,10 +939,6 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     overflow: 'hidden',
     gap: 0,
-  },
-  participantCardLandscape: {
-    width: '48.5%',
-    marginBottom: 0,
   },
   participantCardBody: {
     flex: 1,

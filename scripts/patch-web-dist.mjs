@@ -99,7 +99,7 @@ function copyIcon(name) {
 
 const has192 = copyIcon('icon-192.png');
 const has512 = copyIcon('icon-512.png');
-const hasMaskable = copyIcon('icon-maskable-512.png');
+copyIcon('icon-maskable-512.png');
 const hasLegacy = copyIcon('icon.png');
 if (fs.existsSync(path.join(assetsSrc, 'favicon.png'))) {
   fs.copyFileSync(path.join(assetsSrc, 'favicon.png'), path.join(distDir, 'favicon.png'));
@@ -112,7 +112,6 @@ if (fs.existsSync(legacyIco)) {
 
 const icon192 = path.join(distAssets, 'icon-192.png');
 const icon512 = path.join(distAssets, 'icon-512.png');
-const iconMaskable = path.join(distAssets, 'icon-maskable-512.png');
 const iconLegacy = path.join(distAssets, 'icon.png');
 
 html = html.replace(
@@ -138,6 +137,7 @@ const manifest = {
 };
 
 if (has192 && has512 && fs.existsSync(icon192) && fs.existsSync(icon512)) {
+  // Apenas purpose "any": no Android, maskable pinta o alpha com preto e recria o fundo.
   manifest.icons.push(
     {
       src: `${prefix}/assets/icon-192.png`,
@@ -152,36 +152,13 @@ if (has192 && has512 && fs.existsSync(icon192) && fs.existsSync(icon512)) {
       purpose: 'any',
     },
   );
-  if (hasMaskable && fs.existsSync(iconMaskable)) {
-    manifest.icons.push({
-      src: `${prefix}/assets/icon-maskable-512.png`,
-      sizes: '512x512',
-      type: 'image/png',
-      purpose: 'maskable',
-    });
-  } else {
-    manifest.icons.push({
-      src: `${prefix}/assets/icon-512.png`,
-      sizes: '512x512',
-      type: 'image/png',
-      purpose: 'maskable',
-    });
-  }
 } else if (hasLegacy && fs.existsSync(iconLegacy)) {
-  manifest.icons.push(
-    {
-      src: `${prefix}/assets/icon.png`,
-      sizes: '512x512',
-      type: 'image/png',
-      purpose: 'any',
-    },
-    {
-      src: `${prefix}/assets/icon.png`,
-      sizes: '512x512',
-      type: 'image/png',
-      purpose: 'maskable',
-    },
-  );
+  manifest.icons.push({
+    src: `${prefix}/assets/icon.png`,
+    sizes: '512x512',
+    type: 'image/png',
+    purpose: 'any',
+  });
 } else {
   console.error('patch-web-dist: nenhum ícone PWA encontrado em assets/');
   process.exit(1);

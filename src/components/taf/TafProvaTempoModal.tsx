@@ -27,6 +27,20 @@ import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPan
 const PARTICIPANTES_ESCALA_MIN = 0.7;
 const PARTICIPANTES_ESCALA_MAX = 1.35;
 const PARTICIPANTES_ESCALA_DEFAULT = 0.5; // ~1.025×
+
+/** Estimativa da largura do nome (bold ~11px) para encaixar checklists o mais à esquerda. */
+function estimarLarguraNomePx(nome: string, fontSize: number): number {
+  const texto = (nome || '—').trim() || '—';
+  let w = 0;
+  for (let i = 0; i < texto.length; i += 1) {
+    const ch = texto[i]!;
+    if (ch === ' ') w += fontSize * 0.28;
+    else if (/[iIl1.|']/.test(ch)) w += fontSize * 0.38;
+    else if (/[mwMW@]/.test(ch)) w += fontSize * 0.78;
+    else w += fontSize * 0.58;
+  }
+  return Math.ceil(w + 2);
+}
 import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import { LogombWatermark } from '../mobile/LogombWatermark';
 import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
@@ -468,6 +482,33 @@ export function TafProvaTempoModal({
     if (h > 0) setParticipantesBaseHeight(h);
   }, []);
 
+  /**
+   * Largura da coluna nome (+ bandeira) = maior nome da lista (com teto).
+   * Assim os checklists começam juntos, o mais à esquerda possível, sem cobrir nomes.
+   */
+  const identityColWidth = useMemo(() => {
+    const fontSize = isNativeMobile ? 10 : 11;
+    const iconW = permiteDesistencia ? (isNativeMobile ? 28 : 26) : 0;
+    const gapIcon = permiteDesistencia ? 8 : 0;
+    const padDireita = 6;
+    let maxNome = estimarLarguraNomePx('—', fontSize);
+    for (let i = 0; i < nParticipantes; i += 1) {
+      maxNome = Math.max(
+        maxNome,
+        estimarLarguraNomePx(nomesParticipantes[i] ?? '—', fontSize),
+      );
+    }
+    const natural = iconW + gapIcon + maxNome + padDireita;
+    const minW = iconW + gapIcon + 40;
+    const maxW = isNativeMobile ? 150 : 220;
+    return Math.min(maxW, Math.max(minW, natural));
+  }, [
+    nParticipantes,
+    nomesParticipantes,
+    permiteDesistencia,
+    isNativeMobile,
+  ]);
+
   const participantesList = (
     <View
       onLayout={onParticipantesBaseLayout}
@@ -570,6 +611,10 @@ export function TafProvaTempoModal({
                   style={[
                     styles.identityCol,
                     styles.identityColFixed,
+                    {
+                      width: identityColWidth,
+                      maxWidth: identityColWidth,
+                    },
                     permiteDesistencia ? styles.identityColWithDesistencia : null,
                   ]}
                 >
@@ -935,7 +980,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: 8,
+    gap: 6,
     minHeight: 0,
     width: '100%',
   },
@@ -948,15 +993,15 @@ const styles = StyleSheet.create({
     gap: 0,
     flexShrink: 0,
     minWidth: 0,
+    overflow: 'hidden',
   },
-  /** Largura fixa para todos os nomes — alinha os checklists na vertical. */
+  /** Largura calculada pelo maior nome — checklists alinhados e o mais à esquerda. */
   identityColFixed: {
-    width: Platform.OS === 'web' ? 168 : 132,
-    maxWidth: Platform.OS === 'web' ? 168 : 132,
     flexGrow: 0,
     flexShrink: 0,
     alignSelf: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   identityColWithDesistencia: {
     gap: 8,
@@ -977,19 +1022,20 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   checksColAligned: {
-    flex: 1,
-    minWidth: 56,
-    alignSelf: 'center',
-    justifyContent: 'center',
-  },
-  checksColPermanencia: {
-    flexGrow: 1,
-  },
-  checksRowInline: {
-    width: '100%',
     flexGrow: 0,
     flexShrink: 1,
-    alignSelf: 'stretch',
+    minWidth: 40,
+    alignSelf: 'center',
+    justifyContent: 'center',
+    marginRight: 'auto',
+  },
+  checksColPermanencia: {
+    flexGrow: 0,
+  },
+  checksRowInline: {
+    flexGrow: 0,
+    flexShrink: 1,
+    alignSelf: 'flex-start',
   },
   checkOuterLarge: {
     padding: 2,
@@ -1001,7 +1047,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 0,
     paddingVertical: 0,
-    flexGrow: 1,
+    flexGrow: 0,
   },
   checksTrackPermanencia: {
     gap: 18,

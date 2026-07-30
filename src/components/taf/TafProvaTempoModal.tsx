@@ -76,21 +76,9 @@ function resolveMetaFieldWidth(value: string, scale: MetaFieldScale): number {
   return Math.max(floor, Math.ceil(text.length * charW + pad));
 }
 
-/** Fonte do valor conforme comprimento — reduz antes de truncar. */
-function resolveMetaValueFontSize(value: string, scale: MetaFieldScale): number {
-  const len = (value.trim() || '—').length;
-  const base = scale === 'minimal' ? 10 : scale === 'compact' ? 12 : 20;
-  const min = scale === 'minimal' ? 7 : scale === 'compact' ? 8 : 11;
-  if (len <= 5) return base;
-  if (len <= 7) return Math.max(min, base - 2);
-  if (len <= 9) return Math.max(min, base - 3);
-  return min;
-}
-
-function resolveMetaReprovFontSize(value: string, scale: MetaFieldScale, baseSize: number): number {
-  const len = value.trim().length;
-  if (len <= 6) return baseSize;
-  return Math.max(scale === 'minimal' ? 7 : 8, baseSize - 1);
+/** Fonte única Tempo/Nota por escala — mesmos números, independente do comprimento. */
+function resolveMetaValueFontSize(_value: string, scale: MetaFieldScale): number {
+  return scale === 'minimal' ? 10 : scale === 'compact' ? 12 : 20;
 }
 
 export type TafProvaTempoModalProps = {
@@ -191,10 +179,7 @@ function MetaResultadoField({
   const isCompact = scale === 'compact' || scale === 'minimal';
   const isMinimal = scale === 'minimal';
   const fieldWidth = adaptive ? resolveMetaFieldWidth(value, scale) : undefined;
-  let valueFontSize = adaptive ? resolveMetaValueFontSize(value, scale) : undefined;
-  if (valueFontSize != null && tone === 'notaReprov') {
-    valueFontSize = resolveMetaReprovFontSize(value, scale, valueFontSize);
-  }
+  const valueFontSize = adaptive ? resolveMetaValueFontSize(value, scale) : undefined;
 
   return (
     <View
@@ -226,16 +211,14 @@ function MetaResultadoField({
           styles.metaValue,
           isCompact ? styles.metaValueCompact : null,
           isMinimal ? styles.metaValueMinimal : null,
-          valueFontSize != null ? { fontSize: valueFontSize } : null,
+          valueFontSize != null ? { fontSize: valueFontSize, lineHeight: valueFontSize + 2 } : null,
           { color: valueColor },
           tone === 'notaReprov' ? styles.metaValueReprov : null,
           tone === 'notaReprov' && isCompact ? styles.metaValueReprovCompact : null,
           tone === 'notaReprov' && isMinimal ? styles.metaValueReprovMinimal : null,
-          tone === 'notaReprov' && valueFontSize != null ? { fontSize: valueFontSize } : null,
         ]}
-        numberOfLines={adaptive ? undefined : 1}
-        adjustsFontSizeToFit={!adaptive && isCompact}
-        minimumFontScale={0.35}
+        numberOfLines={1}
+        adjustsFontSizeToFit={false}
       >
         {value}
       </Text>

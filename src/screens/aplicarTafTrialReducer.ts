@@ -23,8 +23,8 @@ export type TrialTableAction =
   | {
       type: 'toggleVoltaCorrida';
       participante: number;
+      /** Índice clicado (0 = esquerda). Ordem L→R é forçada no reducer. */
       volta: number;
-      isLastVolta: boolean;
       elapsedMs: number | null;
     }
   | { type: 'setDesistencia'; participante: number; value: boolean };
@@ -127,22 +127,34 @@ export function aplicarTafTrialReducer(
     }
 
     case 'toggleVoltaCorrida': {
-      const { participante, volta, isLastVolta, elapsedMs } = action;
+      const { participante, volta, elapsedMs } = action;
       if (state.desistenciaParticipantes[participante]) return state;
       const nextChecks = state.checksVoltas.map((row) => [...row]);
       if (!nextChecks[participante]) return state;
-      const row = [...nextChecks[participante]];
-      const willBeChecked = !row[volta];
-      row[volta] = willBeChecked;
+      const n = nextChecks[participante].length;
+      if (n < 1 || volta < 0 || volta >= n) return state;
+
+      // Prefixo contíguo da esquerda: [✓ ✓ ✓ □ □]
+      let prefixLen = 0;
+      while (prefixLen < n && nextChecks[participante][prefixLen]) prefixLen += 1;
+
+      const row = Array.from({ length: n }, (_, j) => j < prefixLen);
+
+      if (volta >= prefixLen) {
+        // Próximo em ordem — ou clique à frente (pulo): marca o seguinte ao já marcado.
+        if (prefixLen < n) row[prefixLen] = true;
+      } else if (volta === prefixLen - 1) {
+        // Desmarca só o último checklist válido (recuo de um passo).
+        row[volta] = false;
+      }
+      // Clique em checklist já marcado no meio do prefixo: ignora (mantém ordem).
+
       nextChecks[participante] = row;
 
-      if (!isLastVolta) {
-        return { ...state, checksVoltas: nextChecks };
-      }
-
+      const lastMarcada = n > 0 && row[n - 1] === true;
       const nextTempos = [...state.temposMilitaresMs];
       while (nextTempos.length <= participante) nextTempos.push(null);
-      nextTempos[participante] = willBeChecked ? elapsedMs : null;
+      nextTempos[participante] = lastMarcada ? elapsedMs : null;
 
       return { ...state, checksVoltas: nextChecks, temposMilitaresMs: nextTempos };
     }

@@ -697,17 +697,15 @@ export default function AplicarTAFScreen() {
 
   const toggleCheckVolta = useCallback(
     (participante: number, volta: number) => {
-      const isLastVolta = nColunasVoltas > 0 && volta === nColunasVoltas - 1;
-      const elapsedMs = isLastVolta ? getElapsedRaceMs() : null;
+      // Sempre envia o elapsed: um clique “à frente” pode completar a última volta em ordem.
       dispatchTrial({
         type: 'toggleVoltaCorrida',
         participante,
         volta,
-        isLastVolta,
-        elapsedMs,
+        elapsedMs: getElapsedRaceMs(),
       });
     },
-    [nColunasVoltas, getElapsedRaceMs],
+    [getElapsedRaceMs],
   );
 
   const toggleMarcarChegadaNatacao = useCallback(

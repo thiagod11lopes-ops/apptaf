@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -14,6 +15,7 @@ import {
   ClipboardPlus,
   Download,
   FlaskConical,
+  PenLine,
   Trash2,
 } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -21,6 +23,7 @@ import { SectionCard } from './SectionCard';
 import { PressableScale } from '../premium/PressableScale';
 import { CadastrarResultadosManualModal } from './CadastrarResultadosManualModal';
 import { ConfirmacaoExcluirResultadoModal } from './ConfirmacaoExcluirResultadoModal';
+import { RubricaCaptureModal } from '../RubricaCaptureModal';
 import { addCadastro, type CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import {
   tituloTipoProva,
@@ -52,6 +55,7 @@ import {
   type ModalidadeResultadoTaf,
 } from '../../utils/limparResultadoModalidade';
 import { removerParticipanteModalidadeDoHistorico } from '../../utils/registroModalidadeHistorico';
+import { persistirRubricaModalidadeParticipante } from '../../utils/persistirRubricaCadastro';
 import { RubricaCell } from '../RubricaThumb';
 import { PREMIUM } from '../../theme/premium';
 
@@ -121,7 +125,7 @@ export function HistoricoCalendarioTaf({
   onAviso,
   onResultadosCadastrados,
 }: Props) {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const ts = theme.textStyles;
   const hoje = isoHojeLocal();
   const hojeDate = new Date();
@@ -131,10 +135,16 @@ export function HistoricoCalendarioTaf({
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [modalCadastrar, setModalCadastrar] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
+  const [salvandoRubrica, setSalvandoRubrica] = useState(false);
   const [confirmarExclusao, setConfirmarExclusao] = useState<{
     nome: string;
     nip: string;
     modalidade: ModalidadeResultadoTaf;
+  } | null>(null);
+  const [rubricaEdicao, setRubricaEdicao] = useState<{
+    nome: string;
+    nip: string;
+    modalidade: TipoProvaAplicada;
   } | null>(null);
 
   const diasComTeste = useMemo(() => diasComTestesIso(sessoes), [sessoes]);
@@ -264,6 +274,58 @@ export function HistoricoCalendarioTaf({
       setExcluindo(false);
     }
   }, [confirmarExclusao, excluindo, cadastros, onAviso, onResultadosCadastrados]);
+
+  const abrirEdicaoRubrica = useCallback(
+    (r: ResultadoCorridaItem, tipoProva: TipoProvaAplicada) => {
+      if (salvandoRubrica) return;
+      onAviso?.(null);
+      setRubricaEdicao({
+        nome: (r.nome ?? '').trim() || 'Militar',
+        nip: (r.nip ?? '').trim(),
+        modalidade: r.prova ?? tipoProva,
+      });
+    },
+    [salvandoRubrica, onAviso],
+  );
+
+  const participanteRubricaEdicao = useMemo((): ResultadoCorridaItem | null => {
+    if (!rubricaEdicao) return null;
+    return {
+      corredor: 1,
+      nome: rubricaEdicao.nome,
+      nip: rubricaEdicao.nip,
+      tempoMs: 0,
+      prova: rubricaEdicao.modalidade,
+    };
+  }, [rubricaEdicao]);
+
+  const confirmarRubricaEdicao = useCallback(
+    async (svg: string) => {
+      if (!rubricaEdicao || salvandoRubrica) return;
+      setSalvandoRubrica(true);
+      onAviso?.(null);
+      try {
+        const { cadastroOk, sessoesAtualizadas } = await persistirRubricaModalidadeParticipante(
+          rubricaEdicao.nip,
+          rubricaEdicao.nome,
+          rubricaEdicao.modalidade,
+          svg,
+        );
+        if (!cadastroOk && sessoesAtualizadas === 0) {
+          onAviso?.('Não foi possível salvar a rúbrica. Verifique o NIP no cadastro.');
+          return;
+        }
+        setRubricaEdicao(null);
+        onAviso?.('Rúbrica salva com sucesso.');
+        onResultadosCadastrados?.();
+      } catch (e) {
+        onAviso?.(e instanceof Error ? e.message : 'Não foi possível salvar a rúbrica.');
+      } finally {
+        setSalvandoRubrica(false);
+      }
+    },
+    [rubricaEdicao, salvandoRubrica, onAviso, onResultadosCadastrados],
+  );
 
   return (
     <>
@@ -505,6 +567,8 @@ export function HistoricoCalendarioTaf({
               </Text>
               {sessao.resultados.map((r) => {
                 const modalidade = modalidadeExcluivel(sessao.tipoProva);
+                const svgRubrica = rubricaSvgParticipante(sessao.tipoProva, r, cadastros);
+                const temRubrica = !!svgRubrica?.trim();
                 return (
                   <View
                     key={`${sessao.id}-${r.corredor}`}
@@ -549,11 +613,78 @@ export function HistoricoCalendarioTaf({
                       <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 4 }]}>
                         Rúbrica
                       </Text>
-                      <RubricaCell
-                        svgUri={rubricaSvgParticipante(sessao.tipoProva, r, cadastros)}
-                        maxWidth={120}
-                        maxHeight={52}
-                      />
+                      <TouchableOpacity
+                        onPress={() => abrirEdicaoRubrica(r, sessao.tipoProva)}
+                        activeOpacity={0.82}
+                        disabled={salvandoRubrica}
+                        accessibilityLabel={
+                          temRubrica ? 'Alterar rúbrica' : 'Adicionar rúbrica'
+                        }
+                        accessibilityRole="button"
+                        style={[
+                          styles.rubricaBtn,
+                          temRubrica
+                            ? styles.rubricaBtnPreenchida
+                            : {
+                                borderColor: theme.border,
+                                backgroundColor: isDark
+                                  ? 'rgba(2,6,23,0.35)'
+                                  : 'rgba(248,250,252,0.95)',
+                              },
+                          Platform.OS === 'web' ? ({ cursor: 'pointer' } as object) : null,
+                        ]}
+                        {...(Platform.OS === 'web'
+                          ? ({
+                              onClick: (e: {
+                                preventDefault?: () => void;
+                                stopPropagation?: () => void;
+                              }) => {
+                                e?.preventDefault?.();
+                                e?.stopPropagation?.();
+                                abrirEdicaoRubrica(r, sessao.tipoProva);
+                              },
+                            } as object)
+                          : null)}
+                      >
+                        {temRubrica ? (
+                          <>
+                            <RubricaCell
+                              svgUri={svgRubrica}
+                              maxWidth={120}
+                              maxHeight={52}
+                            />
+                            <Text
+                              style={[styles.rubricaHint, { color: theme.textMuted }]}
+                              pointerEvents="none"
+                            >
+                              Toque para alterar
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <View
+                              pointerEvents="none"
+                              style={[
+                                styles.rubricaAddIcon,
+                                {
+                                  backgroundColor: isDark
+                                    ? 'rgba(37,99,235,0.22)'
+                                    : 'rgba(37,99,235,0.1)',
+                                  borderColor: theme.primary,
+                                },
+                              ]}
+                            >
+                              <PenLine size={18} color={theme.primary} strokeWidth={2.4} />
+                            </View>
+                            <Text
+                              style={[styles.rubricaAddLabel, { color: theme.primary }]}
+                              pointerEvents="none"
+                            >
+                              Adicionar
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
                     </View>
                     <PressableScale
                       onPress={() =>
@@ -601,6 +732,25 @@ export function HistoricoCalendarioTaf({
         if (!excluindo) setConfirmarExclusao(null);
       }}
       onConfirm={() => void executarExclusao()}
+    />
+
+    <RubricaCaptureModal
+      visible={!!rubricaEdicao}
+      participante={participanteRubricaEdicao}
+      indice={0}
+      total={1}
+      tipoProva={rubricaEdicao?.modalidade ?? 'corrida'}
+      ultimo
+      confirmLabel={salvandoRubrica ? 'Salvando…' : 'Salvar rúbrica'}
+      onConfirm={(svg) => {
+        if (!salvandoRubrica) void confirmarRubricaEdicao(svg);
+      }}
+      onSkip={() => {
+        if (!salvandoRubrica) setRubricaEdicao(null);
+      }}
+      onCancel={() => {
+        if (!salvandoRubrica) setRubricaEdicao(null);
+      }}
     />
     </>
   );
@@ -699,7 +849,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     minWidth: 120,
-    maxWidth: 130,
+    maxWidth: 140,
+    zIndex: 2,
+  },
+  rubricaBtn: {
+    width: '100%',
+    minHeight: 64,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    gap: 4,
+  },
+  rubricaBtnPreenchida: {
+    borderWidth: 0,
+    borderStyle: 'solid',
+  },
+  rubricaAddIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rubricaAddLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  rubricaHint: {
+    fontSize: 9,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   trashBtn: {
     width: 36,

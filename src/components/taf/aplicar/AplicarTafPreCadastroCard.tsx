@@ -9,6 +9,8 @@ import { getAplicarTafGlass } from './aplicarTafTheme';
 import { useAplicarTafLayout } from './useAplicarTafLayout';
 
 type Props = {
+  /** Número de ordem do card (1-based), exibido no topo à direita. */
+  numero: number;
   titulo: string;
   meta: string;
   nomesPreview: string;
@@ -18,6 +20,7 @@ type Props = {
 };
 
 export function AplicarTafPreCadastroCard({
+  numero,
   titulo,
   meta,
   nomesPreview,
@@ -30,6 +33,7 @@ export function AplicarTafPreCadastroCard({
   const glass = getAplicarTafGlass(theme);
   const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
   const stackActions = isNativeMobile || isNarrowPhone;
+  const numLabel = String(Math.max(1, Math.floor(numero)));
 
   return (
     <View
@@ -44,8 +48,46 @@ export function AplicarTafPreCadastroCard({
     >
       <LinearGradient colors={accentColors} style={styles.stripe} />
       <View style={styles.body}>
-        <Text style={[styles.titulo, { color: ui.text }]}>{titulo}</Text>
-        <Text style={[styles.meta, { color: theme.textSecondary }]}>{meta}</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerTextCol}>
+            <Text style={[styles.titulo, { color: ui.text }]}>{titulo}</Text>
+            <Text style={[styles.meta, { color: theme.textSecondary }]}>{meta}</Text>
+          </View>
+          <View
+            style={[
+              styles.numeroOrb,
+              Platform.OS === 'web'
+                ? ({
+                    boxShadow: `0 8px 22px ${accentColors[0]}55, 0 0 0 1px ${accentColors[1]}44`,
+                  } as object)
+                : {
+                    shadowColor: accentColors[0],
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.35,
+                    shadowRadius: 12,
+                    elevation: 6,
+                  },
+            ]}
+            accessibilityLabel={`Pré-cadastro número ${numLabel}`}
+          >
+            <LinearGradient
+              colors={[...accentColors]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.numeroOrbFill}
+            >
+              <LinearGradient
+                colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.06)', 'transparent']}
+                start={{ x: 0.2, y: 0 }}
+                end={{ x: 0.9, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <Text style={styles.numeroText} numberOfLines={1}>
+                {numLabel}
+              </Text>
+            </LinearGradient>
+          </View>
+        </View>
         <Text style={[styles.nomes, { color: theme.textMuted }]} numberOfLines={2}>
           {nomesPreview}
         </Text>
@@ -77,6 +119,42 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 4,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+    paddingRight: 4,
+  },
+  numeroOrb: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  numeroOrbFill: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  numeroText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(15, 23, 42, 0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   titulo: {
     fontSize: 17,
     fontWeight: '900',
@@ -91,6 +169,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 17,
     marginBottom: 6,
+    marginTop: 2,
   },
   actions: {
     flexDirection: 'row',

@@ -2742,9 +2742,10 @@ export default function AplicarTAFScreen() {
                   Nenhum pré-cadastro salvo ainda.
                 </Text>
               ) : (
-                listaPreCadastros.map((pre) => (
+                listaPreCadastros.map((pre, index) => (
                   <AplicarTafPreCadastroCard
                     key={pre.id}
+                    numero={index + 1}
                     titulo={labelTipoProvaPreCadastro(pre)}
                     meta={metaPreCadastro(pre)}
                     nomesPreview={pre.participantes.map((p) => p.nomeMilitar).join(', ')}

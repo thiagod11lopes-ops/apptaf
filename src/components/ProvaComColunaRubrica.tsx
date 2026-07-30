@@ -1,5 +1,6 @@
-import React, { useCallback, useRef } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import { PenLine } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { RubricaCell } from './RubricaThumb';
 
@@ -10,11 +11,11 @@ type Props = {
   rubricaSvg?: string | null;
   /** Tarja vermelha para corrida/caminhada substituída ou não aplicada (TAF Armada). */
   dispensavel?: boolean;
-  /** Duplo clique / duplo toque na área da rúbrica (desenho ou espaço em branco). */
+  /** Clique na rúbrica: editar se existir, ou adicionar se estiver vazia. */
+  onPressRubrica?: () => void;
+  /** @deprecated Use onPressRubrica */
   onDuploCliqueRubrica?: () => void;
 };
-
-const DUPLO_MS = 320;
 
 /** Bloco de prova com coluna dedicada "Rúbrica" ao lado dos dados. */
 export function ProvaComColunaRubrica({
@@ -23,47 +24,49 @@ export function ProvaComColunaRubrica({
   children,
   rubricaSvg,
   dispensavel = false,
+  onPressRubrica,
   onDuploCliqueRubrica,
 }: Props) {
-  const { theme } = useTheme();
-  const lastTapRef = useRef(0);
-
-  const dispararDuplo = useCallback(() => {
-    onDuploCliqueRubrica?.();
-  }, [onDuploCliqueRubrica]);
-
-  const onPressRubrica = useCallback(() => {
-    if (!onDuploCliqueRubrica) return;
-    if (Platform.OS === 'web') return;
-    const now = Date.now();
-    if (now - lastTapRef.current < DUPLO_MS) {
-      lastTapRef.current = 0;
-      dispararDuplo();
-    } else {
-      lastTapRef.current = now;
-    }
-  }, [onDuploCliqueRubrica, dispararDuplo]);
-
+  const { theme, isDark } = useTheme();
+  const onRubrica = onPressRubrica ?? onDuploCliqueRubrica;
   const temRubrica = !!(rubricaSvg && String(rubricaSvg).trim());
 
-  const rubricaArea = (
+  const rubricaArea = temRubrica ? (
+    <View style={styles.rubricaHit}>
+      <RubricaCell svgUri={rubricaSvg} />
+      {onRubrica ? (
+        <Text style={[styles.rubricaHint, { color: theme.textMuted }]}>Toque para alterar</Text>
+      ) : null}
+    </View>
+  ) : (
     <View
       style={[
         styles.rubricaHit,
-        !temRubrica && onDuploCliqueRubrica
-          ? {
-              borderColor: theme.border,
-              backgroundColor: theme.backgroundSecondary,
-            }
-          : null,
+        styles.rubricaVazia,
+        {
+          borderColor: theme.border,
+          backgroundColor: isDark ? 'rgba(2,6,23,0.35)' : 'rgba(248,250,252,0.95)',
+        },
       ]}
     >
-      <RubricaCell svgUri={rubricaSvg} />
-      {!temRubrica && onDuploCliqueRubrica ? (
-        <Text style={[styles.rubricaHint, { color: theme.textMuted }]}>
-          Duplo clique para assinar
-        </Text>
-      ) : null}
+      {onRubrica ? (
+        <>
+          <View
+            style={[
+              styles.addIconWrap,
+              {
+                backgroundColor: isDark ? 'rgba(37,99,235,0.22)' : 'rgba(37,99,235,0.1)',
+                borderColor: theme.primary,
+              },
+            ]}
+          >
+            <PenLine size={22} color={theme.primary} strokeWidth={2.4} />
+          </View>
+          <Text style={[styles.addLabel, { color: theme.primary }]}>Adicionar rúbrica</Text>
+        </>
+      ) : (
+        <Text style={[styles.rubricaHint, { color: theme.textMuted }]}>Sem rúbrica</Text>
+      )}
     </View>
   );
 
@@ -97,22 +100,18 @@ export function ProvaComColunaRubrica({
         <View style={styles.dadosCol}>{children}</View>
         <View style={styles.rubricaCol}>
           <Text style={[styles.rubricaLabel, { color: theme.textMuted }]}>Rúbrica</Text>
-          {onDuploCliqueRubrica ? (
+          {onRubrica ? (
             <Pressable
-              onPress={onPressRubrica}
+              onPress={onRubrica}
               accessibilityLabel={
-                temRubrica
-                  ? 'Duplo clique para substituir a rúbrica'
-                  : 'Duplo clique para adicionar a rúbrica'
+                temRubrica ? 'Alterar rúbrica' : 'Adicionar rúbrica'
               }
-              accessibilityHint="Toque duas vezes para abrir o campo de assinatura"
-              {...(Platform.OS === 'web'
-                ? ({
-                    onClick: (e: { detail?: number }) => {
-                      if (e?.detail === 2) dispararDuplo();
-                    },
-                  } as object)
-                : null)}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.pressWrap,
+                pressed ? { opacity: 0.85 } : null,
+                Platform.OS === 'web' ? ({ cursor: 'pointer' } as object) : null,
+              ]}
             >
               {rubricaArea}
             </Pressable>
@@ -180,17 +179,37 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     alignSelf: 'flex-start',
   },
+  pressWrap: {
+    width: '100%',
+  },
   rubricaHit: {
     width: '100%',
-    minHeight: 56,
+    minHeight: 72,
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    gap: 6,
+  },
+  rubricaVazia: {
+    borderStyle: 'dashed',
+    borderWidth: 1.5,
+  },
+  addIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   rubricaHint: {
     fontSize: 10,

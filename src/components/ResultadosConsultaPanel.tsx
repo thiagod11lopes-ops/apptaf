@@ -642,7 +642,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
               titulo="Corrida"
               rubricaSvg={r.rubricaCorridaSvg}
               dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'corrida')}
-              onDuploCliqueRubrica={() => abrirEdicaoRubrica(r, 'corrida')}
+              onPressRubrica={() => abrirEdicaoRubrica(r, 'corrida')}
               headerRight={
                 podeExcluirCorrida ? (
                   <PressableScale
@@ -668,7 +668,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
               titulo="Caminhada"
               rubricaSvg={r.rubricaCaminhadaSvg}
               dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'caminhada')}
-              onDuploCliqueRubrica={() => abrirEdicaoRubrica(r, 'caminhada')}
+              onPressRubrica={() => abrirEdicaoRubrica(r, 'caminhada')}
               headerRight={
                 podeExcluirCaminhada ? (
                   <PressableScale
@@ -693,7 +693,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
             <ProvaComColunaRubrica
               titulo="Natação"
               rubricaSvg={r.rubricaNatacaoSvg}
-              onDuploCliqueRubrica={() => abrirEdicaoRubrica(r, 'natacao')}
+              onPressRubrica={() => abrirEdicaoRubrica(r, 'natacao')}
               headerRight={
                 podeExcluirNatacao ? (
                   <PressableScale
@@ -718,7 +718,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
             <ProvaComColunaRubrica
               titulo="Permanência"
               rubricaSvg={r.rubricaPermanenciaSvg}
-              onDuploCliqueRubrica={() => abrirEdicaoRubrica(r, 'permanencia')}
+              onPressRubrica={() => abrirEdicaoRubrica(r, 'permanencia')}
               headerRight={
                 podeExcluirPermanencia ? (
                   <PressableScale

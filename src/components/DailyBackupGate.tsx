@@ -18,7 +18,7 @@ import {
   Sparkles,
 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { useCloudSyncState } from '../contexts/OfflineSyncContext';
+import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { useAuth } from '../contexts/AuthContext';
 import { AppModal } from './premium/AppModal';
 import { PressableScale } from './premium/PressableScale';
@@ -129,7 +129,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
   const ts = theme.textStyles;
   const t = theme.tokens;
   const { isAuthenticated, authReady } = useAuth();
-  const { syncUi, startSyncFromToggle, connectivity } = useCloudSyncState();
+  const { syncUi, startSyncFromToggle, connectivity } = useOfflineSyncState();
 
   const [phase, setPhase] = useState<GatePhase>('checking');
   const [progress, setProgress] = useState<DailyBackupProgress>({

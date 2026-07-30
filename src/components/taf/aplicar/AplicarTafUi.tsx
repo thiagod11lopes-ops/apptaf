@@ -14,7 +14,6 @@ import { ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
-import { TabTitleIcon } from '../../branding/TabTitleIcon';
 import { aplicarTafShared, getAplicarTafGlass } from './aplicarTafTheme';
 import { useAplicarTafLayout } from './useAplicarTafLayout';
 
@@ -38,30 +37,26 @@ export function AplicarTafTabHeader({
   const ui = getUiColors(theme);
   const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
   const glass = getAplicarTafGlass(theme);
-  const iconSize = isNarrowPhone ? 32 : 38;
 
   if (centered) {
     return (
       <View style={styles.headerCenteredWrap}>
         <View style={styles.headerCenteredText}>
-          <View style={styles.titleRowCentered}>
-            <TabTitleIcon size={iconSize} />
-            <Text
-              style={[
-                ts.brandTitle,
-                styles.headerTitleCentered,
-                {
-                  fontSize: isNarrowPhone ? 26 : 28,
-                  lineHeight: isNarrowPhone ? 32 : 34,
-                },
-              ]}
-              numberOfLines={2}
-              adjustsFontSizeToFit
-              minimumFontScale={0.85}
-            >
-              {title}
-            </Text>
-          </View>
+          <Text
+            style={[
+              ts.brandTitle,
+              styles.headerTitleCentered,
+              {
+                fontSize: isNarrowPhone ? 26 : 28,
+                lineHeight: isNarrowPhone ? 32 : 34,
+              },
+            ]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
+            {title}
+          </Text>
           <LinearGradient
             colors={[theme.primary, '#6366f1']}
             start={{ x: 0, y: 0 }}
@@ -100,25 +95,21 @@ export function AplicarTafTabHeader({
             {kicker}
           </Text>
         ) : null}
-        <View style={styles.titleRowInline}>
-          <TabTitleIcon size={isNarrowPhone ? 28 : 34} />
-          <Text
-            style={[
-              styles.headerTitle,
-              {
-                color: ui.text,
-                fontSize: isNarrowPhone ? 22 : isNativeMobile ? 24 : 26,
-                lineHeight: isNarrowPhone ? 26 : isNativeMobile ? 28 : 30,
-                flexShrink: 1,
-              },
-            ]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.85}
-          >
-            {title}
-          </Text>
-        </View>
+        <Text
+          style={[
+            styles.headerTitle,
+            {
+              color: ui.text,
+              fontSize: isNarrowPhone ? 22 : isNativeMobile ? 24 : 26,
+              lineHeight: isNarrowPhone ? 26 : isNativeMobile ? 28 : 30,
+            },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
+        >
+          {title}
+        </Text>
         {subtitle ? (
           <Text
             style={[styles.headerSubtitle, { color: theme.textSecondary }]}
@@ -397,27 +388,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  titleRowCentered: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    maxWidth: '100%',
-    paddingHorizontal: 4,
-  },
-  titleRowInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minWidth: 0,
-  },
   headerCenteredFooter: {
     width: '100%',
     alignItems: 'center',
   },
   headerTitleCentered: {
     textAlign: 'center',
-    flexShrink: 1,
+    width: '100%',
   },
   headerSubtitleCentered: {
     textAlign: 'center',

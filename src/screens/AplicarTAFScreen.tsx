@@ -19,6 +19,8 @@ import {
   ActivityIndicator,
   GestureResponderEvent,
   KeyboardAvoidingView,
+  AppState,
+  type AppStateStatus,
 } from 'react-native';
 import { Trash2 } from 'lucide-react-native';
 import { AppModal } from '../components/premium/AppModal';
@@ -57,6 +59,7 @@ import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { AplicarTafModoTesteBar } from '../components/taf/aplicar/AplicarTafModoTesteBar';
 import { EditarIdadeGeneroMilitarModal } from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
 import { ConfirmacaoExcluirParticipanteNipModal } from '../components/taf/aplicar/ConfirmacaoExcluirParticipanteNipModal';
+import { ContinuidadeProvaAtivaModal } from '../components/taf/aplicar/ContinuidadeProvaAtivaModal';
 import { CadastroRapidoMilitarModal } from '../components/taf/aplicar/CadastroRapidoMilitarModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -91,6 +94,13 @@ import {
 import { LabelNip } from '../components/LabelNip';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { addSessaoAplicacao, getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import {
+  clearProvaAtivaSession,
+  loadProvaAtivaSession,
+  resolveCronometroElapsedMs,
+  saveProvaAtivaSession,
+  type ProvaAtivaSessionV1,
+} from '../services/provaAtivaSessionStorage';
 import { aplicarRubricasEmCadastros } from '../utils/persistirRubricaCadastro';
 import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
@@ -363,9 +373,18 @@ export default function AplicarTAFScreen() {
   >(null);
   const nipsRepeticaoAutorizadaRef = useRef<Set<number>>(new Set());
   const [numeroVoltas, setNumeroVoltas] = useState('');
+  /** Corrida/caminhada: número de voltas já confirmado (também persistido na sessão). */
+  const [voltasConfirmadasProva, setVoltasConfirmadasProva] = useState(false);
   /** Voltas, chegadas e tempos em um único reducer (atualização atômica por clique). */
   const [trialTable, dispatchTrial] = useReducer(aplicarTafTrialReducer, initialTrialTableState);
   const { checksVoltas, chegadaNatacao, temposMilitaresMs, desistenciaParticipantes } = trialTable;
+  const [continuidadeProvaVisible, setContinuidadeProvaVisible] = useState(false);
+  const [continuidadeProvaMeta, setContinuidadeProvaMeta] = useState<{
+    provaLabel: string;
+    participantesCount: number;
+  } | null>(null);
+  const suppressPersistProvaRef = useRef(false);
+  const provaAtivaRestauradaRef = useRef(false);
 
   /** Após “Aplicar Resultado”: tempos gravados no cadastro. */
   const [salvandoResultadosCorrida, setSalvandoResultadosCorrida] = useState(false);
@@ -710,6 +729,287 @@ export default function AplicarTAFScreen() {
     resultadosPosMilitaresRef.current = null;
   }, []);
 
+  const montarSnapshotProvaAtiva = useCallback((): ProvaAtivaSessionV1 | null => {
+    if (modoPreCadastro || !mostrarProvas || !tipoProva) return null;
+    const emTabela =
+      corridaEtapa === 'tabela_corrida' ||
+      corridaEtapa === 'tabela_permanencia' ||
+      corridaEtapa === 'tabela_repeticoes';
+    const emFinalizacao =
+      modalRubricaNatacaoVisible || fluxoAplicadorVisible || modalTempoRegistradoVisible;
+    if (!emTabela && !emFinalizacao) return null;
+    if (nipsParticipantes.length < 1) return null;
+
+    const elapsedMs = getElapsedRaceMs() ?? 0;
+    let finalizacao: ProvaAtivaSessionV1['finalizacao'];
+    const resultadosPendentes =
+      listaResultadosRubricaNatacao ??
+      resultadosPosMilitaresRef.current ??
+      pendingResultadosNavRef.current;
+    if (fluxoAplicadorVisible && resultadosPendentes) {
+      finalizacao = {
+        fase: 'aplicador',
+        resultados: resultadosPendentes.map((r) => ({ ...r })),
+        pendingCadastros: pendingCadastrosRef.current.map((c) => ({ ...c })),
+      };
+    } else if (modalRubricaNatacaoVisible && resultadosPendentes) {
+      finalizacao = {
+        fase: 'rubrica_candidatos',
+        resultados: resultadosPendentes.map((r) => ({ ...r })),
+        pendingCadastros: pendingCadastrosRef.current.map((c) => ({ ...c })),
+        indiceRubrica: indiceRubricaNatacao,
+        listaResultadosRubrica: (listaResultadosRubricaNatacao ?? resultadosPendentes).map(
+          (r) => ({ ...r }),
+        ),
+      };
+    } else if (modalTempoRegistradoVisible && resultadosPendentes) {
+      finalizacao = {
+        fase: 'tempo_registrado',
+        resultados: resultadosPendentes.map((r) => ({ ...r })),
+        pendingCadastros: pendingCadastrosRef.current.map((c) => ({ ...c })),
+      };
+    }
+
+    const etapaSalva: ProvaAtivaSessionV1['corridaEtapa'] = emTabela
+      ? corridaEtapa
+      : 'nips';
+
+    return {
+      v: 1,
+      savedAt: Date.now(),
+      tipoProva,
+      modoTafNaval,
+      corridaEtapa: etapaSalva,
+      nipsParticipantes: [...nipsParticipantes],
+      nipFeedbackLinhas: nipFeedbackLinhas.map((fb) =>
+        fb == null ? null : ({ ...fb } as ProvaAtivaSessionV1['nipFeedbackLinhas'][number]),
+      ),
+      trialTable: {
+        checksVoltas: trialTable.checksVoltas.map((row) => [...row]),
+        chegadaNatacao: [...trialTable.chegadaNatacao],
+        temposMilitaresMs: [...trialTable.temposMilitaresMs],
+        desistenciaParticipantes: [...trialTable.desistenciaParticipantes],
+      },
+      numeroVoltas,
+      voltasConfirmadas: voltasConfirmadasProva,
+      repeticoesParticipantes: [...repeticoesParticipantes],
+      resultadoPermanenciaLinhas: [...resultadoPermanenciaLinhas],
+      cronometro: {
+        estado: cronometroEstado,
+        elapsedMs,
+        wallClockAtSave: Date.now(),
+      },
+      nipsRepeticaoAutorizada: [...nipsRepeticaoAutorizadaRef.current],
+      finalizacao,
+    };
+  }, [
+    modoPreCadastro,
+    mostrarProvas,
+    tipoProva,
+    corridaEtapa,
+    modalRubricaNatacaoVisible,
+    fluxoAplicadorVisible,
+    modalTempoRegistradoVisible,
+    nipsParticipantes,
+    nipFeedbackLinhas,
+    trialTable,
+    numeroVoltas,
+    voltasConfirmadasProva,
+    repeticoesParticipantes,
+    resultadoPermanenciaLinhas,
+    cronometroEstado,
+    getElapsedRaceMs,
+    listaResultadosRubricaNatacao,
+    indiceRubricaNatacao,
+    modoTafNaval,
+  ]);
+
+  const persistirProvaAtivaAgora = useCallback(() => {
+    if (suppressPersistProvaRef.current) return;
+    const snap = montarSnapshotProvaAtiva();
+    if (!snap) return;
+    void saveProvaAtivaSession(snap);
+  }, [montarSnapshotProvaAtiva]);
+
+  const limparSessaoProvaAtiva = useCallback(() => {
+    void clearProvaAtivaSession();
+  }, []);
+
+  const aplicarSessaoProvaAtiva = useCallback(
+    (session: ProvaAtivaSessionV1) => {
+      suppressPersistProvaRef.current = true;
+      const tipo = session.tipoProva;
+      tipoProvaRef.current = tipo;
+      setTipoProva(tipo);
+      setModoTafNaval(session.modoTafNaval);
+      setModoPreCadastro(false);
+      setMostrarListaPreCadastro(false);
+      setMostrarFatoresRisco(false);
+      setMostrarRestritos(false);
+      setMostrarProvas(true);
+      setNipsParticipantes(session.nipsParticipantes);
+      setNipFeedbackLinhas(session.nipFeedbackLinhas as NipFeedbackLinha[]);
+      nipsRepeticaoAutorizadaRef.current = new Set(session.nipsRepeticaoAutorizada ?? []);
+      setModalTesteExistente(null);
+      setNumeroVoltas(session.numeroVoltas ?? '');
+      setVoltasConfirmadasProva(Boolean(session.voltasConfirmadas));
+      setRepeticoesParticipantes(session.repeticoesParticipantes ?? []);
+      setResultadoPermanenciaLinhas(session.resultadoPermanenciaLinhas ?? []);
+      setModalPermanenciaFinalizadaVisible(false);
+      setErroPermanencia('');
+      dispatchTrial({ type: 'hydrate', state: session.trialTable });
+
+      const elapsed = resolveCronometroElapsedMs(session);
+      stopwatch.restaurar({
+        estado: session.cronometro.estado,
+        elapsedMs: elapsed,
+      });
+
+      setCorridaEtapa(session.corridaEtapa);
+
+      const fin = session.finalizacao;
+      if (fin) {
+        pendingCadastrosRef.current = fin.pendingCadastros.map((c) => ({ ...c }));
+        pendingCleanupsRef.current = [];
+        const resultados = fin.resultados.map((r) => ({ ...r }));
+        resultadosPosMilitaresRef.current = resultados;
+        pendingResultadosNavRef.current = resultados;
+        if (fin.fase === 'rubrica_candidatos') {
+          const lista = (fin.listaResultadosRubrica ?? resultados).map((r) => ({ ...r }));
+          setListaResultadosRubricaNatacao(lista);
+          setIndiceRubricaNatacao(fin.indiceRubrica ?? 0);
+          setErroRubricaNatacao('');
+          setRubricaStrokes([]);
+          setRubricaStrokeAtual([]);
+          setModalRubricaNatacaoVisible(true);
+          setFluxoAplicadorVisible(false);
+          setModalTempoRegistradoVisible(false);
+        } else if (fin.fase === 'aplicador') {
+          setListaResultadosRubricaNatacao(null);
+          setModalRubricaNatacaoVisible(false);
+          setModalTempoRegistradoVisible(false);
+          setFluxoAplicadorVisible(true);
+        } else {
+          setListaResultadosRubricaNatacao(null);
+          setModalRubricaNatacaoVisible(false);
+          setFluxoAplicadorVisible(false);
+          setModalTempoRegistradoVisible(true);
+        }
+      } else {
+        limparBufferAplicacao();
+        setListaResultadosRubricaNatacao(null);
+        setModalRubricaNatacaoVisible(false);
+        setFluxoAplicadorVisible(false);
+        setModalTempoRegistradoVisible(false);
+      }
+
+      setContinuidadeProvaMeta({
+        provaLabel: tituloProvaTaf(tipo, session.modoTafNaval),
+        participantesCount: session.nipsParticipantes.length,
+      });
+      setContinuidadeProvaVisible(true);
+
+      requestAnimationFrame(() => {
+        suppressPersistProvaRef.current = false;
+        void saveProvaAtivaSession({
+          ...session,
+          savedAt: Date.now(),
+          cronometro: {
+            ...session.cronometro,
+            estado: session.cronometro.estado === 'rodando' ? 'pausado' : session.cronometro.estado,
+            elapsedMs: elapsed,
+            wallClockAtSave: Date.now(),
+          },
+        });
+      });
+    },
+    [stopwatch.restaurar, limparBufferAplicacao],
+  );
+
+  const descartarSessaoProvaAtivaRestaurada = useCallback(() => {
+    suppressPersistProvaRef.current = true;
+    setContinuidadeProvaVisible(false);
+    setContinuidadeProvaMeta(null);
+    limparBufferAplicacao();
+    setListaResultadosRubricaNatacao(null);
+    setModalRubricaNatacaoVisible(false);
+    setFluxoAplicadorVisible(false);
+    setModalTempoRegistradoVisible(false);
+    resetCronometroCorrida();
+    dispatchTrial({ type: 'resetAll' });
+    setRepeticoesParticipantes([]);
+    setResultadoPermanenciaLinhas([]);
+    setNumeroVoltas('');
+    setVoltasConfirmadasProva(false);
+    setNipsParticipantes([]);
+    setNipFeedbackLinhas([]);
+    setTipoProva(null);
+    tipoProvaRef.current = null;
+    setModoTafNaval(false);
+    setModoPreCadastro(false);
+    setMostrarProvas(false);
+    setCorridaEtapa('menu');
+    void clearProvaAtivaSession();
+    requestAnimationFrame(() => {
+      suppressPersistProvaRef.current = false;
+    });
+  }, [limparBufferAplicacao, resetCronometroCorrida]);
+
+  useEffect(() => {
+    if (provaAtivaRestauradaRef.current) return;
+    provaAtivaRestauradaRef.current = true;
+    let cancelled = false;
+    void loadProvaAtivaSession().then((session) => {
+      if (cancelled || !session) return;
+      aplicarSessaoProvaAtiva(session);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [aplicarSessaoProvaAtiva]);
+
+  useEffect(() => {
+    if (suppressPersistProvaRef.current) return;
+    const snap = montarSnapshotProvaAtiva();
+    if (!snap) return;
+    const timer = setTimeout(() => {
+      void saveProvaAtivaSession(snap);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [montarSnapshotProvaAtiva]);
+
+  useEffect(() => {
+    const onAppState = (next: AppStateStatus) => {
+      if (next === 'background' || next === 'inactive') {
+        persistirProvaAtivaAgora();
+      }
+    };
+    const sub = AppState.addEventListener('change', onAppState);
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        persistirProvaAtivaAgora();
+      }
+    };
+    const onPageHide = () => {
+      persistirProvaAtivaAgora();
+    };
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.addEventListener('pagehide', onPageHide);
+    }
+    return () => {
+      sub.remove();
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', onPageHide);
+      }
+    };
+  }, [persistirProvaAtivaAgora]);
+
   const gravarSessaoAplicacao = useCallback(
     async (
       resultados: ResultadoCorridaItem[],
@@ -801,6 +1101,7 @@ export default function AplicarTAFScreen() {
         return;
       }
       limparBufferAplicacao();
+      limparSessaoProvaAtiva();
       setFluxoAplicadorVisible(false);
       if (res) {
         navigation.navigate('CadastrarResultados', {
@@ -810,7 +1111,7 @@ export default function AplicarTAFScreen() {
         });
       }
     },
-    [navigation, commitAplicacao, limparBufferAplicacao],
+    [navigation, commitAplicacao, limparBufferAplicacao, limparSessaoProvaAtiva],
   );
 
   const onCancelarAssinaturaAplicador = useCallback(() => {
@@ -824,12 +1125,13 @@ export default function AplicarTAFScreen() {
           style: 'destructive',
           onPress: () => {
             limparBufferAplicacao();
+            limparSessaoProvaAtiva();
             setFluxoAplicadorVisible(false);
           },
         },
       ],
     );
-  }, [limparBufferAplicacao]);
+  }, [limparBufferAplicacao, limparSessaoProvaAtiva]);
 
   const onCadastrarResultados = useCallback(async () => {
     if (salvandoResultadosCorrida) return;
@@ -1804,6 +2106,7 @@ export default function AplicarTAFScreen() {
       return;
     }
     resetCronometroCorrida();
+    setVoltasConfirmadasProva(false);
     dispatchTrial({
       type: 'prepararProva',
       nParticipantes: nParticipantesConfirmado,
@@ -1814,6 +2117,7 @@ export default function AplicarTAFScreen() {
 
   const executarPrepararProvaRepeticoes = useCallback(() => {
     if (!tipoProva || !isProvaComRepeticoes(tipoProva)) return;
+    setVoltasConfirmadasProva(false);
     setRepeticoesParticipantes(Array.from({ length: nParticipantesConfirmado }, () => ''));
     setCorridaEtapa('tabela_repeticoes');
   }, [nParticipantesConfirmado, tipoProva]);
@@ -1821,6 +2125,7 @@ export default function AplicarTAFScreen() {
   const executarPrepararPermanencia = useCallback(() => {
     setModalPermanenciaFinalizadaVisible(false);
     setErroPermanencia('');
+    setVoltasConfirmadasProva(false);
     setResultadoPermanenciaLinhas(
       Array.from({ length: nParticipantesConfirmado }, () => null),
     );
@@ -1975,8 +2280,10 @@ export default function AplicarTAFScreen() {
   const voltarDeTabelaParaNips = useCallback(() => {
     resetCronometroCorrida();
     setRepeticoesParticipantes([]);
+    setVoltasConfirmadasProva(false);
     setCorridaEtapa('nips');
-  }, [resetCronometroCorrida]);
+    limparSessaoProvaAtiva();
+  }, [resetCronometroCorrida, limparSessaoProvaAtiva]);
 
   const recarregarListaPreCadastros = useCallback(async () => {
     const lista = await getAllPreCadastrosTaf();
@@ -2194,6 +2501,7 @@ export default function AplicarTAFScreen() {
       nipsRepeticaoAutorizadaRef.current = new Set();
       setModalTesteExistente(null);
       setNumeroVoltas('');
+      setVoltasConfirmadasProva(false);
       resetCronometroCorrida();
 
       if (tipo === 'permanencia') {
@@ -2534,7 +2842,7 @@ export default function AplicarTAFScreen() {
       </AppModal>
 
       <AppModal
-        visible={modalTempoRegistradoVisible}
+        visible={modalTempoRegistradoVisible && !continuidadeProvaVisible}
         transparent
         animationType="fade"
         onRequestClose={fecharModalTempoRegistrado}
@@ -2559,7 +2867,7 @@ export default function AplicarTAFScreen() {
         </View>
       </AppModal>
       <AppModal
-        visible={modalRubricaNatacaoVisible}
+        visible={modalRubricaNatacaoVisible && !continuidadeProvaVisible}
         transparent
         animationType="fade"
         onRequestClose={() => {}}
@@ -2678,7 +2986,7 @@ export default function AplicarTAFScreen() {
       </AppModal>
 
       <FluxoAssinaturaAplicadorModal
-        visible={fluxoAplicadorVisible}
+        visible={fluxoAplicadorVisible && !continuidadeProvaVisible}
         onConcluir={(assinatura) => void onConcluirAssinaturaAplicador(assinatura)}
         onCancelar={onCancelarAssinaturaAplicador}
       />
@@ -3267,13 +3575,27 @@ export default function AplicarTAFScreen() {
         onCadastrado={onMilitarCadastradoRapido}
       />
 
+      <ContinuidadeProvaAtivaModal
+        visible={continuidadeProvaVisible}
+        provaLabel={continuidadeProvaMeta?.provaLabel ?? tituloProvaCurta}
+        participantesCount={
+          continuidadeProvaMeta?.participantesCount ?? nParticipantesConfirmado
+        }
+        onContinuar={() => {
+          setContinuidadeProvaVisible(false);
+          persistirProvaAtivaAgora();
+        }}
+        onDescartar={descartarSessaoProvaAtivaRestaurada}
+      />
+
       <TafProvaTempoModal
         visible={
           mostrarProvas &&
           modalProvaTempoVisible &&
           !modalRubricaNatacaoVisible &&
           !modalTempoRegistradoVisible &&
-          !fluxoAplicadorVisible
+          !fluxoAplicadorVisible &&
+          !continuidadeProvaVisible
         }
         onClose={voltarDeTabelaParaNips}
         prova={provaModalTipo}
@@ -3293,6 +3615,8 @@ export default function AplicarTAFScreen() {
         }
         numeroVoltas={numeroVoltas}
         onChangeNumeroVoltas={onChangeNumeroVoltas}
+        onVoltasConfirmadas={() => setVoltasConfirmadasProva(true)}
+        voltasJaConfirmadas={voltasConfirmadasProva}
         nColunasVoltas={nColunasVoltas}
         nParticipantes={nParticipantesConfirmado}
         nomesParticipantes={nomesParticipantesModal}
@@ -3327,7 +3651,9 @@ export default function AplicarTAFScreen() {
       />
 
       <TafProvaRepeticoesModal
-        visible={mostrarProvas && modalProvaRepeticoesVisible}
+        visible={
+          mostrarProvas && modalProvaRepeticoesVisible && !continuidadeProvaVisible
+        }
         onClose={voltarDeTabelaParaNips}
         tituloProva={tituloProvaCurta}
         nParticipantes={nParticipantesConfirmado}

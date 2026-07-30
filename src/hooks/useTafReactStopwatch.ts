@@ -168,6 +168,35 @@ export function useTafReactStopwatch({ getMaxMs, onMaxReached }: Options = {}) {
     syncPausado(ms);
   }, [totalMilliseconds, reset, syncPausado]);
 
+  /**
+   * Restaura cronômetro a partir de sessão persistida.
+   * `rodando` vira `pausado` para o aplicador confirmar continuidade com segurança.
+   */
+  const restaurar = useCallback(
+    (opts: { estado: TafCronometroEstado; elapsedMs: number }) => {
+      const ms = Math.max(0, Math.floor(opts.elapsedMs));
+      pause();
+      maxReachedRef.current = false;
+
+      if (opts.estado === 'inicial' || (ms <= 0 && opts.estado !== 'finalizado')) {
+        reset(undefined, false);
+        tempoParadoMsRef.current = null;
+        setEstado('inicial');
+        syncPausado(0);
+        return;
+      }
+
+      const estadoRestored: TafCronometroEstado =
+        opts.estado === 'rodando' ? 'pausado' : opts.estado;
+
+      reset(stopwatchOffsetFromElapsedMs(ms), false);
+      syncPausado(ms);
+      tempoParadoMsRef.current = estadoRestored === 'finalizado' ? ms : null;
+      setEstado(estadoRestored);
+    },
+    [pause, reset, syncPausado],
+  );
+
   return {
     estado,
     isRunning,
@@ -186,5 +215,6 @@ export function useTafReactStopwatch({ getMaxMs, onMaxReached }: Options = {}) {
     onBlurPausado,
     aplicarTextoPausado,
     syncPausado,
+    restaurar,
   };
 }

@@ -31,6 +31,7 @@ export const APP_META_KEYS = [
   THEME_META_KEY,
   'demo:modoAtivo',
   'demo:backupId',
+  'provaAtiva:session',
 ] as const;
 
 export const DEMO_MODO_ATIVO_KEY = 'demo:modoAtivo';

@@ -13,6 +13,7 @@ export type TrialTableState = {
 
 export type TrialTableAction =
   | { type: 'resetAll' }
+  | { type: 'hydrate'; state: TrialTableState }
   | { type: 'prepararProva'; nParticipantes: number; tipoProva: 'corrida' | 'natacao' | 'caminhada' }
   | { type: 'resizeChecksGrid'; p: number; v: number }
   | { type: 'resizeChegadaNatacao'; p: number }
@@ -48,6 +49,22 @@ export function aplicarTafTrialReducer(
   switch (action.type) {
     case 'resetAll':
       return initialTrialTableState;
+
+    case 'hydrate':
+      return {
+        checksVoltas: Array.isArray(action.state.checksVoltas)
+          ? action.state.checksVoltas.map((row) => (Array.isArray(row) ? [...row] : []))
+          : [],
+        chegadaNatacao: Array.isArray(action.state.chegadaNatacao)
+          ? [...action.state.chegadaNatacao]
+          : [],
+        temposMilitaresMs: Array.isArray(action.state.temposMilitaresMs)
+          ? [...action.state.temposMilitaresMs]
+          : [],
+        desistenciaParticipantes: Array.isArray(action.state.desistenciaParticipantes)
+          ? [...action.state.desistenciaParticipantes]
+          : [],
+      };
 
     case 'prepararProva': {
       const { nParticipantes: n, tipoProva } = action;

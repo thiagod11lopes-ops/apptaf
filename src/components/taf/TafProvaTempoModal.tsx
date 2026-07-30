@@ -101,6 +101,8 @@ export type TafProvaTempoModalProps = {
   onChangeNumeroVoltas?: (text: string) => void;
   /** Chamado após confirmar o número de voltas (corrida/caminhada). */
   onVoltasConfirmadas?: () => void;
+  /** Restauração de sessão: já havia confirmado o número de voltas. */
+  voltasJaConfirmadas?: boolean;
   nColunasVoltas?: number;
   nParticipantes: number;
   nomesParticipantes: string[];
@@ -355,6 +357,7 @@ export function TafProvaTempoModal({
   numeroVoltas = '',
   onChangeNumeroVoltas,
   onVoltasConfirmadas,
+  voltasJaConfirmadas = false,
   nColunasVoltas = 0,
   nParticipantes,
   nomesParticipantes,
@@ -417,6 +420,13 @@ export function TafProvaTempoModal({
       setParticipantesBaseHeight(0);
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (voltasJaConfirmadas && nColunasVoltas >= 1) {
+      setVoltasConfirmadas(true);
+    }
+  }, [visible, voltasJaConfirmadas, nColunasVoltas]);
 
   const escalaParticipantes = useMemo(
     () =>

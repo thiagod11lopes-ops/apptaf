@@ -11,6 +11,7 @@ import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { navigationRef, getCurrentRouteName, navigateTab } from './navigationRef';
 import { AuthLoginRouteGate } from './AuthLoginRouteGate';
 import { hasPendingAuthCallback } from '../services/firebase/googleAuth';
+import { peekProvaAtivaSession } from '../services/provaAtivaSessionStorage';
 import type { RootStackParamList } from './types';
 
 export type { ResultadoCorridaItem, RootStackParamList } from './types';
@@ -60,6 +61,10 @@ export default function AppNavigator() {
     syncRoute();
     if (hasPendingAuthCallback()) {
       navigateTab('Login');
+      return;
+    }
+    if (peekProvaAtivaSession()) {
+      navigateTab('AplicarTAF');
     }
   }, [syncRoute]);
 

@@ -26,7 +26,8 @@ import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPan
 /** Escala dos cards dos militares (barra horizontal na prova ativa). */
 const PARTICIPANTES_ESCALA_MIN = 0.7;
 const PARTICIPANTES_ESCALA_MAX = 1.35;
-const PARTICIPANTES_ESCALA_DEFAULT = 0.5; // ~1.025×
+/** Abre em 102% (ajustável). norm = (1.02 − min) / (max − min). */
+const PARTICIPANTES_ESCALA_DEFAULT = (1.02 - PARTICIPANTES_ESCALA_MIN) / (PARTICIPANTES_ESCALA_MAX - PARTICIPANTES_ESCALA_MIN);
 
 /** Estimativa da largura do nome (bold ~11px) para encaixar checklists o mais à esquerda. */
 function estimarLarguraNomePx(nome: string, fontSize: number): number {

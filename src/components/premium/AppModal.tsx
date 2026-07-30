@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -17,17 +17,26 @@ function portalToHost(node: React.ReactNode, target: Element): React.ReactPortal
   return createPortal(node, target);
 }
 
+function readPortalHost(): Element | null {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return null;
+  return document.getElementById(APP_MODAL_HOST_ID);
+}
+
 /** Modal que permanece dentro da tela do tablet no desktop web. */
 export function AppModal({ visible, children, ...rest }: ModalProps) {
   const { useTabletFrame } = useDeviceLayout();
-  const [portalTarget, setPortalTarget] = useState<Element | null>(null);
+  const [portalTarget, setPortalTarget] = useState<Element | null>(() =>
+    useTabletFrame ? readPortalHost() : null,
+  );
 
-  useEffect(() => {
+  // useLayoutEffect: resolve o host antes do paint para não “sumir” o modal
+  // ao trocar TafProvaTempoModal → rúbrica no mesmo clique.
+  useLayoutEffect(() => {
     if (Platform.OS !== 'web' || !useTabletFrame) {
       setPortalTarget(null);
       return;
     }
-    setPortalTarget(document.getElementById(APP_MODAL_HOST_ID));
+    setPortalTarget(readPortalHost());
   }, [useTabletFrame, visible]);
 
   if (!visible) {
@@ -48,8 +57,9 @@ export function AppModal({ visible, children, ...rest }: ModalProps) {
     </View>
   );
 
-  if (useTabletFrame && Platform.OS === 'web' && portalTarget) {
-    return portalToHost(tabletOverlay, portalTarget);
+  const host = portalTarget ?? (useTabletFrame ? readPortalHost() : null);
+  if (useTabletFrame && Platform.OS === 'web' && host) {
+    return portalToHost(tabletOverlay, host);
   }
 
   // Fallback: Modal nativo (também quando o host do frame ainda não está no DOM).
@@ -78,13 +88,12 @@ const styles = StyleSheet.create({
     zIndex: 8000,
     ...Platform.select({
       web: { isolation: 'isolate' } as object,
-      default: { elevation: 80 },
+      default: {},
     }),
   },
   tabletLayer: {
     flex: 1,
     width: '100%',
     height: '100%',
-    overflow: 'hidden',
   },
 });

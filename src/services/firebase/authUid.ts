@@ -208,7 +208,7 @@ export async function resolveStorageOwnerUid(): Promise<string | null> {
 
   if (!owner) {
     if (!authReady) {
-      await waitForAuthUid();
+      await waitForAuthUid(8000);
     }
     owner = getCachedDataOwnerUid();
   }
@@ -245,37 +245,54 @@ export function isAuthUidReady(): boolean {
   return authReady;
 }
 
-export function waitForAuthUid(): Promise<string | null> {
+export function waitForAuthUid(timeoutMs = 15000): Promise<string | null> {
   if (authReady) {
     return Promise.resolve(getCachedDataOwnerUid());
   }
   return new Promise((resolve) => {
-    const handler = (uid: string | null) => {
+    let settled = false;
+    const finish = (uid: string | null) => {
+      if (settled) return;
+      settled = true;
       waiters.delete(handler);
+      clearTimeout(timer);
       resolve(uid ?? getCachedDataOwnerUid());
     };
+    const handler = (uid: string | null) => {
+      finish(uid);
+    };
+    const timer = setTimeout(() => {
+      finish(getCachedDataOwnerUid());
+    }, Math.max(0, timeoutMs));
     waiters.add(handler);
   });
 }
 
 /** Aguarda UID dono dos dados não nulo (login concluído). */
 export async function waitForAuthenticatedUid(timeoutMs = 20000): Promise<string | null> {
-  const immediate = await waitForAuthUid();
-  if (immediate) return immediate;
+  const immediate = getCachedDataOwnerUid();
+  if (authReady && immediate) return immediate;
 
   return new Promise((resolve) => {
-    const timer = setTimeout(() => {
+    let settled = false;
+    const finish = (uid: string | null) => {
+      if (settled) return;
+      settled = true;
       waiters.delete(handler);
-      resolve(getCachedDataOwnerUid());
-    }, timeoutMs);
-
+      clearTimeout(timer);
+      resolve(uid ?? getCachedDataOwnerUid());
+    };
+    const timer = setTimeout(() => {
+      finish(getCachedDataOwnerUid());
+    }, Math.max(0, timeoutMs));
     const handler = (uid: string | null) => {
       const resolved = uid ?? getCachedDataOwnerUid();
-      if (!resolved) return;
-      clearTimeout(timer);
-      waiters.delete(handler);
-      resolve(resolved);
+      // authReady pode ter virado true com uid ainda null (convidado / falha).
+      if (authReady || resolved) finish(resolved);
     };
     waiters.add(handler);
+    if (authReady) {
+      finish(getCachedDataOwnerUid());
+    }
   });
 }

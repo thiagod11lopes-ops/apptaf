@@ -54,7 +54,7 @@ export type CadastroItemPersist = {
 };
 
 import { toCadastroLight } from '../utils/cadastroLight';
-import { waitForAuthenticatedUid, resolveStorageOwnerUid } from './firebase/authUid';
+import { waitForAuthenticatedUid, resolveStorageOwnerUid, getCachedDataOwnerUid } from './firebase/authUid';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { dataStore } from '../offline-first/store/DataStore';
 import {
@@ -136,13 +136,31 @@ export async function getAllCadastros(opts?: {
   includeDemo?: boolean;
 }): Promise<CadastroItemPersist[]> {
   if (useOfflineFirstDb()) {
-    const uid = await resolveStorageOwnerUid();
-    return dataStore.getCadastros(uid, opts);
+    try {
+      const uid = await Promise.race([
+        resolveStorageOwnerUid(),
+        new Promise<string | null>((resolve) => {
+          setTimeout(() => resolve(getCachedDataOwnerUid()), 8000);
+        }),
+      ]);
+      return await dataStore.getCadastros(uid, opts);
+    } catch {
+      // Fallback: lista local sem bloquear o fluxo de aplicar resultado.
+      try {
+        return await dataStore.getCadastros(getCachedDataOwnerUid(), opts);
+      } catch {
+        return [];
+      }
+    }
   }
-  const uid = await waitForAuthenticatedUid();
-  if (uid) {
-    const entry = await readOfflineCloudEntry(uid, { autoSync: false });
-    return entry.cadastros;
+  try {
+    const uid = await waitForAuthenticatedUid(8000);
+    if (uid) {
+      const entry = await readOfflineCloudEntry(uid, { autoSync: false });
+      return entry.cadastros;
+    }
+  } catch {
+    // segue para local
   }
   return getAllCadastrosLocal();
 }

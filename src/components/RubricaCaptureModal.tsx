@@ -95,7 +95,7 @@ export function RubricaCaptureModal({
     onConfirm(svg);
   }, [strokes, strokeAtual, canvasWidth, onConfirm]);
 
-  if (!participante) return null;
+  if (!visible || !participante) return null;
 
   const mod = participante.prova ?? tipoProva;
   const modLabel = tituloTipoProva(mod);

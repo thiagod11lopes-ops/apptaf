@@ -32,19 +32,22 @@ export function RubricaCell({
   const imgH = Math.max(1, Math.round(colMax * ratio));
 
   // RN Web Image frequentemente falha com data:image/svg+xml — usar <img> nativo.
+  // pointerEvents none: o clique deve chegar ao Pressable pai (editar rúbrica).
   if (Platform.OS === 'web') {
     return (
-      <View style={[styles.cell, { width: imgW, height: imgH }]}>
+      <View style={[styles.cell, { width: imgW, height: imgH }]} pointerEvents="none">
         <img
           src={uri}
           alt="Rúbrica"
           width={imgW}
           height={imgH}
+          draggable={false}
           style={{
             width: imgW,
             height: imgH,
             objectFit: 'contain',
             display: 'block',
+            pointerEvents: 'none',
           }}
         />
       </View>
@@ -52,12 +55,13 @@ export function RubricaCell({
   }
 
   return (
-    <View style={[styles.cell, { width: imgW, height: imgH }]}>
+    <View style={[styles.cell, { width: imgW, height: imgH }]} pointerEvents="none">
       <Image
         source={{ uri }}
         style={{ width: imgW, height: imgH }}
         resizeMode="contain"
         accessibilityLabel="Rúbrica"
+        pointerEvents="none"
       />
     </View>
   );

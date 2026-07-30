@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { PenLine } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { RubricaCell } from './RubricaThumb';
@@ -31,11 +31,17 @@ export function ProvaComColunaRubrica({
   const onRubrica = onPressRubrica ?? onDuploCliqueRubrica;
   const temRubrica = !!(rubricaSvg && String(rubricaSvg).trim());
 
+  const handlePress = useCallback(() => {
+    onRubrica?.();
+  }, [onRubrica]);
+
   const rubricaArea = temRubrica ? (
-    <View style={styles.rubricaHit}>
+    <View style={styles.rubricaHit} pointerEvents="box-none">
       <RubricaCell svgUri={rubricaSvg} />
       {onRubrica ? (
-        <Text style={[styles.rubricaHint, { color: theme.textMuted }]}>Toque para alterar</Text>
+        <Text style={[styles.rubricaHint, { color: theme.textMuted }]} pointerEvents="none">
+          Toque para alterar
+        </Text>
       ) : null}
     </View>
   ) : (
@@ -48,10 +54,12 @@ export function ProvaComColunaRubrica({
           backgroundColor: isDark ? 'rgba(2,6,23,0.35)' : 'rgba(248,250,252,0.95)',
         },
       ]}
+      pointerEvents="box-none"
     >
       {onRubrica ? (
         <>
           <View
+            pointerEvents="none"
             style={[
               styles.addIconWrap,
               {
@@ -62,10 +70,14 @@ export function ProvaComColunaRubrica({
           >
             <PenLine size={22} color={theme.primary} strokeWidth={2.4} />
           </View>
-          <Text style={[styles.addLabel, { color: theme.primary }]}>Adicionar rúbrica</Text>
+          <Text style={[styles.addLabel, { color: theme.primary }]} pointerEvents="none">
+            Adicionar rúbrica
+          </Text>
         </>
       ) : (
-        <Text style={[styles.rubricaHint, { color: theme.textMuted }]}>Sem rúbrica</Text>
+        <Text style={[styles.rubricaHint, { color: theme.textMuted }]} pointerEvents="none">
+          Sem rúbrica
+        </Text>
       )}
     </View>
   );
@@ -84,37 +96,48 @@ export function ProvaComColunaRubrica({
           paddingBottom: 10,
         },
       ]}
+      pointerEvents="box-none"
     >
-      <View style={styles.header}>
+      <View style={styles.header} pointerEvents="box-none">
         <Text
           style={[
             styles.titulo,
             { color: dispensavel ? theme.loss : theme.textSecondary },
           ]}
+          pointerEvents="none"
         >
           {titulo}
         </Text>
         {headerRight}
       </View>
-      <View style={[styles.grid, dispensavel && styles.gridFaded]}>
+      <View style={[styles.grid, dispensavel && styles.gridFaded]} pointerEvents="box-none">
         <View style={styles.dadosCol}>{children}</View>
-        <View style={styles.rubricaCol}>
-          <Text style={[styles.rubricaLabel, { color: theme.textMuted }]}>Rúbrica</Text>
+        <View style={styles.rubricaCol} pointerEvents="box-none">
+          <Text style={[styles.rubricaLabel, { color: theme.textMuted }]} pointerEvents="none">
+            Rúbrica
+          </Text>
           {onRubrica ? (
-            <Pressable
-              onPress={onRubrica}
-              accessibilityLabel={
-                temRubrica ? 'Alterar rúbrica' : 'Adicionar rúbrica'
-              }
+            <TouchableOpacity
+              onPress={handlePress}
+              activeOpacity={0.82}
+              accessibilityLabel={temRubrica ? 'Alterar rúbrica' : 'Adicionar rúbrica'}
               accessibilityRole="button"
-              style={({ pressed }) => [
+              style={[
                 styles.pressWrap,
-                pressed ? { opacity: 0.85 } : null,
                 Platform.OS === 'web' ? ({ cursor: 'pointer' } as object) : null,
               ]}
+              {...(Platform.OS === 'web'
+                ? ({
+                    onClick: (e: { preventDefault?: () => void; stopPropagation?: () => void }) => {
+                      e?.preventDefault?.();
+                      e?.stopPropagation?.();
+                      handlePress();
+                    },
+                  } as object)
+                : null)}
             >
               {rubricaArea}
-            </Pressable>
+            </TouchableOpacity>
           ) : (
             rubricaArea
           )}
@@ -144,6 +167,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+    zIndex: 2,
   },
   titulo: {
     fontWeight: '800',
@@ -155,6 +179,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
+    zIndex: 2,
   },
   gridFaded: {
     opacity: 0.32,
@@ -170,6 +195,7 @@ const styles = StyleSheet.create({
     minWidth: 160,
     alignItems: 'center',
     backgroundColor: 'transparent',
+    zIndex: 3,
   },
   rubricaLabel: {
     fontSize: 10,
@@ -181,6 +207,7 @@ const styles = StyleSheet.create({
   },
   pressWrap: {
     width: '100%',
+    zIndex: 4,
   },
   rubricaHit: {
     width: '100%',
@@ -221,6 +248,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(220, 38, 38, 0.08)',
+    zIndex: 1,
   },
   dispensavelStripe: {
     transform: [{ rotate: '-14deg' }],

@@ -58,7 +58,6 @@ import { AplicarTafModoTesteBar } from '../components/taf/aplicar/AplicarTafModo
 import { EditarIdadeGeneroMilitarModal } from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
 import { ConfirmacaoExcluirParticipanteNipModal } from '../components/taf/aplicar/ConfirmacaoExcluirParticipanteNipModal';
 import { CadastroRapidoMilitarModal } from '../components/taf/aplicar/CadastroRapidoMilitarModal';
-import { OrientacaoLandscapeProvaModal } from '../components/taf/aplicar/OrientacaoLandscapeProvaModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ModalTesteJaAplicado,
@@ -332,11 +331,6 @@ export default function AplicarTAFScreen() {
     index: number;
     nip: string;
   } | null>(null);
-  const [preparoPendenteAposOrientacao, setPreparoPendenteAposOrientacao] = useState<
-    'tempo' | 'repeticoes' | 'permanencia' | null
-  >(null);
-  /** Corrida: modal de paisagem só após confirmar o número de voltas. */
-  const [orientacaoAposVoltasVisible, setOrientacaoAposVoltasVisible] = useState(false);
   const [modoPreCadastro, setModoPreCadastro] = useState(false);
   const [modoTafNaval, setModoTafNaval] = useState(false);
   const [repeticoesParticipantes, setRepeticoesParticipantes] = useState<string[]>([]);
@@ -1339,8 +1333,6 @@ export default function AplicarTAFScreen() {
     setModalEditarIdadeGeneroIndex(null);
     setParticipanteNipParaExcluir(null);
     setModalCadastroRapido(null);
-    setPreparoPendenteAposOrientacao(null);
-    setOrientacaoAposVoltasVisible(false);
     setCorridaEtapa('menu');
   }, []);
 
@@ -1850,38 +1842,19 @@ export default function AplicarTAFScreen() {
       return;
     }
     if (!validarNipsConfirmados()) return;
-    // Corrida: entra na prova e pede voltas antes; paisagem só depois das voltas.
-    if (tipoProva === 'corrida') {
-      setOrientacaoAposVoltasVisible(false);
-      executarPrepararProvaTempo();
-      return;
-    }
-    setPreparoPendenteAposOrientacao('tempo');
+    executarPrepararProvaTempo();
   }, [tipoProva, validarNipsConfirmados, executarPrepararProvaTempo]);
 
   const prepararProvaRepeticoes = useCallback(() => {
     if (!tipoProva || !isProvaComRepeticoes(tipoProva)) return;
     if (!validarNipsConfirmados()) return;
-    setPreparoPendenteAposOrientacao('repeticoes');
-  }, [tipoProva, validarNipsConfirmados]);
+    executarPrepararProvaRepeticoes();
+  }, [tipoProva, validarNipsConfirmados, executarPrepararProvaRepeticoes]);
 
   const prepararPermanencia = useCallback(() => {
     if (!validarNipsConfirmados()) return;
-    setPreparoPendenteAposOrientacao('permanencia');
-  }, [validarNipsConfirmados]);
-
-  const confirmarOrientacaoEPreparar = useCallback(() => {
-    const tipo = preparoPendenteAposOrientacao;
-    setPreparoPendenteAposOrientacao(null);
-    if (tipo === 'tempo') executarPrepararProvaTempo();
-    else if (tipo === 'repeticoes') executarPrepararProvaRepeticoes();
-    else if (tipo === 'permanencia') executarPrepararPermanencia();
-  }, [
-    preparoPendenteAposOrientacao,
-    executarPrepararProvaTempo,
-    executarPrepararProvaRepeticoes,
-    executarPrepararPermanencia,
-  ]);
+    executarPrepararPermanencia();
+  }, [validarNipsConfirmados, executarPrepararPermanencia]);
 
   const togglePermanenciaResultado = useCallback(
     (index: number, opcao: 'aprovado' | 'reprovado') => {
@@ -2002,7 +1975,6 @@ export default function AplicarTAFScreen() {
   const voltarDeTabelaParaNips = useCallback(() => {
     resetCronometroCorrida();
     setRepeticoesParticipantes([]);
-    setOrientacaoAposVoltasVisible(false);
     setCorridaEtapa('nips');
   }, [resetCronometroCorrida]);
 
@@ -3320,9 +3292,6 @@ export default function AplicarTAFScreen() {
         }
         numeroVoltas={numeroVoltas}
         onChangeNumeroVoltas={onChangeNumeroVoltas}
-        onVoltasConfirmadas={() => {
-          if (tipoProva === 'corrida') setOrientacaoAposVoltasVisible(true);
-        }}
         nColunasVoltas={nColunasVoltas}
         nParticipantes={nParticipantesConfirmado}
         nomesParticipantes={nomesParticipantesModal}
@@ -3354,21 +3323,6 @@ export default function AplicarTAFScreen() {
         }}
         salvando={salvandoResultadosCorrida}
         erroAplicar={corridaEtapa === 'tabela_permanencia' ? erroPermanencia : undefined}
-      />
-
-      <OrientacaoLandscapeProvaModal
-        visible={preparoPendenteAposOrientacao != null || orientacaoAposVoltasVisible}
-        onClose={() => {
-          setPreparoPendenteAposOrientacao(null);
-          setOrientacaoAposVoltasVisible(false);
-        }}
-        onContinuar={() => {
-          if (orientacaoAposVoltasVisible) {
-            setOrientacaoAposVoltasVisible(false);
-            return;
-          }
-          confirmarOrientacaoEPreparar();
-        }}
       />
 
       <TafProvaRepeticoesModal

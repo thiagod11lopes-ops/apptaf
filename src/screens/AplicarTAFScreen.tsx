@@ -225,6 +225,14 @@ type NipFeedbackLinha =
   | { tipo: 'erro'; texto: string }
   | null;
 
+/** Exibição na prova ativa: apenas primeiro e segundo nome. */
+function primeiroSegundoNome(nome: string): string {
+  const parts = nome.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return nome.trim();
+  if (parts.length === 1) return parts[0]!;
+  return `${parts[0]} ${parts[1]}`;
+}
+
 /** Sufixo de idade ao lado do nome. */
 function textoIdadeMilitar(dataNascimento: string): string {
   const idade = idadeFromDataNascimento(dataNascimento);
@@ -2617,7 +2625,7 @@ export default function AplicarTAFScreen() {
     () =>
       Array.from({ length: nParticipantesConfirmado }, (_, index) => {
         const fb = nipFeedbackLinhas[index];
-        return fb?.tipo === 'ok' ? fb.nomeMilitar : '—';
+        return fb?.tipo === 'ok' ? primeiroSegundoNome(fb.nomeMilitar) : '—';
       }),
     [nParticipantesConfirmado, nipFeedbackLinhas],
   );

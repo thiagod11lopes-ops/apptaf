@@ -38,8 +38,9 @@ const headInject = `
     <meta name="apple-mobile-web-app-title" content="TAF" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="${prefix}/manifest.webmanifest" />
-    <link rel="icon" type="image/png" sizes="512x512" href="${prefix}/assets/icon.png" />
-    <link rel="apple-touch-icon" href="${prefix}/assets/icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="${prefix}/assets/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="${prefix}/assets/icon-512.png" />
+    <link rel="apple-touch-icon" href="${prefix}/assets/icon-512.png" />
     <style id="taf-pwa-no-zoom">
       html, body, #root {
         height: 100%;
@@ -83,11 +84,14 @@ if (!html.includes('manifest.webmanifest')) {
     </style>\n  </head>`);
 }
 
-const faviconPng = path.join(distDir, 'assets', 'icon.png');
-// Prioriza o PNG oficial do TAF (ícone circular) sobre favicon.ico legado.
+const icon192 = path.join(distDir, 'assets', 'icon-192.png');
+const icon512 = path.join(distDir, 'assets', 'icon-512.png');
+const iconMaskable = path.join(distDir, 'assets', 'icon-maskable-512.png');
+const iconLegacy = path.join(distDir, 'assets', 'icon.png');
+// Prioriza PNGs em resolução real (Android fica embaçado se o manifest mente o tamanho).
 html = html.replace(
   /<link rel="icon"[^>]*>/i,
-  `<link rel="icon" type="image/png" sizes="512x512" href="${prefix}/assets/icon.png" />`,
+  `<link rel="icon" type="image/png" sizes="512x512" href="${prefix}/assets/icon-512.png" />`,
 );
 
 fs.writeFileSync(indexPath, html);
@@ -107,14 +111,38 @@ const manifest = {
   icons: [],
 };
 
-if (fs.existsSync(faviconPng)) {
+if (fs.existsSync(icon192) && fs.existsSync(icon512)) {
   manifest.icons.push(
     {
-      src: `${prefix}/assets/icon.png`,
+      src: `${prefix}/assets/icon-192.png`,
       sizes: '192x192',
       type: 'image/png',
       purpose: 'any',
     },
+    {
+      src: `${prefix}/assets/icon-512.png`,
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any',
+    },
+  );
+  if (fs.existsSync(iconMaskable)) {
+    manifest.icons.push({
+      src: `${prefix}/assets/icon-maskable-512.png`,
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'maskable',
+    });
+  } else {
+    manifest.icons.push({
+      src: `${prefix}/assets/icon-512.png`,
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'maskable',
+    });
+  }
+} else if (fs.existsSync(iconLegacy)) {
+  manifest.icons.push(
     {
       src: `${prefix}/assets/icon.png`,
       sizes: '512x512',

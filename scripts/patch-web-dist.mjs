@@ -84,13 +84,39 @@ if (!html.includes('manifest.webmanifest')) {
     </style>\n  </head>`);
 }
 
-const icon192 = path.join(distDir, 'assets', 'icon-192.png');
-const icon512 = path.join(distDir, 'assets', 'icon-512.png');
-const iconMaskable = path.join(distDir, 'assets', 'icon-maskable-512.png');
-const iconLegacy = path.join(distDir, 'assets', 'icon.png');
-// Prioriza PNGs em resolução real (Android fica embaçado se o manifest mente o tamanho).
+// Copia ícones oficiais ANTES de escrever o manifest (senão o Android cai no favicon.ico 48px).
+const assetsSrc = path.resolve('assets');
+const distAssets = path.join(distDir, 'assets');
+fs.mkdirSync(distAssets, { recursive: true });
+
+function copyIcon(name) {
+  const from = path.join(assetsSrc, name);
+  const to = path.join(distAssets, name);
+  if (!fs.existsSync(from)) return false;
+  fs.copyFileSync(from, to);
+  return true;
+}
+
+const has192 = copyIcon('icon-192.png');
+const has512 = copyIcon('icon-512.png');
+const hasMaskable = copyIcon('icon-maskable-512.png');
+const hasLegacy = copyIcon('icon.png');
+if (fs.existsSync(path.join(assetsSrc, 'favicon.png'))) {
+  fs.copyFileSync(path.join(assetsSrc, 'favicon.png'), path.join(distDir, 'favicon.png'));
+}
+// Remove favicon.ico 48px do Expo — Android prioriza isso e o atalho fica embaçado.
+const legacyIco = path.join(distDir, 'favicon.ico');
+if (fs.existsSync(legacyIco)) {
+  fs.unlinkSync(legacyIco);
+}
+
+const icon192 = path.join(distAssets, 'icon-192.png');
+const icon512 = path.join(distAssets, 'icon-512.png');
+const iconMaskable = path.join(distAssets, 'icon-maskable-512.png');
+const iconLegacy = path.join(distAssets, 'icon.png');
+
 html = html.replace(
-  /<link rel="icon"[^>]*>/i,
+  /<link rel="icon"[^>]*>/gi,
   `<link rel="icon" type="image/png" sizes="512x512" href="${prefix}/assets/icon-512.png" />`,
 );
 
@@ -111,7 +137,7 @@ const manifest = {
   icons: [],
 };
 
-if (fs.existsSync(icon192) && fs.existsSync(icon512)) {
+if (has192 && has512 && fs.existsSync(icon192) && fs.existsSync(icon512)) {
   manifest.icons.push(
     {
       src: `${prefix}/assets/icon-192.png`,
@@ -126,7 +152,7 @@ if (fs.existsSync(icon192) && fs.existsSync(icon512)) {
       purpose: 'any',
     },
   );
-  if (fs.existsSync(iconMaskable)) {
+  if (hasMaskable && fs.existsSync(iconMaskable)) {
     manifest.icons.push({
       src: `${prefix}/assets/icon-maskable-512.png`,
       sizes: '512x512',
@@ -141,7 +167,7 @@ if (fs.existsSync(icon192) && fs.existsSync(icon512)) {
       purpose: 'maskable',
     });
   }
-} else if (fs.existsSync(iconLegacy)) {
+} else if (hasLegacy && fs.existsSync(iconLegacy)) {
   manifest.icons.push(
     {
       src: `${prefix}/assets/icon.png`,
@@ -157,11 +183,8 @@ if (fs.existsSync(icon192) && fs.existsSync(icon512)) {
     },
   );
 } else {
-  manifest.icons.push({
-    src: `${prefix}/favicon.ico`,
-    sizes: '48x48',
-    type: 'image/x-icon',
-  });
+  console.error('patch-web-dist: nenhum ícone PWA encontrado em assets/');
+  process.exit(1);
 }
 
 fs.writeFileSync(
@@ -199,7 +222,10 @@ const precacheUrls = [
   `${prefix}/`,
   `${prefix}/index.html`,
   `${prefix}/manifest.webmanifest`,
-  `${prefix}/favicon.ico`,
+  `${prefix}/favicon.png`,
+  `${prefix}/assets/icon-192.png`,
+  `${prefix}/assets/icon-512.png`,
+  `${prefix}/assets/icon-maskable-512.png`,
   ...walkDistFiles(distDir),
 ].filter((url, index, arr) => arr.indexOf(url) === index);
 

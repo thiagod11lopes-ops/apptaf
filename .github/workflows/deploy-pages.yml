@@ -50,21 +50,10 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: npm run build:web
 
-      - name: Manifest e metadados web
+      - name: Ícones PWA + manifest
         env:
           EXPO_BASE_URL: /apptaf
         run: node scripts/patch-web-dist.mjs
-
-      - name: Copiar ícone PWA
-        run: |
-          mkdir -p dist/assets
-          cp assets/icon.png dist/assets/icon.png
-          cp assets/icon-192.png dist/assets/icon-192.png
-          cp assets/icon-512.png dist/assets/icon-512.png
-          cp assets/icon-maskable-512.png dist/assets/icon-maskable-512.png
-          cp assets/favicon.png dist/favicon.png
-          # Garante que o favicon do build Expo também use o ícone TAF
-          if [ -f dist/favicon.ico ]; then cp assets/icon-512.png dist/favicon.png; fi
 
       - name: Impedir deploy Vercel na branch gh-pages
         run: cp scripts/vercel-gh-pages.json dist/vercel.json

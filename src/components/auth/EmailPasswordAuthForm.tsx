@@ -84,7 +84,6 @@ export function EmailPasswordAuthForm({
   const [accessBlockedVisible, setAccessBlockedVisible] = useState(false);
   const [accessModalVariant, setAccessModalVariant] =
     useState<SistemaAcessoModalVariant>('unregistered');
-  const emailWasAllowedRef = useRef(false);
   const blurHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
@@ -149,32 +148,11 @@ export function EmailPasswordAuthForm({
     [resetTermsState, termsAccepted],
   );
 
-  const applyEmailText = useCallback(
-    (text: string) => {
-      setEmail(text);
-      if (forceRecovery || mode === 'recovery' || mode === 'forgot') {
-        emailWasAllowedRef.current = isAllowedAuthEmail(text);
-        return;
-      }
-
-      const allowed = isAllowedAuthEmail(text);
-      const becameComplete = allowed && !emailWasAllowedRef.current;
-      emailWasAllowedRef.current = allowed;
-
-      // Não força "Cadastrar" automaticamente: e-mails autorizados pelo chefe
-      // devem preferir Entrar (conta já criada) e evita flood de signUp/rate limit.
-      // Novo banco: usuário usa o link "Criar conta".
-      if (becameComplete) {
-        return;
-      }
-
-      if (!allowed && mode === 'register') {
-        setMode('login');
-        resetTermsState();
-      }
-    },
-    [forceRecovery, mode, resetTermsState],
-  );
+  const applyEmailText = useCallback((text: string) => {
+    setEmail(text);
+    // Não troca o modo (login/register) enquanto digita o e-mail.
+    // Antes, e-mail incompleto forçava "login" e sumia o campo Confirmar senha.
+  }, []);
 
   const handleEmailChange = useCallback(
     (text: string) => {

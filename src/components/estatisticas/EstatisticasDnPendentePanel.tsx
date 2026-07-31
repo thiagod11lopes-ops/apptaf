@@ -20,6 +20,7 @@ import {
 } from '../../services/cadastrosIndexedDb';
 import { dataNascimentoCadastroValida } from '../../utils/cadastroDadosTaf';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
+import { formatNomeComPosto } from '../../utils/formatNomeComPosto';
 import { formatNipInput, nipDigitos } from '../../utils/nipFormat';
 import { idadeFromDataNascimento } from '../../utils/idadeFromDataNascimento';
 import { compareByNomePtBr } from '../../utils/compareNomePtBr';
@@ -36,11 +37,6 @@ function formatDateInput(value: string): string {
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-}
-
-function postoGrad(c: CadastroItemPersist): string {
-  if (c.categoria === 'Oficiais') return (c.oficial || '').trim() || '—';
-  return (c.praca || '').trim() || '—';
 }
 
 function matchBuscaNomeOuNip(c: CadastroItemPersist, query: string): boolean {
@@ -451,10 +447,10 @@ export function EstatisticasDnPendentePanel() {
                 ]}
               >
                 <Text style={[styles.cadastroNome, { color: ui.text }]} numberOfLines={2}>
-                  {encontrado.nome || '—'}
+                  {formatNomeComPosto(encontrado)}
                 </Text>
                 <Text style={[styles.cadastroMeta, { color: theme.textSecondary }]}>
-                  {postoGrad(encontrado)} · {encontrado.categoria} · NIP {encontrado.nip || '—'}
+                  {encontrado.categoria} · NIP {encontrado.nip || '—'}
                 </Text>
 
                 <Text style={[styles.fieldLabel, { color: theme.textMuted, marginTop: 14 }]}>
@@ -605,10 +601,10 @@ export function EstatisticasDnPendentePanel() {
                       ]}
                     >
                       <Text style={[styles.cadastroNome, { color: ui.text }]} numberOfLines={2}>
-                        {c.nome || '—'}
+                        {formatNomeComPosto(c)}
                       </Text>
                       <Text style={[styles.cadastroMeta, { color: theme.textSecondary }]}>
-                        {postoGrad(c)} · NIP {c.nip || '—'}
+                        NIP {c.nip || '—'}
                         {idade != null ? ` · ${idade} anos` : ''}
                       </Text>
 

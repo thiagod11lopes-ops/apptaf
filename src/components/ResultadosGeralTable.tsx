@@ -11,6 +11,7 @@ import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from './mobile/TafTabChrome';
+import { formatNomeComPostoParts } from '../utils/formatNomeComPosto';
 
 function situacaoCor(situacao: string, theme: { gain: string; loss: string; textMuted: string }) {
   if (situacao === 'Aprovado') return theme.gain;
@@ -126,13 +127,15 @@ export function ResultadosGeralTable({
 
   return (
     <View style={styles.modernList}>
-      {data.map((item) => (
+      {data.map((item) => {
+        const nomeComPosto = formatNomeComPostoParts(item.postoGrad, item.nome);
+        return (
         <View key={item.id} style={styles.itemPress}>
           <TafGlassPanel style={styles.modernRow}>
           <View style={styles.modernRowHeader}>
             <View style={styles.modernRowHeaderText}>
               <SearchHighlightText
-                text={item.nome}
+                text={nomeComPosto}
                 queryLower={buscaLower}
                 style={[styles.modernName, { color: ui.text }]}
                 numberOfLines={2}
@@ -153,7 +156,7 @@ export function ResultadosGeralTable({
               <View style={styles.modernActions}>
                 {onVerHistorico ? (
                   <TouchableOpacity
-                    accessibilityLabel={`Ver histórico de ${item.nome}`}
+                    accessibilityLabel={`Ver histórico de ${nomeComPosto}`}
                     onPress={() => onVerHistorico(item)}
                     style={[styles.modernIconBtn, { borderColor: glass.border }]}
                   >
@@ -162,7 +165,7 @@ export function ResultadosGeralTable({
                 ) : null}
                 {onEditar ? (
                   <TouchableOpacity
-                    accessibilityLabel={`Editar resultados de ${item.nome}`}
+                    accessibilityLabel={`Editar resultados de ${nomeComPosto}`}
                     onPress={() => onEditar(item)}
                     style={[styles.modernIconBtn, { borderColor: glass.border }]}
                   >
@@ -171,7 +174,7 @@ export function ResultadosGeralTable({
                 ) : null}
                 {onExcluir ? (
                   <TouchableOpacity
-                    accessibilityLabel={`Excluir resultados de ${item.nome}`}
+                    accessibilityLabel={`Excluir resultados de ${nomeComPosto}`}
                     onPress={() => onExcluir(item)}
                     style={[styles.modernIconBtn, styles.modernIconBtnDanger]}
                   >
@@ -232,7 +235,8 @@ export function ResultadosGeralTable({
           </View>
           </TafGlassPanel>
         </View>
-      ))}
+        );
+      })}
     </View>
   );
 }

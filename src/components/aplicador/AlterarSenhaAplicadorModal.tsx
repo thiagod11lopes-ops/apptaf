@@ -23,8 +23,8 @@ import {
   formatSenhaAplicadorInput,
   isSenhaAplicadorValid,
 } from '../../utils/aplicadorSenha';
-import { postoGradAplicador } from '../../types/aplicadorAssinatura';
 import { compareByNomePtBr } from '../../utils/compareNomePtBr';
+import { formatNomeComPosto } from '../../utils/formatNomeComPosto';
 
 type Props = {
   visible: boolean;
@@ -32,9 +32,8 @@ type Props = {
 };
 
 function labelAplicador(item: AplicadorItemPersist): string {
-  const posto = postoGradAplicador(item);
   const nip = item.nip?.trim();
-  const nome = posto !== '—' ? `${posto} ${item.nome}` : item.nome;
+  const nome = formatNomeComPosto(item);
   return nip ? `${nome} (${nip})` : nome;
 }
 

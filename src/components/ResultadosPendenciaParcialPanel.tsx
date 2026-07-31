@@ -26,6 +26,7 @@ import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { TafGlassPanel } from './mobile/TafTabChrome';
+import { formatNomeComPostoParts } from '../utils/formatNomeComPosto';
 
 function ChipModalidade({ label, ok }: { label: string; ok: boolean }) {
   const { theme } = useTheme();
@@ -194,11 +195,11 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
 
                 <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
                 <Text style={[ts.body, { color: ui.text, fontWeight: '700', marginBottom: 4 }]}>
-                  {item.nome}
+                  {formatNomeComPostoParts(item.postoGrad, item.nome)}
                 </Text>
 
                 <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 10 }]}>
-                  {item.postoGrad} · {item.categoria}
+                  {item.categoria}
                 </Text>
 
                 <View style={styles.chipsRow}>
@@ -251,11 +252,11 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
 
                 <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
                 <Text style={[ts.body, { color: ui.text, fontWeight: '700', marginBottom: 4 }]}>
-                  {item.nome}
+                  {formatNomeComPostoParts(item.postoGrad, item.nome)}
                 </Text>
 
                 <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 10 }]}>
-                  {item.postoGrad} · {item.categoria}
+                  {item.categoria}
                 </Text>
 
                 <View style={styles.chipsRow}>

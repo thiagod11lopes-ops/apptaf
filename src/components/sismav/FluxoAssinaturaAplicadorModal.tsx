@@ -33,6 +33,7 @@ import {
 } from '../../utils/rubricaSvgBuilder';
 import { RUBRICA_COR_TRACO } from '../../utils/rubricaSvgNormalize';
 import { compareByNomePtBr } from '../../utils/compareNomePtBr';
+import { formatNomeComPosto } from '../../utils/formatNomeComPosto';
 import { RUBRICA_NATIVA_ALTURA } from '../../utils/rubricaConstants';
 import { RubricaAlteradaToast } from './RubricaAlteradaToast';
 import {
@@ -52,9 +53,8 @@ import {
 } from '../assinatura/AssinaturaFuturistaUi';
 
 function labelAplicador(item: AplicadorItemPersist): string {
-  const posto = postoGradAplicador(item);
   const nip = item.nip?.trim();
-  const nome = posto !== '—' ? `${posto} ${item.nome}` : item.nome;
+  const nome = formatNomeComPosto(item);
   return nip ? `${nome} (${nip})` : nome;
 }
 
@@ -501,7 +501,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
                   title="Nova rúbrica"
                   subtitle={
                     aplicadorSelecionado
-                      ? `Desenhe a nova rúbrica de ${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome}.`
+                      ? `Desenhe a nova rúbrica de ${formatNomeComPosto(aplicadorSelecionado)}.`
                       : 'Desenhe a nova rúbrica do aplicador.'
                   }
                   accent="violet"
@@ -516,7 +516,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
                 {aplicadorSelecionado ? (
                   <AssinaturaFuturistaMetaChip
                     label="Identificação"
-                    value={`${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome} · NIP ${aplicadorSelecionado.nip || '—'}`}
+                    value={`${formatNomeComPosto(aplicadorSelecionado)} · NIP ${aplicadorSelecionado.nip || '—'}`}
                   />
                 ) : null}
 
@@ -574,7 +574,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
                   title="Primeira rúbrica"
                   subtitle={
                     aplicadorSelecionado
-                      ? `Desenhe a rúbrica de ${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome}. Ela ficará salva no cadastro.`
+                      ? `Desenhe a rúbrica de ${formatNomeComPosto(aplicadorSelecionado)}. Ela ficará salva no cadastro.`
                       : 'Desenhe a rúbrica do aplicador.'
                   }
                   accent="violet"
@@ -587,7 +587,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
                 {aplicadorSelecionado ? (
                   <AssinaturaFuturistaMetaChip
                     label="Identificação"
-                    value={`${postoGradAplicador(aplicadorSelecionado)} ${aplicadorSelecionado.nome} · NIP ${aplicadorSelecionado.nip || '—'}`}
+                    value={`${formatNomeComPosto(aplicadorSelecionado)} · NIP ${aplicadorSelecionado.nip || '—'}`}
                   />
                 ) : null}
 

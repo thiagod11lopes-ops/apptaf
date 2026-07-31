@@ -40,6 +40,7 @@ import {
   dataRegistroCoincide,
   dataExibicaoRegistro,
 } from '../utils/tafRegistro';
+import { formatNomeComPosto } from '../utils/formatNomeComPosto';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -141,7 +142,7 @@ export function CadastroPlanilhaBlock({
 
   const abrirFatoresRiscoCadastro = useCallback(async (c: CadastroItemPersist) => {
     const key = nipDigitos(c.nip ?? '');
-    const nome = (c.nome || '').trim() || 'Militar';
+    const nome = formatNomeComPosto({ ...c, nome: (c.nome || '').trim() || 'Militar' });
     let registro: FatoresRiscoRegistro | null = key ? fatoresPorNip[key] ?? null : null;
     try {
       if (key) {
@@ -622,7 +623,7 @@ export function CadastroPlanilhaBlock({
                 >
                   <View style={styles.modernRowHeader}>
                     <View style={styles.modernRowHeaderText}>
-                      {highlightText(c.nome || '-', buscaLower, styles.modernName, 2)}
+                      {highlightText(formatNomeComPosto(c), buscaLower, styles.modernName, 2)}
                       <View style={styles.modernChipRow}>
                         <View
                           style={[
@@ -805,7 +806,7 @@ export function CadastroPlanilhaBlock({
                       {highlightText(c.nip ? c.nip : '-', buscaLower, styles.tableCell, 1)}
                     </View>
                     <View style={[colSep(true), { flex: 2 }]}>
-                      {highlightText(c.nome ? c.nome : '-', buscaLower, styles.tableCell, 1)}
+                      {highlightText(formatNomeComPosto(c), buscaLower, styles.tableCell, 1)}
                     </View>
                     {!isAplicacaoTaf ? (
                       <View style={[colSep(true), { flex: 0.9 }]}>

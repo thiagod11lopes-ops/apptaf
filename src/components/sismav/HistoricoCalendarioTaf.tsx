@@ -50,6 +50,8 @@ import {
 } from '../../utils/exportResultadosTafPdf';
 import { coletarAssinaturasAplicadorParaPdf } from '../../utils/assinaturaAplicadorDasSessoes';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
+import { formatNomeComPostoParts } from '../../utils/formatNomeComPosto';
+import { postoGradFromCadastro } from '../../utils/resultadoTafCadastro';
 import {
   limparResultadoModalidadeCadastro,
   type ModalidadeResultadoTaf,
@@ -61,6 +63,18 @@ import { PREMIUM } from '../../theme/premium';
 
 function modalidadeExcluivel(tipo: TipoProvaAplicada): ModalidadeResultadoTaf {
   return tipo;
+}
+
+function nomeResultadoComPosto(
+  r: Pick<ResultadoCorridaItem, 'nome' | 'nip'>,
+  cadastros: CadastroItemPersist[],
+): string {
+  const nome = (r.nome ?? '').trim() || '—';
+  const busca = buscarCadastroPorNomeOuNip(cadastros, (r.nip ?? '').trim() || nome);
+  if (busca.kind === 'found') {
+    return formatNomeComPostoParts(postoGradFromCadastro(busca.cadastro), nome);
+  }
+  return nome;
 }
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as const;
@@ -280,12 +294,12 @@ export function HistoricoCalendarioTaf({
       if (salvandoRubrica) return;
       onAviso?.(null);
       setRubricaEdicao({
-        nome: (r.nome ?? '').trim() || 'Militar',
+        nome: nomeResultadoComPosto(r, cadastros),
         nip: (r.nip ?? '').trim(),
         modalidade: r.prova ?? tipoProva,
       });
     },
-    [salvandoRubrica, onAviso],
+    [salvandoRubrica, onAviso, cadastros],
   );
 
   const participanteRubricaEdicao = useMemo((): ResultadoCorridaItem | null => {
@@ -576,7 +590,7 @@ export function HistoricoCalendarioTaf({
                   >
                     <View style={styles.partMain}>
                       <Text style={[ts.body, { color: theme.text, fontWeight: '700' }]} numberOfLines={1}>
-                        {r.nome?.trim() || '—'}
+                        {nomeResultadoComPosto(r, cadastros)}
                       </Text>
                       <Text style={[ts.caption, { color: theme.textMuted }]}>
                         NIP {r.nip?.trim() || '—'}
@@ -689,7 +703,7 @@ export function HistoricoCalendarioTaf({
                     <PressableScale
                       onPress={() =>
                         setConfirmarExclusao({
-                          nome: (r.nome ?? '').trim() || 'Militar',
+                          nome: nomeResultadoComPosto(r, cadastros),
                           nip: (r.nip ?? '').trim(),
                           modalidade,
                         })

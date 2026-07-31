@@ -11,6 +11,7 @@ import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import { calcularEstatisticasTaf, META_CONCLUSAO_TAF_PCT } from '../utils/estatisticasTaf';
+import { formatNomeComPostoParts } from '../utils/formatNomeComPosto';
 import { StatSection } from '../components/estatisticas/StatSection';
 import { StatBarChart } from '../components/estatisticas/StatBarChart';
 import { EstatisticasDnPendentePanel } from '../components/estatisticas/EstatisticasDnPendentePanel';
@@ -294,7 +295,7 @@ export default function EstatisticasScreen() {
                   {s.rankingTempos.corrida.map((r, i) => (
                     <View key={`${r.nip}-${i}`} style={[styles.dataRow, { borderBottomColor: theme.borderSubtle }]}>
                       <Text style={[styles.dataDate, { color: theme.text }]} numberOfLines={1}>
-                        {i + 1}. {r.nome}
+                        {i + 1}. {formatNomeComPostoParts(r.postoGrad, r.nome)}
                       </Text>
                       <MonoValue size="sm" variant="gain">{r.tempoFmt}</MonoValue>
                     </View>
@@ -307,7 +308,7 @@ export default function EstatisticasScreen() {
                   {s.rankingTempos.caminhada.map((r, i) => (
                     <View key={`${r.nip}-${i}`} style={[styles.dataRow, { borderBottomColor: theme.borderSubtle }]}>
                       <Text style={[styles.dataDate, { color: theme.text }]} numberOfLines={1}>
-                        {i + 1}. {r.nome}
+                        {i + 1}. {formatNomeComPostoParts(r.postoGrad, r.nome)}
                       </Text>
                       <MonoValue size="sm" variant="gain">{r.tempoFmt}</MonoValue>
                     </View>
@@ -320,7 +321,7 @@ export default function EstatisticasScreen() {
                   {s.rankingTempos.natacao.map((r, i) => (
                     <View key={`${r.nip}-${i}`} style={[styles.dataRow, { borderBottomColor: theme.borderSubtle }]}>
                       <Text style={[styles.dataDate, { color: theme.text }]} numberOfLines={1}>
-                        {i + 1}. {r.nome}
+                        {i + 1}. {formatNomeComPostoParts(r.postoGrad, r.nome)}
                       </Text>
                       <MonoValue size="sm" variant="gain">{r.tempoFmt}</MonoValue>
                     </View>

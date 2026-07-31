@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,10 @@ import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { isNotaReprovacaoTexto } from '../utils/notaReprovacaoTexto';
+import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
+import { formatNomeComPostoParts } from '../utils/formatNomeComPosto';
+import { postoGradFromCadastro } from '../utils/resultadoTafCadastro';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CadastrarResultados'>;
 
@@ -39,6 +43,26 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const styles = useMemo(() => createCadastrarResultadosStyles(theme, ui), [theme, ui]);
   const resultados = route.params?.resultados ?? [];
+  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
+
+  useEffect(() => {
+    void getAllCadastros()
+      .then(setCadastros)
+      .catch(() => setCadastros([]));
+  }, []);
+
+  const nomeExibicao = useCallback(
+    (r: (typeof resultados)[number]) => {
+      const nome = (r.nome ?? '').trim() || '—';
+      const busca = buscarCadastroPorNomeOuNip(cadastros, (r.nip ?? '').trim() || nome);
+      if (busca.kind === 'found') {
+        return formatNomeComPostoParts(postoGradFromCadastro(busca.cadastro), nome);
+      }
+      return nome;
+    },
+    [cadastros],
+  );
+
   const textoColunaCadastro = useMemo(() => {
     const temNatacao = resultados.some((r) => r.prova === 'natacao');
     const temCorrida = resultados.some((r) => r.prova !== 'natacao');
@@ -158,7 +182,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                   {(r.prova === 'natacao' ? 'Nadador' : 'Corredor')} {r.corredor}
                 </Text>
                 <Text style={styles.nomeText} numberOfLines={2}>
-                  {r.nome}
+                  {nomeExibicao(r)}
                 </Text>
                 {r.nip ? (
                   <Text style={styles.nipText} numberOfLines={1}>

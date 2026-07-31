@@ -130,6 +130,10 @@ import {
   isNotaReprovacaoTexto,
 } from '../utils/notaReprovacaoTexto';
 import {
+  formatNomeComPosto,
+  primeiroSegundoNomeComPosto,
+} from '../utils/formatNomeComPosto';
+import {
   notaCaminhadaParaPersistencia,
   textoNotaCaminhadaFromCadastro,
 } from '../taf/caminhada4800Nota';
@@ -230,13 +234,6 @@ type NipFeedbackLinha =
   | { tipo: 'erro'; texto: string }
   | null;
 
-/** Exibição na prova ativa: apenas primeiro e segundo nome. */
-function primeiroSegundoNome(nome: string): string {
-  const parts = nome.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return nome.trim();
-  if (parts.length === 1) return parts[0]!;
-  return `${parts[0]} ${parts[1]}`;
-}
 
 /** Sufixo de idade ao lado do nome. */
 function textoIdadeMilitar(dataNascimento: string): string {
@@ -1792,7 +1789,7 @@ export default function AplicarTAFScreen() {
       : '';
 
   const definirNipOk = useCallback((index: number, c: CadastroItemPersist) => {
-    const nome = (c.nome || '').trim() || 'Sem nome';
+    const nome = formatNomeComPosto({ ...c, nome: (c.nome || '').trim() || 'Sem nome' });
     setNipFeedbackLinhas((prev) => {
       const next = [...prev];
       next[index] = {
@@ -1829,7 +1826,7 @@ export default function AplicarTAFScreen() {
       );
       if (!oposta || (modalidade !== 'corrida' && modalidade !== 'caminhada')) return false;
 
-      const nome = (c.nome || '').trim() || 'Sem nome';
+      const nome = formatNomeComPosto({ ...c, nome: (c.nome || '').trim() || 'Sem nome' });
       setModalModalidadeExcludente({
         index,
         nome,
@@ -1877,7 +1874,7 @@ export default function AplicarTAFScreen() {
   const continuarAposCadastroEncontrado = useCallback(
     async (index: number, c: CadastroItemPersist) => {
       if (cadastroPrecisaCompletarDadosTaf(c)) {
-        const nome = (c.nome || '').trim() || 'Sem nome';
+        const nome = formatNomeComPosto({ ...c, nome: (c.nome || '').trim() || 'Sem nome' });
         setNipFeedbackLinhas((prev) => {
           const next = [...prev];
           next[index] = {
@@ -1892,7 +1889,7 @@ export default function AplicarTAFScreen() {
         return;
       }
 
-      const nome = (c.nome || '').trim() || 'Sem nome';
+      const nome = formatNomeComPosto({ ...c, nome: (c.nome || '').trim() || 'Sem nome' });
       const nipLinha = nipsParticipantes[index] || c.nip;
       const modalidade = tipoProvaRef.current ?? tipoProva;
       const emDemonstracao = isModoDemonstracaoAtivo();
@@ -2716,7 +2713,7 @@ export default function AplicarTAFScreen() {
     () =>
       Array.from({ length: nParticipantesConfirmado }, (_, index) => {
         const fb = nipFeedbackLinhas[index];
-        return fb?.tipo === 'ok' ? primeiroSegundoNome(fb.nomeMilitar) : '—';
+        return fb?.tipo === 'ok' ? primeiroSegundoNomeComPosto(fb.nomeMilitar) : '—';
       }),
     [nParticipantesConfirmado, nipFeedbackLinhas],
   );

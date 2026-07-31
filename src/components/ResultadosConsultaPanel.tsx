@@ -59,6 +59,7 @@ import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { listarResultadosCompletosFromHistorico, enriquecerLinhasDistanciaMetaFromHistorico } from '../utils/resultadoGeralHistorico';
 import { cadastroComResultadoNorma, prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
 import { modalidadeCorridaCaminhadaDispensavel } from '../utils/corridaCaminhadaExcludente';
+import { formatNomeComPostoParts } from '../utils/formatNomeComPosto';
 import type { ConfirmacaoGerarResultadosPdfInfo } from './sismav/ConfirmacaoGerarResultadosPdfModal';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
@@ -429,7 +430,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       setAviso(null);
       setRubricaEdicao({
         linhaId: linha.id,
-        nome: (linha.nome ?? '').trim() || 'Militar',
+        nome: formatNomeComPostoParts(linha.postoGrad, (linha.nome ?? '').trim() || 'Militar'),
         nip: (linha.nip ?? '').trim(),
         modalidade,
       });
@@ -609,10 +610,12 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
           (cadastro ? temAvaliacaoPermanencia(cadastro) : false) ||
           (r.situacaoPermanencia !== '—' && r.situacaoPermanencia !== '');
 
+        const nomeComPosto = formatNomeComPostoParts(r.postoGrad, r.nome);
+
         const abrirExclusao = (modalidade: ModalidadeResultadoTaf) => {
           setConfirmarExclusao({
             cadastroId: cadastro?.id ?? r.id,
-            nome: r.nome,
+            nome: nomeComPosto,
             nip: r.nip,
             modalidade,
           });
@@ -625,13 +628,13 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
                 <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
                 <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{r.nip}</Text>
                 <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
-                <Text style={[ts.h2, { color: ui.text, fontSize: 18 }]}>{r.nome}</Text>
+                <Text style={[ts.h2, { color: ui.text, fontSize: 18 }]}>{nomeComPosto}</Text>
               </View>
               {cadastro ? (
                 <PressableScale
                   onPress={() => setCadastroEmEdicao(cadastro)}
                   style={[styles.editBtn, { borderColor: theme.border }]}
-                  accessibilityLabel={`Editar resultados de ${r.nome}`}
+                  accessibilityLabel={`Editar resultados de ${nomeComPosto}`}
                 >
                   <Pencil size={18} color={theme.primary} strokeWidth={2.2} />
                 </PressableScale>

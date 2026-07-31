@@ -41,6 +41,7 @@ export type RegistroPorMesItem = {
 export type RankingTempoItem = {
   nome: string;
   nip: string;
+  postoGrad?: string;
   tempoFmt: string;
   tempoSeg: number;
   nota?: string;
@@ -481,6 +482,7 @@ export function calcularEstatisticasTaf(
         rankingC.push({
           nome: c.nome || '—',
           nip: c.nip || '—',
+          postoGrad: pg !== '—' ? pg : undefined,
           tempoFmt: segundosParaMmSs(sec),
           tempoSeg: sec,
           nota,
@@ -523,6 +525,7 @@ export function calcularEstatisticasTaf(
         rankingCam.push({
           nome: c.nome || '—',
           nip: c.nip || '—',
+          postoGrad: pg !== '—' ? pg : undefined,
           tempoFmt: segundosParaMmSs(sec),
           tempoSeg: sec,
           nota,
@@ -565,6 +568,7 @@ export function calcularEstatisticasTaf(
         rankingN.push({
           nome: c.nome || '—',
           nip: c.nip || '—',
+          postoGrad: pg !== '—' ? pg : undefined,
           tempoFmt: segundosParaMmSs(sec),
           tempoSeg: sec,
           nota,

@@ -35,6 +35,8 @@ import { isNotaReprovacaoTexto } from '../../utils/notaReprovacaoTexto';
 import { RubricaCell } from '../RubricaThumb';
 import { AplicadorAssinaturaBloco } from '../AplicadorAssinaturaBloco';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
+import { formatNomeComPostoParts } from '../../utils/formatNomeComPosto';
+import { postoGradFromCadastro } from '../../utils/resultadoTafCadastro';
 import { formatNipInput, nipDigitos } from '../../utils/nipFormat';
 import { formatMinutosSegundosInput } from '../../utils/formatMinutosSegundos';
 import { tempoStringParaMsProva } from '../../utils/calcularIdade';
@@ -162,6 +164,18 @@ function provaEhReps(
 
 function renumerar(resultados: ResultadoCorridaItem[]): ResultadoCorridaItem[] {
   return resultados.map((r, i) => ({ ...r, corredor: i + 1 }));
+}
+
+function nomeResultadoComPosto(
+  r: Pick<ResultadoCorridaItem, 'nome' | 'nip'>,
+  cadastros: CadastroItemPersist[],
+): string {
+  const nome = (r.nome ?? '').trim() || '—';
+  const busca = buscarCadastroPorNomeOuNip(cadastros, (r.nip ?? '').trim() || nome);
+  if (busca.kind === 'found') {
+    return formatNomeComPostoParts(postoGradFromCadastro(busca.cadastro), nome);
+  }
+  return nome;
 }
 
 function limparNotaCampos(): Pick<
@@ -1116,7 +1130,7 @@ export function HistoricoSessaoDetalheModal({
                       {editavel ? (
                         <View style={[styles.td, styles.colNome]}>
                           <Text style={{ color: ui.text, fontSize: 12, fontWeight: '700' }} numberOfLines={2}>
-                            {r.nome?.trim() || '—'}
+                            {nomeResultadoComPosto(r, cadastros)}
                           </Text>
                           {meta?.avisoNip ? (
                             <Text
@@ -1129,7 +1143,7 @@ export function HistoricoSessaoDetalheModal({
                         </View>
                       ) : (
                         <Text style={[styles.td, styles.colNome, { color: ui.text }]} numberOfLines={2}>
-                          {r.nome?.trim() || '—'}
+                          {nomeResultadoComPosto(r, cadastros)}
                         </Text>
                       )}
 
@@ -1317,7 +1331,11 @@ export function HistoricoSessaoDetalheModal({
 
       <ConfirmacaoExcluirResultadoModal
         visible={excluirIdx != null}
-        nome={(excluirIdx != null ? linhas[excluirIdx]?.nome : '')?.trim() || 'Militar'}
+        nome={
+          excluirIdx != null && linhas[excluirIdx]
+            ? nomeResultadoComPosto(linhas[excluirIdx]!, cadastros)
+            : 'Militar'
+        }
         nip={(excluirIdx != null ? linhas[excluirIdx]?.nip : '')?.trim() || '—'}
         modalidade={modalidadeExcluivel(tipo)}
         rotuloProva={titulo}

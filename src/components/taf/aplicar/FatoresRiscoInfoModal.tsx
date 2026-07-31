@@ -68,7 +68,7 @@ export function FatoresRiscoInfoModal({ visible, nome, nip, fatores, onClose }: 
           </View>
 
           <Text style={[ts.caption, styles.lead, { color: theme.textSecondary }]}>
-            Itens marcados com Sim para este militar:
+            Alertas de saúde deste militar (fatores com Sim e obesidade grau I–III):
           </Text>
 
           <ScrollView style={styles.lista} nestedScrollEnabled>

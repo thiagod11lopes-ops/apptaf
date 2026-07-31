@@ -171,8 +171,8 @@ import {
 } from '../services/preCadastroTafStorage';
 import {
   getAllFatoresRisco,
-  listarFatoresRiscoSim,
-  temFatorRiscoSim,
+  listarAlertasFatoresRisco,
+  temAlertaFatorRisco,
   type FatoresRiscoRegistro,
 } from '../services/fatoresRiscoStorage';
 import { nipDigitos } from '../utils/nipFormat';
@@ -2473,7 +2473,7 @@ export default function AplicarTAFScreen() {
       const nip = nipsParticipantes[index] ?? '';
       const key = nipDigitos(nip);
       const reg = key ? fatoresRiscoPorNip[key] : undefined;
-      if (!reg || !temFatorRiscoSim(reg.respostas)) return;
+      if (!reg || !temAlertaFatorRisco(reg)) return;
       const fb = nipFeedbackLinhas[index];
       const nome =
         fb?.tipo === 'ok' || fb?.tipo === 'completar_dados'
@@ -2482,7 +2482,7 @@ export default function AplicarTAFScreen() {
       setModalFatoresRiscoInfo({
         nome,
         nip: key,
-        fatores: listarFatoresRiscoSim(reg.respostas),
+        fatores: listarAlertasFatoresRisco(reg),
       });
     },
     [nipsParticipantes, fatoresRiscoPorNip, nipFeedbackLinhas],
@@ -2492,7 +2492,7 @@ export default function AplicarTAFScreen() {
     (index: number): boolean => {
       const key = nipDigitos(nipsParticipantes[index] ?? '');
       if (!key) return false;
-      return temFatorRiscoSim(fatoresRiscoPorNip[key]?.respostas);
+      return temAlertaFatorRisco(fatoresRiscoPorNip[key]);
     },
     [nipsParticipantes, fatoresRiscoPorNip],
   );
@@ -2833,7 +2833,7 @@ export default function AplicarTAFScreen() {
     () =>
       Array.from({ length: nParticipantesConfirmado }, (_, index) => {
         const key = nipDigitos(nipsParticipantes[index] ?? '');
-        return key ? temFatorRiscoSim(fatoresRiscoPorNip[key]?.respostas) : false;
+        return key ? temAlertaFatorRisco(fatoresRiscoPorNip[key]) : false;
       }),
     [nParticipantesConfirmado, nipsParticipantes, fatoresRiscoPorNip],
   );

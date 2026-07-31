@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { readAppMeta, writeAppMeta, removeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
 import { nipChaveCadastro, nipDigitos } from '../utils/nipFormat';
+import { labelObesidadeFromImcDados } from '../utils/imcFatoresRisco';
 import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 
 export type FatorRiscoId =
@@ -86,6 +87,34 @@ export function listarFatoresRiscoSim(
 ): string[] {
   if (!respostas) return [];
   return FATORES_RISCO_ITENS.filter((item) => respostas[item.id] === 'sim').map((item) => item.label);
+}
+
+/** Fatores “Sim” + Obesidade Grau I/II/III (quando houver IMC). */
+export function listarAlertasFatoresRisco(
+  reg: FatoresRiscoRegistro | null | undefined,
+): string[] {
+  if (!reg) return [];
+  const itens = listarFatoresRiscoSim(reg.respostas);
+  const obesidade = labelObesidadeFromImcDados({
+    imc: reg.imc,
+    altura: reg.altura,
+    peso: reg.peso,
+  });
+  if (obesidade) itens.push(obesidade);
+  return itens;
+}
+
+/** Alerta visual (nome laranja): algum fator Sim ou obesidade grau 1+. */
+export function temAlertaFatorRisco(reg: FatoresRiscoRegistro | null | undefined): boolean {
+  if (!reg) return false;
+  if (temFatorRiscoSim(reg.respostas)) return true;
+  return (
+    labelObesidadeFromImcDados({
+      imc: reg.imc,
+      altura: reg.altura,
+      peso: reg.peso,
+    }) != null
+  );
 }
 
 function parseMap(raw: string | null | undefined): Record<string, FatoresRiscoRegistro> {

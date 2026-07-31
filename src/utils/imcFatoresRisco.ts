@@ -141,6 +141,30 @@ export function calcularImc(alturaTexto: string, pesoTexto: string): ImcResultad
   };
 }
 
+/** True quando IMC está em Obesidade Grau I, II ou III. */
+export function isObesidadeGrau(imc: number | null | undefined): boolean {
+  if (imc == null || !Number.isFinite(imc)) return false;
+  const id = classificarImc(imc).id;
+  return id === 'obesidade1' || id === 'obesidade2' || id === 'obesidade3';
+}
+
+/**
+ * Rótulo de obesidade (Grau I/II/III) a partir do IMC salvo ou recalculado.
+ * Retorna null se não houver obesidade grau 1+.
+ */
+export function labelObesidadeFromImcDados(dados: {
+  imc?: number | null;
+  altura?: string | null;
+  peso?: string | null;
+}): string | null {
+  let imc = dados.imc != null && Number.isFinite(dados.imc) ? dados.imc : null;
+  if (imc == null) {
+    imc = calcularImc(dados.altura ?? '', dados.peso ?? '')?.imc ?? null;
+  }
+  if (!isObesidadeGrau(imc)) return null;
+  return classificarImc(imc!).titulo;
+}
+
 /** Permite apenas dígitos e um separador decimal (, ou .). */
 export function formatDecimalInput(texto: string, maxLen = 6): string {
   const limpo = texto.replace(/[^\d.,]/g, '');

@@ -141,31 +141,6 @@ export function EditarIdadeGeneroMilitarModal({
       fullScreen
       title="Editar dados do militar"
       icon={<UserRound size={20} color="#FFFFFF" strokeWidth={2.2} />}
-      footer={
-        <View style={styles.footer}>
-          <PressableScale
-            onPress={onClose}
-            disabled={salvando}
-            style={[styles.btnGhost, { borderColor: theme.border, opacity: salvando ? 0.5 : 1 }]}
-          >
-            <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>Cancelar</Text>
-          </PressableScale>
-          <PressableScale onPress={() => void salvar()} disabled={salvando} style={styles.btnPrimaryOuter}>
-            <LinearGradient
-              colors={[...theme.tokens.gradientPrimaryBtn]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.btnPrimary}
-            >
-              {salvando ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.btnPrimaryText}>Salvar</Text>
-              )}
-            </LinearGradient>
-          </PressableScale>
-        </View>
-      }
     >
       <View style={styles.body}>
         {nipFmt ? (
@@ -298,6 +273,34 @@ export function EditarIdadeGeneroMilitarModal({
         <Text style={[styles.hint, { color: theme.textMuted }]}>
           Os dados serão atualizados no cadastro e usados no cálculo da nota.
         </Text>
+
+        <View style={styles.footerInline}>
+          <PressableScale
+            onPress={onClose}
+            disabled={salvando}
+            style={[styles.btnGhost, { borderColor: theme.border, opacity: salvando ? 0.5 : 1 }]}
+          >
+            <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>Cancelar</Text>
+          </PressableScale>
+          <PressableScale
+            onPress={() => void salvar()}
+            disabled={salvando}
+            style={styles.btnPrimaryOuter}
+          >
+            <LinearGradient
+              colors={[...theme.tokens.gradientPrimaryBtn]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.btnPrimary}
+            >
+              {salvando ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.btnPrimaryText}>Salvar</Text>
+              )}
+            </LinearGradient>
+          </PressableScale>
+        </View>
       </View>
     </ModernModal>
   );
@@ -341,7 +344,13 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '800' },
   erro: { fontSize: 13, fontWeight: '600', marginTop: 4 },
   hint: { fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 4 },
-  footer: { flexDirection: 'row', gap: 10, width: '100%' },
+  footerInline: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginTop: 16,
+    marginBottom: 8,
+  },
   btnGhost: {
     flex: 1,
     paddingVertical: 12,

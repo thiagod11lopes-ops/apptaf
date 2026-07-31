@@ -366,6 +366,10 @@ export default function AplicarTAFScreen() {
   const inputTextColor = ui.text;
   const [mostrarListaPreCadastro, setMostrarListaPreCadastro] = useState(false);
   const [mostrarFatoresRisco, setMostrarFatoresRisco] = useState(false);
+  /** De onde o painel de fatores foi aberto — define o destino do Voltar. */
+  const [fatoresRiscoOrigem, setFatoresRiscoOrigem] = useState<'home' | 'nips' | null>(null);
+  const [fatoresRiscoNipInicial, setFatoresRiscoNipInicial] = useState<string | null>(null);
+  const [fatoresRiscoNomeInicial, setFatoresRiscoNomeInicial] = useState<string | null>(null);
   const [mostrarRestritos, setMostrarRestritos] = useState(false);
   const [fatoresRiscoPorNip, setFatoresRiscoPorNip] = useState<Record<string, FatoresRiscoRegistro>>(
     {},
@@ -2431,6 +2435,9 @@ export default function AplicarTAFScreen() {
   }, [recarregarListaPreCadastros]);
 
   const abrirFatoresRisco = useCallback(() => {
+    setFatoresRiscoOrigem('home');
+    setFatoresRiscoNipInicial(null);
+    setFatoresRiscoNomeInicial(null);
     setMostrarFatoresRisco(true);
     setMostrarRestritos(false);
     setMostrarListaPreCadastro(false);
@@ -2442,6 +2449,9 @@ export default function AplicarTAFScreen() {
   const abrirRestritos = useCallback(() => {
     setMostrarRestritos(true);
     setMostrarFatoresRisco(false);
+    setFatoresRiscoOrigem(null);
+    setFatoresRiscoNipInicial(null);
+    setFatoresRiscoNomeInicial(null);
     setMostrarListaPreCadastro(false);
     setModoPreCadastro(false);
     setModoTafNaval(false);
@@ -2499,36 +2509,47 @@ export default function AplicarTAFScreen() {
 
   const onPressIconeFatoresRiscoParticipante = useCallback(
     (index: number) => {
-      const key = nipDigitos(nipsParticipantes[index] ?? '');
-      const reg = key ? fatoresRiscoPorNip[key] : undefined;
-      if (reg && temFatorRiscoSim(reg.respostas)) {
-        abrirModalFatoresRiscoParticipante(index);
+      const nipLinha = nipsParticipantes[index] ?? '';
+      const key = nipDigitos(nipLinha);
+      if (key.length !== 8) {
+        Alert.alert('Fatores de risco', 'Informe um NIP válido antes de abrir os fatores de risco.');
         return;
       }
-      if (reg) {
-        Alert.alert(
-          'Fatores de risco',
-          'Este militar já possui cadastro em Fatores de Risco (nenhum fator positivo).',
-        );
-        return;
-      }
-      Alert.alert(
-        'Fatores de risco',
-        'Este militar ainda não foi cadastrado em Fatores de Risco. Use a opção Fatores de Risco no menu do Aplicar TAF.',
-      );
+      const fb = nipFeedbackLinhas[index];
+      const nome =
+        fb?.tipo === 'ok' || fb?.tipo === 'completar_dados' ? (fb.nome || '').trim() : '';
+      setFatoresRiscoOrigem('nips');
+      setFatoresRiscoNipInicial(nipLinha);
+      setFatoresRiscoNomeInicial(nome || null);
+      setMostrarFatoresRisco(true);
     },
-    [nipsParticipantes, fatoresRiscoPorNip, abrirModalFatoresRiscoParticipante],
+    [nipsParticipantes, nipFeedbackLinhas],
   );
 
   const voltarInicioAplicarTaf = useCallback(() => {
     setMostrarListaPreCadastro(false);
     setMostrarFatoresRisco(false);
+    setFatoresRiscoOrigem(null);
+    setFatoresRiscoNipInicial(null);
+    setFatoresRiscoNomeInicial(null);
     setMostrarRestritos(false);
     setModoPreCadastro(false);
     setModoTafNaval(false);
     setMostrarProvas(false);
     setCorridaEtapa('menu');
   }, []);
+
+  const fecharPainelFatoresRisco = useCallback(() => {
+    if (fatoresRiscoOrigem === 'nips') {
+      setMostrarFatoresRisco(false);
+      setFatoresRiscoOrigem(null);
+      setFatoresRiscoNipInicial(null);
+      setFatoresRiscoNomeInicial(null);
+      recarregarFatoresRisco();
+      return;
+    }
+    voltarInicioAplicarTaf();
+  }, [fatoresRiscoOrigem, recarregarFatoresRisco, voltarInicioAplicarTaf]);
 
   const iniciarNovoPreCadastro = useCallback(() => {
     tipoProvaRef.current = null;
@@ -3244,7 +3265,10 @@ export default function AplicarTAFScreen() {
 
           {mostrarFatoresRisco ? (
             <AplicarTafFatoresRiscoPanel
-              onVoltar={voltarInicioAplicarTaf}
+              key={fatoresRiscoNipInicial ? `fr-${nipDigitos(fatoresRiscoNipInicial)}` : 'fr-home'}
+              nipInicial={fatoresRiscoNipInicial ?? undefined}
+              nomeInicial={fatoresRiscoNomeInicial ?? undefined}
+              onVoltar={fecharPainelFatoresRisco}
               onSalvo={recarregarFatoresRisco}
             />
           ) : null}
@@ -3340,7 +3364,7 @@ export default function AplicarTAFScreen() {
           </AplicarTafGlassPanel>
         ) : null}
 
-        {mostrarProvas && corridaEtapa === 'nips' ? (
+        {mostrarProvas && corridaEtapa === 'nips' && !mostrarFatoresRisco ? (
           <AplicarTafGlassPanel accent="violet">
             <View style={styles.section}>
               <View style={styles.identTopRow}>
@@ -3662,8 +3686,8 @@ export default function AplicarTAFScreen() {
                             }
                             accessibilityHint={
                               frCadastrado
-                                ? 'Verde: cadastro em fatores de risco encontrado'
-                                : 'Laranja: militar ainda sem cadastro em fatores de risco'
+                                ? 'Abre a página para editar os fatores de risco'
+                                : 'Abre a página para cadastrar os fatores de risco'
                             }
                             onPress={() => onPressIconeFatoresRiscoParticipante(index)}
                             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}

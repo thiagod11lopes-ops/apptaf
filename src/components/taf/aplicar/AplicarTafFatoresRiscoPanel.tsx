@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
@@ -32,6 +32,9 @@ import { FatoresRiscoSalvoToast } from './FatoresRiscoSalvoToast';
 type Props = {
   onVoltar: () => void;
   onSalvo?: () => void;
+  /** Prefill ao abrir a partir da identificação do participante. */
+  nipInicial?: string;
+  nomeInicial?: string;
 };
 
 function SimNaoToggle({
@@ -83,7 +86,12 @@ function SimNaoToggle({
   );
 }
 
-export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
+export function AplicarTafFatoresRiscoPanel({
+  onVoltar,
+  onSalvo,
+  nipInicial,
+  nomeInicial,
+}: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -152,6 +160,30 @@ export function AplicarTafFatoresRiscoPanel({ onVoltar, onSalvo }: Props) {
       // silencioso
     }
   }, [aplicarRegistroNoFormulario]);
+
+  const prefillAplicadoRef = useRef(false);
+
+  /** Prefill NIP/nome e carrega registro existente ao abrir a partir da identificação. */
+  useEffect(() => {
+    const nipFmt = formatNipInput(nipInicial ?? '');
+    const key = nipDigitos(nipFmt);
+    if (key.length !== 8) return;
+
+    if (!prefillAplicadoRef.current) {
+      setNip(nipFmt);
+      if ((nomeInicial ?? '').trim()) {
+        setNome((nomeInicial ?? '').trim());
+      }
+      void carregarRespostasSalvas(nipFmt);
+      prefillAplicadoRef.current = true;
+    }
+
+    const resultado = buscarCadastroPorNomeOuNip(cadastros, nipFmt);
+    if (resultado.kind === 'found') {
+      setNome((prev) => prev.trim() || resultado.cadastro.nome?.trim() || '');
+      setFeedback('Militar cadastrado no sistema.');
+    }
+  }, [nipInicial, nomeInicial, cadastros, carregarRespostasSalvas]);
 
   const sincronizarCampoPar = useCallback(
     (origem: 'nip' | 'nome', valor: string) => {

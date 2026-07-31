@@ -523,8 +523,9 @@ export function TafProvaTempoModal({
         const temFatorRisco = participantesComFatorRisco[index] === true;
         const desistiu = permiteDesistencia && (desistenciaParticipantes[index] ?? false);
         const tempoMs = temposMilitaresMs[index];
-        const tempoStr = desistiu ? '—' : tempoMs != null ? formatMs(tempoMs) : '—';
-        const nota = desistiu ? 'REPROVADO' : (getNota?.(index) ?? '—');
+        // Desistência: mostra o tempo do cronômetro no momento da confirmação.
+        const tempoStr = tempoMs != null ? formatMs(tempoMs) : '—';
+        const nota = desistiu ? (getNota?.(index) ?? 'REPROVADO') : (getNota?.(index) ?? '—');
         const notaReprov = desistiu || (isNotaReprovado?.(index) ?? false);
 
         const temChecks =

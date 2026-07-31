@@ -16,6 +16,7 @@ import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResult
 import { compareByNomePtBr } from './compareNomePtBr';
 import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
 import { cadastroIncompletoNascimentoOuFatores } from './cadastroIncompleto';
+import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 
 type ModalidadeHistorico = {
   nota: string;
@@ -64,7 +65,7 @@ function situacaoFromResultado(r: ResultadoCorridaItem): string {
   const rep = (r.reprovacaoTexto ?? '').trim();
   if (rep) return rep;
   const nota = (r.notaTexto ?? r.noraTexto ?? '').trim();
-  if (nota.toUpperCase() === 'REPROVADO') return 'Reprovado';
+  if (isNotaReprovacaoTexto(nota)) return 'Reprovado';
   if (nota.toLowerCase() === 'aprovado') return 'Aprovado';
   if (nota) return 'Aprovado';
   return '—';
@@ -261,7 +262,7 @@ export function agregarHistoricoPorParticipante(
 function situacaoFromNotaCadastro(nota: string | undefined): string {
   const n = (nota || '').trim();
   if (!n) return '—';
-  if (n.toUpperCase() === 'REPROVADO') return 'Reprovado';
+  if (isNotaReprovacaoTexto(n)) return 'Reprovado';
   return 'Aprovado';
 }
 
@@ -490,7 +491,10 @@ function classificarAggNoResumo(agg: AggRow): 'completo' | 'parcial' | 'vazio' {
 function modalidadeEhReprovada(m?: ModalidadeHistorico): boolean {
   if (!m) return false;
   if ((m.situacao ?? '').trim().toLowerCase() === 'reprovado') return true;
-  return (m.nota ?? '').trim().toUpperCase() === 'REPROVADO';
+  if ((m.situacao ?? '').trim().toLowerCase() === 'desistência' || (m.situacao ?? '').trim().toLowerCase() === 'desistencia') {
+    return true;
+  }
+  return isNotaReprovacaoTexto(m.nota);
 }
 
 function aggTemReprovacao(agg: AggRow): boolean {
@@ -503,17 +507,17 @@ function aggTemReprovacao(agg: AggRow): boolean {
 }
 
 function resultadoItemEhReprovado(r: ResultadoCorridaItem): boolean {
+  if (r.desistencia) return true;
   const rep = (r.reprovacaoTexto ?? '').trim().toLowerCase();
-  if (rep.includes('reprov')) return true;
-  const nota = (r.notaTexto ?? r.noraTexto ?? '').trim().toUpperCase();
-  if (nota === 'REPROVADO') return true;
+  if (rep.includes('reprov') || rep.includes('desist')) return true;
+  if (isNotaReprovacaoTexto(r.notaTexto ?? r.noraTexto)) return true;
   const desempenho = (r.desempenhoTexto ?? '').trim().toLowerCase();
-  return desempenho === 'reprovado';
+  return desempenho === 'reprovado' || desempenho.startsWith('desist');
 }
 
 function cadastroTemReprovacaoDireta(c: CadastroItemPersist): boolean {
   for (const nota of [c.notaCorrida, c.notaCaminhada, c.notaNatacao]) {
-    if ((nota || '').trim().toUpperCase() === 'REPROVADO') return true;
+    if (isNotaReprovacaoTexto(nota)) return true;
   }
   return c.resultadoPermanencia === 'reprovado' || c.resultadoNatacao === 'reprovado';
 }

@@ -7,8 +7,10 @@ export type TrialTableState = {
   checksVoltas: boolean[][];
   chegadaNatacao: boolean[];
   temposMilitaresMs: (number | null)[];
-  /** Corrida/natação: desistência = reprovado sem tempo. */
+  /** Corrida/natação: desistência = reprovado. */
   desistenciaParticipantes: boolean[];
+  /** Corrida: voltas já marcadas no momento da desistência (para nota REP. (n)). */
+  desistenciaVoltasParticipantes: number[];
 };
 
 export type TrialTableAction =
@@ -27,19 +29,41 @@ export type TrialTableAction =
       volta: number;
       elapsedMs: number | null;
     }
-  | { type: 'setDesistencia'; participante: number; value: boolean };
+  | {
+      type: 'setDesistencia';
+      participante: number;
+      value: boolean;
+      /** Tempo do cronômetro no momento da confirmação (exibido na prova ativa). */
+      elapsedMs?: number | null;
+    };
 
 export const initialTrialTableState: TrialTableState = {
   checksVoltas: [],
   chegadaNatacao: [],
   temposMilitaresMs: [],
   desistenciaParticipantes: [],
+  desistenciaVoltasParticipantes: [],
 };
 
 function ensureBoolRow(arr: boolean[], len: number, fill = false): boolean[] {
   const next = arr.slice(0, len);
   while (next.length < len) next.push(fill);
   return next;
+}
+
+function ensureNumRow(arr: number[], len: number, fill = 0): number[] {
+  const next = arr.slice(0, len);
+  while (next.length < len) next.push(fill);
+  return next;
+}
+
+function countVoltasMarcadas(row: boolean[] | undefined): number {
+  if (!Array.isArray(row)) return 0;
+  let n = 0;
+  for (const c of row) {
+    if (c) n += 1;
+  }
+  return n;
 }
 
 export function aplicarTafTrialReducer(
@@ -64,6 +88,9 @@ export function aplicarTafTrialReducer(
         desistenciaParticipantes: Array.isArray(action.state.desistenciaParticipantes)
           ? [...action.state.desistenciaParticipantes]
           : [],
+        desistenciaVoltasParticipantes: Array.isArray(action.state.desistenciaVoltasParticipantes)
+          ? [...action.state.desistenciaVoltasParticipantes]
+          : [],
       };
 
     case 'prepararProva': {
@@ -72,7 +99,14 @@ export function aplicarTafTrialReducer(
       const chegadaNatacao =
         tipoProva === 'natacao' ? Array.from({ length: n }, () => false) : [];
       const desistenciaParticipantes = Array.from({ length: n }, () => false);
-      return { ...state, temposMilitaresMs, chegadaNatacao, desistenciaParticipantes };
+      const desistenciaVoltasParticipantes = Array.from({ length: n }, () => 0);
+      return {
+        ...state,
+        temposMilitaresMs,
+        chegadaNatacao,
+        desistenciaParticipantes,
+        desistenciaVoltasParticipantes,
+      };
     }
 
     case 'resizeChecksGrid': {
@@ -107,6 +141,7 @@ export function aplicarTafTrialReducer(
       return {
         ...state,
         desistenciaParticipantes: ensureBoolRow(state.desistenciaParticipantes, p),
+        desistenciaVoltasParticipantes: ensureNumRow(state.desistenciaVoltasParticipantes, p),
       };
     }
 
@@ -160,18 +195,38 @@ export function aplicarTafTrialReducer(
     }
 
     case 'setDesistencia': {
-      const { participante, value } = action;
-      const nextDes = ensureBoolRow(state.desistenciaParticipantes, Math.max(participante + 1, state.desistenciaParticipantes.length));
+      const { participante, value, elapsedMs } = action;
+      const len = Math.max(
+        participante + 1,
+        state.desistenciaParticipantes.length,
+        state.desistenciaVoltasParticipantes.length,
+      );
+      const nextDes = ensureBoolRow(state.desistenciaParticipantes, len);
+      const nextVoltasDes = ensureNumRow(state.desistenciaVoltasParticipantes, len);
       nextDes[participante] = value;
 
       if (!value) {
-        return { ...state, desistenciaParticipantes: nextDes };
+        // Desmarcar desistência também limpa o tempo e as voltas capturadas.
+        const nextTempos = [...state.temposMilitaresMs];
+        while (nextTempos.length <= participante) nextTempos.push(null);
+        nextTempos[participante] = null;
+        nextVoltasDes[participante] = 0;
+        return {
+          ...state,
+          desistenciaParticipantes: nextDes,
+          desistenciaVoltasParticipantes: nextVoltasDes,
+          temposMilitaresMs: nextTempos,
+        };
       }
 
-      // Desistência limpa tempo e marcas de volta/chegada.
+      // Captura voltas marcadas ANTES de limpar o checklist.
+      nextVoltasDes[participante] = countVoltasMarcadas(state.checksVoltas[participante]);
+
+      // Desistência: grava o tempo do clique e limpa marcas de volta/chegada.
       const nextTempos = [...state.temposMilitaresMs];
       while (nextTempos.length <= participante) nextTempos.push(null);
-      nextTempos[participante] = null;
+      nextTempos[participante] =
+        elapsedMs != null && Number.isFinite(elapsedMs) && elapsedMs >= 0 ? elapsedMs : null;
 
       const nextChegada = [...state.chegadaNatacao];
       if (nextChegada.length > participante) nextChegada[participante] = false;
@@ -183,6 +238,7 @@ export function aplicarTafTrialReducer(
       return {
         ...state,
         desistenciaParticipantes: nextDes,
+        desistenciaVoltasParticipantes: nextVoltasDes,
         temposMilitaresMs: nextTempos,
         chegadaNatacao: nextChegada,
         checksVoltas: nextChecks,

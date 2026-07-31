@@ -6,6 +6,7 @@ import { formatMsByModality } from '../taf/tafTimeFormat';
 import { RUBRICA_PDF_ALTURA, RUBRICA_PDF_LARGURA } from './rubricaConstants';
 import { rubricaSvgParaPdf } from './rubricaSvgNormalize';
 import { pdfTextoParaJsPdf } from './pdfLayout';
+import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 
 function tituloProva(resultados: ResultadoCorridaItem[]): string {
   const prova = resultados.find((r) => r.prova)?.prova ?? 'corrida';
@@ -23,8 +24,8 @@ function cabecalhoColuna(resultados: ResultadoCorridaItem[]): string {
 const pdfTexto = pdfTextoParaJsPdf;
 
 function formatarTempo(r: ResultadoCorridaItem): string {
-  if (r.desistencia) return 'Desistência';
   if (r.desempenhoTexto?.trim()) return r.desempenhoTexto.trim();
+  if (r.desistencia) return 'Desistência';
   const prova = r.prova ?? 'corrida';
   if (prova === 'corrida' || prova === 'natacao') {
     return formatMsByModality(prova, r.tempoMs);
@@ -314,7 +315,9 @@ export async function gerarResumoAplicacaoPdfBlobWeb(
       title: 'Situacao',
       w: usableW * 0.12,
       kind: 'text',
-      get: (r) => r.reprovacaoTexto || (r.notaTexto === 'REPROVADO' ? 'Reprovado' : 'Aprovado'),
+      get: (r) =>
+        r.reprovacaoTexto ||
+        (r.desistencia || isNotaReprovacaoTexto(r.notaTexto) ? 'Reprovado' : 'Aprovado'),
     },
     { title: 'Rubrica', w: usableW * 0.2, kind: 'rubrica' },
   ];

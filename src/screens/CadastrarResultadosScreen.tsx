@@ -24,6 +24,7 @@ import {
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
+import { isNotaReprovacaoTexto } from '../utils/notaReprovacaoTexto';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CadastrarResultados'>;
 
@@ -176,7 +177,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                       <Text
                         style={[
                           styles.notaResumoValor,
-                          r.notaTexto === 'REPROVADO' ? styles.notaResumoRepro : null,
+                          isNotaReprovacaoTexto(r.notaTexto) ? styles.notaResumoRepro : null,
                         ]}
                       >
                         {r.notaTexto}

@@ -78,7 +78,9 @@ export function ConfirmacaoDesistenciaModal({
             </>
           ) : null}{' '}
           será marcado como <Text style={styles.strong}>REPROVADO</Text> na prova de{' '}
-          <Text style={styles.strong}>{provaLabel}</Text>, sem tempo e sem nota.
+          <Text style={styles.strong}>{provaLabel}</Text>. Na corrida, a nota fica{' '}
+          <Text style={styles.strong}>REP. (voltas)</Text> e o tempo do cronômetro no momento da
+          confirmação é registrado.
         </Text>
         <Text style={[styles.hint, { color: theme.textMuted }]}>
           O teste passa a contar como aplicado. Você poderá desmarcar a desistência antes de aplicar.

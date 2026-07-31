@@ -12,6 +12,7 @@ import { formatMsByModality } from '../taf/tafTimeFormat';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { nipDigitos } from './nipFormat';
+import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 import { getSessaoSortTime } from '../services/offline/recordTimestamps';
 import {
   temAvaliacaoCorrida,
@@ -32,7 +33,7 @@ export type RegistroModalidadeExistente = {
 function situacaoFromResultado(r: ResultadoCorridaItem): string {
   if (r.reprovacaoTexto?.trim()) return r.reprovacaoTexto.trim();
   const nota = (r.notaTexto ?? r.noraTexto ?? '').trim();
-  if (nota.toUpperCase() === 'REPROVADO') return 'Reprovado';
+  if (isNotaReprovacaoTexto(nota)) return 'Reprovado';
   if (nota.toLowerCase() === 'aprovado') return 'Aprovado';
   if (nota) return 'Aprovado';
   return '—';

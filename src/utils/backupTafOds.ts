@@ -27,6 +27,7 @@ import {
   temAvaliacaoPermanencia,
 } from './resultadoTafCadastro';
 import { isDemoCadastroId } from './gatherSystemBackupData';
+import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 import {
   cadastroTemResultadoArmada,
   cadastroTemResultadoCfn,
@@ -249,7 +250,7 @@ export type OdsPicture = {
 function situacaoDeNota(nota: string | undefined): 'aprovado' | 'reprovado' | null {
   const n = (nota || '').trim();
   if (!n || n === '—') return null;
-  if (n.toUpperCase() === 'REPROVADO') return 'reprovado';
+  if (isNotaReprovacaoTexto(n)) return 'reprovado';
   return 'aprovado';
 }
 
@@ -340,7 +341,7 @@ export function svgDataUrlParaXml(svgDataUrl: string): string | null {
 export function estiloPontos(nota: string): string {
   const n = nota.trim();
   if (!n) return 'ce9';
-  if (n.toUpperCase() === 'REPROVADO') return 'cePontosVermelho';
+  if (isNotaReprovacaoTexto(n)) return 'cePontosVermelho';
   const num = Number.parseFloat(n.replace(',', '.'));
   if (!Number.isFinite(num)) return 'ce9';
   return num < 50 ? 'cePontosVermelho' : 'cePontosVerde';

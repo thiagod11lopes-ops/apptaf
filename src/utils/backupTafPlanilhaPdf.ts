@@ -11,6 +11,7 @@ import {
 } from './backupTafOds';
 import { formatBrDateKey } from './backupNaming';
 import { pdfTextoParaJsPdf } from './pdfLayout';
+import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 
 const pdfTexto = pdfTextoParaJsPdf;
 
@@ -240,6 +241,9 @@ function drawSheet(
       if (col.label === 'Geral') {
         const [r, g, b] = corGeral(raw);
         doc.setTextColor(r, g, b);
+        doc.setFont('helvetica', 'bold');
+      } else if (isNotaReprovacaoTexto(raw)) {
+        doc.setTextColor(220, 38, 38);
         doc.setFont('helvetica', 'bold');
       } else {
         doc.setTextColor(30, 41, 59);

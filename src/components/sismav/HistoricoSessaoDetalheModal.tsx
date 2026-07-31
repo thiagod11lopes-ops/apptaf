@@ -31,6 +31,7 @@ import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../../se
 import type { ResultadoCorridaItem } from '../../navigation/types';
 import { formatMsByModality } from '../../taf/tafTimeFormat';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from '../../utils/exportResultadosTafPdf';
+import { isNotaReprovacaoTexto } from '../../utils/notaReprovacaoTexto';
 import { RubricaCell } from '../RubricaThumb';
 import { AplicadorAssinaturaBloco } from '../AplicadorAssinaturaBloco';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
@@ -146,8 +147,7 @@ function notaParticipante(r: ResultadoCorridaItem): string {
 function situacaoParticipante(r: ResultadoCorridaItem): { label: string; tone: 'ok' | 'bad' | 'muted' } {
   if (r.reprovacaoTexto?.trim()) return { label: r.reprovacaoTexto.trim(), tone: 'bad' };
   const nota = (r.notaTexto ?? '').trim();
-  const upper = nota.toUpperCase();
-  if (upper === 'REPROVADO') return { label: 'Reprovado', tone: 'bad' };
+  if (r.desistencia || isNotaReprovacaoTexto(nota)) return { label: 'Reprovado', tone: 'bad' };
   if (nota.toLowerCase() === 'aprovado') return { label: 'Aprovado', tone: 'ok' };
   if (nota.toLowerCase() === 'reprovado') return { label: 'Reprovado', tone: 'bad' };
   if (nota) return { label: 'Aprovado', tone: 'ok' };
@@ -400,7 +400,7 @@ export function HistoricoSessaoDetalheModal({
           let cad = busca.cadastro;
           if (tipo === 'permanencia') {
             const aprovado = (r.notaTexto ?? '').toLowerCase() === 'aprovado';
-            const reprovado = (r.notaTexto ?? '').toUpperCase() === 'REPROVADO';
+            const reprovado = r.desistencia === true || isNotaReprovacaoTexto(r.notaTexto);
             if (aprovado || reprovado) {
               cad = {
                 ...cad,

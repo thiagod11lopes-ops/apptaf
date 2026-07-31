@@ -4,6 +4,7 @@ import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { compareByNomePtBr } from './compareNomePtBr';
 import { mesclarRubricas, rubricasDoCadastro, type RubricasPorNip } from './rubricasDasSessoes';
 import { temRegistroModalidade } from './tafRegistro';
+import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 
 export type ResultadoTafLinha = {
   id: string;
@@ -46,7 +47,7 @@ function situacaoDeNota(nota: string | undefined, temRegistro: boolean): string 
   if (!temRegistro) return '—';
   const n = (nota || '').trim();
   if (!n) return '—';
-  if (n.toUpperCase() === 'REPROVADO') return 'Reprovado';
+  if (isNotaReprovacaoTexto(n)) return 'Reprovado';
   return 'Aprovado';
 }
 

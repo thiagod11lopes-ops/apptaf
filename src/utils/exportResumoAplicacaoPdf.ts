@@ -4,6 +4,7 @@ import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { tituloTipoProva, type TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import { formatMsByModality } from '../taf/tafTimeFormat';
+import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
 import {
   blocoAplicadorAssinaturaHtml,
@@ -73,7 +74,8 @@ export function buildResumoAplicacaoHtml(
       const nip = r.nip ? escapeHtmlPdf(r.nip) : '—';
       const nota = escapeHtmlPdf(r.notaTexto ?? '—');
       const situacao = escapeHtmlPdf(
-        r.reprovacaoTexto ?? (r.notaTexto === 'REPROVADO' ? 'Reprovado' : 'Aprovado'),
+        r.reprovacaoTexto ??
+          (r.desistencia || isNotaReprovacaoTexto(r.notaTexto) ? 'Reprovado' : 'Aprovado'),
       );
       const rubrica = celulaRubricaHtml(r.rubricaCandidatoSvg);
       return `<tr>

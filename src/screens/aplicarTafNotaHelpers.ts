@@ -15,6 +15,7 @@ import { formatMsByModality } from '../taf/tafTimeFormat';
 import type { TipoProvaTAF } from '../taf/tafProvaTypes';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { limparResultadoModalidadeCadastro } from '../utils/limparResultadoModalidade';
+import { formatNotaDesistenciaCorrida } from '../utils/notaReprovacaoTexto';
 
 type NipOk = {
   dataNascimento: string;
@@ -178,28 +179,41 @@ export function aplicarPermanenciaNoCadastro(
   };
 }
 
-/** Desistência em corrida/natação: reprovado sem tempo, com data (teste aplicado). */
+/** Desistência em corrida/natação: reprovado com data (teste aplicado). */
 export function aplicarDesistenciaNoCadastro(
   cadastro: CadastroItemPersist,
   prova: 'corrida' | 'natacao',
-  opts: { modoTafNaval: boolean },
+  opts: {
+    modoTafNaval: boolean;
+    /** Corrida: voltas marcadas no abandono → nota REP. (n). */
+    voltasCompletas?: number;
+    /** Tempo do cronômetro no abandono (ms). */
+    tempoMs?: number | null;
+  },
 ): CadastroItemPersist {
   const hoje = dataHojeBr();
   if (prova === 'corrida') {
     const base = opts.modoTafNaval
       ? cadastro
       : limparResultadoModalidadeCadastro(cadastro, 'caminhada');
+    const tempoStr =
+      opts.tempoMs != null && Number.isFinite(opts.tempoMs) && opts.tempoMs >= 0
+        ? formatMsByModality('corrida', opts.tempoMs)
+        : undefined;
     return {
       ...base,
-      tempoCorrida: undefined,
+      tempoCorrida: tempoStr,
       dataTafCorrida: hoje,
-      notaCorrida: 'REPROVADO',
+      notaCorrida: formatNotaDesistenciaCorrida(opts.voltasCompletas ?? 0),
       ...(opts.modoTafNaval ? {} : { modalidadeDistanciaAtiva: 'corrida' as const }),
     };
   }
   return {
     ...cadastro,
-    tempoNatacao: undefined,
+    tempoNatacao:
+      opts.tempoMs != null && Number.isFinite(opts.tempoMs) && opts.tempoMs >= 0
+        ? formatMsByModality('natacao', opts.tempoMs)
+        : undefined,
     dataTafNatacao: hoje,
     notaNatacao: 'REPROVADO',
   };

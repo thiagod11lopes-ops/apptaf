@@ -126,6 +126,10 @@ import { dataHojeBr } from '../utils/tafRegistro';
 import { detectarConflitoCorridaCaminhada, removerModalidadeOpostaDistanciaDoHistorico } from '../utils/corridaCaminhadaExcludente';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
 import {
+  formatNotaDesistenciaCorrida,
+  isNotaReprovacaoTexto,
+} from '../utils/notaReprovacaoTexto';
+import {
   notaCaminhadaParaPersistencia,
   textoNotaCaminhadaFromCadastro,
 } from '../taf/caminhada4800Nota';
@@ -307,7 +311,7 @@ function buildRubricaSvgDataUrl(
 /** Situação no modal de rúbrica — corrida e natação (alinhada ao PDF). */
 function textoSituacaoRubricaModal(r: ResultadoCorridaItem): string {
   if (r.reprovacaoTexto) return r.reprovacaoTexto;
-  if (r.notaTexto === 'REPROVADO') return 'Reprovado';
+  if (r.desistencia || isNotaReprovacaoTexto(r.notaTexto)) return 'Reprovado';
   if (r.notaTexto != null && r.notaTexto !== '') return 'Aprovado';
   return '—';
 }
@@ -386,7 +390,13 @@ export default function AplicarTAFScreen() {
   const [voltasConfirmadasProva, setVoltasConfirmadasProva] = useState(false);
   /** Voltas, chegadas e tempos em um único reducer (atualização atômica por clique). */
   const [trialTable, dispatchTrial] = useReducer(aplicarTafTrialReducer, initialTrialTableState);
-  const { checksVoltas, chegadaNatacao, temposMilitaresMs, desistenciaParticipantes } = trialTable;
+  const {
+    checksVoltas,
+    chegadaNatacao,
+    temposMilitaresMs,
+    desistenciaParticipantes,
+    desistenciaVoltasParticipantes,
+  } = trialTable;
   const [continuidadeProvaVisible, setContinuidadeProvaVisible] = useState(false);
   const [continuidadeProvaMeta, setContinuidadeProvaMeta] = useState<{
     provaLabel: string;
@@ -504,7 +514,7 @@ export default function AplicarTAFScreen() {
     const out: string[] = [];
     for (let i = 0; i < nParticipantesConfirmado; i += 1) {
       if (desistenciaParticipantes[i]) {
-        out.push('REPROVADO');
+        out.push(formatNotaDesistenciaCorrida(desistenciaVoltasParticipantes[i] ?? 0));
         continue;
       }
       const fb = nipFeedbackLinhas[i];
@@ -522,6 +532,7 @@ export default function AplicarTAFScreen() {
     nipFeedbackLinhas,
     temposMilitaresMs,
     desistenciaParticipantes,
+    desistenciaVoltasParticipantes,
     modoTafNaval,
   ]);
 
@@ -725,8 +736,13 @@ export default function AplicarTAFScreen() {
   );
 
   const confirmarDesistenciaParticipante = useCallback((participante: number) => {
-    dispatchTrial({ type: 'setDesistencia', participante, value: true });
-  }, []);
+    dispatchTrial({
+      type: 'setDesistencia',
+      participante,
+      value: true,
+      elapsedMs: getElapsedRaceMs(),
+    });
+  }, [getElapsedRaceMs]);
 
   const limparDesistenciaParticipante = useCallback((participante: number) => {
     dispatchTrial({ type: 'setDesistencia', participante, value: false });
@@ -798,6 +814,7 @@ export default function AplicarTAFScreen() {
         chegadaNatacao: [...trialTable.chegadaNatacao],
         temposMilitaresMs: [...trialTable.temposMilitaresMs],
         desistenciaParticipantes: [...trialTable.desistenciaParticipantes],
+        desistenciaVoltasParticipantes: [...(trialTable.desistenciaVoltasParticipantes ?? [])],
       },
       numeroVoltas,
       voltasConfirmadas: voltasConfirmadasProva,
@@ -1240,17 +1257,29 @@ export default function AplicarTAFScreen() {
         (prova === 'corrida' || prova === 'natacao') && desistenciaParticipantes[i] === true;
 
       if (desistiu) {
+        const tempoDesistenciaMs = temposMilitaresMs[i];
+        const tempoMod =
+          prova === 'natacao' || prova === 'abdominal_prancha' ? 'natacao' : 'corrida';
+        const desempenhoDesistencia =
+          tempoDesistenciaMs != null
+            ? `Desistência ${formatMsByModality(tempoMod, tempoDesistenciaMs)}`
+            : 'Desistência';
+        const notaDesistencia =
+          prova === 'corrida'
+            ? formatNotaDesistenciaCorrida(desistenciaVoltasParticipantes[i] ?? 0)
+            : 'REPROVADO';
         resultados.push({
           corredor: i + 1,
           nome: nomeBase,
-          tempoMs: 0,
+          tempoMs: tempoDesistenciaMs ?? 0,
           nip,
           prova,
-          desempenhoTexto: 'Desistência',
-          notaTexto: 'REPROVADO',
-          noraTexto: 'REPROVADO',
+          desempenhoTexto: desempenhoDesistencia,
+          notaTexto: notaDesistencia,
+          noraTexto: notaDesistencia,
           reprovacaoTexto: 'Desistência',
           desistencia: true,
+          voltasDesistencia: prova === 'corrida' ? (desistenciaVoltasParticipantes[i] ?? 0) : undefined,
         });
         continue;
       }
@@ -1275,7 +1304,7 @@ export default function AplicarTAFScreen() {
         desempenhoTexto,
         notaTexto,
         noraTexto: notaTexto,
-        reprovacaoTexto: notaTexto === 'REPROVADO' ? 'Reprovado' : undefined,
+        reprovacaoTexto: isNotaReprovacaoTexto(notaTexto) ? 'Reprovado' : undefined,
       });
     }
 
@@ -1297,7 +1326,11 @@ export default function AplicarTAFScreen() {
           continue;
         }
         const atualizado = r.desistencia && (prova === 'corrida' || prova === 'natacao')
-          ? aplicarDesistenciaNoCadastro(busca.cadastro, prova, { modoTafNaval })
+          ? aplicarDesistenciaNoCadastro(busca.cadastro, prova, {
+              modoTafNaval,
+              voltasCompletas: r.voltasDesistencia,
+              tempoMs: r.tempoMs,
+            })
           : aplicarResultadoNoCadastro(busca.cadastro, prova, {
               tempoMs: r.tempoMs,
               modoTafNaval,
@@ -1431,7 +1464,7 @@ export default function AplicarTAFScreen() {
         desempenhoTexto: Number.isFinite(reps) ? `${reps} rep.` : undefined,
         notaTexto,
         noraTexto: notaTexto,
-        reprovacaoTexto: notaTexto === 'REPROVADO' ? 'Reprovado' : undefined,
+        reprovacaoTexto: isNotaReprovacaoTexto(notaTexto) ? 'Reprovado' : undefined,
       });
     }
 
@@ -2737,7 +2770,7 @@ export default function AplicarTAFScreen() {
   );
 
   const isNotaReprovadoModal = useCallback(
-    (index: number) => getNotaModal(index) === 'REPROVADO',
+    (index: number) => isNotaReprovacaoTexto(getNotaModal(index)),
     [getNotaModal],
   );
 

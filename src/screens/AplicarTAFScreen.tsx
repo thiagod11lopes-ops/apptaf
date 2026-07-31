@@ -455,6 +455,8 @@ export default function AplicarTAFScreen() {
   const [modalParcialAviso, setModalParcialAviso] = useState<string | null>(null);
   const pendingResultadosNavRef = useRef<ResultadoCorridaItem[] | null>(null);
   const resultadosPosMilitaresRef = useRef<ResultadoCorridaItem[] | null>(null);
+  /** Pré-cadastro que originou a prova ativa (excluído após lançamento confirmado). */
+  const preCadastroOrigemIdRef = useRef<string | null>(null);
   /**
    * Gravação adiada: nada é lançado no sistema (nem notas no cadastro, nem a sessão)
    * até o aplicador confirmar senha + rúbrica. Estes buffers guardam o que será gravado.
@@ -868,6 +870,7 @@ export default function AplicarTAFScreen() {
         wallClockAtSave: Date.now(),
       },
       nipsRepeticaoAutorizada: [...nipsRepeticaoAutorizadaRef.current],
+      preCadastroOrigemId: preCadastroOrigemIdRef.current ?? undefined,
       finalizacao,
     };
   }, [
@@ -918,6 +921,7 @@ export default function AplicarTAFScreen() {
       setNipsParticipantes(session.nipsParticipantes);
       setNipFeedbackLinhas(session.nipFeedbackLinhas as NipFeedbackLinha[]);
       nipsRepeticaoAutorizadaRef.current = new Set(session.nipsRepeticaoAutorizada ?? []);
+      preCadastroOrigemIdRef.current = session.preCadastroOrigemId?.trim() || null;
       setModalTesteExistente(null);
       setNumeroVoltas(session.numeroVoltas?.trim() ? session.numeroVoltas : NUMERO_VOLTAS_PADRAO);
       setVoltasConfirmadasProva(Boolean(session.voltasConfirmadas));
@@ -1013,6 +1017,7 @@ export default function AplicarTAFScreen() {
     setNipFeedbackLinhas([]);
     setTipoProva(null);
     tipoProvaRef.current = null;
+    preCadastroOrigemIdRef.current = null;
     setModoTafNaval(false);
     setModoPreCadastro(false);
     setMostrarProvas(false);
@@ -1168,6 +1173,17 @@ export default function AplicarTAFScreen() {
         );
         return;
       }
+      const preCadastroId = preCadastroOrigemIdRef.current;
+      preCadastroOrigemIdRef.current = null;
+      if (preCadastroId) {
+        try {
+          await removePreCadastroTaf(preCadastroId);
+          const lista = await getAllPreCadastrosTaf();
+          setListaPreCadastros(lista);
+        } catch {
+          // Lançamento já concluído; falha ao limpar pré-cadastro não bloqueia o fluxo.
+        }
+      }
       limparBufferAplicacao();
       limparSessaoProvaAtiva();
       setFluxoAplicadorVisible(false);
@@ -1192,6 +1208,7 @@ export default function AplicarTAFScreen() {
           text: 'Descartar',
           style: 'destructive',
           onPress: () => {
+            preCadastroOrigemIdRef.current = null;
             limparBufferAplicacao();
             limparSessaoProvaAtiva();
             setFluxoAplicadorVisible(false);
@@ -2645,6 +2662,7 @@ export default function AplicarTAFScreen() {
 
   const iniciarNovoPreCadastro = useCallback(() => {
     tipoProvaRef.current = null;
+    preCadastroOrigemIdRef.current = null;
     resetCronometroCorrida();
     setModoPreCadastro(true);
     setModoTafNaval(false);
@@ -2668,6 +2686,7 @@ export default function AplicarTAFScreen() {
 
   const iniciarNovoPreCadastroCfn = useCallback(() => {
     tipoProvaRef.current = null;
+    preCadastroOrigemIdRef.current = null;
     resetCronometroCorrida();
     setModoPreCadastro(true);
     setModoTafNaval(true);
@@ -2771,6 +2790,7 @@ export default function AplicarTAFScreen() {
         setMostrarFatoresRisco(false);
         setMostrarRestritos(false);
         setMostrarProvas(true);
+        preCadastroOrigemIdRef.current = pre.id;
         setNipsParticipantes(pre.participantes.map((p) => p.nip));
         setNipFeedbackLinhas(
           pre.participantes.map((p) => {
@@ -2852,6 +2872,7 @@ export default function AplicarTAFScreen() {
     setMostrarFatoresRisco(false);
     setMostrarRestritos(false);
     tipoProvaRef.current = null;
+    preCadastroOrigemIdRef.current = null;
     resetCronometroCorrida();
     setMostrarProvas(true);
     setTipoProva(null);
@@ -2876,6 +2897,7 @@ export default function AplicarTAFScreen() {
     setMostrarFatoresRisco(false);
     setMostrarRestritos(false);
     tipoProvaRef.current = null;
+    preCadastroOrigemIdRef.current = null;
     resetCronometroCorrida();
     setMostrarProvas(true);
     setTipoProva(null);

@@ -46,6 +46,8 @@ export type ProvaAtivaSessionV1 = {
     wallClockAtSave: number;
   };
   nipsRepeticaoAutorizada: number[];
+  /** Se a prova veio de um pré-cadastro, ID para excluir após lançamento. */
+  preCadastroOrigemId?: string;
   finalizacao?: {
     fase: ProvaAtivaFinalizacaoFase;
     resultados: ResultadoCorridaItem[];

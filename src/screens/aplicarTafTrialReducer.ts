@@ -9,7 +9,7 @@ export type TrialTableState = {
   temposMilitaresMs: (number | null)[];
   /** Corrida/natação: desistência = reprovado. */
   desistenciaParticipantes: boolean[];
-  /** Corrida: voltas já marcadas no momento da desistência (para nota REP. (n)). */
+  /** Corrida: voltas já marcadas no momento da desistência (para nota REP. (n VOLTA/VOLTAS)). */
   desistenciaVoltasParticipantes: number[];
 };
 

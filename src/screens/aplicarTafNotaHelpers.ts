@@ -185,7 +185,7 @@ export function aplicarDesistenciaNoCadastro(
   prova: 'corrida' | 'natacao',
   opts: {
     modoTafNaval: boolean;
-    /** Corrida: voltas marcadas no abandono → nota REP. (n). */
+    /** Corrida: voltas marcadas no abandono → nota REP. (n VOLTA/VOLTAS). */
     voltasCompletas?: number;
     /** Tempo do cronômetro no abandono (ms). */
     tempoMs?: number | null;

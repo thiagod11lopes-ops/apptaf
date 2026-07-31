@@ -23,7 +23,7 @@ export type ResultadoCorridaItem = {
   rubricaCandidatoSvg?: string;
   /** Corrida/natação: desistência = REPROVADO sem tempo. */
   desistencia?: boolean;
-  /** Corrida: voltas marcadas no momento da desistência (nota REP. (n)). */
+  /** Corrida: voltas marcadas no momento da desistência (nota REP. (n VOLTA/VOLTAS)). */
   voltasDesistencia?: number;
 };
 

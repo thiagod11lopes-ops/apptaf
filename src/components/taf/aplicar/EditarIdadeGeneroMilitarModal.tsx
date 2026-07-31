@@ -138,6 +138,7 @@ export function EditarIdadeGeneroMilitarModal({
         if (salvando) return;
         onClose();
       }}
+      fullScreen
       title="Editar dados do militar"
       icon={<UserRound size={20} color="#FFFFFF" strokeWidth={2.2} />}
       footer={

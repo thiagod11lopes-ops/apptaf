@@ -181,6 +181,7 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
     <ModernModal
       visible={visible}
       onClose={fechar}
+      fullScreen
       title={etapa === 'aviso' ? 'Militar não cadastrado' : 'Cadastrar militar'}
       icon={
         etapa === 'aviso' ? (

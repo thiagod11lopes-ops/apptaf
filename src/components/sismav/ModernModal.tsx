@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { X } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { PressableScale } from '../premium/PressableScale';
 import { AppModal } from '../premium/AppModal';
@@ -24,6 +25,8 @@ type Props = {
   /** Quando false, overlay e botão X não fecham o modal. */
   dismissable?: boolean;
   maxBodyHeight?: number;
+  /** Ocupa toda a tela do dispositivo (sem card flutuante). */
+  fullScreen?: boolean;
 };
 
 export function ModernModal({
@@ -35,9 +38,11 @@ export function ModernModal({
   icon,
   dismissable = true,
   maxBodyHeight = 420,
+  fullScreen = false,
 }: Props) {
   const { theme, isDark } = useTheme();
   const t = theme.tokens;
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (Platform.OS !== 'web' || !visible) return;
@@ -47,27 +52,57 @@ export function ModernModal({
   return (
     <AppModal
       visible={visible}
-      transparent
-      animationType="fade"
+      transparent={!fullScreen}
+      animationType={fullScreen ? 'slide' : 'fade'}
       onRequestClose={dismissable ? onClose : undefined}
       accessibilityViewIsModal
     >
-      <View style={styles.modalRoot}>
-        <Pressable
-          style={[styles.overlay, { backgroundColor: t.overlayBg }]}
-          onPress={dismissable ? onClose : undefined}
+      <View
+        style={[
+          styles.modalRoot,
+          fullScreen ? styles.modalRootFull : null,
+          fullScreen ? { backgroundColor: theme.surface } : null,
+        ]}
+      >
+        {!fullScreen ? (
+          <Pressable
+            style={[styles.overlay, { backgroundColor: t.overlayBg }]}
+            onPress={dismissable ? onClose : undefined}
+          >
+            {Platform.OS === 'ios' ? (
+              <BlurView intensity={24} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+            ) : null}
+          </Pressable>
+        ) : null}
+        <View
+          style={
+            fullScreen
+              ? [
+                  styles.shellFull,
+                  { backgroundColor: theme.surface },
+                  {
+                    paddingTop: Math.max(insets.top, Platform.OS === 'web' ? 12 : 0),
+                    paddingBottom: Math.max(insets.bottom, 8),
+                    paddingLeft: insets.left,
+                    paddingRight: insets.right,
+                  },
+                ]
+              : [styles.center]
+          }
+          pointerEvents="box-none"
         >
-          {Platform.OS === 'ios' ? (
-            <BlurView intensity={24} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-          ) : null}
-        </Pressable>
-        <View style={styles.center} pointerEvents="box-none">
           <View
-            style={[
-              styles.shell,
-              { backgroundColor: theme.surface },
-              Platform.OS === 'web' ? ({ boxShadow: t.shadowModal } as object) : { elevation: 16 },
-            ]}
+            style={
+              fullScreen
+                ? styles.shellInnerFull
+                : [
+                    styles.shell,
+                    { backgroundColor: theme.surface },
+                    Platform.OS === 'web'
+                      ? ({ boxShadow: t.shadowModal } as object)
+                      : { elevation: 16 },
+                  ]
+            }
           >
             <LinearGradient
               colors={[...t.gradientHeader]}
@@ -89,9 +124,19 @@ export function ModernModal({
               colors={[...t.gradientPanelBody]}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 1 }}
-              style={[styles.body, { maxHeight: maxBodyHeight }]}
+              style={[
+                styles.body,
+                fullScreen ? styles.bodyFull : { maxHeight: maxBodyHeight },
+              ]}
             >
-              <ScrollView showsVerticalScrollIndicator={false}>{children}</ScrollView>
+              <ScrollView
+                style={fullScreen ? styles.scrollFull : undefined}
+                contentContainerStyle={fullScreen ? styles.scrollContentFull : undefined}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {children}
+              </ScrollView>
             </LinearGradient>
             {footer ? (
               <View style={[styles.footer, { borderTopColor: theme.border }]}>{footer}</View>
@@ -118,6 +163,10 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  modalRootFull: {
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+  },
   overlay: {
     ...StyleSheet.absoluteFillObject,
   },
@@ -132,6 +181,17 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     maxHeight: '100%',
     borderRadius: 20,
+    overflow: 'hidden',
+  },
+  shellFull: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    alignSelf: 'stretch',
+  },
+  shellInnerFull: {
+    flex: 1,
+    width: '100%',
     overflow: 'hidden',
   },
   header: {
@@ -165,6 +225,18 @@ const styles = StyleSheet.create({
   body: {
     maxHeight: 420,
     padding: 16,
+  },
+  bodyFull: {
+    flex: 1,
+    maxHeight: undefined,
+    minHeight: 0,
+  },
+  scrollFull: {
+    flex: 1,
+  },
+  scrollContentFull: {
+    flexGrow: 1,
+    paddingBottom: 12,
   },
   footer: {
     flexDirection: 'row',

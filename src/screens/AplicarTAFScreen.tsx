@@ -23,7 +23,7 @@ import {
   type AppStateStatus,
   InteractionManager,
 } from 'react-native';
-import { Trash2 } from 'lucide-react-native';
+import { HeartPulse, Trash2 } from 'lucide-react-native';
 import { AppModal } from '../components/premium/AppModal';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { SafeAreaView as SafeAreaViewInsets } from 'react-native-safe-area-context';
@@ -2487,6 +2487,39 @@ export default function AplicarTAFScreen() {
     [nipsParticipantes, fatoresRiscoPorNip],
   );
 
+  /** Tem registro salvo em Fatores de Risco (independente de respostas "sim"). */
+  const participanteCadastradoFatoresRisco = useCallback(
+    (index: number): boolean => {
+      const key = nipDigitos(nipsParticipantes[index] ?? '');
+      if (!key) return false;
+      return Boolean(fatoresRiscoPorNip[key]);
+    },
+    [nipsParticipantes, fatoresRiscoPorNip],
+  );
+
+  const onPressIconeFatoresRiscoParticipante = useCallback(
+    (index: number) => {
+      const key = nipDigitos(nipsParticipantes[index] ?? '');
+      const reg = key ? fatoresRiscoPorNip[key] : undefined;
+      if (reg && temFatorRiscoSim(reg.respostas)) {
+        abrirModalFatoresRiscoParticipante(index);
+        return;
+      }
+      if (reg) {
+        Alert.alert(
+          'Fatores de risco',
+          'Este militar já possui cadastro em Fatores de Risco (nenhum fator positivo).',
+        );
+        return;
+      }
+      Alert.alert(
+        'Fatores de risco',
+        'Este militar ainda não foi cadastrado em Fatores de Risco. Use a opção Fatores de Risco no menu do Aplicar TAF.',
+      );
+    },
+    [nipsParticipantes, fatoresRiscoPorNip, abrirModalFatoresRiscoParticipante],
+  );
+
   const voltarInicioAplicarTaf = useCallback(() => {
     setMostrarListaPreCadastro(false);
     setMostrarFatoresRisco(false);
@@ -3472,9 +3505,7 @@ export default function AplicarTAFScreen() {
                           accessibilityLabel="Editar dados do militar"
                           accessibilityHint={
                             !demoAtivo
-                              ? participanteTemFatorRisco(index)
-                                ? 'Abre edição dos dados. Toque no # para ver fatores de risco.'
-                                : 'Abre edição de categoria, nome, idade e gênero'
+                              ? 'Abre edição de categoria, nome, idade e gênero'
                               : undefined
                           }
                           onPress={
@@ -3604,52 +3635,58 @@ export default function AplicarTAFScreen() {
                           )}
                         </View>
                       </View>
-                      <TouchableOpacity
-                        disabled={!participanteTemFatorRisco(index)}
-                        accessibilityRole={
-                          participanteTemFatorRisco(index) ? 'button' : undefined
-                        }
-                        accessibilityLabel={
-                          participanteTemFatorRisco(index)
-                            ? `Fatores de risco do participante ${index + 1}`
-                            : `Participante ${index + 1}`
-                        }
-                        accessibilityHint={
-                          participanteTemFatorRisco(index)
-                            ? 'Abre os fatores de risco deste militar'
-                            : undefined
-                        }
-                        onPress={
-                          participanteTemFatorRisco(index)
-                            ? () => abrirModalFatoresRiscoParticipante(index)
-                            : undefined
-                        }
-                        style={[
-                          styles.militarHashBadge,
-                          {
-                            backgroundColor: participanteTemFatorRisco(index)
-                              ? theme.isDark
-                                ? 'rgba(234,88,12,0.18)'
-                                : 'rgba(254,215,170,0.55)'
-                              : theme.isDark
-                                ? 'rgba(56,189,248,0.15)'
-                                : 'rgba(37,99,235,0.1)',
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.militarHashText,
-                            {
-                              color: participanteTemFatorRisco(index)
-                                ? FATORES_RISCO_LARANJA
-                                : theme.primary,
-                            },
-                          ]}
-                        >
-                          #{index + 1}
-                        </Text>
-                      </TouchableOpacity>
+                      {(() => {
+                        const frCadastrado = participanteCadastradoFatoresRisco(index);
+                        const frCor = frCadastrado ? theme.success : FATORES_RISCO_LARANJA;
+                        const frBg = frCadastrado
+                          ? theme.isDark
+                            ? 'rgba(34,197,94,0.16)'
+                            : 'rgba(220,252,231,0.95)'
+                          : theme.isDark
+                            ? 'rgba(234,88,12,0.18)'
+                            : 'rgba(255,247,237,0.95)';
+                        const frBorder = frCadastrado
+                          ? theme.isDark
+                            ? 'rgba(34,197,94,0.45)'
+                            : 'rgba(34,197,94,0.35)'
+                          : theme.isDark
+                            ? 'rgba(234,88,12,0.5)'
+                            : 'rgba(234,88,12,0.4)';
+                        return (
+                          <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel={
+                              frCadastrado
+                                ? `Fatores de risco cadastrados — participante ${index + 1}`
+                                : `Fatores de risco pendentes — participante ${index + 1}`
+                            }
+                            accessibilityHint={
+                              frCadastrado
+                                ? 'Verde: cadastro em fatores de risco encontrado'
+                                : 'Laranja: militar ainda sem cadastro em fatores de risco'
+                            }
+                            onPress={() => onPressIconeFatoresRiscoParticipante(index)}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            activeOpacity={0.82}
+                            style={[
+                              styles.militarFatoresIconBtn,
+                              {
+                                borderColor: frBorder,
+                                backgroundColor: frBg,
+                                shadowColor: frCor,
+                              },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.militarFatoresIconGlow,
+                                { backgroundColor: frCor },
+                              ]}
+                            />
+                            <HeartPulse size={20} color={frCor} strokeWidth={2.35} />
+                          </TouchableOpacity>
+                        );
+                      })()}
                     </View>
                   </View>
                 ) : null}
@@ -4081,16 +4118,26 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     fontSize: 12,
     fontWeight: '700',
   },
-  militarHashBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
+  militarFatoresIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     flexShrink: 0,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  militarHashText: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: -0.3,
+  militarFatoresIconGlow: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    opacity: 0.18,
   },
   feedbackOk: {
     marginTop: 8,

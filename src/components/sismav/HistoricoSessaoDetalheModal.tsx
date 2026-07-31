@@ -31,6 +31,7 @@ import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../../se
 import type { ResultadoCorridaItem } from '../../navigation/types';
 import { formatMsByModality } from '../../taf/tafTimeFormat';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from '../../utils/exportResultadosTafPdf';
+import { formatTempoColunaResultado } from '../../utils/formatTempoColunaResultado';
 import { isNotaReprovacaoTexto } from '../../utils/notaReprovacaoTexto';
 import { RubricaCell } from '../RubricaThumb';
 import { AplicadorAssinaturaBloco } from '../AplicadorAssinaturaBloco';
@@ -130,15 +131,12 @@ function desempenhoParticipante(
   tipo: SessaoAplicacaoTaf['tipoProva'],
   r: ResultadoCorridaItem,
 ): string {
-  const texto = r.desempenhoTexto?.trim();
-  if (texto) return texto;
   if (tipo === 'permanencia') {
     const n = (r.notaTexto ?? r.desempenhoTexto ?? '').trim();
     if (n) return n;
     return PERMANENCIA_TEMPO_PDF_PADRAO;
   }
-  const mod = tipo === 'natacao' || tipo === 'abdominal_prancha' ? 'natacao' : 'corrida';
-  return formatMsByModality(mod, r.tempoMs) || '—';
+  return formatTempoColunaResultado({ ...r, prova: r.prova ?? tipo });
 }
 
 function notaParticipante(r: ResultadoCorridaItem): string {

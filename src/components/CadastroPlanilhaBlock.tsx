@@ -25,6 +25,7 @@ import { idadeDisplayFromDataNascimento } from '../utils/idadeFromDataNascimento
 import { textoNotaCorridaFromCadastro } from '../taf/corrida2400Nota';
 import { textoNotaNatacaoFromCadastro } from '../taf/natacaoNota';
 import { formatTempoNatacaoParaExibicao } from '../taf/tafTimeFormat';
+import { stripPrefixoDesistenciaTempo } from '../utils/formatTempoColunaResultado';
 import { TafPlanilhaFiltrosBar } from './TafPlanilhaFiltrosBar';
 import { ResultadosGeralTable } from './ResultadosGeralTable';
 import { useTheme } from '../contexts/ThemeContext';
@@ -48,8 +49,8 @@ type Categoria = 'Oficiais' | 'Praças';
 function temposCorridaNatacao(c: CadastroItemPersist) {
   const x = c as CadastroItemPersist & { tempo?: string };
   return {
-    corrida: (x.tempoCorrida ?? x.tempo ?? '').trim(),
-    natacao: (x.tempoNatacao ?? '').trim(),
+    corrida: stripPrefixoDesistenciaTempo((x.tempoCorrida ?? x.tempo ?? '').trim()),
+    natacao: stripPrefixoDesistenciaTempo((x.tempoNatacao ?? '').trim()),
   };
 }
 

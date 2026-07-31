@@ -8,9 +8,9 @@ import {
   type TipoProvaAplicada,
 } from '../services/resultadosAplicadosIndexedDb';
 import type { ResultadoCorridaItem } from '../navigation/types';
-import { formatMsByModality } from '../taf/tafTimeFormat';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
+import { formatTempoColunaResultado } from './formatTempoColunaResultado';
 import { nipDigitos } from './nipFormat';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 import { getSessaoSortTime } from '../services/offline/recordTimestamps';
@@ -41,17 +41,7 @@ function situacaoFromResultado(r: ResultadoCorridaItem): string {
 
 function tempoFromResultado(tipo: TipoProvaAplicada, r: ResultadoCorridaItem): string {
   if (tipo === 'permanencia') return PERMANENCIA_TEMPO_PDF_PADRAO;
-  if (r.desempenhoTexto?.trim()) return r.desempenhoTexto.trim();
-  if (
-    tipo === 'flexao_barra' ||
-    tipo === 'flexao_solo' ||
-    tipo === 'abdominal_remador'
-  ) {
-    return r.tempoMs > 0 ? `${r.tempoMs} rep.` : '—';
-  }
-  const mod =
-    tipo === 'natacao' || tipo === 'abdominal_prancha' ? 'natacao' : 'corrida';
-  return formatMsByModality(mod, r.tempoMs) || '—';
+  return formatTempoColunaResultado({ ...r, prova: r.prova ?? tipo });
 }
 
 function notaFromResultado(r: ResultadoCorridaItem): string {

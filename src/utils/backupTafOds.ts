@@ -36,6 +36,7 @@ import {
 } from './normaTafResultados';
 import { dataBrParaIso } from './tafRegistro';
 import { buildZipStoreOnly, utf8Bytes, type ZipStoreEntry } from './zipStoreOnly';
+import { stripPrefixoDesistenciaTempo } from './formatTempoColunaResultado';
 
 const ODS_MIME = 'application/vnd.oasis.opendocument.spreadsheet';
 
@@ -532,9 +533,9 @@ export function montarLinhasArmada(
         nip: (c.nip || '').trim(),
         nome: (c.nome || '').trim(),
         idade: idade == null ? '' : String(idade),
-        corridaTempo: (c.tempoCorrida || '').trim(),
+        corridaTempo: stripPrefixoDesistenciaTempo((c.tempoCorrida || '').trim()),
         corridaPontos: (c.notaCorrida || '').trim(),
-        natacaoTempo: (c.tempoNatacao || '').trim(),
+        natacaoTempo: stripPrefixoDesistenciaTempo((c.tempoNatacao || '').trim()),
         natacaoPontos: (c.notaNatacao || '').trim(),
         permanencia: situacaoPermanencia(c),
         geral: situacaoGeralPlanilha(c),
@@ -571,14 +572,14 @@ export function montarLinhasFn(
         idade: idade == null ? '' : String(idade),
         permanencia: situacaoPermanencia(c),
         permanenciaPontos: '',
-        natacaoTempo: (c.tempoNatacao || '').trim(),
+        natacaoTempo: stripPrefixoDesistenciaTempo((c.tempoNatacao || '').trim()),
         natacaoPontos: (c.notaNatacao || '').trim(),
         flexaoBarra: c.repsFlexaoBarra != null ? String(c.repsFlexaoBarra) : '',
         flexaoSolo: c.repsFlexaoSolo != null ? String(c.repsFlexaoSolo) : '',
         flexaoPontos,
         abdominal,
         abdominalPontos,
-        corrida: (c.tempoCorrida || '').trim(),
+        corrida: stripPrefixoDesistenciaTempo((c.tempoCorrida || '').trim()),
         corridaPontos: (c.notaCorrida || '').trim(),
         geral: situacaoGeralPlanilha(c),
         rubricaSvg,

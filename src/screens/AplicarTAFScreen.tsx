@@ -1319,10 +1319,11 @@ export default function AplicarTAFScreen() {
         const tempoDesistenciaMs = temposMilitaresMs[i];
         const tempoMod =
           prova === 'natacao' || prova === 'abdominal_prancha' ? 'natacao' : 'corrida';
+        // Coluna Tempo: só o cronômetro (situação/nota carregam a desistência).
         const desempenhoDesistencia =
           tempoDesistenciaMs != null
-            ? `Desistência ${formatMsByModality(tempoMod, tempoDesistenciaMs)}`
-            : 'Desistência';
+            ? formatMsByModality(tempoMod, tempoDesistenciaMs)
+            : undefined;
         const notaDesistencia =
           prova === 'corrida'
             ? formatNotaDesistenciaCorrida(desistenciaVoltasParticipantes[i] ?? 0)

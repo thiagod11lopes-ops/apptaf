@@ -3,8 +3,8 @@ import * as Print from 'expo-print';
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { tituloTipoProva, type TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
-import { formatMsByModality } from '../taf/tafTimeFormat';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
+import { formatTempoColunaResultado } from './formatTempoColunaResultado';
 import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
 import {
   blocoAplicadorAssinaturaHtml,
@@ -82,11 +82,7 @@ export function buildResumoAplicacaoHtml(
         <td>${papel} ${r.corredor}</td>
         <td class="col-nome">${escapeHtmlPdf(r.nome)}</td>
         <td>${nip}</td>
-        <td class="tempo">${escapeHtmlPdf(
-          r.desistencia
-            ? 'Desistência'
-            : formatMsByModality(r.prova ?? 'corrida', r.tempoMs),
-        )}</td>
+        <td class="tempo">${escapeHtmlPdf(formatTempoColunaResultado(r))}</td>
         <td class="nota">${nota}</td>
         <td class="repro">${situacao}</td>
         <td class="col-rubrica">${rubrica}</td>

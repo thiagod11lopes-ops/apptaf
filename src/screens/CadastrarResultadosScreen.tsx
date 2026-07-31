@@ -16,11 +16,11 @@ import { Card } from '../components/Card';
 import { AplicadorAssinaturaBloco } from '../components/AplicadorAssinaturaBloco';
 import { SalvarPdfFeedbackModal } from '../components/sismav/SalvarPdfFeedbackModal';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import { formatMsByModality } from '../taf/tafTimeFormat';
 import {
   cabecalhoColunaProvaResultados,
   exportResumoAplicacaoPdf,
 } from '../utils/exportResumoAplicacaoPdf';
+import { formatTempoColunaResultado } from '../utils/formatTempoColunaResultado';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
@@ -191,9 +191,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                 ) : null}
                 <View style={styles.linhaTempoNota}>
                   <Text style={styles.tempoText}>
-                    {r.desistencia
-                      ? 'Desistência'
-                      : formatMsByModality(r.prova ?? 'corrida', r.tempoMs)}
+                    {formatTempoColunaResultado(r)}
                   </Text>
                   {r.notaTexto != null && r.notaTexto !== '' ? (
                     <View style={styles.blocoNotaCorrida}>

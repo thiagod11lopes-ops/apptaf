@@ -2,11 +2,11 @@ import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { postoGradExibicaoAssinatura } from '../types/aplicadorAssinatura';
 import { tituloTipoProva, type TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
-import { formatMsByModality } from '../taf/tafTimeFormat';
 import { RUBRICA_PDF_ALTURA, RUBRICA_PDF_LARGURA } from './rubricaConstants';
 import { rubricaSvgParaPdf } from './rubricaSvgNormalize';
 import { pdfTextoParaJsPdf } from './pdfLayout';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
+import { formatTempoColunaResultado } from './formatTempoColunaResultado';
 
 function tituloProva(resultados: ResultadoCorridaItem[]): string {
   const prova = resultados.find((r) => r.prova)?.prova ?? 'corrida';
@@ -24,16 +24,7 @@ function cabecalhoColuna(resultados: ResultadoCorridaItem[]): string {
 const pdfTexto = pdfTextoParaJsPdf;
 
 function formatarTempo(r: ResultadoCorridaItem): string {
-  if (r.desempenhoTexto?.trim()) return r.desempenhoTexto.trim();
-  if (r.desistencia) return 'Desistência';
-  const prova = r.prova ?? 'corrida';
-  if (prova === 'corrida' || prova === 'natacao') {
-    return formatMsByModality(prova, r.tempoMs);
-  }
-  if (Number.isFinite(r.tempoMs) && r.tempoMs > 0) {
-    return formatMsByModality('corrida', r.tempoMs);
-  }
-  return '—';
+  return formatTempoColunaResultado(r);
 }
 
 function papelLinha(r: ResultadoCorridaItem): string {

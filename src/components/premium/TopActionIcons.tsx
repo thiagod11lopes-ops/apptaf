@@ -258,8 +258,8 @@ export function TopActionIcons({
             inline,
             isAuthenticated ? 'Conta' : 'Entrar',
             isAuthenticated
-              ? 'Sua conta Google conectada ao TAF'
-              : 'Fazer login com Google',
+              ? 'Sua conta conectada ao TAF'
+              : 'Fazer Login com ZIMBRA',
             <PressableScale
               onPress={() => navigateTab('Login')}
               style={[

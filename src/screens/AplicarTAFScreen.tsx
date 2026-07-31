@@ -465,7 +465,7 @@ export default function AplicarTAFScreen() {
   const [modalRubricaNatacaoVisible, setModalRubricaNatacaoVisible] = useState(false);
   const [fluxoAplicadorVisible, setFluxoAplicadorVisible] = useState(false);
   const [indiceRubricaNatacao, setIndiceRubricaNatacao] = useState(0);
-  const [, setRubricasNatacaoSvg] = useState<string[]>([]);
+  const [rubricasNatacaoSvg, setRubricasNatacaoSvg] = useState<string[]>([]);
   const [erroRubricaNatacao, setErroRubricaNatacao] = useState('');
   const [rubricaStrokes, setRubricaStrokes] = useState<RubricaStroke[]>([]);
   const [rubricaStrokeAtual, setRubricaStrokeAtual] = useState<RubricaStroke>([]);

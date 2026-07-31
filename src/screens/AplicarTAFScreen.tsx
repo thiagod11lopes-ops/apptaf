@@ -58,7 +58,10 @@ import {
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { AplicarTafModoTesteBar } from '../components/taf/aplicar/AplicarTafModoTesteBar';
-import { EditarIdadeGeneroMilitarModal } from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
+import {
+  EditarIdadeGeneroMilitarModal,
+  type EditarDadosMilitarPayload,
+} from '../components/taf/aplicar/EditarIdadeGeneroMilitarModal';
 import { ConfirmacaoExcluirParticipanteNipModal } from '../components/taf/aplicar/ConfirmacaoExcluirParticipanteNipModal';
 import { ContinuidadeProvaAtivaModal } from '../components/taf/aplicar/ContinuidadeProvaAtivaModal';
 import { CadastroRapidoMilitarModal } from '../components/taf/aplicar/CadastroRapidoMilitarModal';
@@ -222,10 +225,25 @@ function limiteParticipantesPreCadastro(tipo: TipoProvaTAF | null): number {
 /** Cronômetro da prova: controlado por react-timer-hook (MM:SS:CS). */
 
 type NipFeedbackLinha =
-  | { tipo: 'ok'; texto: string; nomeMilitar: string; dataNascimento: string; sexo?: 'M' | 'F' }
+  | {
+      tipo: 'ok';
+      texto: string;
+      nomeMilitar: string;
+      /** Nome sem posto (edição / persistência). */
+      nome: string;
+      categoria: 'Oficiais' | 'Praças';
+      oficial?: string;
+      praca?: string;
+      dataNascimento: string;
+      sexo?: 'M' | 'F';
+    }
   | {
       tipo: 'completar_dados';
       nomeMilitar: string;
+      nome: string;
+      categoria: 'Oficiais' | 'Praças';
+      oficial?: string;
+      praca?: string;
       cadastro: CadastroItemPersist;
       dataNascimento: string;
       sexo: 'M' | 'F';
@@ -245,6 +263,20 @@ function textoGeneroMilitar(sexo?: 'M' | 'F'): string {
   if (sexo === 'M') return 'Masculino';
   if (sexo === 'F') return 'Feminino';
   return 'Gênero?';
+}
+
+/** Campos de cadastro usados no feedback NIP e no modal de edição. */
+function camposCadastroParaFeedback(c: CadastroItemPersist) {
+  const nomeBare = (c.nome || '').trim() || 'Sem nome';
+  return {
+    nomeMilitar: formatNomeComPosto({ ...c, nome: nomeBare }),
+    nome: nomeBare,
+    categoria: c.categoria === 'Oficiais' ? ('Oficiais' as const) : ('Praças' as const),
+    oficial: c.oficial,
+    praca: c.praca,
+    dataNascimento: (c.dataNascimento || '').trim(),
+    sexo: c.sexo,
+  };
 }
 
 const MAX_VOLTAS_COLUNAS = 99;
@@ -1789,15 +1821,13 @@ export default function AplicarTAFScreen() {
       : '';
 
   const definirNipOk = useCallback((index: number, c: CadastroItemPersist) => {
-    const nome = formatNomeComPosto({ ...c, nome: (c.nome || '').trim() || 'Sem nome' });
+    const campos = camposCadastroParaFeedback(c);
     setNipFeedbackLinhas((prev) => {
       const next = [...prev];
       next[index] = {
         tipo: 'ok',
         texto: 'Militar Cadastrado no Sistema.',
-        nomeMilitar: nome,
-        dataNascimento: c.dataNascimento || '',
-        sexo: c.sexo,
+        ...campos,
       };
       return next;
     });
@@ -1874,15 +1904,14 @@ export default function AplicarTAFScreen() {
   const continuarAposCadastroEncontrado = useCallback(
     async (index: number, c: CadastroItemPersist) => {
       if (cadastroPrecisaCompletarDadosTaf(c)) {
-        const nome = formatNomeComPosto({ ...c, nome: (c.nome || '').trim() || 'Sem nome' });
+        const campos = camposCadastroParaFeedback(c);
         setNipFeedbackLinhas((prev) => {
           const next = [...prev];
           next[index] = {
             tipo: 'completar_dados',
-            nomeMilitar: nome,
-            cadastro: c,
-            dataNascimento: (c.dataNascimento || '').trim(),
+            ...campos,
             sexo: c.sexo === 'F' ? 'F' : 'M',
+            cadastro: c,
           };
           return next;
         });
@@ -2008,9 +2037,9 @@ export default function AplicarTAFScreen() {
   );
 
   const salvarEdicaoIdadeGenero = useCallback(
-    async (dados: { dataNascimento: string; sexo: 'M' | 'F' }) => {
+    async (dados: EditarDadosMilitarPayload) => {
       if (isModoDemonstracaoAtivo()) {
-        throw new Error('No Modo Teste não é permitido alterar idade ou gênero.');
+        throw new Error('No Modo Teste não é permitido alterar os dados do militar.');
       }
       const index = modalEditarIdadeGeneroIndex;
       if (index == null) return;
@@ -2022,6 +2051,10 @@ export default function AplicarTAFScreen() {
       }
       const atualizado: CadastroItemPersist = {
         ...busca.cadastro,
+        nome: dados.nome,
+        categoria: dados.categoria,
+        oficial: dados.categoria === 'Oficiais' ? dados.oficial : undefined,
+        praca: dados.categoria === 'Praças' ? dados.praca : undefined,
         dataNascimento: dados.dataNascimento,
         sexo: dados.sexo,
       };
@@ -2571,51 +2604,75 @@ export default function AplicarTAFScreen() {
 
   const iniciarProvaFromPreCadastro = useCallback(
     (pre: PreCadastroTaf) => {
-      const tipo = pre.tipoProva;
-      const n = pre.participantes.length;
-      if (n < 1) return;
-      const normaCfn = (pre.normaTaf ?? 'armada') === 'cfn';
+      void (async () => {
+        const tipo = pre.tipoProva;
+        const n = pre.participantes.length;
+        if (n < 1) return;
+        const normaCfn = (pre.normaTaf ?? 'armada') === 'cfn';
 
-      tipoProvaRef.current = tipo;
-      setTipoProva(tipo);
-      setModoTafNaval(normaCfn);
-      setModoPreCadastro(false);
-      setMostrarListaPreCadastro(false);
-      setMostrarFatoresRisco(false);
-    setMostrarRestritos(false);
-      setMostrarProvas(true);
-      setNipsParticipantes(pre.participantes.map((p) => p.nip));
-      setNipFeedbackLinhas(
-        pre.participantes.map((p) => ({
-          tipo: 'ok' as const,
-          texto: 'Militar Cadastrado no Sistema.',
-          nomeMilitar: p.nomeMilitar,
-          dataNascimento: p.dataNascimento,
-          sexo: p.sexo,
-        })),
-      );
-      nipsRepeticaoAutorizadaRef.current = new Set();
-      setModalTesteExistente(null);
-      setNumeroVoltas('');
-      setVoltasConfirmadasProva(false);
-      resetCronometroCorrida();
+        let lista: CadastroItemPersist[] = [];
+        try {
+          lista = await getAllCadastros({ includeDemo: true });
+        } catch {
+          lista = [];
+        }
 
-      if (tipo === 'permanencia') {
-        setModalPermanenciaFinalizadaVisible(false);
-        setErroPermanencia('');
-        setResultadoPermanenciaLinhas(Array.from({ length: n }, () => null));
-        setCorridaEtapa('tabela_permanencia');
-      } else if (isProvaComRepeticoes(tipo)) {
-        setRepeticoesParticipantes(Array.from({ length: n }, () => ''));
-        setCorridaEtapa('tabela_repeticoes');
-      } else {
-        dispatchTrial({
-          type: 'prepararProva',
-          nParticipantes: n,
-          tipoProva: trialTipoFromProva(tipo),
-        });
-        setCorridaEtapa('tabela_corrida');
-      }
+        tipoProvaRef.current = tipo;
+        setTipoProva(tipo);
+        setModoTafNaval(normaCfn);
+        setModoPreCadastro(false);
+        setMostrarListaPreCadastro(false);
+        setMostrarFatoresRisco(false);
+        setMostrarRestritos(false);
+        setMostrarProvas(true);
+        setNipsParticipantes(pre.participantes.map((p) => p.nip));
+        setNipFeedbackLinhas(
+          pre.participantes.map((p) => {
+            const busca = buscarCadastroPorNomeOuNip(lista, p.nip);
+            if (busca.kind === 'found') {
+              const campos = camposCadastroParaFeedback(busca.cadastro);
+              return {
+                tipo: 'ok' as const,
+                texto: 'Militar Cadastrado no Sistema.',
+                ...campos,
+                dataNascimento: p.dataNascimento || campos.dataNascimento,
+                sexo: p.sexo ?? campos.sexo,
+              };
+            }
+            return {
+              tipo: 'ok' as const,
+              texto: 'Militar Cadastrado no Sistema.',
+              nomeMilitar: p.nomeMilitar,
+              nome: p.nomeMilitar,
+              categoria: 'Praças' as const,
+              dataNascimento: p.dataNascimento,
+              sexo: p.sexo,
+            };
+          }),
+        );
+        nipsRepeticaoAutorizadaRef.current = new Set();
+        setModalTesteExistente(null);
+        setNumeroVoltas('');
+        setVoltasConfirmadasProva(false);
+        resetCronometroCorrida();
+
+        if (tipo === 'permanencia') {
+          setModalPermanenciaFinalizadaVisible(false);
+          setErroPermanencia('');
+          setResultadoPermanenciaLinhas(Array.from({ length: n }, () => null));
+          setCorridaEtapa('tabela_permanencia');
+        } else if (isProvaComRepeticoes(tipo)) {
+          setRepeticoesParticipantes(Array.from({ length: n }, () => ''));
+          setCorridaEtapa('tabela_repeticoes');
+        } else {
+          dispatchTrial({
+            type: 'prepararProva',
+            nParticipantes: n,
+            tipoProva: trialTipoFromProva(tipo),
+          });
+          setCorridaEtapa('tabela_corrida');
+        }
+      })();
     },
     [resetCronometroCorrida],
   );
@@ -3411,18 +3468,21 @@ export default function AplicarTAFScreen() {
                           {labelAtleta}
                         </Text>
                         <Text
-                          accessibilityRole={
-                            participanteTemFatorRisco(index) ? 'button' : undefined
-                          }
+                          accessibilityRole={!demoAtivo ? 'button' : undefined}
+                          accessibilityLabel="Editar dados do militar"
                           accessibilityHint={
-                            participanteTemFatorRisco(index)
-                              ? 'Abre os fatores de risco deste militar'
+                            !demoAtivo
+                              ? participanteTemFatorRisco(index)
+                                ? 'Abre edição dos dados. Toque no # para ver fatores de risco.'
+                                : 'Abre edição de categoria, nome, idade e gênero'
                               : undefined
                           }
                           onPress={
-                            participanteTemFatorRisco(index)
-                              ? () => abrirModalFatoresRiscoParticipante(index)
-                              : undefined
+                            !demoAtivo
+                              ? () => setModalEditarIdadeGeneroIndex(index)
+                              : participanteTemFatorRisco(index)
+                                ? () => abrirModalFatoresRiscoParticipante(index)
+                                : undefined
                           }
                           style={[
                             styles.militarNomeText,
@@ -3430,9 +3490,10 @@ export default function AplicarTAFScreen() {
                               color: participanteTemFatorRisco(index)
                                 ? FATORES_RISCO_LARANJA
                                 : ui.text,
-                              textDecorationLine: participanteTemFatorRisco(index)
-                                ? 'underline'
-                                : 'none',
+                              textDecorationLine:
+                                !demoAtivo || participanteTemFatorRisco(index)
+                                  ? 'underline'
+                                  : 'none',
                             },
                           ]}
                           numberOfLines={2}
@@ -3492,7 +3553,7 @@ export default function AplicarTAFScreen() {
                               <TouchableOpacity
                                 accessibilityRole="button"
                                 accessibilityLabel="Editar idade"
-                                accessibilityHint="Abre edição de idade e gênero"
+                                accessibilityHint="Abre edição dos dados do militar"
                                 onPress={() => setModalEditarIdadeGeneroIndex(index)}
                                 hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                                 style={[
@@ -3517,7 +3578,7 @@ export default function AplicarTAFScreen() {
                               <TouchableOpacity
                                 accessibilityRole="button"
                                 accessibilityLabel="Editar gênero"
-                                accessibilityHint="Abre edição de idade e gênero"
+                                accessibilityHint="Abre edição dos dados do militar"
                                 onPress={() => setModalEditarIdadeGeneroIndex(index)}
                                 hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                                 style={[
@@ -3543,7 +3604,26 @@ export default function AplicarTAFScreen() {
                           )}
                         </View>
                       </View>
-                      <View
+                      <TouchableOpacity
+                        disabled={!participanteTemFatorRisco(index)}
+                        accessibilityRole={
+                          participanteTemFatorRisco(index) ? 'button' : undefined
+                        }
+                        accessibilityLabel={
+                          participanteTemFatorRisco(index)
+                            ? `Fatores de risco do participante ${index + 1}`
+                            : `Participante ${index + 1}`
+                        }
+                        accessibilityHint={
+                          participanteTemFatorRisco(index)
+                            ? 'Abre os fatores de risco deste militar'
+                            : undefined
+                        }
+                        onPress={
+                          participanteTemFatorRisco(index)
+                            ? () => abrirModalFatoresRiscoParticipante(index)
+                            : undefined
+                        }
                         style={[
                           styles.militarHashBadge,
                           {
@@ -3569,7 +3649,7 @@ export default function AplicarTAFScreen() {
                         >
                           #{index + 1}
                         </Text>
-                      </View>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 ) : null}
@@ -3674,7 +3754,13 @@ export default function AplicarTAFScreen() {
 
       <EditarIdadeGeneroMilitarModal
         visible={!demoAtivo && modalEditarOk != null}
-        nome={modalEditarOk?.nomeMilitar ?? ''}
+        nome={modalEditarOk?.nome ?? ''}
+        categoria={modalEditarOk?.categoria}
+        postoGrad={
+          modalEditarOk?.categoria === 'Oficiais'
+            ? modalEditarOk?.oficial
+            : modalEditarOk?.praca
+        }
         nip={
           modalEditarIdadeGeneroIndex != null
             ? (nipsParticipantes[modalEditarIdadeGeneroIndex] ?? '')

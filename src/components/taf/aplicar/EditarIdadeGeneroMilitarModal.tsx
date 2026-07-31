@@ -8,6 +8,12 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { idadeFromDataNascimento } from '../../../utils/idadeFromDataNascimento';
 import { dataNascimentoCadastroValida } from '../../../utils/cadastroDadosTaf';
 import { AplicarTafInput } from './AplicarTafUi';
+import { formatNipInput } from '../../../utils/nipFormat';
+
+const POSTOS_OFICIAIS = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG', 'CALTE'] as const;
+const GRADUACOES_PRACAS = ['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'] as const;
+
+type Categoria = 'Oficiais' | 'Praças';
 
 function formatDateInput(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 8);
@@ -19,26 +25,44 @@ function formatDateInput(value: string): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+export type EditarDadosMilitarPayload = {
+  nome: string;
+  categoria: Categoria;
+  oficial?: string;
+  praca?: string;
+  dataNascimento: string;
+  sexo: 'M' | 'F';
+};
+
 type Props = {
   visible: boolean;
-  nome: string;
   nip: string;
+  nome: string;
+  categoria?: Categoria;
+  postoGrad?: string;
   dataNascimento: string;
   sexo?: 'M' | 'F';
   onClose: () => void;
-  onSalvar: (dados: { dataNascimento: string; sexo: 'M' | 'F' }) => Promise<void>;
+  onSalvar: (dados: EditarDadosMilitarPayload) => Promise<void>;
 };
 
 export function EditarIdadeGeneroMilitarModal({
   visible,
-  nome,
   nip,
+  nome: nomeInicial,
+  categoria: categoriaInicial,
+  postoGrad: postoInicial,
   dataNascimento: dataInicial,
   sexo: sexoInicial,
   onClose,
   onSalvar,
 }: Props) {
   const { theme } = useTheme();
+  const [nome, setNome] = useState(nomeInicial);
+  const [categoria, setCategoria] = useState<Categoria>(
+    categoriaInicial === 'Oficiais' ? 'Oficiais' : 'Praças',
+  );
+  const [posto, setPosto] = useState(postoInicial?.trim() || 'MN');
   const [dataNascimento, setDataNascimento] = useState(dataInicial);
   const [sexo, setSexo] = useState<'M' | 'F'>(sexoInicial === 'F' ? 'F' : 'M');
   const [erro, setErro] = useState('');
@@ -46,24 +70,59 @@ export function EditarIdadeGeneroMilitarModal({
 
   useEffect(() => {
     if (!visible) return;
+    const cat: Categoria = categoriaInicial === 'Oficiais' ? 'Oficiais' : 'Praças';
+    const opcoes = cat === 'Oficiais' ? POSTOS_OFICIAIS : GRADUACOES_PRACAS;
+    const postoRaw = (postoInicial || '').trim();
+    setNome((nomeInicial || '').trim());
+    setCategoria(cat);
+    setPosto(
+      postoRaw && (opcoes as readonly string[]).includes(postoRaw)
+        ? postoRaw
+        : cat === 'Oficiais'
+          ? 'CT'
+          : 'MN',
+    );
     setDataNascimento(dataInicial);
     setSexo(sexoInicial === 'F' ? 'F' : 'M');
     setErro('');
     setSalvando(false);
-  }, [visible, dataInicial, sexoInicial]);
+  }, [visible, nomeInicial, categoriaInicial, postoInicial, dataInicial, sexoInicial]);
 
   const idade = useMemo(() => idadeFromDataNascimento(dataNascimento), [dataNascimento]);
+  const nipFmt = useMemo(() => formatNipInput(nip), [nip]);
+  const opcoesPosto = categoria === 'Oficiais' ? POSTOS_OFICIAIS : GRADUACOES_PRACAS;
+
+  const setCategoriaComPosto = (next: Categoria) => {
+    setCategoria(next);
+    setPosto(next === 'Oficiais' ? 'CT' : 'MN');
+  };
 
   const salvar = async () => {
+    const nomeTrim = nome.trim();
+    if (!nomeTrim) {
+      setErro('Informe o nome do militar.');
+      return;
+    }
     const data = dataNascimento.trim();
     if (!dataNascimentoCadastroValida(data) || idade == null) {
       setErro('Informe a data de nascimento no formato DD/MM/AAAA.');
       return;
     }
+    if (!posto.trim()) {
+      setErro(categoria === 'Oficiais' ? 'Selecione o posto.' : 'Selecione a graduação.');
+      return;
+    }
     setSalvando(true);
     setErro('');
     try {
-      await onSalvar({ dataNascimento: data, sexo });
+      await onSalvar({
+        nome: nomeTrim,
+        categoria,
+        oficial: categoria === 'Oficiais' ? posto : undefined,
+        praca: categoria === 'Praças' ? posto : undefined,
+        dataNascimento: data,
+        sexo,
+      });
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível salvar.');
       setSalvando(false);
@@ -79,7 +138,7 @@ export function EditarIdadeGeneroMilitarModal({
         if (salvando) return;
         onClose();
       }}
-      title="Idade e gênero"
+      title="Editar dados do militar"
       icon={<UserRound size={20} color="#FFFFFF" strokeWidth={2.2} />}
       footer={
         <View style={styles.footer}>
@@ -108,12 +167,84 @@ export function EditarIdadeGeneroMilitarModal({
       }
     >
       <View style={styles.body}>
-        <Text style={[styles.nome, { color: theme.text }]} numberOfLines={2}>
-          {nome}
-        </Text>
-        {nip ? (
-          <Text style={[styles.nip, { color: theme.textSecondary }]}>NIP {nip}</Text>
+        {nipFmt ? (
+          <Text style={[styles.nip, { color: theme.textSecondary }]}>NIP {nipFmt}</Text>
         ) : null}
+
+        <Text style={[styles.label, styles.labelFirst, { color: theme.textMuted }]}>Categoria</Text>
+        <View style={[styles.segmented, { borderColor: theme.border }]}>
+          {(['Oficiais', 'Praças'] as const).map((cat) => {
+            const active = categoria === cat;
+            return (
+              <TouchableOpacity
+                key={cat}
+                accessibilityLabel={cat}
+                onPress={() => setCategoriaComPosto(cat)}
+                style={[
+                  styles.segmentBtn,
+                  {
+                    backgroundColor: active
+                      ? theme.isDark
+                        ? 'rgba(37,99,235,0.35)'
+                        : 'rgba(37,99,235,0.12)'
+                      : theme.backgroundSecondary,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    { color: active ? theme.primary : theme.textSecondary },
+                  ]}
+                >
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.label, { color: theme.textMuted }]}>
+          {categoria === 'Oficiais' ? 'Posto' : 'Graduação'}
+        </Text>
+        <View style={styles.chipsWrap}>
+          {opcoesPosto.map((opt) => {
+            const active = posto === opt;
+            return (
+              <TouchableOpacity
+                key={opt}
+                accessibilityLabel={opt}
+                onPress={() => setPosto(opt)}
+                style={[
+                  styles.chip,
+                  {
+                    borderColor: active ? theme.primary : theme.border,
+                    backgroundColor: active
+                      ? theme.isDark
+                        ? 'rgba(37,99,235,0.35)'
+                        : 'rgba(37,99,235,0.12)'
+                      : theme.backgroundSecondary,
+                  },
+                ]}
+              >
+                <Text
+                  style={[styles.chipText, { color: active ? theme.primary : theme.textSecondary }]}
+                >
+                  {opt}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.label, { color: theme.textMuted }]}>Nome</Text>
+        <AplicarTafInput
+          value={nome}
+          onChangeText={setNome}
+          placeholder="Nome completo"
+          autoCapitalize="words"
+          accessibilityLabel="Nome do militar"
+        />
 
         <Text style={[styles.label, { color: theme.textMuted }]}>Data de nascimento</Text>
         <AplicarTafInput
@@ -173,8 +304,7 @@ export function EditarIdadeGeneroMilitarModal({
 
 const styles = StyleSheet.create({
   body: { gap: 8 },
-  nome: { fontSize: 16, fontWeight: '800', textAlign: 'center' },
-  nip: { fontSize: 13, fontWeight: '600', textAlign: 'center', marginBottom: 6 },
+  nip: { fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 2 },
   label: {
     fontSize: 11,
     fontWeight: '700',
@@ -182,6 +312,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 8,
   },
+  labelFirst: { marginTop: 0 },
   idadeHint: { fontSize: 13, fontWeight: '600' },
   segmented: {
     flexDirection: 'row',
@@ -195,6 +326,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   segmentText: { fontSize: 13, fontWeight: '800' },
+  chipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chipText: { fontSize: 12, fontWeight: '800' },
   erro: { fontSize: 13, fontWeight: '600', marginTop: 4 },
   hint: { fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 4 },
   footer: { flexDirection: 'row', gap: 10, width: '100%' },

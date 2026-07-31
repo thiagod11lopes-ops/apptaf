@@ -10,7 +10,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { PenLine, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, PenLine, Sparkles } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
@@ -245,6 +245,70 @@ export function AssinaturaFuturistaError({ message }: { message: string }) {
   return <Text style={[styles.erro, { color: theme.loss }]}>{message}</Text>;
 }
 
+/** Setas para navegar entre rúbricas de candidatos. */
+export function AssinaturaFuturistaNav({
+  current,
+  total,
+  onPrev,
+  onNext,
+  accent = 'cyan',
+}: {
+  /** Índice 1-based para exibição. */
+  current: number;
+  total: number;
+  onPrev?: () => void;
+  onNext?: () => void;
+  accent?: AssinaturaAccent;
+}) {
+  const { theme } = useTheme();
+  const g = glass(theme);
+  const a = ACCENT[accent];
+  const podePrev = Boolean(onPrev) && current > 1;
+  const podeNext = Boolean(onNext) && current < total;
+
+  return (
+    <View style={styles.navRow}>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Rúbrica anterior"
+        onPress={onPrev}
+        disabled={!podePrev}
+        activeOpacity={0.85}
+        style={[
+          styles.navArrowBtn,
+          {
+            borderColor: podePrev ? a.ring[0] : g.border,
+            backgroundColor: podePrev ? a.glow : g.highlight,
+            opacity: podePrev ? 1 : 0.4,
+          },
+        ]}
+      >
+        <ChevronLeft size={22} color={podePrev ? a.ring[0] : theme.textMuted} strokeWidth={2.6} />
+      </TouchableOpacity>
+      <Text style={[styles.navLabel, { color: theme.textSecondary }]}>
+        {current} / {total}
+      </Text>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Próxima rúbrica"
+        onPress={onNext}
+        disabled={!podeNext}
+        activeOpacity={0.85}
+        style={[
+          styles.navArrowBtn,
+          {
+            borderColor: podeNext ? a.ring[0] : g.border,
+            backgroundColor: podeNext ? a.glow : g.highlight,
+            opacity: podeNext ? 1 : 0.4,
+          },
+        ]}
+      >
+        <ChevronRight size={22} color={podeNext ? a.ring[0] : theme.textMuted} strokeWidth={2.6} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export function AssinaturaFuturistaBtnRow({ children }: { children: React.ReactNode }) {
   return <View style={styles.footerBtns}>{children}</View>;
 }
@@ -443,6 +507,28 @@ const styles = StyleSheet.create({
   backBtnText: {
     fontSize: 13,
     fontWeight: '800',
+  },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 14,
+  },
+  navArrowBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+    minWidth: 56,
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
   metaChip: {
     borderWidth: 1,

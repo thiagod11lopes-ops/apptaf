@@ -81,6 +81,7 @@ import {
   AssinaturaFuturistaScroll,
   AssinaturaFuturistaCard,
   AssinaturaFuturistaHeader,
+  AssinaturaFuturistaNav,
   AssinaturaFuturistaMetaChip,
   AssinaturaFuturistaCanvas,
   AssinaturaFuturistaError,
@@ -96,6 +97,7 @@ import {
   type TafProvaTempoModalProva,
 } from '../components/taf/TafProvaTempoModal';
 import { LabelNip } from '../components/LabelNip';
+import { RubricaCell } from '../components/RubricaThumb';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { addSessaoAplicacao, getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
 import {
@@ -106,7 +108,11 @@ import {
   type ProvaAtivaSessionV1,
 } from '../services/provaAtivaSessionStorage';
 import { aplicarRubricasEmCadastros } from '../utils/persistirRubricaCadastro';
-import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
+import {
+  normalizarRubricaSvgDataUrl,
+  RUBRICA_COR_FUNDO,
+  RUBRICA_COR_TRACO,
+} from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
   buscarRegistroModalidadeExistente,
@@ -1606,24 +1612,87 @@ export default function AplicarTAFScreen() {
     setErroRubricaNatacao('');
     setRubricaStrokes([]);
     setRubricaStrokeAtual([]);
-  }, []);
+    setRubricasNatacaoSvg((prev) => {
+      const next = [...prev];
+      if (indiceRubricaNatacao < next.length) next[indiceRubricaNatacao] = '';
+      return next;
+    });
+    setListaResultadosRubricaNatacao((prev) => {
+      if (!prev) return prev;
+      const atualizados = prev.map((item, idx) =>
+        idx === indiceRubricaNatacao
+          ? { ...item, rubricaCandidato: undefined, rubricaCandidatoSvg: undefined }
+          : item,
+      );
+      pendingResultadosNavRef.current = atualizados;
+      return atualizados;
+    });
+  }, [indiceRubricaNatacao]);
 
-  const confirmarRubricaNatacao = useCallback(() => {
+  const buildSvgRubricaAtual = useCallback((): string | null => {
     const strokesProntos = [
       ...rubricaStrokes.filter((s) => s.length > 0),
       ...(rubricaStrokeAtual.length > 0 ? [rubricaStrokeAtual] : []),
     ];
-    if (strokesProntos.length === 0) {
-      setErroRubricaNatacao('Desenhe a rúbrica do candidato para continuar.');
-      return;
-    }
-    const rubricaSvgAtual = buildRubricaSvgDataUrl(
+    if (strokesProntos.length === 0) return null;
+    return buildRubricaSvgDataUrl(
       strokesProntos,
       rubricaCanvasWidth,
       RUBRICA_NATIVA_ALTURA,
       RUBRICA_COR_TRACO,
       RUBRICA_COR_FUNDO,
     );
+  }, [rubricaCanvasWidth, rubricaStrokeAtual, rubricaStrokes]);
+
+  const aplicarSvgNoIndiceRubrica = useCallback(
+    (index: number, svg: string, listaBase: ResultadoCorridaItem[]) => {
+      const atualizados = listaBase.map((item, idx) =>
+        idx === index
+          ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: svg }
+          : item,
+      );
+      setRubricasNatacaoSvg((prev) => {
+        const next = [...prev];
+        while (next.length < atualizados.length) next.push('');
+        next[index] = svg;
+        return next;
+      });
+      pendingResultadosNavRef.current = atualizados;
+      setListaResultadosRubricaNatacao(atualizados);
+      return atualizados;
+    },
+    [],
+  );
+
+  const irParaRubricaIndex = useCallback(
+    (novoIndex: number) => {
+      const res = listaResultadosRubricaNatacao ?? pendingResultadosNavRef.current;
+      if (!res || novoIndex < 0 || novoIndex >= res.length) return;
+      if (novoIndex === indiceRubricaNatacao) return;
+      const svgNovo = buildSvgRubricaAtual();
+      if (svgNovo) {
+        aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res);
+      }
+      setIndiceRubricaNatacao(novoIndex);
+      setErroRubricaNatacao('');
+    },
+    [
+      aplicarSvgNoIndiceRubrica,
+      buildSvgRubricaAtual,
+      indiceRubricaNatacao,
+      listaResultadosRubricaNatacao,
+    ],
+  );
+
+  const onVoltarRubricaCandidato = useCallback(() => {
+    if (indiceRubricaNatacao <= 0) {
+      cancelarFluxoRubricaCandidatos();
+      return;
+    }
+    irParaRubricaIndex(indiceRubricaNatacao - 1);
+  }, [cancelarFluxoRubricaCandidatos, indiceRubricaNatacao, irParaRubricaIndex]);
+
+  const confirmarRubricaNatacao = useCallback(() => {
     const res = listaResultadosRubricaNatacao ?? pendingResultadosNavRef.current;
     if (!res || res.length === 0) {
       setModalRubricaNatacaoVisible(false);
@@ -1635,22 +1704,27 @@ export default function AplicarTAFScreen() {
       setRubricaStrokeAtual([]);
       return;
     }
-    const atualizados = res.map((item, idx) =>
-      idx === indiceRubricaNatacao
-        ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: rubricaSvgAtual }
-        : item,
-    );
-    setRubricasNatacaoSvg((prev) => {
-      const next = [...prev];
-      next[indiceRubricaNatacao] = rubricaSvgAtual;
-      return next;
-    });
-    pendingResultadosNavRef.current = atualizados;
-    setListaResultadosRubricaNatacao(atualizados);
+    const svgNovo = buildSvgRubricaAtual();
+    const svgExistente =
+      (res[indiceRubricaNatacao]?.rubricaCandidatoSvg || '').trim() ||
+      (rubricasNatacaoSvg[indiceRubricaNatacao] || '').trim();
+    if (!svgNovo && !svgExistente) {
+      setErroRubricaNatacao('Desenhe a rúbrica do candidato para continuar.');
+      return;
+    }
+    const atualizados = svgNovo
+      ? aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res)
+      : res;
     const proximo = indiceRubricaNatacao + 1;
     if (proximo < atualizados.length) {
       setIndiceRubricaNatacao(proximo);
       setErroRubricaNatacao('');
+      return;
+    }
+    const faltando = atualizados.findIndex((r) => !(r.rubricaCandidatoSvg || '').trim());
+    if (faltando >= 0) {
+      setIndiceRubricaNatacao(faltando);
+      setErroRubricaNatacao('Desenhe a rúbrica de todos os candidatos antes de finalizar.');
       return;
     }
     setModalRubricaNatacaoVisible(false);
@@ -1674,14 +1748,15 @@ export default function AplicarTAFScreen() {
     pendingResultadosNavRef.current = null;
     setModalParcialAviso(null);
   }, [
+    aplicarSvgNoIndiceRubrica,
+    buildSvgRubricaAtual,
     indiceRubricaNatacao,
+    iniciarFinalizacaoComAssinaturaAplicador,
     listaResultadosRubricaNatacao,
     modalParcialAviso,
-    iniciarFinalizacaoComAssinaturaAplicador,
-    rubricaCanvasWidth,
-    rubricaStrokeAtual,
-    rubricaStrokes,
+    rubricasNatacaoSvg,
   ]);
+
   /** Ao trocar de participante ou abrir o modal: limpa a área de assinatura para não misturar traços. */
   useEffect(() => {
     if (!modalRubricaNatacaoVisible) return;
@@ -3077,20 +3152,7 @@ export default function AplicarTAFScreen() {
         visible={modalRubricaNatacaoVisible && !continuidadeProvaVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          Alert.alert(
-            'Cancelar rúbricas?',
-            'Os resultados ainda não foram lançados. Deseja voltar à prova?',
-            [
-              { text: 'Continuar', style: 'cancel' },
-              {
-                text: 'Voltar à prova',
-                style: 'destructive',
-                onPress: cancelarFluxoRubricaCandidatos,
-              },
-            ],
-          );
-        }}
+        onRequestClose={onVoltarRubricaCandidato}
         accessibilityViewIsModal
       >
         <AssinaturaFuturistaOverlay
@@ -3112,6 +3174,8 @@ export default function AplicarTAFScreen() {
                       title="Assinatura do candidato"
                       subtitle="Não foi possível carregar o participante."
                       accent="cyan"
+                      onBack={cancelarFluxoRubricaCandidatos}
+                      backLabel="Voltar"
                     />
                     <AssinaturaFuturistaBtnRow>
                       <AssinaturaFuturistaBtnPrimary
@@ -3135,6 +3199,11 @@ export default function AplicarTAFScreen() {
                       : 'Corrida';
               const temTracoRubrica =
                 rubricaStrokes.some((s) => s.length > 0) || rubricaStrokeAtual.length > 0;
+              const svgSalvoUri = normalizarRubricaSvgDataUrl(
+                participanteAtual.rubricaCandidatoSvg || rubricasNatacaoSvg[indiceRubricaNatacao],
+              );
+              const temRubricaSalva = Boolean(svgSalvoUri);
+              const podeAvancar = temTracoRubrica || temRubricaSalva;
               const tempoStr = formatMsByModality(
                 modProva === 'natacao' ? 'natacao' : 'corrida',
                 participanteAtual.tempoMs,
@@ -3147,7 +3216,27 @@ export default function AplicarTAFScreen() {
                     title="Assinatura do candidato"
                     subtitle={`Participante ${indiceRubricaNatacao + 1} de ${totalLista} · ${tituloModalidade}`}
                     accent="cyan"
+                    onBack={onVoltarRubricaCandidato}
+                    backLabel={indiceRubricaNatacao === 0 ? 'Voltar à prova' : 'Anterior'}
                   />
+
+                  {totalLista > 1 ? (
+                    <AssinaturaFuturistaNav
+                      current={indiceRubricaNatacao + 1}
+                      total={totalLista}
+                      accent="cyan"
+                      onPrev={
+                        indiceRubricaNatacao > 0
+                          ? () => irParaRubricaIndex(indiceRubricaNatacao - 1)
+                          : undefined
+                      }
+                      onNext={
+                        indiceRubricaNatacao + 1 < totalLista && podeAvancar
+                          ? () => irParaRubricaIndex(indiceRubricaNatacao + 1)
+                          : undefined
+                      }
+                    />
+                  ) : null}
 
                   <AssinaturaFuturistaMetaChip
                     label="Militar"
@@ -3175,29 +3264,47 @@ export default function AplicarTAFScreen() {
                       onResponderTerminate: finalizarRubricaStroke,
                     }}
                   >
-                    <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>
-                      {rubricaStrokes.map((stroke, idx) => (
-                        <SvgPath
-                          key={`stroke-${indiceRubricaNatacao}-${idx}`}
-                          d={buildStrokePath(stroke)}
-                          stroke={RUBRICA_COR_TRACO}
-                          strokeWidth={2.5}
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                    {!temTracoRubrica && svgSalvoUri ? (
+                      <View
+                        style={{
+                          width: '100%',
+                          height: RUBRICA_NATIVA_ALTURA,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        pointerEvents="none"
+                      >
+                        <RubricaCell
+                          svgUri={svgSalvoUri}
+                          maxWidth={rubricaCanvasWidth || 420}
+                          maxHeight={RUBRICA_NATIVA_ALTURA}
                         />
-                      ))}
-                      {rubricaStrokeAtual.length > 0 ? (
-                        <SvgPath
-                          d={buildStrokePath(rubricaStrokeAtual)}
-                          stroke={RUBRICA_COR_TRACO}
-                          strokeWidth={2.5}
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      ) : null}
-                    </Svg>
+                      </View>
+                    ) : (
+                      <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>
+                        {rubricaStrokes.map((stroke, idx) => (
+                          <SvgPath
+                            key={`stroke-${indiceRubricaNatacao}-${idx}`}
+                            d={buildStrokePath(stroke)}
+                            stroke={RUBRICA_COR_TRACO}
+                            strokeWidth={2.5}
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        ))}
+                        {rubricaStrokeAtual.length > 0 ? (
+                          <SvgPath
+                            d={buildStrokePath(rubricaStrokeAtual)}
+                            stroke={RUBRICA_COR_TRACO}
+                            strokeWidth={2.5}
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        ) : null}
+                      </Svg>
+                    )}
                   </AssinaturaFuturistaCanvas>
 
                   {erroRubricaNatacao ? (
@@ -3212,7 +3319,7 @@ export default function AplicarTAFScreen() {
                     <AssinaturaFuturistaBtnPrimary
                       label={indiceRubricaNatacao + 1 < totalLista ? 'Próximo' : 'Finalizar'}
                       onPress={confirmarRubricaNatacao}
-                      disabled={!temTracoRubrica}
+                      disabled={!podeAvancar}
                       accent="cyan"
                       flex
                     />

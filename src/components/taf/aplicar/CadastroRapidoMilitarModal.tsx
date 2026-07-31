@@ -147,36 +147,6 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
     </View>
   );
 
-  const footerForm = (
-    <View style={styles.footer}>
-      <PressableScale
-        onPress={() => {
-          if (salvando) return;
-          setEtapa('aviso');
-          setErro('');
-        }}
-        disabled={salvando}
-        style={[styles.btnGhost, { borderColor: theme.border, opacity: salvando ? 0.5 : 1 }]}
-      >
-        <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>Voltar</Text>
-      </PressableScale>
-      <PressableScale onPress={() => void salvar()} disabled={salvando} style={styles.btnPrimaryOuter}>
-        <LinearGradient
-          colors={[...theme.tokens.gradientPrimaryBtn]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.btnPrimary}
-        >
-          {salvando ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.btnPrimaryText}>Salvar cadastro</Text>
-          )}
-        </LinearGradient>
-      </PressableScale>
-    </View>
-  );
-
   return (
     <ModernModal
       visible={visible}
@@ -190,7 +160,7 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
           <UserPlus size={20} color="#FFFFFF" strokeWidth={2.2} />
         )
       }
-      footer={etapa === 'aviso' ? footerAviso : footerForm}
+      footer={etapa === 'aviso' ? footerAviso : undefined}
     >
       {etapa === 'aviso' ? (
         <View style={styles.body}>
@@ -339,6 +309,38 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
           </View>
 
           {erro ? <Text style={[styles.erro, { color: theme.error }]}>{erro}</Text> : null}
+
+          <View style={styles.footerInline}>
+            <PressableScale
+              onPress={() => {
+                if (salvando) return;
+                setEtapa('aviso');
+                setErro('');
+              }}
+              disabled={salvando}
+              style={[styles.btnGhost, { borderColor: theme.border, opacity: salvando ? 0.5 : 1 }]}
+            >
+              <Text style={[styles.btnGhostText, { color: theme.textSecondary }]}>Voltar</Text>
+            </PressableScale>
+            <PressableScale
+              onPress={() => void salvar()}
+              disabled={salvando}
+              style={styles.btnPrimaryOuter}
+            >
+              <LinearGradient
+                colors={[...theme.tokens.gradientPrimaryBtn]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.btnPrimary}
+              >
+                {salvando ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.btnPrimaryText}>Salvar cadastro</Text>
+                )}
+              </LinearGradient>
+            </PressableScale>
+          </View>
         </View>
       )}
     </ModernModal>
@@ -392,6 +394,13 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '800' },
   erro: { fontSize: 13, fontWeight: '600', marginTop: 4 },
   footer: { flexDirection: 'row', gap: 10, width: '100%' },
+  footerInline: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginTop: 16,
+    marginBottom: 8,
+  },
   btnGhost: {
     flex: 1,
     paddingVertical: 12,

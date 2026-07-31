@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -49,98 +50,121 @@ export function ModernModal({
     (document.activeElement as HTMLElement | null)?.blur?.();
   }, [visible]);
 
+  const header = (
+    <LinearGradient
+      colors={[...t.gradientHeader]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.header}
+    >
+      {icon ? <View style={styles.iconBox}>{icon}</View> : null}
+      <Text style={styles.headerTitle}>{title}</Text>
+      {dismissable ? (
+        <PressableScale onPress={onClose} style={styles.closeBtn} accessibilityLabel="Fechar">
+          <X size={18} color="#FFFFFF" strokeWidth={2.5} />
+        </PressableScale>
+      ) : (
+        <View style={styles.closeBtn} />
+      )}
+    </LinearGradient>
+  );
+
+  const footerBar = footer ? (
+    <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.surface }]}>
+      {footer}
+    </View>
+  ) : null;
+
+  if (fullScreen) {
+    return (
+      <AppModal
+        visible={visible}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={dismissable ? onClose : undefined}
+        accessibilityViewIsModal
+      >
+        <KeyboardAvoidingView
+          style={[styles.modalRoot, styles.modalRootFull, { backgroundColor: theme.surface }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View
+            style={[
+              styles.shellFull,
+              {
+                backgroundColor: theme.surface,
+                paddingTop: Math.max(insets.top, Platform.OS === 'web' ? 12 : 0),
+                paddingBottom: Math.max(insets.bottom, 8),
+                paddingLeft: insets.left,
+                paddingRight: insets.right,
+              },
+            ]}
+          >
+            {header}
+            <View style={styles.bodyFullWrap}>
+              <LinearGradient
+                colors={[...t.gradientPanelBody]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+              <ScrollView
+                style={styles.scrollFull}
+                contentContainerStyle={styles.scrollContentFull}
+                showsVerticalScrollIndicator
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+              >
+                {children}
+              </ScrollView>
+            </View>
+            {footerBar}
+          </View>
+        </KeyboardAvoidingView>
+      </AppModal>
+    );
+  }
+
   return (
     <AppModal
       visible={visible}
-      transparent={!fullScreen}
-      animationType={fullScreen ? 'slide' : 'fade'}
+      transparent
+      animationType="fade"
       onRequestClose={dismissable ? onClose : undefined}
       accessibilityViewIsModal
     >
-      <View
-        style={[
-          styles.modalRoot,
-          fullScreen ? styles.modalRootFull : null,
-          fullScreen ? { backgroundColor: theme.surface } : null,
-        ]}
-      >
-        {!fullScreen ? (
-          <Pressable
-            style={[styles.overlay, { backgroundColor: t.overlayBg }]}
-            onPress={dismissable ? onClose : undefined}
-          >
-            {Platform.OS === 'ios' ? (
-              <BlurView intensity={24} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-            ) : null}
-          </Pressable>
-        ) : null}
-        <View
-          style={
-            fullScreen
-              ? [
-                  styles.shellFull,
-                  { backgroundColor: theme.surface },
-                  {
-                    paddingTop: Math.max(insets.top, Platform.OS === 'web' ? 12 : 0),
-                    paddingBottom: Math.max(insets.bottom, 8),
-                    paddingLeft: insets.left,
-                    paddingRight: insets.right,
-                  },
-                ]
-              : [styles.center]
-          }
-          pointerEvents="box-none"
+      <View style={styles.modalRoot}>
+        <Pressable
+          style={[styles.overlay, { backgroundColor: t.overlayBg }]}
+          onPress={dismissable ? onClose : undefined}
         >
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={24} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          ) : null}
+        </Pressable>
+        <View style={styles.center} pointerEvents="box-none">
           <View
-            style={
-              fullScreen
-                ? styles.shellInnerFull
-                : [
-                    styles.shell,
-                    { backgroundColor: theme.surface },
-                    Platform.OS === 'web'
-                      ? ({ boxShadow: t.shadowModal } as object)
-                      : { elevation: 16 },
-                  ]
-            }
+            style={[
+              styles.shell,
+              { backgroundColor: theme.surface },
+              Platform.OS === 'web'
+                ? ({ boxShadow: t.shadowModal } as object)
+                : { elevation: 16 },
+            ]}
           >
-            <LinearGradient
-              colors={[...t.gradientHeader]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.header}
-            >
-              {icon ? <View style={styles.iconBox}>{icon}</View> : null}
-              <Text style={styles.headerTitle}>{title}</Text>
-              {dismissable ? (
-                <PressableScale onPress={onClose} style={styles.closeBtn} accessibilityLabel="Fechar">
-                  <X size={18} color="#FFFFFF" strokeWidth={2.5} />
-                </PressableScale>
-              ) : (
-                <View style={styles.closeBtn} />
-              )}
-            </LinearGradient>
+            {header}
             <LinearGradient
               colors={[...t.gradientPanelBody]}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 1 }}
-              style={[
-                styles.body,
-                fullScreen ? styles.bodyFull : { maxHeight: maxBodyHeight },
-              ]}
+              style={[styles.body, { maxHeight: maxBodyHeight }]}
             >
-              <ScrollView
-                style={fullScreen ? styles.scrollFull : undefined}
-                contentContainerStyle={fullScreen ? styles.scrollContentFull : undefined}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 {children}
               </ScrollView>
             </LinearGradient>
-            {footer ? (
-              <View style={[styles.footer, { borderTopColor: theme.border }]}>{footer}</View>
-            ) : null}
+            {footerBar}
           </View>
         </View>
       </View>
@@ -186,19 +210,16 @@ const styles = StyleSheet.create({
   shellFull: {
     flex: 1,
     width: '100%',
-    height: '100%',
+    minHeight: 0,
     alignSelf: 'stretch',
-  },
-  shellInnerFull: {
-    flex: 1,
-    width: '100%',
-    overflow: 'hidden',
+    flexDirection: 'column',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     gap: 12,
+    flexShrink: 0,
   },
   iconBox: {
     width: 36,
@@ -226,23 +247,32 @@ const styles = StyleSheet.create({
     maxHeight: 420,
     padding: 16,
   },
-  bodyFull: {
+  /** Área rolável entre header e footer — não pode “crescer” por cima dos botões. */
+  bodyFullWrap: {
     flex: 1,
-    maxHeight: undefined,
     minHeight: 0,
+    overflow: 'hidden',
+    position: 'relative',
   },
   scrollFull: {
     flex: 1,
+    minHeight: 0,
   },
   scrollContentFull: {
     flexGrow: 1,
-    paddingBottom: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 28,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    flexWrap: 'wrap',
     gap: 10,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
+    flexShrink: 0,
   },
 });

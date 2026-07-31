@@ -12,10 +12,13 @@ import { BlurView } from 'expo-blur';
 import {
   Cloud,
   CloudDownload,
+  CloudOff,
   Database,
   Download,
   ShieldCheck,
   Sparkles,
+  Wifi,
+  WifiOff,
 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
@@ -37,12 +40,33 @@ import {
   type DailyBackupProgress,
 } from '../services/dailyBackupService';
 import { formatElapsedClock } from '../offline-first/sync/syncFormatters';
-import { getConnectivityState } from '../offline-first/sync/ConnectivityMonitor';
+import {
+  connectivityMonitor,
+  getConnectivityState,
+} from '../offline-first/sync/ConnectivityMonitor';
 import { getFirebaseAuth } from '../config/firebase';
 import {
   getSyncManagerState,
   SYNC_AUTH_REQUIRED_MESSAGE,
 } from '../offline-first/sync/SyncManager';
+
+/** Confirma internet real antes de tentar sync na nuvem. */
+async function resolveBackupOnline(): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return false;
+  }
+  try {
+    const probed = await connectivityMonitor.refresh();
+    if (probed === 'OFFLINE') return false;
+    if (probed === 'ONLINE' || probed === 'SYNCING') return true;
+  } catch {
+    // cai no fallback abaixo
+  }
+  const state = getConnectivityState();
+  if (state === 'OFFLINE') return false;
+  if (state === 'ONLINE' || state === 'SYNCING') return true;
+  return typeof navigator === 'undefined' || navigator.onLine !== false;
+}
 
 type GatePhase =
   | 'checking'
@@ -129,7 +153,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
   const ts = theme.textStyles;
   const t = theme.tokens;
   const { isAuthenticated, authReady } = useAuth();
-  const { syncUi, startSyncFromToggle, connectivity } = useOfflineSyncState();
+  const { syncUi, startSyncFromToggle } = useOfflineSyncState();
 
   const [phase, setPhase] = useState<GatePhase>('checking');
   const [progress, setProgress] = useState<DailyBackupProgress>({
@@ -140,6 +164,10 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
   const [prepared, setPrepared] = useState<DailyBackupPrepared | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  /** null = ainda verificando; true/false = resultado da ligação com a internet. */
+  const [backupNetOnline, setBackupNetOnline] = useState<boolean | null>(null);
+  /** True se a sync na nuvem concluiu nesta abertura do modal. */
+  const [cloudSyncedForBackup, setCloudSyncedForBackup] = useState(false);
   const startedAtRef = useRef<number | null>(null);
   const syncStartedRef = useRef(false);
   const cancelledRef = useRef(false);
@@ -155,6 +183,8 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     setPrepared(null);
     setError(null);
     setCloudBars(INITIAL_CLOUD_BARS);
+    setBackupNetOnline(null);
+    setCloudSyncedForBackup(false);
     startedAtRef.current = null;
     syncStartedRef.current = false;
   }, []);
@@ -167,41 +197,47 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     }, 1200);
   }, [releaseApp]);
 
+  const goLocalBackupOnly = useCallback(async () => {
+    cloudSyncedThisSessionRef.current = false;
+    setCloudSyncedForBackup(false);
+    await markDailyBackupPendingAfterCloudSync();
+    syncStartedRef.current = false;
+    if (!cancelledRef.current) setPhase('awaiting_backup');
+  }, []);
+
   const runCloudSyncBeforeBackup = useCallback(async (): Promise<void> => {
-    setPhase('syncing_cloud');
     setError(null);
+    setCloudSyncedForBackup(false);
+    setBackupNetOnline(null);
+    setCloudBars(INITIAL_CLOUD_BARS);
+    setPhase('checking');
+    startedAtRef.current = Date.now();
+    syncStartedRef.current = false;
+
+    const online = await resolveBackupOnline();
+    if (cancelledRef.current) return;
+    setBackupNetOnline(online);
+
+    // Sem internet: pula sync e vai direto ao botão de backup (dados locais).
+    if (!online) {
+      await goLocalBackupOnly();
+      return;
+    }
+
+    const hasSession = Boolean(getFirebaseAuth()?.currentUser) && isAuthenticated;
+    if (!authReady || !hasSession) {
+      await goLocalBackupOnly();
+      return;
+    }
+
+    setPhase('syncing_cloud');
+    syncStartedRef.current = true;
     setCloudBars({
-      verifyPercent: 8,
-      verifyLabel: 'Verificando conexão e sessão…',
+      verifyPercent: 12,
+      verifyLabel: 'Internet OK — verificando sessão e nuvem…',
       updatePercent: 0,
       updateLabel: 'Aguardando atualizações da nuvem…',
     });
-    startedAtRef.current = Date.now();
-    syncStartedRef.current = true;
-
-    const online =
-      connectivity === 'ONLINE' ||
-      getSyncManagerState().syncUi.isOnline ||
-      (typeof navigator !== 'undefined' && navigator.onLine !== false) ||
-      getConnectivityState() === 'ONLINE';
-    const hasSession = Boolean(getFirebaseAuth()?.currentUser) && isAuthenticated;
-
-    if (!authReady || !hasSession || !online) {
-      cloudSyncedThisSessionRef.current = false;
-      await markDailyBackupPendingAfterCloudSync();
-      setCloudBars({
-        verifyPercent: 100,
-        verifyLabel: !online
-          ? 'Sem internet — verificação concluída com dados locais'
-          : 'Sem sessão na nuvem — verificação concluída com dados locais',
-        updatePercent: 100,
-        updateLabel: 'Backup será pedido de novo após a 1ª sync com a nuvem',
-      });
-      await wait(450);
-      if (!cancelledRef.current) setPhase('awaiting_backup');
-      syncStartedRef.current = false;
-      return;
-    }
 
     setCloudBars((prev) => ({
       ...prev,
@@ -238,32 +274,16 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
 
     if (!result.ok) {
       const msg = result.error?.trim() || 'Não foi possível sincronizar com a nuvem.';
-      if (msg === SYNC_AUTH_REQUIRED_MESSAGE || msg.toLowerCase().includes('sessão')) {
-        cloudSyncedThisSessionRef.current = false;
-        await markDailyBackupPendingAfterCloudSync();
-        setCloudBars({
-          verifyPercent: 100,
-          verifyLabel: 'Sessão indisponível — seguindo com dados locais',
-          updatePercent: 100,
-          updateLabel: 'Backup será pedido de novo após a 1ª sync com a nuvem',
-        });
-        await wait(400);
-        if (!cancelledRef.current) setPhase('awaiting_backup');
-        syncStartedRef.current = false;
-        return;
-      }
-      if (msg.toLowerCase().includes('offline') || msg.toLowerCase().includes('internet')) {
-        cloudSyncedThisSessionRef.current = false;
-        await markDailyBackupPendingAfterCloudSync();
-        setCloudBars({
-          verifyPercent: 100,
-          verifyLabel: 'Sem conexão — verificação local concluída',
-          updatePercent: 100,
-          updateLabel: 'Backup será pedido de novo após a 1ª sync com a nuvem',
-        });
-        await wait(400);
-        if (!cancelledRef.current) setPhase('awaiting_backup');
-        syncStartedRef.current = false;
+      if (
+        msg === SYNC_AUTH_REQUIRED_MESSAGE ||
+        msg.toLowerCase().includes('sessão') ||
+        msg.toLowerCase().includes('offline') ||
+        msg.toLowerCase().includes('internet')
+      ) {
+        if (msg.toLowerCase().includes('offline') || msg.toLowerCase().includes('internet')) {
+          setBackupNetOnline(false);
+        }
+        await goLocalBackupOnly();
         return;
       }
 
@@ -275,6 +295,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
 
     const last = getSyncManagerState().syncUi.lastSync;
     cloudSyncedThisSessionRef.current = true;
+    setCloudSyncedForBackup(true);
     await clearDailyBackupPendingAfterCloudSync();
     setCloudBars({
       verifyPercent: 100,
@@ -288,7 +309,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     await wait(350);
     if (!cancelledRef.current) setPhase('awaiting_backup');
     syncStartedRef.current = false;
-  }, [authReady, connectivity, isAuthenticated, startSyncFromToggle]);
+  }, [authReady, goLocalBackupOnly, isAuthenticated, startSyncFromToggle]);
 
   // Espelha o progresso real do SyncManager nas barras modernas.
   useEffect(() => {
@@ -412,6 +433,8 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
 
       await reopenDailyBackupAfterCloudSync();
       cloudSyncedThisSessionRef.current = true;
+      setCloudSyncedForBackup(true);
+      setBackupNetOnline(true);
       setError(null);
       setPrepared(null);
       startedAtRef.current = Date.now();
@@ -483,6 +506,8 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     if (syncUi.phase !== 'success' && syncUi.phase !== 'already_up_to_date') return;
 
     cloudSyncedThisSessionRef.current = true;
+    setCloudSyncedForBackup(true);
+    setBackupNetOnline(true);
     void clearDailyBackupPendingAfterCloudSync();
     setCloudBars({
       verifyPercent: 100,
@@ -514,22 +539,31 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
 
   const title = useMemo(() => {
     if (phase === 'done') return 'Sistema liberado';
+    if (phase === 'checking') return 'Verificando conexão';
     if (phase === 'syncing_cloud') return 'Atualizando com a nuvem';
-    if (phase === 'awaiting_backup') return 'Pronto para o backup';
+    if (phase === 'awaiting_backup') {
+      return backupNetOnline === false ? 'Backup com dados locais' : 'Pronto para o backup';
+    }
     if (phase === 'awaiting_download') return 'Backup pronto';
     if (phase === 'backing_up') return 'Gerando backup do dia';
     return 'Backup automático do dia';
-  }, [phase]);
+  }, [phase, backupNetOnline]);
 
   const subtitle = useMemo(() => {
-    if (phase === 'checking') return 'Verificando se o backup de hoje já foi realizado…';
+    if (phase === 'checking') {
+      return 'Verificando se há ligação com a internet antes do backup diário…';
+    }
     if (phase === 'syncing_cloud') {
-      return 'Antes do backup, o AppTAF confere e baixa atualizações da nuvem automaticamente.';
+      return 'Internet detectada. Atualizando com os dados da nuvem antes do backup.';
     }
     if (phase === 'awaiting_backup') {
-      return cloudSyncedThisSessionRef.current
-        ? 'Dados sincronizados com a nuvem. Toque para gerar e baixar o backup diário obrigatório.'
-        : 'Sem verificação na nuvem agora. Após a 1ª sincronização, o backup será pedido novamente.';
+      if (backupNetOnline === false) {
+        return 'Sem internet. O backup será feito só com os dados locais deste aparelho. Após a 1ª sync na nuvem, o backup será pedido de novo.';
+      }
+      if (cloudSyncedForBackup) {
+        return 'Dados sincronizados com a nuvem. Toque para gerar e baixar o backup diário obrigatório.';
+      }
+      return 'Toque para gerar e baixar o backup diário obrigatório.';
     }
     if (phase === 'awaiting_download') {
       return 'Baixe o arquivo para liberar o uso do AppTAF hoje.';
@@ -537,7 +571,9 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     if (phase === 'done') return 'Seus dados foram salvos. Você já pode continuar.';
     if (phase === 'backing_up') return 'Coletando e gerando CSV, planilha e PDF…';
     return 'O AppTAF só é liberado após o backup diário de todos os dados.';
-  }, [phase]);
+  }, [phase, backupNetOnline, cloudSyncedForBackup]);
+
+  const showCloudProgress = phase === 'syncing_cloud' || (phase === 'awaiting_backup' && cloudSyncedForBackup);
 
   return (
     <>
@@ -592,6 +628,8 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
                       <ShieldCheck size={28} color="#FFFFFF" strokeWidth={2.2} />
                     ) : phase === 'syncing_cloud' ? (
                       <CloudDownload size={28} color="#FFFFFF" strokeWidth={2.2} />
+                    ) : phase === 'awaiting_backup' && backupNetOnline === false ? (
+                      <CloudOff size={28} color="#FFFFFF" strokeWidth={2.2} />
                     ) : phase === 'awaiting_backup' ? (
                       <Cloud size={28} color="#FFFFFF" strokeWidth={2.2} />
                     ) : (
@@ -608,11 +646,67 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
                   <Text style={[ts.caption, styles.subtitle, { color: theme.textSecondary }]}>
                     {subtitle}
                   </Text>
+                  {phase === 'checking' ||
+                  phase === 'syncing_cloud' ||
+                  phase === 'awaiting_backup' ? (
+                    <View
+                      style={[
+                        styles.netBadge,
+                        {
+                          backgroundColor:
+                            backupNetOnline === false
+                              ? isDark
+                                ? 'rgba(245,158,11,0.18)'
+                                : 'rgba(245,158,11,0.14)'
+                              : backupNetOnline === true
+                                ? isDark
+                                  ? 'rgba(16,185,129,0.18)'
+                                  : 'rgba(16,185,129,0.12)'
+                                : isDark
+                                  ? 'rgba(148,163,184,0.16)'
+                                  : 'rgba(148,163,184,0.14)',
+                          borderColor:
+                            backupNetOnline === false
+                              ? 'rgba(245,158,11,0.45)'
+                              : backupNetOnline === true
+                                ? 'rgba(16,185,129,0.4)'
+                                : theme.border,
+                        },
+                      ]}
+                    >
+                      {backupNetOnline === false ? (
+                        <WifiOff size={14} color="#d97706" strokeWidth={2.4} />
+                      ) : backupNetOnline === true ? (
+                        <Wifi size={14} color="#059669" strokeWidth={2.4} />
+                      ) : (
+                        <Cloud size={14} color={theme.textMuted} strokeWidth={2.2} />
+                      )}
+                      <Text
+                        style={[
+                          styles.netBadgeText,
+                          {
+                            color:
+                              backupNetOnline === false
+                                ? '#d97706'
+                                : backupNetOnline === true
+                                  ? '#059669'
+                                  : theme.textMuted,
+                          },
+                        ]}
+                      >
+                        {backupNetOnline === false
+                          ? 'Sem ligação com a internet'
+                          : backupNetOnline === true
+                            ? 'Com ligação com a internet'
+                            : 'Verificando ligação com a internet…'}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
 
               <View style={styles.body}>
-                {phase === 'syncing_cloud' || phase === 'awaiting_backup' ? (
+                {showCloudProgress ? (
                   <View
                     style={[
                       styles.progressCard,
@@ -645,6 +739,24 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
                       textColor={theme.text}
                       mutedColor={theme.textMuted}
                     />
+                  </View>
+                ) : phase === 'awaiting_backup' && backupNetOnline === false ? (
+                  <View
+                    style={[
+                      styles.progressCard,
+                      {
+                        backgroundColor: isDark ? 'rgba(15,23,42,0.55)' : 'rgba(255,251,235,0.95)',
+                        borderColor: isDark ? 'rgba(245,158,11,0.35)' : 'rgba(245,158,11,0.4)',
+                      },
+                    ]}
+                  >
+                    <View style={styles.offlineLocalRow}>
+                      <CloudOff size={22} color="#d97706" strokeWidth={2.2} />
+                      <Text style={[styles.offlineLocalText, { color: theme.textSecondary }]}>
+                        Backup apenas com dados locais. A nuvem será consultada quando houver
+                        internet.
+                      </Text>
+                    </View>
                   </View>
                 ) : (
                   <View
@@ -718,9 +830,11 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
                   <View style={styles.workingRow}>
                     <ActivityIndicator size="small" color={theme.primary} />
                     <Text style={[ts.caption, { color: theme.textSecondary, flex: 1 }]}>
-                      {phase === 'syncing_cloud'
-                        ? 'Não feche o aplicativo durante a atualização com a nuvem.'
-                        : 'Não feche o aplicativo até concluir o backup diário.'}
+                      {phase === 'checking'
+                        ? 'Confirmando se há internet…'
+                        : phase === 'syncing_cloud'
+                          ? 'Não feche o aplicativo durante a atualização com a nuvem.'
+                          : 'Não feche o aplicativo até concluir o backup diário.'}
                     </Text>
                   </View>
                 ) : null}
@@ -834,6 +948,32 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   subtitle: { lineHeight: 18, marginTop: 2 },
+  netBadge: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  netBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  offlineLocalRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  offlineLocalText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
   body: {
     paddingHorizontal: 22,
     paddingBottom: 8,

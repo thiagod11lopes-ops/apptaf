@@ -135,7 +135,7 @@ export default function ConfiguracoesScreen() {
             titleColor={theme.loss}
             expanded={dangerOpen}
             onToggle={() => setDangerOpen((v) => !v)}
-            hint="Exclusões irreversíveis. Use as opções específicas para apagar só testes, só testes do Modo Teste, só fatores de risco ou só restritos/dispensas, ou a exclusão total para esvaziar o sistema. Sempre há confirmação antes de apagar."
+            hint="Exclusões irreversíveis. Use as opções específicas para apagar só testes, só testes do Modo Teste, só fatores de risco, só restritos/dispensas ou só datas de nascimento dos cadastrados, ou a exclusão total para esvaziar o sistema. Sempre há confirmação antes de apagar."
           >
             <View style={styles.dangerStack}>
               <ExclusoesEspecificasDangerBlock />

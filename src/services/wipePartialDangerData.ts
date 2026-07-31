@@ -4,6 +4,7 @@
  * - fatores de risco (mantém o restante)
  * - restritos / dispensas (mantém o restante)
  * - sessões do Modo Teste (demo-sess-*)
+ * - datas de nascimento dos cadastros (mantém o restante do cadastro)
  */
 import { isFirebaseConfigured } from '../config/firebase';
 import { dataStore } from '../offline-first/store/DataStore';
@@ -45,6 +46,10 @@ export type WipeAllRestritosResult = {
 
 export type WipeAllModoTesteResult = {
   sessoesDeleted: number;
+};
+
+export type WipeAllDatasNascimentoResult = {
+  cadastrosAtualizados: number;
 };
 
 async function wipeCloudTestesTables(ownerUid: string): Promise<void> {
@@ -154,4 +159,29 @@ export async function wipeAllModoTesteSessoes(options: {
 
   notifyDataChanged();
   return { sessoesDeleted: demoIds.length };
+}
+
+/**
+ * Remove a data de nascimento de todos os cadastros (fica vazia).
+ * Mantém nome, NIP, posto, resultados de TAF e demais campos.
+ */
+export async function wipeAllDatasNascimentoCadastros(options: {
+  uid: string | null;
+}): Promise<WipeAllDatasNascimentoResult> {
+  const ownerUid = resolveOwnerUid(options.uid);
+  const cadastros = await dataStore.getCadastros(ownerUid);
+  const atualizados = cadastros
+    .filter((c) => (c.dataNascimento || '').trim().length > 0)
+    .map((c) => ({ ...c, dataNascimento: '' }));
+
+  if (atualizados.length > 0) {
+    await dataStore.upsertCadastrosBatch(atualizados, ownerUid);
+  } else {
+    notifyDataChanged();
+  }
+
+  invalidateRemoteSnapshotCache();
+  syncManager.scheduleOnlineWriteFlush();
+
+  return { cadastrosAtualizados: atualizados.length };
 }

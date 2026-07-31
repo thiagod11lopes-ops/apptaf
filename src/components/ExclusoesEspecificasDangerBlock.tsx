@@ -1,13 +1,22 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, Platform, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AlertTriangle, Ban, ClipboardList, HeartPulse, Sparkles, Trash2 } from 'lucide-react-native';
+import {
+  AlertTriangle,
+  Ban,
+  CalendarX2,
+  ClipboardList,
+  HeartPulse,
+  Sparkles,
+  Trash2,
+} from 'lucide-react-native';
 import { ModernModal } from './sismav/ModernModal';
 import { PressableScale } from './premium/PressableScale';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import {
+  wipeAllDatasNascimentoCadastros,
   wipeAllFatoresRiscoData,
   wipeAllModoTesteSessoes,
   wipeAllRestritosData,
@@ -15,7 +24,7 @@ import {
 } from '../services/wipePartialDangerData';
 import { PREMIUM } from '../theme/premium';
 
-type Target = 'testes' | 'fatores' | 'restritos' | 'modoTeste' | null;
+type Target = 'testes' | 'fatores' | 'restritos' | 'modoTeste' | 'datasNascimento' | null;
 
 type Props = {
   onDone?: () => void;
@@ -93,6 +102,15 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
           partes.push('Restritos correspondentes na nuvem também foram removidos.');
         }
         setSucesso(partes.join(' '));
+      } else if (target === 'datasNascimento') {
+        const result = await wipeAllDatasNascimentoCadastros({
+          uid: getCachedDataOwnerUid(),
+        });
+        setSucesso(
+          result.cadastrosAtualizados === 0
+            ? 'Nenhuma data de nascimento encontrada nos cadastros.'
+            : `Data de nascimento removida de ${result.cadastrosAtualizados.toLocaleString('pt-BR')} cadastro(s). Nome, NIP, posto e demais dados foram mantidos.`,
+        );
       } else {
         const result = await wipeAllFatoresRiscoData();
         setSucesso(
@@ -115,20 +133,25 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
   const isTestes = target === 'testes';
   const isModoTeste = target === 'modoTeste';
   const isRestritos = target === 'restritos';
+  const isDatasNascimento = target === 'datasNascimento';
   const titulo = isTestes
     ? 'Excluir todos os testes?'
     : isModoTeste
       ? 'Excluir testes do Modo Teste?'
       : isRestritos
         ? 'Excluir restritos / dispensas?'
-        : 'Excluir fatores de risco?';
+        : isDatasNascimento
+          ? 'Excluir datas de nascimento?'
+          : 'Excluir fatores de risco?';
   const mensagem = isTestes
     ? 'Serão removidos todos os testes/sessões de TAF e os resultados vinculados aos cadastros. Cadastros (dados pessoais), fatores de risco, aplicadores e pré-cadastros permanecem.'
     : isModoTeste
       ? 'Serão removidos do Histórico apenas os testes aplicados no Modo Teste (tarja amarela). Seus testes reais, cadastros e demais dados permanecem intactos.'
       : isRestritos
         ? 'Serão removidas todas as dispensas/restritos. Cadastros, testes, fatores de risco, aplicadores e demais dados permanecem.'
-        : 'Serão removidos todos os fatores de risco cadastrados. Cadastros, testes, aplicadores e demais dados permanecem.';
+        : isDatasNascimento
+          ? 'Será apagada a data de nascimento de todos os militares cadastrados. Nome, NIP, posto/graduação, sexo, resultados de TAF e demais dados permanecem.'
+          : 'Serão removidos todos os fatores de risco cadastrados. Cadastros, testes, aplicadores e demais dados permanecem.';
   const lista = isTestes
     ? [
         'Sessões e histórico de testes',
@@ -145,7 +168,12 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
             'Todas as dispensas/restritos neste aparelho',
             ...(apagaNuvem ? ['Restritos na nuvem do chefe'] : []),
           ]
-        : ['Todos os registros de fatores de risco neste aparelho'];
+        : isDatasNascimento
+          ? [
+              'Campo data de nascimento de todos os cadastros',
+              'Idade deixa de ser calculada até informar nova data',
+            ]
+          : ['Todos os registros de fatores de risco neste aparelho'];
 
   const footer = (
     <View style={styles.footerRow}>
@@ -310,6 +338,35 @@ export function ExclusoesEspecificasDangerBlock({ onDone }: Props) {
           <Text style={[styles.btnTriggerText, { color: theme.loss }]}>Excluir Restritos</Text>
           <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 16 }]}>
             Remove todas as dispensas. Mantém cadastros, testes e fatores.
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        accessibilityLabel="Excluir datas de nascimento de todos os cadastros"
+        activeOpacity={0.85}
+        disabled={loading}
+        onPress={() => {
+          setErro(null);
+          setSucesso(null);
+          setTarget('datasNascimento');
+        }}
+        style={[
+          styles.btnTrigger,
+          {
+            borderColor: theme.loss,
+            backgroundColor: theme.isDark ? 'rgba(127, 29, 29, 0.18)' : 'rgba(254, 226, 226, 0.55)',
+            opacity: loading ? 0.6 : 1,
+          },
+        ]}
+      >
+        <CalendarX2 size={18} color={theme.loss} strokeWidth={2.4} />
+        <View style={styles.btnTextCol}>
+          <Text style={[styles.btnTriggerText, { color: theme.loss }]}>
+            Excluir datas de nascimento
+          </Text>
+          <Text style={[ts.caption, { color: theme.textMuted, lineHeight: 16 }]}>
+            Apaga só a data de nascimento dos cadastrados. Mantém o restante.
           </Text>
         </View>
       </TouchableOpacity>

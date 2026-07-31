@@ -2501,6 +2501,20 @@ export default function AplicarTAFScreen() {
     setListaPreCadastros(lista);
   }, []);
 
+  /** Mantém o contador do botão Pré Cadastro atualizado na tela inicial. */
+  useEffect(() => {
+    if (mostrarProvas || mostrarListaPreCadastro || mostrarFatoresRisco || mostrarRestritos) {
+      return;
+    }
+    void recarregarListaPreCadastros();
+  }, [
+    mostrarProvas,
+    mostrarListaPreCadastro,
+    mostrarFatoresRisco,
+    mostrarRestritos,
+    recarregarListaPreCadastros,
+  ]);
+
   const abrirListaPreCadastro = useCallback(() => {
     void recarregarListaPreCadastros().then(() => {
       setMostrarListaPreCadastro(true);
@@ -3370,6 +3384,7 @@ export default function AplicarTAFScreen() {
               onPreCadastro={abrirListaPreCadastro}
               onFatoresRisco={abrirFatoresRisco}
               onRestritos={abrirRestritos}
+              preCadastrosCount={listaPreCadastros.length}
             />
           ) : null}
 

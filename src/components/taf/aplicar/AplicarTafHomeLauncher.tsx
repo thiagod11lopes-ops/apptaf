@@ -18,7 +18,14 @@ type Props = {
   onPreCadastro: () => void;
   onFatoresRisco: () => void;
   onRestritos: () => void;
+  /** Quantidade de pré-cadastros já salvos. */
+  preCadastrosCount?: number;
 };
+
+function textoPreCadastrosCount(n: number): string {
+  if (n === 1) return '1 Prova Cadastrada';
+  return `${n} Provas Cadastradas`;
+}
 
 export function AplicarTafHomeLauncher({
   onIniciarTaf,
@@ -26,11 +33,13 @@ export function AplicarTafHomeLauncher({
   onPreCadastro,
   onFatoresRisco,
   onRestritos,
+  preCadastrosCount = 0,
 }: Props) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const glass = getAplicarTafGlass(theme);
   const { isNarrowPhone } = useAplicarTafLayout();
+  const preCadastroLabel = textoPreCadastrosCount(Math.max(0, Math.floor(preCadastrosCount)));
 
   return (
     <View style={styles.wrap}>
@@ -89,7 +98,7 @@ export function AplicarTafHomeLauncher({
         </TouchableOpacity>
 
         <TouchableOpacity
-          accessibilityLabel="Pré Cadastro"
+          accessibilityLabel={`Pré Cadastro. ${preCadastroLabel}`}
           activeOpacity={0.92}
           onPress={onPreCadastro}
           style={styles.tileWrap}
@@ -113,11 +122,39 @@ export function AplicarTafHomeLauncher({
                 <ClipboardList size={24} color={theme.primary} strokeWidth={2.2} />
               </View>
               <View style={styles.textCol}>
-                <Text
-                  style={[styles.tileTitle, { color: ui.text }, isNarrowPhone ? styles.tileTitleCompact : null]}
-                >
-                  Pré Cadastro
-                </Text>
+                <View style={styles.preCadastroTitleRow}>
+                  <Text
+                    style={[
+                      styles.tileTitle,
+                      { color: ui.text },
+                      isNarrowPhone ? styles.tileTitleCompact : null,
+                      styles.preCadastroTitle,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Pré Cadastro
+                  </Text>
+                  <View
+                    style={[
+                      styles.preCadastroBadge,
+                      {
+                        borderColor: theme.isDark
+                          ? 'rgba(56,189,248,0.4)'
+                          : 'rgba(37,99,235,0.28)',
+                        backgroundColor: theme.isDark
+                          ? 'rgba(56,189,248,0.14)'
+                          : 'rgba(37,99,235,0.1)',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.preCadastroBadgeText, { color: theme.primary }]}
+                      numberOfLines={1}
+                    >
+                      {preCadastroLabel}
+                    </Text>
+                  </View>
+                </View>
                 <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
                   Prepare participantes antes da prova
                 </Text>
@@ -295,6 +332,27 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 4,
+  },
+  preCadastroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  preCadastroTitle: {
+    flexShrink: 1,
+  },
+  preCadastroBadge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexShrink: 0,
+  },
+  preCadastroBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.1,
   },
   tileTitlePrimary: {
     color: '#fff',

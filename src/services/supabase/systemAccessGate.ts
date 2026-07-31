@@ -60,8 +60,8 @@ async function isCurrentUserCanonicalBoss(): Promise<boolean> {
 export type EmailAccessProbe = 'incomplete' | 'allowed' | 'blocked';
 
 /**
- * Pré-checagem no campo de e-mail (sem login).
- * incomplete = ainda digitando / não dá para decidir.
+ * Checagem de e-mail sem login (usada no clique Entrar / Criar conta).
+ * incomplete = e-mail incompleto ou sem como decidir (offline / RPC ausente).
  */
 export async function probeEmailSystemAccess(email: string): Promise<EmailAccessProbe> {
   const normalized = normalizeAuthEmail(email);

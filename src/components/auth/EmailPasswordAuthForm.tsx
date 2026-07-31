@@ -10,7 +10,6 @@ import { PREMIUM } from '../../theme/premium';
 import {
   isAllowedAuthEmail,
   authEmailDomainErrorMessage,
-  normalizeAuthEmail,
 } from '../../utils/normalizeAuthEmail';
 import {
   clearDatabaseTermsPreAccepted,
@@ -87,8 +86,6 @@ export function EmailPasswordAuthForm({
     useState<SistemaAcessoModalVariant>('unregistered');
   const emailWasAllowedRef = useRef(false);
   const blurHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const emailProbeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastBlockedEmailRef = useRef<string | null>(null);
 
   React.useEffect(() => {
     if (forceRecovery) setMode('recovery');
@@ -105,33 +102,8 @@ export function EmailPasswordAuthForm({
   useEffect(() => {
     return () => {
       if (blurHideTimerRef.current) clearTimeout(blurHideTimerRef.current);
-      if (emailProbeTimerRef.current) clearTimeout(emailProbeTimerRef.current);
     };
   }, []);
-
-  const scheduleEmailAccessProbe = useCallback((text: string) => {
-    if (forceRecovery || mode === 'recovery' || mode === 'forgot') return;
-    if (emailProbeTimerRef.current) clearTimeout(emailProbeTimerRef.current);
-
-    // Assim que houver "@", agenda a consulta (só decide com e-mail completo).
-    if (!text.includes('@')) {
-      lastBlockedEmailRef.current = null;
-      return;
-    }
-
-    emailProbeTimerRef.current = setTimeout(() => {
-      void (async () => {
-        const result = await probeEmailSystemAccess(text);
-        if (result !== 'blocked') return;
-        const key = normalizeAuthEmail(text);
-        if (lastBlockedEmailRef.current === key) return;
-        lastBlockedEmailRef.current = key;
-        // Criar conta → Acesso Negado (vermelho). Entrar → e-mail não cadastrado (laranja).
-        setAccessModalVariant(mode === 'register' ? 'denied' : 'unregistered');
-        setAccessBlockedVisible(true);
-      })();
-    }, 280);
-  }, [forceRecovery, mode]);
 
   const emailSuggestions = useMemo(
     () => filterRecentAuthEmailSuggestions(email, recentEmails),
@@ -164,17 +136,6 @@ export function EmailPasswordAuthForm({
       setNeedBossCryptoPassword(false);
       if (next === 'register') {
         if (!termsAccepted) setTermsModalVisible(true);
-        // Revalida o e-mail já digitado no fluxo Criar conta (Acesso Negado).
-        lastBlockedEmailRef.current = null;
-        if (email.includes('@')) {
-          void (async () => {
-            const result = await probeEmailSystemAccess(email);
-            if (result !== 'blocked') return;
-            lastBlockedEmailRef.current = normalizeAuthEmail(email);
-            setAccessModalVariant('denied');
-            setAccessBlockedVisible(true);
-          })();
-        }
       } else if (next === 'login') {
         // Mantém pré-aceite se o usuário já leu os termos (fluxo "Já tenho conta").
         setTermsModalVisible(false);
@@ -185,13 +146,12 @@ export function EmailPasswordAuthForm({
         resetTermsState();
       }
     },
-    [email, resetTermsState, termsAccepted],
+    [resetTermsState, termsAccepted],
   );
 
   const applyEmailText = useCallback(
     (text: string) => {
       setEmail(text);
-      scheduleEmailAccessProbe(text);
       if (forceRecovery || mode === 'recovery' || mode === 'forgot') {
         emailWasAllowedRef.current = isAllowedAuthEmail(text);
         return;
@@ -213,7 +173,7 @@ export function EmailPasswordAuthForm({
         resetTermsState();
       }
     },
-    [forceRecovery, mode, resetTermsState, scheduleEmailAccessProbe],
+    [forceRecovery, mode, resetTermsState],
   );
 
   const handleEmailChange = useCallback(
@@ -276,6 +236,16 @@ export function EmailPasswordAuthForm({
 
     setLoading(true);
     try {
+      // Aviso de e-mail não cadastrado só no clique (Entrar / Criar conta), nunca ao digitar.
+      if (mode === 'login' || mode === 'register') {
+        const accessProbe = await probeEmailSystemAccess(email);
+        if (accessProbe === 'blocked') {
+          setAccessModalVariant(mode === 'register' ? 'denied' : 'unregistered');
+          setAccessBlockedVisible(true);
+          return;
+        }
+      }
+
       if (mode !== 'recovery') {
         await rememberKnownAuthEmailOnDevice(email);
         refreshRecentEmails();
@@ -597,11 +567,9 @@ export function EmailPasswordAuthForm({
         variant={accessModalVariant}
         onClose={() => {
           setAccessBlockedVisible(false);
-          lastBlockedEmailRef.current = null;
         }}
         onAction={() => {
           setAccessBlockedVisible(false);
-          lastBlockedEmailRef.current = null;
           if (accessModalVariant === 'unregistered') {
             switchMode('register');
           }

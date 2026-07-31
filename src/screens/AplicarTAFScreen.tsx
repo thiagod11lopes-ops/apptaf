@@ -271,6 +271,9 @@ function textoGeneroMilitar(sexo?: 'M' | 'F'): string {
   return 'Gênero?';
 }
 
+/** Prefill do número de voltas em corrida/caminhada. */
+const NUMERO_VOLTAS_PADRAO = '6';
+
 /** Campos de cadastro usados no feedback NIP e no modal de edição. */
 function camposCadastroParaFeedback(c: CadastroItemPersist) {
   const nomeBare = (c.nome || '').trim() || 'Sem nome';
@@ -424,7 +427,7 @@ export default function AplicarTAFScreen() {
     (ModalModalidadeExcludenteInfo & { cadastro: CadastroItemPersist }) | null
   >(null);
   const nipsRepeticaoAutorizadaRef = useRef<Set<number>>(new Set());
-  const [numeroVoltas, setNumeroVoltas] = useState('');
+  const [numeroVoltas, setNumeroVoltas] = useState(NUMERO_VOLTAS_PADRAO);
   /** Corrida/caminhada: número de voltas já confirmado (também persistido na sessão). */
   const [voltasConfirmadasProva, setVoltasConfirmadasProva] = useState(false);
   /** Voltas, chegadas e tempos em um único reducer (atualização atômica por clique). */
@@ -916,7 +919,7 @@ export default function AplicarTAFScreen() {
       setNipFeedbackLinhas(session.nipFeedbackLinhas as NipFeedbackLinha[]);
       nipsRepeticaoAutorizadaRef.current = new Set(session.nipsRepeticaoAutorizada ?? []);
       setModalTesteExistente(null);
-      setNumeroVoltas(session.numeroVoltas ?? '');
+      setNumeroVoltas(session.numeroVoltas?.trim() ? session.numeroVoltas : NUMERO_VOLTAS_PADRAO);
       setVoltasConfirmadasProva(Boolean(session.voltasConfirmadas));
       setRepeticoesParticipantes(session.repeticoesParticipantes ?? []);
       setResultadoPermanenciaLinhas(session.resultadoPermanenciaLinhas ?? []);
@@ -1004,7 +1007,7 @@ export default function AplicarTAFScreen() {
     dispatchTrial({ type: 'resetAll' });
     setRepeticoesParticipantes([]);
     setResultadoPermanenciaLinhas([]);
-    setNumeroVoltas('');
+    setNumeroVoltas(NUMERO_VOLTAS_PADRAO);
     setVoltasConfirmadasProva(false);
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
@@ -2642,7 +2645,7 @@ export default function AplicarTAFScreen() {
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalTesteExistente(null);
-    setNumeroVoltas('');
+    setNumeroVoltas(NUMERO_VOLTAS_PADRAO);
     setResultadoPermanenciaLinhas([]);
     setModalPermanenciaFinalizadaVisible(false);
     setErroPermanencia('');
@@ -2665,7 +2668,7 @@ export default function AplicarTAFScreen() {
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalTesteExistente(null);
-    setNumeroVoltas('');
+    setNumeroVoltas(NUMERO_VOLTAS_PADRAO);
     setResultadoPermanenciaLinhas([]);
     setModalPermanenciaFinalizadaVisible(false);
     setErroPermanencia('');
@@ -2781,7 +2784,7 @@ export default function AplicarTAFScreen() {
         );
         nipsRepeticaoAutorizadaRef.current = new Set();
         setModalTesteExistente(null);
-        setNumeroVoltas('');
+        setNumeroVoltas(NUMERO_VOLTAS_PADRAO);
         setVoltasConfirmadasProva(false);
         resetCronometroCorrida();
 
@@ -2844,7 +2847,7 @@ export default function AplicarTAFScreen() {
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalTesteExistente(null);
-    setNumeroVoltas('');
+    setNumeroVoltas(NUMERO_VOLTAS_PADRAO);
     setResultadoPermanenciaLinhas([]);
     setModalPermanenciaFinalizadaVisible(false);
     setErroPermanencia('');
@@ -2868,7 +2871,7 @@ export default function AplicarTAFScreen() {
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalTesteExistente(null);
-    setNumeroVoltas('');
+    setNumeroVoltas(NUMERO_VOLTAS_PADRAO);
     setResultadoPermanenciaLinhas([]);
     setModalPermanenciaFinalizadaVisible(false);
     setErroPermanencia('');

@@ -355,7 +355,7 @@ export function TafProvaTempoModal({
   onPausarCronometro,
   onContinuarCronometro,
   cronometroHint,
-  numeroVoltas = '',
+  numeroVoltas = '6',
   onChangeNumeroVoltas,
   onVoltasConfirmadas,
   voltasJaConfirmadas = false,

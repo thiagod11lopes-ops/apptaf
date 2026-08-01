@@ -133,7 +133,7 @@ export function nomeArquivoPdfResumo(
 }
 
 /**
- * Gera o PDF em silêncio e baixa para Downloads (web/Android) ou Arquivos (iOS).
+ * Gera o PDF em silêncio e baixa para Downloads (web/iPhone/Android).
  * Não abre o PDF na tela.
  */
 export async function exportResumoAplicacaoPdf(
@@ -148,7 +148,7 @@ export async function exportResumoAplicacaoPdf(
   const filename = nomeArquivoPdfResumo(resultados);
 
   if (Platform.OS === 'web') {
-    // iPhone/Safari: html2canvas gera PDF em branco — usa jsPDF + Compartilhar.
+    // iPhone/Safari: html2canvas gera PDF em branco — usa jsPDF + download direto.
     const blob = await gerarResumoAplicacaoPdfBlobWeb(resultados, aplicadorAssinatura);
     const resultado = await entregarPdfBlobWeb(blob, filename);
     if (!resultado.ok) {

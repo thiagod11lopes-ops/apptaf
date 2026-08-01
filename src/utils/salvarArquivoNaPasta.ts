@@ -43,12 +43,26 @@ async function downloadWebBlob(
           ? '.ods'
           : undefined;
   const safeName = sanitizarNomeArquivo(filename, ext);
-  const blob =
+  let blob =
     typeof content === 'string'
       ? new Blob([content], { type: `${mimeType};charset=utf-8` })
       : content.type
         ? content
         : new Blob([await content.arrayBuffer()], { type: mimeType });
+
+  // iPhone/Safari: application/pdf abre preview; octet-stream força o download
+  // para a pasta Downloads (Ajustes → Safari → Downloads).
+  const forcarDownloadIos =
+    isIosWeb() &&
+    (mimeType.includes('pdf') ||
+      mimeType.includes('opendocument.spreadsheet') ||
+      mimeType.includes('ods') ||
+      safeName.toLowerCase().endsWith('.pdf') ||
+      safeName.toLowerCase().endsWith('.ods'));
+  if (forcarDownloadIos) {
+    blob = new Blob([await blob.arrayBuffer()], { type: 'application/octet-stream' });
+  }
+
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -69,7 +83,7 @@ function isIosWeb(): boolean {
 }
 
 /**
- * Entrega PDF no navegador. No iPhone usa Compartilhar → Salvar em Arquivos/Downloads.
+ * Entrega PDF no navegador — download direto para Downloads (inclui iPhone/Safari).
  */
 export async function entregarPdfBlobWeb(
   blob: Blob,
@@ -80,46 +94,6 @@ export async function entregarPdfBlobWeb(
     blob.type === 'application/pdf'
       ? blob
       : new Blob([await blob.arrayBuffer()], { type: 'application/pdf' });
-  const file =
-    typeof File !== 'undefined'
-      ? new File([pdfBlob], safeName, { type: 'application/pdf' })
-      : null;
-
-  const tryShareFilesOnly = async (): Promise<boolean> => {
-    if (!file || typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
-      return false;
-    }
-    // Só `files` — incluir title/text faz o SO gerar um 2º arquivo chamado "texto".
-    const payload: ShareData = { files: [file] };
-    if (typeof navigator.canShare === 'function' && !navigator.canShare(payload)) {
-      return false;
-    }
-    try {
-      await navigator.share(payload);
-      return true;
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === 'AbortError') return true;
-      return false;
-    }
-  };
-
-  // iPhone: share sheet (somente o PDF). Desktop/Android web: download direto.
-  if (isIosWeb()) {
-    if (await tryShareFilesOnly()) {
-      return { ok: true, modo: 'compartilhar' };
-    }
-    // Fallback: abre o PDF para Salvar em Arquivos (sem download paralelo).
-    if (typeof window !== 'undefined') {
-      const url = URL.createObjectURL(pdfBlob);
-      const win = window.open(url, '_blank', 'noopener,noreferrer');
-      if (!win) {
-        window.location.assign(url);
-      }
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      return { ok: true, modo: 'compartilhar' };
-    }
-  }
-
   return downloadWebBlob(pdfBlob, safeName, 'application/pdf');
 }
 
@@ -388,9 +362,9 @@ async function escreverPdfNoDiretorioSaf(
 /**
  * Salva um PDF já gerado no cache diretamente em Downloads (ou equivalente),
  * sem abrir o arquivo na tela.
- * - Web: download do navegador
+ * - Web (inclui iPhone/Safari): download do navegador → pasta Downloads
  * - Android: pasta SAF (Downloads na 1ª vez; depois reutiliza)
- * - iOS: compartilhar → Salvar em Arquivos / Downloads
+ * - iOS nativo: compartilhar → Salvar em Arquivos / Downloads
  */
 export async function baixarArquivoParaDownloads(options: {
   sourceUri: string;
@@ -460,7 +434,7 @@ async function escreverTextoNoDiretorioSaf(
 
 /**
  * Salva texto (CSV etc.) em Downloads — mesmo fluxo do PDF.
- * Web: download (iPhone: Compartilhar → Arquivos).
+ * Web (inclui iPhone/Safari): download direto → pasta Downloads.
  * Android: SAF Downloads (1ª vez escolhe a pasta).
  * iOS nativo: Compartilhar → Salvar em Arquivos.
  */
@@ -476,26 +450,6 @@ export async function baixarTextoParaDownloads(options: {
 
   if (Platform.OS === 'web') {
     const blob = new Blob([options.content], { type: `${mimeType};charset=utf-8` });
-    const file =
-      typeof File !== 'undefined'
-        ? new File([blob], filename, { type: mimeType })
-        : null;
-
-    // iPhone: só o arquivo — title/text gerava um 2º download chamado "texto".
-    if (file && isIosWeb() && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try {
-        const payload: ShareData = { files: [file] };
-        if (typeof navigator.canShare !== 'function' || navigator.canShare(payload)) {
-          await navigator.share(payload);
-          return { ok: true, modo: 'compartilhar' };
-        }
-      } catch (e: unknown) {
-        if (e instanceof Error && e.name === 'AbortError') {
-          return { ok: true, modo: 'compartilhar' };
-        }
-      }
-    }
-
     return downloadWebBlob(blob, filename, mimeType);
   }
 
@@ -591,23 +545,6 @@ export async function baixarBinarioParaDownloads(options: {
 
   if (Platform.OS === 'web') {
     const blob = new Blob([options.bytes], { type: mimeType });
-    const file =
-      typeof File !== 'undefined' ? new File([blob], filename, { type: mimeType }) : null;
-
-    if (file && isIosWeb() && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try {
-        const payload: ShareData = { files: [file] };
-        if (typeof navigator.canShare !== 'function' || navigator.canShare(payload)) {
-          await navigator.share(payload);
-          return { ok: true, modo: 'compartilhar' };
-        }
-      } catch (e: unknown) {
-        if (e instanceof Error && e.name === 'AbortError') {
-          return { ok: true, modo: 'compartilhar' };
-        }
-      }
-    }
-
     return downloadWebBlob(blob, filename, mimeType);
   }
 

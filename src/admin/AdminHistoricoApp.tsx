@@ -30,7 +30,9 @@ import { AppModal } from '../components/premium/AppModal';
 import {
   carregarResumoGeneroPlanilha,
   corrigirGeneroCadastrosPlanilha,
+  generoMarcadoNoModal,
   salvarGeneroManualCadastro,
+  salvarGenerosMarcadosEmLote,
   type CadastroNaoIdentificadoGenero,
   type ResultadoCorrecaoGenero,
 } from '../utils/corrigirGeneroPorNome';
@@ -53,6 +55,9 @@ export function AdminHistoricoApp() {
   const [editando, setEditando] = useState<CadastroNaoIdentificadoGenero | null>(null);
   const [sexoEdicao, setSexoEdicao] = useState<'M' | 'F'>('M');
   const [salvandoGenero, setSalvandoGenero] = useState(false);
+  /** Gênero marcado por id (mesmo padrão do modal). */
+  const [marcacoesNaoId, setMarcacoesNaoId] = useState<Record<string, 'M' | 'F'>>({});
+  const [salvandoLote, setSalvandoLote] = useState(false);
 
   const carregarBosses = useCallback(async () => {
     if (!isSupabaseConfigured()) {
@@ -103,6 +108,16 @@ export function AdminHistoricoApp() {
     void carregarBosses();
   }, [carregarBosses]);
 
+  const sincronizarMarcacoes = useCallback((lista: CadastroNaoIdentificadoGenero[]) => {
+    setMarcacoesNaoId((prev) => {
+      const next: Record<string, 'M' | 'F'> = {};
+      for (const item of lista) {
+        next[item.id] = prev[item.id] ?? generoMarcadoNoModal(item.sexoAtual);
+      }
+      return next;
+    });
+  }, []);
+
   const atualizarResumoGenero = useCallback(async (persistir: boolean) => {
     setCorrigindoGenero(true);
     setErroGenero(null);
@@ -111,22 +126,26 @@ export function AdminHistoricoApp() {
         ? await corrigirGeneroCadastrosPlanilha({ persistir: true })
         : await carregarResumoGeneroPlanilha();
       setResultadoGenero(res);
+      sincronizarMarcacoes(res.naoIdentificados);
       setListaNaoIdAberta(res.naoIdentificados.length > 0);
     } catch (e) {
       setErroGenero(e instanceof Error ? e.message : 'Falha ao ler/corrigir gênero na Planilha.');
     } finally {
       setCorrigindoGenero(false);
     }
-  }, []);
+  }, [sincronizarMarcacoes]);
 
   const executarCorrecaoGenero = useCallback(() => {
     void atualizarResumoGenero(true);
   }, [atualizarResumoGenero]);
 
-  const abrirEdicaoNaoId = useCallback((item: CadastroNaoIdentificadoGenero) => {
-    setEditando(item);
-    setSexoEdicao(item.sexoAtual === 'F' ? 'F' : 'M');
-  }, []);
+  const abrirEdicaoNaoId = useCallback(
+    (item: CadastroNaoIdentificadoGenero) => {
+      setEditando(item);
+      setSexoEdicao(marcacoesNaoId[item.id] ?? generoMarcadoNoModal(item.sexoAtual));
+    },
+    [marcacoesNaoId],
+  );
 
   const salvarEdicaoGenero = useCallback(async () => {
     if (!editando) return;
@@ -139,16 +158,42 @@ export function AdminHistoricoApp() {
         return;
       }
       setEditando(null);
-      // Recarrega da Planilha (fonte da verdade) — não depende só do estado da tela.
       const res = await carregarResumoGeneroPlanilha();
       setResultadoGenero(res);
+      sincronizarMarcacoes(res.naoIdentificados);
       setListaNaoIdAberta(res.naoIdentificados.length > 0);
     } catch (e) {
       setErroGenero(e instanceof Error ? e.message : 'Falha ao salvar gênero.');
     } finally {
       setSalvandoGenero(false);
     }
-  }, [editando, sexoEdicao]);
+  }, [editando, sexoEdicao, sincronizarMarcacoes]);
+
+  const salvarTodosGenerosMarcados = useCallback(async () => {
+    const lista = resultadoGenero?.naoIdentificados ?? [];
+    if (lista.length === 0) return;
+    setSalvandoLote(true);
+    setErroGenero(null);
+    try {
+      const itens = lista.map((item) => ({
+        id: item.id,
+        sexo: marcacoesNaoId[item.id] ?? generoMarcadoNoModal(item.sexoAtual),
+      }));
+      const n = await salvarGenerosMarcadosEmLote(itens);
+      if (n === 0) {
+        setErroGenero('Nenhum gênero foi gravado. Faça login e tente de novo.');
+        return;
+      }
+      const res = await carregarResumoGeneroPlanilha();
+      setResultadoGenero(res);
+      sincronizarMarcacoes(res.naoIdentificados);
+      setListaNaoIdAberta(res.naoIdentificados.length > 0);
+    } catch (e) {
+      setErroGenero(e instanceof Error ? e.message : 'Falha ao salvar gêneros em lote.');
+    } finally {
+      setSalvandoLote(false);
+    }
+  }, [resultadoGenero, marcacoesNaoId, sincronizarMarcacoes]);
 
   useEffect(() => {
     void carregarBosses();
@@ -264,25 +309,77 @@ export function AdminHistoricoApp() {
               <Text style={[styles.naoIdTitle, { color: theme.text }]}>
                 Nomes não identificados ({resultadoGenero.naoIdentificados.length})
               </Text>
-              {resultadoGenero.naoIdentificados.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  onPress={() => abrirEdicaoNaoId(item)}
-                  style={[styles.naoIdRow, { borderColor: theme.border }]}
-                  accessibilityLabel={`Editar gênero de ${item.nome}`}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.cardEmail, { color: theme.text }]} numberOfLines={2}>
-                      {item.nome}
-                    </Text>
-                    <Text style={[styles.cardMeta, { color: theme.textMuted }]}>
-                      {item.nip ? `NIP ${item.nip} · ` : ''}
-                      1º nome: {item.primeiroNome}
-                    </Text>
+              <Text style={[styles.generoHint, { color: theme.textMuted }]}>
+                O gênero marcado em cada linha é o mesmo do modal. Confirme todos de uma vez.
+              </Text>
+              <TouchableOpacity
+                onPress={() => void salvarTodosGenerosMarcados()}
+                disabled={salvandoLote || corrigindoGenero}
+                style={[
+                  styles.generoBtn,
+                  { backgroundColor: theme.gain ?? theme.primary, opacity: salvandoLote ? 0.7 : 1 },
+                ]}
+                accessibilityLabel="Salvar todos os gêneros marcados"
+              >
+                {salvandoLote ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Wand2 size={18} color="#fff" strokeWidth={2.2} />
+                )}
+                <Text style={styles.generoBtnText}>
+                  {salvandoLote
+                    ? 'Salvando…'
+                    : `Salvar todos os gêneros marcados (${resultadoGenero.naoIdentificados.length})`}
+                </Text>
+              </TouchableOpacity>
+              {resultadoGenero.naoIdentificados.map((item) => {
+                const marcado = marcacoesNaoId[item.id] ?? generoMarcadoNoModal(item.sexoAtual);
+                return (
+                  <View
+                    key={item.id}
+                    style={[styles.naoIdRow, { borderColor: theme.border }]}
+                  >
+                    <TouchableOpacity
+                      onPress={() => abrirEdicaoNaoId(item)}
+                      style={{ flex: 1 }}
+                      accessibilityLabel={`Editar gênero de ${item.nome}`}
+                    >
+                      <Text style={[styles.cardEmail, { color: theme.text }]} numberOfLines={2}>
+                        {item.nome}
+                      </Text>
+                      <Text style={[styles.cardMeta, { color: theme.textMuted }]}>
+                        {item.nip ? `NIP ${item.nip} · ` : ''}
+                        1º nome: {item.primeiroNome}
+                      </Text>
+                    </TouchableOpacity>
+                    <View style={styles.sexoRowCompact}>
+                      {(['M', 'F'] as const).map((sx) => {
+                        const active = marcado === sx;
+                        return (
+                          <TouchableOpacity
+                            key={sx}
+                            onPress={() =>
+                              setMarcacoesNaoId((prev) => ({ ...prev, [item.id]: sx }))
+                            }
+                            style={[
+                              styles.sexoChip,
+                              {
+                                borderColor: active ? theme.primary : theme.border,
+                                backgroundColor: active ? theme.accentMuted : 'transparent',
+                              },
+                            ]}
+                          >
+                            <Text style={{ color: theme.text, fontWeight: '800', fontSize: 12 }}>
+                              {sx === 'M' ? 'M' : 'F'}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <ChevronRight size={18} color={theme.textMuted} strokeWidth={2.2} />
                   </View>
-                  <ChevronRight size={18} color={theme.textMuted} strokeWidth={2.2} />
-                </TouchableOpacity>
-              ))}
+                );
+              })}
             </View>
           ) : null}
         </View>
@@ -398,7 +495,12 @@ export function AdminHistoricoApp() {
                 return (
                   <TouchableOpacity
                     key={sx}
-                    onPress={() => setSexoEdicao(sx)}
+                    onPress={() => {
+                      setSexoEdicao(sx);
+                      if (editando) {
+                        setMarcacoesNaoId((prev) => ({ ...prev, [editando.id]: sx }));
+                      }
+                    }}
                     style={[
                       styles.sexoBtn,
                       {
@@ -515,6 +617,15 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     padding: 12,
     gap: 8,
+  },
+  sexoRowCompact: { flexDirection: 'row', gap: 6 },
+  sexoChip: {
+    minWidth: 36,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    alignItems: 'center',
   },
   toolbar: {
     flexDirection: 'row',

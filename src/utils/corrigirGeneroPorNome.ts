@@ -257,6 +257,11 @@ export async function carregarResumoGeneroPlanilha(): Promise<ResultadoCorrecaoG
   return corrigirGeneroCadastrosPlanilha({ persistir: false });
 }
 
+/** Mesmo padrão do modal: Feminino só se já for F; caso contrário Masculino. */
+export function generoMarcadoNoModal(sexoAtual?: 'M' | 'F'): 'M' | 'F' {
+  return sexoAtual === 'F' ? 'F' : 'M';
+}
+
 export async function salvarGeneroManualCadastro(
   id: string,
   sexo: 'M' | 'F',
@@ -273,4 +278,26 @@ export async function salvarGeneroManualCadastro(
     throw new Error('Não foi possível gravar o gênero na Planilha. Faça login e tente de novo.');
   }
   return { ...depois };
+}
+
+/** Grava em lote o gênero já marcado (igual ao modal) para os não identificados. */
+export async function salvarGenerosMarcadosEmLote(
+  itens: Array<{ id: string; sexo: 'M' | 'F' }>,
+): Promise<number> {
+  if (itens.length === 0) return 0;
+  const lista = await getAllCadastros({ includeDemo: false });
+  const byId = new Map(lista.map((c) => [c.id, c]));
+  const paraSalvar: CadastroItemPersist[] = [];
+  const agora = Date.now();
+
+  for (const item of itens) {
+    const found = byId.get(item.id);
+    if (!found) continue;
+    paraSalvar.push({ ...found, sexo: item.sexo, updatedAt: agora });
+  }
+
+  if (paraSalvar.length === 0) return 0;
+  await addCadastrosEmLote(paraSalvar);
+  await Promise.all(paraSalvar.map((c) => marcarGeneroManualCadastro(c.id)));
+  return paraSalvar.length;
 }

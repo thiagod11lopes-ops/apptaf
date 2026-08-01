@@ -32,12 +32,42 @@ function normalizarNomeChave(s: string): string {
     .replace(/[^a-z]/g, '');
 }
 
-/** Detecta token que parece posto/graduação (ex.: CT, 1°TEN, MN). */
+/** Postos/graduações conhecidos — não confundir com nomes curtos em maiúsculas (ex.: ABILIO). */
+const POSTOS_GRAD_CONHECIDOS = new Set(
+  [
+    'GM',
+    '2TEN',
+    '2°TEN',
+    '2ºTEN',
+    '1TEN',
+    '1°TEN',
+    '1ºTEN',
+    'CT',
+    'CC',
+    'CF',
+    'CMG',
+    'CALTE',
+    'MN',
+    'CB',
+    '3SG',
+    '3°SG',
+    '3ºSG',
+    '2SG',
+    '2°SG',
+    '2ºSG',
+    '1SG',
+    '1°SG',
+    '1ºSG',
+    'SO',
+  ].map((p) => normalizarNomeChave(p)),
+);
+
 function parecePostoOuGrad(token: string): boolean {
-  const t = token.trim();
-  if (!t) return false;
-  if (/[0-9°º]/.test(t)) return true;
-  return t.length <= 6 && t === t.toUpperCase() && /[A-ZÀ-Ú]/.test(t);
+  const key = normalizarNomeChave(token);
+  if (!key) return false;
+  if (POSTOS_GRAD_CONHECIDOS.has(key)) return true;
+  // Formas com número + TEN/SG (ex.: 2TEN, 1SG) sem o símbolo °.
+  return /^[123](ten|sg)$/.test(key);
 }
 
 /**

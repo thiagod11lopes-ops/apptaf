@@ -11,6 +11,10 @@ import {
   type GeneroNome,
 } from '../data/dicionarioNomesGenero';
 import { isDemoCadastroId } from './gatherSystemBackupData';
+import {
+  getGeneroManualCadastroIds,
+  marcarGeneroManualCadastro,
+} from './generoManualOverrides';
 
 export type CadastroNaoIdentificadoGenero = {
   id: string;
@@ -125,47 +129,114 @@ export function classificarGeneroPrimeiroNome(primeiroNome: string): GeneroNome 
   return DICIONARIO_NOMES_GENERO[key] ?? classificarPorSufixo(key);
 }
 
-export async function corrigirGeneroCadastrosPlanilha(): Promise<ResultadoCorrecaoGenero> {
+function sexoCadastro(c: CadastroItemPersist): 'M' | 'F' | undefined {
+  return c.sexo === 'F' ? 'F' : c.sexo === 'M' ? 'M' : undefined;
+}
+
+function contarSexo(
+  sexo: 'M' | 'F',
+  acc: { homens: number; mulheres: number },
+): void {
+  if (sexo === 'M') acc.homens += 1;
+  else acc.mulheres += 1;
+}
+
+type LinhaGenero = {
+  c: CadastroItemPersist;
+  primeiroNome: string;
+  sugerido: GeneroNome | null;
+  atual: 'M' | 'F' | undefined;
+  manual: boolean;
+};
+
+async function carregarLinhasGenero(): Promise<{
+  lista: CadastroItemPersist[];
+  linhas: LinhaGenero[];
+}> {
   const lista = (await getAllCadastros({ includeDemo: false })).filter(
     (c) => c?.id && !isDemoCadastroId(c.id),
   );
+  const manuais = await getGeneroManualCadastroIds();
+  const linhas = lista.map((c) => {
+    const primeiroNome = extrairPrimeiroNome(c.nome);
+    return {
+      c,
+      primeiroNome,
+      sugerido: classificarGeneroPrimeiroNome(primeiroNome),
+      atual: sexoCadastro(c),
+      manual: manuais.has(c.id),
+    };
+  });
+  return { lista, linhas };
+}
 
-  let homens = 0;
-  let mulheres = 0;
+/**
+ * Analisa a Planilha e, se `persistir`, aplica o gênero sugerido.
+ * Correções manuais (marcadas) nunca são sobrescritas.
+ * Sem sugestão e sem sexo → não identificados.
+ */
+export async function corrigirGeneroCadastrosPlanilha(
+  opts?: { persistir?: boolean },
+): Promise<ResultadoCorrecaoGenero> {
+  const persistir = opts?.persistir !== false;
+  const { lista, linhas } = await carregarLinhasGenero();
+
+  const acc = { homens: 0, mulheres: 0 };
   let modificados = 0;
   let jaCorretos = 0;
   const naoIdentificados: CadastroNaoIdentificadoGenero[] = [];
   const paraSalvar: CadastroItemPersist[] = [];
 
-  for (const c of lista) {
-    const primeiroNome = extrairPrimeiroNome(c.nome);
-    const genero = classificarGeneroPrimeiroNome(primeiroNome);
+  for (const row of linhas) {
+    const { c, primeiroNome, sugerido, atual, manual } = row;
 
-    if (!genero) {
-      naoIdentificados.push({
-        id: c.id,
-        nome: (c.nome || '').trim() || '—',
-        nip: (c.nip || '').trim(),
-        primeiroNome: primeiroNome || '—',
-        sexoAtual: c.sexo === 'F' ? 'F' : c.sexo === 'M' ? 'M' : undefined,
-      });
-      continue;
-    }
-
-    if (genero === 'M') homens += 1;
-    else mulheres += 1;
-
-    const atual = c.sexo === 'F' ? 'F' : c.sexo === 'M' ? 'M' : undefined;
-    if (atual === genero) {
+    // Manual: nunca sobrescrever; contar o que está gravado.
+    if (manual && atual) {
+      contarSexo(atual, acc);
       jaCorretos += 1;
       continue;
     }
 
+    if (!sugerido) {
+      if (atual) {
+        contarSexo(atual, acc);
+        jaCorretos += 1;
+      } else {
+        naoIdentificados.push({
+          id: c.id,
+          nome: (c.nome || '').trim() || '—',
+          nip: (c.nip || '').trim(),
+          primeiroNome: primeiroNome || '—',
+          sexoAtual: undefined,
+        });
+      }
+      continue;
+    }
+
+    if (atual === sugerido) {
+      contarSexo(atual, acc);
+      jaCorretos += 1;
+      continue;
+    }
+
+    // Divergente ou sem sexo: na leitura mostra o gravado (se houver); ao persistir aplica sugestão.
+    if (!persistir) {
+      if (atual) {
+        contarSexo(atual, acc);
+        jaCorretos += 1;
+      } else {
+        // Ainda sem sexo — entrará nos contadores após clicar em corrigir.
+        contarSexo(sugerido, acc);
+      }
+      continue;
+    }
+
+    contarSexo(sugerido, acc);
     modificados += 1;
-    paraSalvar.push({ ...c, sexo: genero, updatedAt: Date.now() });
+    paraSalvar.push({ ...c, sexo: sugerido, updatedAt: Date.now() });
   }
 
-  if (paraSalvar.length > 0) {
+  if (persistir && paraSalvar.length > 0) {
     await addCadastrosEmLote(paraSalvar);
   }
 
@@ -173,12 +244,17 @@ export async function corrigirGeneroCadastrosPlanilha(): Promise<ResultadoCorrec
 
   return {
     total: lista.length,
-    homens,
-    mulheres,
+    homens: acc.homens,
+    mulheres: acc.mulheres,
     naoIdentificados,
-    modificados,
+    modificados: persistir ? modificados : 0,
     jaCorretos,
   };
+}
+
+/** Só lê a Planilha e monta contadores (não grava). */
+export async function carregarResumoGeneroPlanilha(): Promise<ResultadoCorrecaoGenero> {
+  return corrigirGeneroCadastrosPlanilha({ persistir: false });
 }
 
 export async function salvarGeneroManualCadastro(
@@ -190,5 +266,11 @@ export async function salvarGeneroManualCadastro(
   if (!found) return null;
   const atualizado: CadastroItemPersist = { ...found, sexo, updatedAt: Date.now() };
   await addCadastro(atualizado);
-  return atualizado;
+  await marcarGeneroManualCadastro(id);
+  // Confirma leitura após gravação (evita UI otimista sem persistência).
+  const depois = (await getAllCadastros({ includeDemo: false })).find((c) => c.id === id);
+  if (depois?.sexo !== sexo) {
+    throw new Error('Não foi possível gravar o gênero na Planilha. Faça login e tente de novo.');
+  }
+  return { ...depois };
 }

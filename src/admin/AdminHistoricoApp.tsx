@@ -28,6 +28,7 @@ import { isSupabaseConfigured } from '../config/supabase';
 import { PREMIUM } from '../theme/premium';
 import { AppModal } from '../components/premium/AppModal';
 import {
+  carregarResumoGeneroPlanilha,
   corrigirGeneroCadastrosPlanilha,
   salvarGeneroManualCadastro,
   type CadastroNaoIdentificadoGenero,
@@ -102,19 +103,25 @@ export function AdminHistoricoApp() {
     void carregarBosses();
   }, [carregarBosses]);
 
-  const executarCorrecaoGenero = useCallback(async () => {
+  const atualizarResumoGenero = useCallback(async (persistir: boolean) => {
     setCorrigindoGenero(true);
     setErroGenero(null);
     try {
-      const res = await corrigirGeneroCadastrosPlanilha();
+      const res = persistir
+        ? await corrigirGeneroCadastrosPlanilha({ persistir: true })
+        : await carregarResumoGeneroPlanilha();
       setResultadoGenero(res);
       setListaNaoIdAberta(res.naoIdentificados.length > 0);
     } catch (e) {
-      setErroGenero(e instanceof Error ? e.message : 'Falha ao corrigir gênero na Planilha.');
+      setErroGenero(e instanceof Error ? e.message : 'Falha ao ler/corrigir gênero na Planilha.');
     } finally {
       setCorrigindoGenero(false);
     }
   }, []);
+
+  const executarCorrecaoGenero = useCallback(() => {
+    void atualizarResumoGenero(true);
+  }, [atualizarResumoGenero]);
 
   const abrirEdicaoNaoId = useCallback((item: CadastroNaoIdentificadoGenero) => {
     setEditando(item);
@@ -131,18 +138,11 @@ export function AdminHistoricoApp() {
         setErroGenero('Cadastro não encontrado na Planilha.');
         return;
       }
-      setResultadoGenero((prev) => {
-        if (!prev) return prev;
-        const restante = prev.naoIdentificados.filter((x) => x.id !== editando.id);
-        return {
-          ...prev,
-          homens: sexoEdicao === 'M' ? prev.homens + 1 : prev.homens,
-          mulheres: sexoEdicao === 'F' ? prev.mulheres + 1 : prev.mulheres,
-          naoIdentificados: restante,
-          modificados: prev.modificados + 1,
-        };
-      });
       setEditando(null);
+      // Recarrega da Planilha (fonte da verdade) — não depende só do estado da tela.
+      const res = await carregarResumoGeneroPlanilha();
+      setResultadoGenero(res);
+      setListaNaoIdAberta(res.naoIdentificados.length > 0);
     } catch (e) {
       setErroGenero(e instanceof Error ? e.message : 'Falha ao salvar gênero.');
     } finally {
@@ -153,6 +153,11 @@ export function AdminHistoricoApp() {
   useEffect(() => {
     void carregarBosses();
   }, [carregarBosses]);
+
+  // Ao abrir/atualizar a página, mostra o que já está gravado na Planilha.
+  useEffect(() => {
+    void atualizarResumoGenero(false);
+  }, [atualizarResumoGenero]);
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -240,12 +245,13 @@ export function AdminHistoricoApp() {
           {resultadoGenero ? (
             <Text style={[styles.generoMeta, { color: theme.textMuted }]}>
               {resultadoGenero.total} na Planilha · {resultadoGenero.modificados} alterado
-              {resultadoGenero.modificados !== 1 ? 's' : ''} · {resultadoGenero.jaCorretos} já correto
+              {resultadoGenero.modificados !== 1 ? 's' : ''} nesta execução ·{' '}
+              {resultadoGenero.jaCorretos} já com gênero salvo
               {resultadoGenero.jaCorretos !== 1 ? 's' : ''}
             </Text>
           ) : (
             <Text style={[styles.generoMeta, { color: theme.textMuted }]}>
-              Execute a correção para preencher os contadores.
+              Carregando contadores da Planilha…
             </Text>
           )}
 

@@ -8,7 +8,15 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { ArrowLeft, ChevronRight, ExternalLink, Mail, RefreshCw, Users } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  ChevronRight,
+  ExternalLink,
+  Mail,
+  RefreshCw,
+  Users,
+  Wand2,
+} from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import {
   adminListAuthorizedEmails,
@@ -18,6 +26,13 @@ import {
 } from '../services/supabase/adminDirectoryCloud';
 import { isSupabaseConfigured } from '../config/supabase';
 import { PREMIUM } from '../theme/premium';
+import { AppModal } from '../components/premium/AppModal';
+import {
+  corrigirGeneroCadastrosPlanilha,
+  salvarGeneroManualCadastro,
+  type CadastroNaoIdentificadoGenero,
+  type ResultadoCorrecaoGenero,
+} from '../utils/corrigirGeneroPorNome';
 
 type Page = 'bosses' | 'members';
 
@@ -29,6 +44,14 @@ export function AdminHistoricoApp() {
   const [members, setMembers] = useState<AdminAuthorizedRow[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+
+  const [corrigindoGenero, setCorrigindoGenero] = useState(false);
+  const [resultadoGenero, setResultadoGenero] = useState<ResultadoCorrecaoGenero | null>(null);
+  const [erroGenero, setErroGenero] = useState<string | null>(null);
+  const [listaNaoIdAberta, setListaNaoIdAberta] = useState(false);
+  const [editando, setEditando] = useState<CadastroNaoIdentificadoGenero | null>(null);
+  const [sexoEdicao, setSexoEdicao] = useState<'M' | 'F'>('M');
+  const [salvandoGenero, setSalvandoGenero] = useState(false);
 
   const carregarBosses = useCallback(async () => {
     if (!isSupabaseConfigured()) {
@@ -79,6 +102,54 @@ export function AdminHistoricoApp() {
     void carregarBosses();
   }, [carregarBosses]);
 
+  const executarCorrecaoGenero = useCallback(async () => {
+    setCorrigindoGenero(true);
+    setErroGenero(null);
+    try {
+      const res = await corrigirGeneroCadastrosPlanilha();
+      setResultadoGenero(res);
+      setListaNaoIdAberta(res.naoIdentificados.length > 0);
+    } catch (e) {
+      setErroGenero(e instanceof Error ? e.message : 'Falha ao corrigir gênero na Planilha.');
+    } finally {
+      setCorrigindoGenero(false);
+    }
+  }, []);
+
+  const abrirEdicaoNaoId = useCallback((item: CadastroNaoIdentificadoGenero) => {
+    setEditando(item);
+    setSexoEdicao(item.sexoAtual === 'F' ? 'F' : 'M');
+  }, []);
+
+  const salvarEdicaoGenero = useCallback(async () => {
+    if (!editando) return;
+    setSalvandoGenero(true);
+    setErroGenero(null);
+    try {
+      const ok = await salvarGeneroManualCadastro(editando.id, sexoEdicao);
+      if (!ok) {
+        setErroGenero('Cadastro não encontrado na Planilha.');
+        return;
+      }
+      setResultadoGenero((prev) => {
+        if (!prev) return prev;
+        const restante = prev.naoIdentificados.filter((x) => x.id !== editando.id);
+        return {
+          ...prev,
+          homens: sexoEdicao === 'M' ? prev.homens + 1 : prev.homens,
+          mulheres: sexoEdicao === 'F' ? prev.mulheres + 1 : prev.mulheres,
+          naoIdentificados: restante,
+          modificados: prev.modificados + 1,
+        };
+      });
+      setEditando(null);
+    } catch (e) {
+      setErroGenero(e instanceof Error ? e.message : 'Falha ao salvar gênero.');
+    } finally {
+      setSalvandoGenero(false);
+    }
+  }, [editando, sexoEdicao]);
+
   useEffect(() => {
     void carregarBosses();
   }, [carregarBosses]);
@@ -95,6 +166,10 @@ export function AdminHistoricoApp() {
     const base = path.startsWith('/apptaf') ? '/apptaf/' : '/';
     window.location.href = `${window.location.origin}${base}`;
   }, []);
+
+  const homens = resultadoGenero?.homens ?? 0;
+  const mulheres = resultadoGenero?.mulheres ?? 0;
+  const naoIdCount = resultadoGenero?.naoIdentificados.length ?? 0;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -116,6 +191,94 @@ export function AdminHistoricoApp() {
             <ExternalLink size={16} color={theme.primary} strokeWidth={2.2} />
             <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>App TAF</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={[styles.generoPanel, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+          <Text style={[styles.generoTitle, { color: theme.text }]}>Gênero — Planilha de cadastro</Text>
+          <Text style={[styles.generoHint, { color: theme.textMuted }]}>
+            Identifica o primeiro nome de cada militar da Planilha e corrige o gênero pelo dicionário.
+          </Text>
+
+          <TouchableOpacity
+            onPress={() => void executarCorrecaoGenero()}
+            disabled={corrigindoGenero}
+            style={[
+              styles.generoBtn,
+              { backgroundColor: theme.primary, opacity: corrigindoGenero ? 0.7 : 1 },
+            ]}
+            accessibilityLabel="Corrigir gênero pelos nomes"
+          >
+            {corrigindoGenero ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Wand2 size={18} color="#fff" strokeWidth={2.2} />
+            )}
+            <Text style={styles.generoBtnText}>
+              {corrigindoGenero ? 'Corrigindo…' : 'Corrigir gênero pelos nomes'}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.statsRow}>
+            <View style={[styles.statChip, { borderColor: theme.border, backgroundColor: theme.accentMuted }]}>
+              <Text style={[styles.statLabel, { color: theme.textMuted }]}>Homens</Text>
+              <Text style={[styles.statValue, { color: theme.text }]}>{homens}</Text>
+            </View>
+            <View style={[styles.statChip, { borderColor: theme.border, backgroundColor: theme.accentMuted }]}>
+              <Text style={[styles.statLabel, { color: theme.textMuted }]}>Mulheres</Text>
+              <Text style={[styles.statValue, { color: theme.text }]}>{mulheres}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setListaNaoIdAberta((v) => !v)}
+              style={[styles.statChip, { borderColor: theme.border, backgroundColor: theme.accentMuted }]}
+              accessibilityLabel="Ver nomes não identificados"
+            >
+              <Text style={[styles.statLabel, { color: theme.textMuted }]}>Não identificados</Text>
+              <Text style={[styles.statValue, { color: theme.text }]}>{naoIdCount}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {resultadoGenero ? (
+            <Text style={[styles.generoMeta, { color: theme.textMuted }]}>
+              {resultadoGenero.total} na Planilha · {resultadoGenero.modificados} alterado
+              {resultadoGenero.modificados !== 1 ? 's' : ''} · {resultadoGenero.jaCorretos} já correto
+              {resultadoGenero.jaCorretos !== 1 ? 's' : ''}
+            </Text>
+          ) : (
+            <Text style={[styles.generoMeta, { color: theme.textMuted }]}>
+              Execute a correção para preencher os contadores.
+            </Text>
+          )}
+
+          {erroGenero ? (
+            <Text style={[styles.erroBox, { color: theme.loss, borderColor: theme.loss }]}>{erroGenero}</Text>
+          ) : null}
+
+          {listaNaoIdAberta && resultadoGenero && resultadoGenero.naoIdentificados.length > 0 ? (
+            <View style={styles.naoIdList}>
+              <Text style={[styles.naoIdTitle, { color: theme.text }]}>
+                Nomes não identificados ({resultadoGenero.naoIdentificados.length})
+              </Text>
+              {resultadoGenero.naoIdentificados.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  onPress={() => abrirEdicaoNaoId(item)}
+                  style={[styles.naoIdRow, { borderColor: theme.border }]}
+                  accessibilityLabel={`Editar gênero de ${item.nome}`}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cardEmail, { color: theme.text }]} numberOfLines={2}>
+                      {item.nome}
+                    </Text>
+                    <Text style={[styles.cardMeta, { color: theme.textMuted }]}>
+                      {item.nip ? `NIP ${item.nip} · ` : ''}
+                      1º nome: {item.primeiroNome}
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={theme.textMuted} strokeWidth={2.2} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.toolbar}>
@@ -211,6 +374,64 @@ export function AdminHistoricoApp() {
             ))
           : null}
       </ScrollView>
+
+      <AppModal visible={editando != null} transparent animationType="fade" onRequestClose={() => setEditando(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Definir gênero</Text>
+            <Text style={[styles.modalNome, { color: theme.text }]} numberOfLines={3}>
+              {editando?.nome}
+            </Text>
+            {editando?.nip ? (
+              <Text style={[styles.cardMeta, { color: theme.textMuted }]}>NIP {editando.nip}</Text>
+            ) : null}
+
+            <View style={styles.sexoRow}>
+              {(['M', 'F'] as const).map((sx) => {
+                const active = sexoEdicao === sx;
+                return (
+                  <TouchableOpacity
+                    key={sx}
+                    onPress={() => setSexoEdicao(sx)}
+                    style={[
+                      styles.sexoBtn,
+                      {
+                        borderColor: active ? theme.primary : theme.border,
+                        backgroundColor: active ? theme.accentMuted : 'transparent',
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: theme.text, fontWeight: '800' }}>
+                      {sx === 'M' ? 'Masculino' : 'Feminino'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                onPress={() => setEditando(null)}
+                style={[styles.modalBtn, { borderColor: theme.border }]}
+                disabled={salvandoGenero}
+              >
+                <Text style={{ color: theme.text, fontWeight: '700' }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void salvarEdicaoGenero()}
+                style={[styles.modalBtnPrimary, { backgroundColor: theme.primary }]}
+                disabled={salvandoGenero}
+              >
+                {salvandoGenero ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>Salvar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </AppModal>
     </View>
   );
 }
@@ -247,6 +468,48 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
   },
+  generoPanel: {
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusLg,
+    padding: 16,
+    marginBottom: 18,
+    gap: 12,
+  },
+  generoTitle: { fontSize: 17, fontWeight: '800' },
+  generoHint: { fontSize: 13, lineHeight: 18 },
+  generoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: PREMIUM.radiusMd,
+  },
+  generoBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  statChip: {
+    flexGrow: 1,
+    minWidth: 110,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  statLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  statValue: { fontSize: 22, fontWeight: '800' },
+  generoMeta: { fontSize: 12, lineHeight: 16 },
+  naoIdList: { gap: 8, marginTop: 4 },
+  naoIdTitle: { fontSize: 14, fontWeight: '800' },
+  naoIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    padding: 12,
+    gap: 8,
+  },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -275,7 +538,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: PREMIUM.radiusMd,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 4,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -291,4 +554,45 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1, gap: 4 },
   cardEmail: { fontSize: 16, fontWeight: '700' },
   cardMeta: { fontSize: 13 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusLg,
+    padding: 18,
+    gap: 12,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800' },
+  modalNome: { fontSize: 15, fontWeight: '700', lineHeight: 20 },
+  sexoRow: { flexDirection: 'row', gap: 10 },
+  sexoBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  modalBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalBtnPrimary: {
+    flex: 1,
+    borderRadius: PREMIUM.radiusMd,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
 });

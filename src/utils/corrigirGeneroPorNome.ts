@@ -4,7 +4,12 @@ import {
   getAllCadastros,
   type CadastroItemPersist,
 } from '../services/cadastrosIndexedDb';
-import { DICIONARIO_NOMES_GENERO, type GeneroNome } from '../data/dicionarioNomesGenero';
+import {
+  DICIONARIO_NOMES_GENERO,
+  isNomeGeneroDuvidoso,
+  MASCULINOS_TERMINADOS_EM_A,
+  type GeneroNome,
+} from '../data/dicionarioNomesGenero';
 import { isDemoCadastroId } from './gatherSystemBackupData';
 
 export type CadastroNaoIdentificadoGenero = {
@@ -92,20 +97,31 @@ export function extrairPrimeiroNome(nomeCompleto: string): string {
 }
 
 /**
- * Heurística: termina em "o" → masculino, exceto "-ção" (normalizado: cao) → feminino.
- * O dicionário tem prioridade sobre esta regra.
+ * Heurísticas por final do nome (dicionário tem prioridade):
+ * - "-ção" (cao) → feminino
+ * - termina em "o" → masculino
+ * - termina em "a" → feminino (padrão BR), exceto masculinos conhecidos;
+ *   nomes duvidosos/unissex ficam sem classificação (não identificados)
  */
 function classificarPorSufixo(key: string): GeneroNome | null {
   if (key.length < 2) return null;
+  if (isNomeGeneroDuvidoso(key)) return null;
+
   // Conceição, Consolação, Assunção, etc.
   if (key.endsWith('cao')) return 'F';
   if (key.endsWith('o')) return 'M';
+
+  if (key.endsWith('a')) {
+    if (MASCULINOS_TERMINADOS_EM_A.has(key)) return 'M';
+    return 'F';
+  }
   return null;
 }
 
 export function classificarGeneroPrimeiroNome(primeiroNome: string): GeneroNome | null {
   const key = normalizarNomeChave(primeiroNome);
   if (!key) return null;
+  if (isNomeGeneroDuvidoso(key)) return null;
   return DICIONARIO_NOMES_GENERO[key] ?? classificarPorSufixo(key);
 }
 

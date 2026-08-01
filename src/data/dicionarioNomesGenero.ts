@@ -123,11 +123,31 @@ const FEMININOS = [
   'yvone', 'zelia', 'zenaide', 'zilda', 'zuleica', 'zuleide', 'zuleika', 'zulmira',
 ] as const;
 
-/** Nomes ambíguos / unissex — não classificar automaticamente. */
+/** Nomes ambíguos / unissex — não classificar automaticamente (ficam em não identificados). */
 const AMBIGUOS = new Set([
   'alex', 'andrea', 'ariel', 'dani', 'dom', 'gui', 'isa', 'jordan', 'kai', 'leslie',
-  'nicolle', 'noa', 'noah', 'robin', 'sam', 'tony',
+  'nicola', 'nicolle', 'noa', 'noah', 'robin', 'sam', 'sasha', 'sascha', 'tony',
 ]);
+
+/**
+ * Masculinos populares que terminam em "a" (após normalizar acentos: Cauã → caua).
+ * Evita a heurística "termina em a = feminino".
+ */
+export const MASCULINOS_TERMINADOS_EM_A = new Set([
+  'barnaba',
+  'caua',
+  'josafa',
+  'joshua',
+  'juda',
+  'kaua',
+  'luca',
+  'lucca',
+  'mustafa',
+]);
+
+export function isNomeGeneroDuvidoso(nomeNormalizado: string): boolean {
+  return AMBIGUOS.has(nomeNormalizado);
+}
 
 function buildMap(): Record<string, GeneroNome> {
   const map: Record<string, GeneroNome> = {};
@@ -137,9 +157,10 @@ function buildMap(): Record<string, GeneroNome> {
   for (const n of FEMININOS) {
     if (!AMBIGUOS.has(n)) map[n] = 'F';
   }
+  for (const n of MASCULINOS_TERMINADOS_EM_A) {
+    if (!AMBIGUOS.has(n)) map[n] = 'M';
+  }
   // Conflitos conhecidos: preferir o gênero mais comum no Brasil para cadastro TAF.
-  // "Alex" e similares ficam em AMBIGUOS.
-  // Jessica aparece só como F (removido de M se houver).
   map.jessica = 'F';
   map.jussara = 'F';
   return map;

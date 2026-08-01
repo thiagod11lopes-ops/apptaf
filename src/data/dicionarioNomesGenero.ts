@@ -5,8 +5,9 @@
 export type GeneroNome = 'M' | 'F';
 
 const MASCULINOS = [
-  'aaron', 'abdiel', 'abel', 'abilio', 'abner', 'abraao', 'adalberto', 'adalton', 'adam', 'adelson', 'ademar',
-  'ademir', 'adesio', 'adilson', 'adolfo', 'adonis', 'adrian', 'adriano', 'aecio', 'afonso', 'agnaldo',
+  'aaron', 'abdiel', 'abel', 'abilio', 'abner', 'abraao', 'adailton', 'adaildo', 'adalberto', 'adalton', 'adam',
+  'adeildo', 'adeilson', 'adelino', 'adelson', 'ademar', 'ademir', 'adenilson', 'adesio', 'adilson', 'adolfo',
+  'adonis', 'adrian', 'adriano', 'aecio', 'afonso', 'agnaldo',
   'agnelo', 'agostinho', 'aguinaldo', 'airton', 'alan', 'alberto', 'alcides', 'aldecir', 'aldenir', 'aldo',
   'aleandro', 'alejandro', 'alenilson', 'alex', 'alexander', 'alexandre', 'alexsandro', 'alfredo', 'alison', 'alisson',
   'allan', 'almir', 'aloizio', 'alonso', 'alvaro', 'alvino', 'amadeu', 'amado', 'amarildo', 'amazonas',

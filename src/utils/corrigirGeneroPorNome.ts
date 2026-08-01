@@ -91,10 +91,17 @@ export function extrairPrimeiroNome(nomeCompleto: string): string {
   return parts[parecePostoOuGrad(parts[0]!) ? 1 : 0] ?? '';
 }
 
+/** Sufixos tipicamente masculinos no Brasil (ex.: Adeildo, Josenildo). */
+function classificarPorSufixoMasculino(key: string): GeneroNome | null {
+  if (key.length < 5) return null;
+  if (/(ildo|nildo|valdo|berto)$/.test(key)) return 'M';
+  return null;
+}
+
 export function classificarGeneroPrimeiroNome(primeiroNome: string): GeneroNome | null {
   const key = normalizarNomeChave(primeiroNome);
   if (!key) return null;
-  return DICIONARIO_NOMES_GENERO[key] ?? null;
+  return DICIONARIO_NOMES_GENERO[key] ?? classificarPorSufixoMasculino(key);
 }
 
 export async function corrigirGeneroCadastrosPlanilha(): Promise<ResultadoCorrecaoGenero> {

@@ -45,6 +45,7 @@ import {
   getConnectivityState,
 } from '../offline-first/sync/ConnectivityMonitor';
 import { getFirebaseAuth } from '../config/firebase';
+import { subscribeCloudLink } from '../offline-first/sync/cloudLinkPreference';
 import {
   getSyncManagerState,
   SYNC_AUTH_REQUIRED_MESSAGE,
@@ -155,7 +156,8 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
   const { isAuthenticated, authReady } = useAuth();
   const { syncUi, startSyncFromToggle } = useOfflineSyncState();
 
-  const [phase, setPhase] = useState<GatePhase>('checking');
+  /** idle no boot — backup do dia só após a 1ª vez que a chave da nuvem for ligada hoje. */
+  const [phase, setPhase] = useState<GatePhase>('idle');
   const [progress, setProgress] = useState<DailyBackupProgress>({
     percent: 0,
     label: 'Verificando…',
@@ -420,18 +422,21 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     void runCloudSyncBeforeBackup();
   }, [runCloudSyncBeforeBackup]);
 
-  const bootStartedRef = useRef(false);
-  const runCloudSyncRef = useRef(runCloudSyncBeforeBackup);
-  runCloudSyncRef.current = runCloudSyncBeforeBackup;
+  /** True após ligar a chave neste ciclo — evita abrir backup sem ter virado a chave. */
+  const expectBackupAfterKeyRef = useRef(false);
 
   const openBackupModalAfterCloudSync = useCallback(async () => {
     if (reopenAfterSyncLockRef.current) return;
     reopenAfterSyncLockRef.current = true;
     try {
       const pending = await isDailyBackupPendingAfterCloudSync();
-      if (!pending) return;
+      const required = await isDailyBackupRequired();
+      if (!pending && !required) return;
+      if (!expectBackupAfterKeyRef.current && !pending) return;
 
+      await markDailyBackupPendingAfterCloudSync();
       await reopenDailyBackupAfterCloudSync();
+      expectBackupAfterKeyRef.current = false;
       cloudSyncedThisSessionRef.current = true;
       setCloudSyncedForBackup(true);
       setBackupNetOnline(true);
@@ -453,37 +458,37 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     }
   }, []);
 
+  // Não inicia backup no carregamento da página.
+  // Na 1ª vez que a chave da nuvem é ligada no dia, marca pendência para abrir após a sync.
   useEffect(() => {
     if (!enabled) {
       setPhase('idle');
-      bootStartedRef.current = false;
+      expectBackupAfterKeyRef.current = false;
       return;
     }
-    if (bootStartedRef.current) return;
     if (!authReady) return;
-    bootStartedRef.current = true;
-    cancelledRef.current = false;
 
-    void (async () => {
-      setPhase('checking');
-      try {
-        const required = await isDailyBackupRequired();
-        if (cancelledRef.current) return;
-        if (!required) {
-          setPhase('idle');
-          return;
+    return subscribeCloudLink((cloudOn) => {
+      if (!cloudOn) return;
+      // Sinal síncrono: a sync da Home pode terminar antes do await abaixo.
+      expectBackupAfterKeyRef.current = true;
+      void (async () => {
+        try {
+          const required = await isDailyBackupRequired();
+          const alreadyPending = await isDailyBackupPendingAfterCloudSync();
+          if (!required && !alreadyPending) {
+            expectBackupAfterKeyRef.current = false;
+            return;
+          }
+          await markDailyBackupPendingAfterCloudSync();
+        } catch {
+          // ignore
         }
-
-        await runCloudSyncRef.current();
-      } catch (e) {
-        if (cancelledRef.current) return;
-        setError(e instanceof Error ? e.message : 'Não foi possível iniciar o fluxo diário.');
-        setPhase('error');
-      }
-    })();
+      })();
+    });
   }, [enabled, authReady]);
 
-  // Sem internet no boot: quando a 1ª sync com a nuvem concluir, reabre o modal.
+  // Após a sync disparada pela chave, abre o modal do backup do dia (se ainda não feito hoje).
   useEffect(() => {
     if (!enabled) return;
     if (phase !== 'idle') return;
@@ -491,11 +496,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
     if (syncUi.phase !== 'success' && syncUi.phase !== 'already_up_to_date') return;
     if (!syncUi.lastSyncAt) return;
 
-    void (async () => {
-      if (await isDailyBackupPendingAfterCloudSync()) {
-        await openBackupModalAfterCloudSync();
-      }
-    })();
+    void openBackupModalAfterCloudSync();
   }, [enabled, phase, syncUi.isSyncing, syncUi.phase, syncUi.lastSyncAt, openBackupModalAfterCloudSync]);
 
   // Se ainda está no modal (aguardando backup) e a sync conclui depois, marca nuvem OK.

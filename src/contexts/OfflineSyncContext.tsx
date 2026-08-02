@@ -27,6 +27,7 @@ import { getFirebaseAuth } from '../config/firebase';
 import { subscribeDataChanged } from '../offline-first/sync/SyncEngine';
 import {
   isCloudLinkEnabled,
+  setCloudLinkEnabled,
   subscribeCloudLink,
 } from '../offline-first/sync/cloudLinkPreference';
 
@@ -109,7 +110,11 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     return subscribeCloudLink((enabled) => {
       if (!enabled) {
         syncManager.cancelScheduledBackgroundSync();
-        syncManager.cancelOnlineMode();
+        // Não cancela se ainda há sync em voo — o SyncManager fecha a chave ao concluir.
+        const phase = getSyncManagerState().syncUi.phase;
+        if (phase !== 'preparing' && phase !== 'syncing') {
+          syncManager.cancelOnlineMode();
+        }
         return;
       }
       if (!authReady || !firebaseEnabled || !isAuthenticated) return;
@@ -118,6 +123,17 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       syncManager.scheduleBackgroundSync(400);
     });
   }, [authReady, firebaseEnabled, isAuthenticated]);
+
+  // Backup: sync concluída e sem pendências → fecha a chave (Local).
+  useEffect(() => {
+    if (!isCloudLinkEnabled()) return;
+    const phase = syncUi.phase;
+    if (phase !== 'success' && phase !== 'already_up_to_date') return;
+    if (pendingCount > 0) return;
+    const downloads = syncUi.counters.pendingDownloads;
+    if (typeof downloads === 'number' && downloads > 0) return;
+    setCloudLinkEnabled(false);
+  }, [syncUi.phase, syncUi.counters.pendingDownloads, pendingCount]);
 
   const hasValidSession =
     authReady && isAuthenticated && Boolean(getFirebaseAuth()?.currentUser);

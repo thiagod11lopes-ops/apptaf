@@ -5,7 +5,7 @@ import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems
 import { syncEngine, notifyDataChanged } from './SyncEngine';
 import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip, compactDuplicateAplicadoresByNip, pruneAplicadoresOutsideDataOwner } from '../db/localDb';
 import { systemState } from './SystemState';
-import { isCloudLinkEnabled } from './cloudLinkPreference';
+import { isCloudLinkEnabled, setCloudLinkEnabled } from './cloudLinkPreference';
 import { syncLogger } from './SyncLogger';
 import { createLocalBackup, restoreLocalBackup } from './localBackup';
 import { detectClockDrift, type ClockDriftResult } from './clockDrift';
@@ -716,6 +716,12 @@ function scheduleReturnToOffline(delayMs: number): void {
   }, delayMs);
 }
 
+/** Local = nuvem: fecha a chave da Home (volta ao modo desconectado). */
+function closeCloudLinkAfterEqual(): void {
+  if (!isCloudLinkEnabled()) return;
+  setCloudLinkEnabled(false);
+}
+
 async function runSyncPipeline(
   ensureAuth: EnsureAuthenticatedFn,
   options?: { silent?: boolean },
@@ -1006,6 +1012,8 @@ async function runSyncPipeline(
       syncSteps = markStepsDoneThrough(syncSteps, 'finalizing');
       await applyCountersAfterSuccessfulSync();
       await syncLogger.info('sync-manager', 'Sync: banco já atualizado');
+      notifyListeners();
+      closeCloudLinkAfterEqual();
       scheduleReturnToOffline(ALREADY_UP_TO_DATE_MS);
       return { ok: true };
     }
@@ -1018,6 +1026,8 @@ async function runSyncPipeline(
       `Sync concluída em ${durationMs}ms: ↑${result.stats.uploads} ↓${result.stats.downloads} ⊘${result.stats.ignored}`,
     );
 
+    notifyListeners();
+    closeCloudLinkAfterEqual();
     scheduleReturnToOffline(SUCCESS_DISPLAY_MS);
     const successUid = ownerUid ?? getCachedDataOwnerUid();
     if (successUid) cloudMirrorDoneOwner = successUid;
@@ -1337,8 +1347,10 @@ export const syncManager = {
         pendingDownloads <= 0 &&
         !needsMirror
       ) {
+        // Já igual à nuvem — fecha a chave se o usuário tinha ligado para atualizar.
+        closeCloudLinkAfterEqual();
         notifyListeners();
-        return { ok: false, skipped: 'nothing_pending' };
+        return { ok: true, skipped: 'nothing_pending' };
       }
 
       if (

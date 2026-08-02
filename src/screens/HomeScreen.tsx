@@ -233,19 +233,11 @@ export default function HomeScreen() {
           ) : null}
           {bankCode || emailPrefixo || isAuthenticated ? (
             <View style={styles.bankRow}>
-              {bankCode ? (
-                <Text
-                  style={[styles.bankCode, { color: theme.textMuted }]}
-                  numberOfLines={1}
-                  accessibilityLabel={`Banco de dados ${bankCode}`}
-                >
-                  {bankCode}
-                </Text>
-              ) : null}
               <CloudLinkToggle
                 value={cloudLinkOn}
                 onValueChange={(v) => void onToggleCloudLink(v)}
                 disabled={togglingCloud}
+                bankLabel={bankCode?.trim() || 'BNC'}
               />
             </View>
           ) : null}
@@ -443,15 +435,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  bankCode: {
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 15,
-    textAlign: 'center',
-    letterSpacing: 0.8,
   },
   statsPanel: {
     flexShrink: 0,

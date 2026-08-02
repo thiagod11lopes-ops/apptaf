@@ -7,28 +7,34 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Cloud, CloudOff } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 
 type Props = {
   value: boolean;
   onValueChange: (next: boolean) => void;
   disabled?: boolean;
-  /** Rótulo curto ao lado (opcional). */
-  showLabel?: boolean;
+  /** Identificação do banco exibida dentro da chave (ex.: BNC 001). */
+  bankLabel: string;
 };
 
+const TRACK_W = 92;
+const THUMB_W = 58;
+const THUMB_H = 24;
+const TRACK_H = 30;
+const PAD = 3;
+
 /**
- * Interruptor ultra-moderno: liga/desliga conexão com a nuvem.
+ * Interruptor: liga/desliga nuvem; o polegar mostra o código do banco.
  */
 export function CloudLinkToggle({
   value,
   onValueChange,
   disabled = false,
-  showLabel = true,
+  bankLabel,
 }: Props) {
   const { theme } = useTheme();
   const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
+  const label = (bankLabel || 'BNC').trim() || 'BNC';
 
   useEffect(() => {
     Animated.spring(anim, {
@@ -45,18 +51,13 @@ export function CloudLinkToggle({
   });
   const thumbX = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [2, 28],
+    outputRange: [PAD, TRACK_W - THUMB_W - PAD],
   });
   const glow = value ? 'rgba(16, 185, 129, 0.55)' : 'rgba(220, 38, 38, 0.45)';
   const accent = value ? theme.gain : theme.loss;
 
   return (
-    <View style={styles.wrap} accessibilityRole="switch" accessibilityState={{ checked: value, disabled }}>
-      {showLabel ? (
-        <Text style={[styles.label, { color: theme.textMuted }]}>
-          {value ? 'Nuvem' : 'Local'}
-        </Text>
-      ) : null}
+    <View accessibilityRole="switch" accessibilityState={{ checked: value, disabled }}>
       <Pressable
         onPress={() => {
           if (!disabled) onValueChange(!value);
@@ -67,7 +68,9 @@ export function CloudLinkToggle({
           { opacity: disabled ? 0.45 : pressed ? 0.88 : 1 },
         ]}
         accessibilityLabel={
-          value ? 'Desligar conexão com a nuvem' : 'Ligar conexão com a nuvem'
+          value
+            ? `Desligar nuvem. Banco ${label}`
+            : `Ligar nuvem. Banco ${label}`
         }
       >
         <Animated.View
@@ -82,12 +85,6 @@ export function CloudLinkToggle({
             },
           ]}
         >
-          <View style={styles.iconLeft}>
-            <CloudOff size={12} color={value ? 'rgba(255,255,255,0.35)' : accent} strokeWidth={2.4} />
-          </View>
-          <View style={styles.iconRight}>
-            <Cloud size={12} color={value ? accent : 'rgba(255,255,255,0.35)'} strokeWidth={2.4} />
-          </View>
           <Animated.View
             style={[
               styles.thumb,
@@ -100,7 +97,16 @@ export function CloudLinkToggle({
                   : { elevation: 6 }),
               },
             ]}
-          />
+          >
+            <Text
+              style={[styles.bankInThumb, { color: accent }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
+              {label}
+            </Text>
+          </Animated.View>
         </Animated.View>
       </Pressable>
     </View>
@@ -108,24 +114,13 @@ export function CloudLinkToggle({
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
   hit: {
     paddingVertical: 4,
     paddingHorizontal: 2,
   },
   track: {
-    width: 56,
-    height: 28,
+    width: TRACK_W,
+    height: TRACK_H,
     borderRadius: 999,
     borderWidth: 1.5,
     justifyContent: 'center',
@@ -133,23 +128,18 @@ const styles = StyleSheet.create({
   },
   thumb: {
     position: 'absolute',
-    width: 22,
-    height: 22,
+    width: THUMB_W,
+    height: THUMB_H,
     borderRadius: 999,
     borderWidth: 1.5,
-  },
-  iconLeft: {
-    position: 'absolute',
-    left: 7,
-    top: 0,
-    bottom: 0,
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
   },
-  iconRight: {
-    position: 'absolute',
-    right: 7,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
+  bankInThumb: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textAlign: 'center',
   },
 });

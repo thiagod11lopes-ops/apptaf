@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Platform, StyleSheet, View, ActivityIndicator } from 'react-native';
 import {
   BookOpen,
@@ -22,6 +22,10 @@ import { E2eEncryptionStatusModal } from './E2eEncryptionStatusModal';
 import { SyncLiveStatusModal } from '../sismav/SyncLiveStatusModal';
 import { PREMIUM } from '../../theme/premium';
 import { syncManager } from '../../offline-first/sync/SyncManager';
+import {
+  isCloudLinkEnabled,
+  subscribeCloudLink,
+} from '../../offline-first/sync/cloudLinkPreference';
 
 const ICON_SIZE = 22;
 const BTN_SIZE = PREMIUM.minTouch;
@@ -84,7 +88,11 @@ export function TopActionIcons({
   const { connectivity, syncing, appMode, pendingCount, uploadError, syncUi } =
     useOfflineSyncState();
   const { e2eActive, status: e2eStatus, copy: e2eCopy } = useE2eEncryptionStatus();
-  const cloudOnline = connectivity === 'ONLINE' || connectivity === 'SYNCING';
+  const [cloudLinkOn, setCloudLinkOn] = useState(isCloudLinkEnabled);
+  useEffect(() => subscribeCloudLink(setCloudLinkOn), []);
+  const networkOnline = connectivity === 'ONLINE' || connectivity === 'SYNCING';
+  /** Só considera “online na nuvem” se a chave da Home estiver ligada. */
+  const cloudOnline = cloudLinkOn && networkOnline;
   /** Envio ou recebimento ativo com a nuvem → ícone azul. */
   const cloudTransferring =
     cloudOnline &&
@@ -153,25 +161,30 @@ export function TopActionIcons({
   const cloudPendingParts: string[] = [];
   if (pendingUploads > 0) cloudPendingParts.push(`${pendingUploads} envio(s)`);
   if (pendingDownloads > 0) cloudPendingParts.push(`${pendingDownloads} recebimento(s)`);
-  const cloudTooltipTitle = !cloudOnline
-    ? 'Offline · local'
-    : cloudTransferring
-      ? 'Sincronizando · nuvem'
-      : cloudOutOfSync
-        ? `Pendente · ${cloudPendingParts.join(' · ')}`
-        : 'Online · igual à nuvem';
-  const cloudTooltipDescription = !cloudOnline
-    ? 'Sem internet — toque para ver o status. Alterações ficam no IndexedDB até reconectar.'
-    : cloudTransferring
-      ? 'Enviando ou recebendo dados da nuvem. Toque para ver o progresso.'
-      : cloudOutOfSync
-        ? uploadError
-          ? `Há diferença com a nuvem. Última tentativa: ${uploadError}. Toque para sincronizar.`
-          : 'Há pendência de envio ou recebimento. Toque para sincronizar até o ícone ficar verde.'
-        : 'Dados deste aparelho alinhados com a nuvem. Toque para ver o status.';
+  const cloudTooltipTitle = !cloudLinkOn
+    ? 'Desconectado · nuvem'
+    : !networkOnline
+      ? 'Offline · local'
+      : cloudTransferring
+        ? 'Sincronizando · nuvem'
+        : cloudOutOfSync
+          ? `Pendente · ${cloudPendingParts.join(' · ')}`
+          : 'Online · igual à nuvem';
+  const cloudTooltipDescription = !cloudLinkOn
+    ? 'Conexão com a nuvem desligada. Ligue a chave ao lado do banco de dados na página principal para sincronizar.'
+    : !networkOnline
+      ? 'Sem internet — toque para ver o status. Alterações ficam no IndexedDB até reconectar.'
+      : cloudTransferring
+        ? 'Enviando ou recebendo dados da nuvem. Toque para ver o progresso.'
+        : cloudOutOfSync
+          ? uploadError
+            ? `Há diferença com a nuvem. Última tentativa: ${uploadError}. Toque para sincronizar.`
+            : 'Há pendência de envio ou recebimento. Toque para sincronizar até o ícone ficar verde.'
+          : 'Dados deste aparelho alinhados com a nuvem. Toque para ver o status.';
 
   const openSyncStatus = useCallback(() => {
     setSyncStatusModalVisible(true);
+    if (!isCloudLinkEnabled()) return;
     void syncManager.refreshCloudDiff({ forcePull: true }).catch(() => {});
   }, []);
 
@@ -193,13 +206,15 @@ export function TopActionIcons({
                 },
               ]}
               accessibilityLabel={
-                !cloudOnline
-                  ? 'Offline: usando dados locais IndexedDB. Abrir status de sincronização.'
-                  : cloudTransferring
-                    ? 'Sincronizando com a nuvem: enviando ou recebendo dados. Abrir status.'
-                    : cloudOutOfSync
-                      ? `Há pendência com a nuvem: ${cloudPendingParts.join(', ')}. Abrir status de sincronização.`
-                      : 'Online e alinhado com a nuvem. Abrir status de sincronização.'
+                !cloudLinkOn
+                  ? 'Nuvem desconectada (chave desligada). Abrir status de sincronização.'
+                  : !cloudOnline
+                    ? 'Offline: usando dados locais IndexedDB. Abrir status de sincronização.'
+                    : cloudTransferring
+                      ? 'Sincronizando com a nuvem: enviando ou recebendo dados. Abrir status.'
+                      : cloudOutOfSync
+                        ? `Há pendência com a nuvem: ${cloudPendingParts.join(', ')}. Abrir status de sincronização.`
+                        : 'Online e alinhado com a nuvem. Abrir status de sincronização.'
               }
             >
               {cloudOnline ? (

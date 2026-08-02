@@ -5,6 +5,7 @@ import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems
 import { syncEngine, notifyDataChanged } from './SyncEngine';
 import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip, compactDuplicateAplicadoresByNip, pruneAplicadoresOutsideDataOwner } from '../db/localDb';
 import { systemState } from './SystemState';
+import { isCloudLinkEnabled } from './cloudLinkPreference';
 import { syncLogger } from './SyncLogger';
 import { createLocalBackup, restoreLocalBackup } from './localBackup';
 import { detectClockDrift, type ClockDriftResult } from './clockDrift';
@@ -1201,6 +1202,11 @@ export const syncManager = {
   },
 
   async evaluateOnReconnect(): Promise<void> {
+    if (!isCloudLinkEnabled()) {
+      await refreshPendingSummary();
+      notifyListeners();
+      return;
+    }
     const uid = ownerUid ?? getCachedDataOwnerUid();
     if (uid) {
       try {
@@ -1251,6 +1257,11 @@ export const syncManager = {
    * Só dispara com internet, login, chave E2E e pendências.
    */
   scheduleBackgroundSync(delayMs = AUTO_SYNC_DEBOUNCE_MS): void {
+    // Chave de nuvem desligada (padrão ao abrir/atualizar) — não sincroniza.
+    if (!isCloudLinkEnabled()) {
+      this.cancelScheduledBackgroundSync();
+      return;
+    }
     if (backgroundSyncTimer) {
       clearTimeout(backgroundSyncTimer);
       backgroundSyncTimer = null;
@@ -1270,6 +1281,9 @@ export const syncManager = {
 
   /** Sync silenciosa — sem modal; erros de E2E/offline são ignorados (não atrapalham UI). */
   async tryBackgroundSync(): Promise<{ ok: boolean; skipped?: string }> {
+    if (!isCloudLinkEnabled()) {
+      return { ok: false, skipped: 'cloud_link_off' };
+    }
     if (backgroundSyncRunning || syncInFlight) {
       backgroundSyncRetryAfterBusy = true;
       return { ok: false, skipped: 'busy' };
@@ -1417,6 +1431,9 @@ export const syncManager = {
   },
 
   async startSyncFromToggle(ensureAuth?: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
+    if (!isCloudLinkEnabled()) {
+      return { ok: false, error: 'Ligue a conexão com a nuvem na página principal.' };
+    }
     if (!syncAuthAvailable || !getFirebaseAuth()?.currentUser) {
       return { ok: false, error: SYNC_AUTH_REQUIRED_MESSAGE };
     }

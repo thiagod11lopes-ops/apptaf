@@ -25,6 +25,10 @@ import { hydrateAppStorageFromIndexedDb } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import { getFirebaseAuth } from '../config/firebase';
 import { subscribeDataChanged } from '../offline-first/sync/SyncEngine';
+import {
+  isCloudLinkEnabled,
+  subscribeCloudLink,
+} from '../offline-first/sync/cloudLinkPreference';
 
 type OfflineSyncContextType = {
   connectivity: ConnectivityState;
@@ -87,15 +91,33 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       const ownerUid = dataOwnerUid ?? getCachedDataOwnerUid();
       if (ownerUid) {
         await syncManager.bindSession(ownerUid);
-        if (hasFirebaseUser && isAuthenticated) {
+        // Só sincroniza se a chave da nuvem estiver ligada (padrão: desligada).
+        if (hasFirebaseUser && isAuthenticated && isCloudLinkEnabled()) {
           await syncManager.refreshCloudDiff();
           syncManager.scheduleBackgroundSync(2_500);
+        } else {
+          await syncManager.refreshPending();
         }
       } else {
         await syncManager.refreshPending();
       }
     })();
   }, [authReady, firebaseEnabled, isAuthenticated, user?.uid, dataOwnerUid]);
+
+  // Religa/desliga sync quando o usuário mexer na chave da Home.
+  useEffect(() => {
+    return subscribeCloudLink((enabled) => {
+      if (!enabled) {
+        syncManager.cancelScheduledBackgroundSync();
+        syncManager.cancelOnlineMode();
+        return;
+      }
+      if (!authReady || !firebaseEnabled || !isAuthenticated) return;
+      if (!getFirebaseAuth()?.currentUser) return;
+      void syncManager.refreshCloudDiff({ forcePull: true }).catch(() => {});
+      syncManager.scheduleBackgroundSync(400);
+    });
+  }, [authReady, firebaseEnabled, isAuthenticated]);
 
   const hasValidSession =
     authReady && isAuthenticated && Boolean(getFirebaseAuth()?.currentUser);
@@ -155,6 +177,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
     return connectivityMonitor.subscribe((state) => {
       if (state !== 'ONLINE') return;
+      if (!isCloudLinkEnabled()) return;
       if (!getFirebaseAuth()?.currentUser) return;
       void syncManager.evaluateOnReconnect();
     });
@@ -165,9 +188,9 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
     const onVisibilityChange = (): void => {
       if (document.visibilityState !== 'visible') return;
+      if (!isCloudLinkEnabled()) return;
       if (!getFirebaseAuth()?.currentUser) return;
       void syncManager.refreshCloudDiff({ forcePull: true });
-      // Voltou ao app online → tenta sync automática em segundo plano.
       syncManager.scheduleBackgroundSync(1_000);
     };
 

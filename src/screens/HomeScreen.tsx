@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Image, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, Image, Platform, Animated, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
+import { CloudLinkToggle } from '../components/premium/CloudLinkToggle';
 import { StatCard } from '../components/sismav/StatCard';
 import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
 import { loadResumoInicioFromIndexedDb } from '../utils/homeResumoIndexedDb';
@@ -17,6 +18,13 @@ import {
   ensureDatabaseBankCode,
   readCachedDatabaseBankCode,
 } from '../services/supabase/databaseRegistryCloud';
+import { listRecentKnownAuthEmails } from '../offline-first/auth/knownAuthEmails';
+import { getCachedDataOwnerUid } from '../services/firebase/authUid';
+import {
+  isCloudLinkEnabled,
+  setCloudLinkEnabled,
+  subscribeCloudLink,
+} from '../offline-first/sync/cloudLinkPreference';
 
 const tafImage = require('../../TAF1.png');
 
@@ -44,9 +52,12 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const { isNarrowPhone } = useAplicarTafLayout();
   const { user, authReady, isAuthenticated, dataOwnerUid } = useAuth();
-  const { syncUi } = useOfflineSyncState();
+  const { syncUi, startSyncFromToggle, cancelOnlineMode } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const [cloudLinkOn, setCloudLinkOn] = useState(isCloudLinkEnabled);
+  const [emailFixoPrefixo, setEmailFixoPrefixo] = useState<string | null>(null);
+  const [togglingCloud, setTogglingCloud] = useState(false);
 
   const pctConcluidos = useMemo(() => {
     const total = resumo.totalCadastrados;
@@ -77,9 +88,59 @@ export default function HomeScreen() {
     extrapolate: 'clamp',
   });
 
-  const emailPrefixo = useMemo(
-    () => (isAuthenticated ? emailPrefixoExibicao(user?.email) : null),
-    [isAuthenticated, user?.email],
+  /** E-mail da sessão atual ou o último login salvo neste aparelho (fixo na Home). */
+  const emailPrefixo = useMemo(() => {
+    const fromSession = emailPrefixoExibicao(user?.email);
+    return fromSession ?? emailFixoPrefixo;
+  }, [user?.email, emailFixoPrefixo]);
+
+  useEffect(() => subscribeCloudLink(setCloudLinkOn), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const fromSession = emailPrefixoExibicao(user?.email);
+      if (fromSession) {
+        if (!cancelled) setEmailFixoPrefixo(fromSession);
+        return;
+      }
+      try {
+        const recent = await listRecentKnownAuthEmails(1);
+        const prefix = emailPrefixoExibicao(recent[0]);
+        if (!cancelled && prefix) setEmailFixoPrefixo(prefix);
+      } catch {
+        // mantém o que já estiver
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.email, isAuthenticated]);
+
+  const onToggleCloudLink = useCallback(
+    async (next: boolean) => {
+      if (togglingCloud) return;
+      if (next && !isAuthenticated) {
+        Alert.alert('Login necessário', 'Faça login para ligar a conexão com a nuvem.');
+        return;
+      }
+      setTogglingCloud(true);
+      try {
+        setCloudLinkEnabled(next);
+        if (next) {
+          const res = await startSyncFromToggle();
+          if (!res.ok) {
+            setCloudLinkEnabled(false);
+            Alert.alert('Nuvem', res.error ?? 'Não foi possível conectar à nuvem.');
+          }
+        } else {
+          cancelOnlineMode();
+        }
+      } finally {
+        setTogglingCloud(false);
+      }
+    },
+    [togglingCloud, isAuthenticated, startSyncFromToggle, cancelOnlineMode],
   );
 
   const [bankCode, setBankCode] = useState<string | null>(() =>
@@ -90,13 +151,16 @@ export default function HomeScreen() {
     if (!authReady) return;
     let cancelled = false;
     void (async () => {
-      if (!isAuthenticated || !dataOwnerUid) {
-        if (!cancelled) setBankCode(null);
+      const owner = dataOwnerUid ?? getCachedDataOwnerUid();
+      if (!owner) {
+        // Mantém código já exibido se houver (não apaga ao desligar nuvem).
         return;
       }
-      if (!cancelled) setBankCode(readCachedDatabaseBankCode(dataOwnerUid));
-      const code = await ensureDatabaseBankCode(dataOwnerUid);
-      if (!cancelled) setBankCode(code);
+      if (!cancelled) setBankCode(readCachedDatabaseBankCode(owner));
+      if (isAuthenticated && isCloudLinkEnabled()) {
+        const code = await ensureDatabaseBankCode(owner);
+        if (!cancelled) setBankCode(code);
+      }
     })();
     return () => {
       cancelled = true;
@@ -167,14 +231,23 @@ export default function HomeScreen() {
               {emailPrefixo}
             </Text>
           ) : null}
-          {bankCode ? (
-            <Text
-              style={[styles.bankCode, { color: theme.textMuted }]}
-              numberOfLines={1}
-              accessibilityLabel={`Banco de dados ${bankCode}`}
-            >
-              {bankCode}
-            </Text>
+          {bankCode || emailPrefixo || isAuthenticated ? (
+            <View style={styles.bankRow}>
+              {bankCode ? (
+                <Text
+                  style={[styles.bankCode, { color: theme.textMuted }]}
+                  numberOfLines={1}
+                  accessibilityLabel={`Banco de dados ${bankCode}`}
+                >
+                  {bankCode}
+                </Text>
+              ) : null}
+              <CloudLinkToggle
+                value={cloudLinkOn}
+                onValueChange={(v) => void onToggleCloudLink(v)}
+                disabled={togglingCloud}
+              />
+            </View>
           ) : null}
         </View>
         <TopActionIcons activeRoute="Home" inline centered />
@@ -364,13 +437,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
     letterSpacing: 0.2,
   },
+  bankRow: {
+    marginTop: 6,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
   bankCode: {
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 15,
     textAlign: 'center',
-    width: '100%',
-    marginTop: 2,
     letterSpacing: 0.8,
   },
   statsPanel: {

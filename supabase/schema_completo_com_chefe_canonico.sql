@@ -885,6 +885,22 @@ begin
     return true;
   end if;
 
+  -- Já possui banco na nuvem (não bloqueia chefe existente se config divergir)
+  if exists (
+    select 1
+    from auth.users u
+    where lower(trim(coalesce(u.email, ''))) = v_email
+      and (
+        exists (select 1 from public.database_registry d where d.owner_uid = u.id)
+        or exists (select 1 from public.team_e2e_meta t where t.owner_uid = u.id)
+        or exists (select 1 from public.cadastros c where c.owner_uid = u.id)
+        or exists (select 1 from public.sessoes s where s.owner_uid = u.id)
+        or exists (select 1 from public.aplicadores a where a.owner_uid = u.id)
+      )
+  ) then
+    return true;
+  end if;
+
   return false;
 end;
 $$;

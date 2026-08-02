@@ -2,6 +2,7 @@ import { getSupabase, requireSupabase } from '../../config/supabase';
 import { isAllowedAuthEmail, authEmailDomainErrorMessage, normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
 import { isCloudOwnerUid } from '../../utils/cloudOwnerUid';
 import { readAppMetaCache } from '../../offline-first/db/appMeta';
+import { ownerHasExistingCloudData } from './ownerCloudPresence';
 
 export type AuthorizedEmailEntry = {
   email: string;
@@ -13,6 +14,44 @@ export type MemberAccess = {
   dataOwnerUid: string;
   isAuthorizedMember: boolean;
 };
+
+async function fetchCanonicalBossEmailKey(): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb
+      .from('app_config')
+      .select('value')
+      .eq('key', 'canonical_boss_email')
+      .maybeSingle();
+    if (error || typeof data?.value !== 'string' || !data.value.trim()) return null;
+    return normalizeAuthEmail(data.value);
+  } catch {
+    return null;
+  }
+}
+
+/** Conta própria (chefe) — nunca membro de outro banco. */
+function ownBankAccess(loginUid: string): MemberAccess {
+  return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+}
+
+/**
+ * Se o UID já tem banco na nuvem, não rebaixa a "membro autorizado"
+ * (evita bloqueio do chefe por member_lookup/sessão antiga).
+ */
+async function preferOwnBankIfPresent(
+  loginUid: string,
+  memberAccess: MemberAccess,
+): Promise<MemberAccess> {
+  if (!memberAccess.isAuthorizedMember || memberAccess.dataOwnerUid === loginUid) {
+    return memberAccess;
+  }
+  if (await ownerHasExistingCloudData(loginUid)) {
+    return ownBankAccess(loginUid);
+  }
+  return memberAccess;
+}
 
 function readPersistedMemberSession(): { loginUid: string; dataOwnerUid: string } | null {
   const loginUid = readAppMetaCache('session:loginUid');
@@ -54,22 +93,32 @@ export async function resolveMemberAccess(
   email: string | null | undefined,
 ): Promise<MemberAccess> {
   if (!isCloudOwnerUid(loginUid)) {
-    return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+    return ownBankAccess(loginUid);
   }
   const sb = getSupabase();
-  if (!sb) return fallbackMemberAccessFromPersistedSession(loginUid);
+  if (!sb) {
+    return preferOwnBankIfPresent(loginUid, fallbackMemberAccessFromPersistedSession(loginUid));
+  }
 
   try {
-    if (email?.trim()) {
-      const emailKey = normalizeAuthEmail(email);
+    const emailKey = email?.trim() ? normalizeAuthEmail(email) : '';
 
+    // Chefe canônico nunca é membro — alinhado à RPC resolve_member_boss.
+    if (emailKey) {
+      const canonical = await fetchCanonicalBossEmailKey();
+      if (canonical && emailKey === canonical) {
+        return ownBankAccess(loginUid);
+      }
+    }
+
+    if (emailKey) {
       // Preferência: RPC SECURITY DEFINER (confiável mesmo com RLS restritivo).
       const { data: rpcBoss, error: rpcError } = await sb.rpc('resolve_member_boss', {
         p_email: emailKey,
       });
       if (!rpcError) {
         const fromRpc = memberAccessFromBoss(loginUid, rpcBoss as string | null);
-        if (fromRpc) return fromRpc;
+        if (fromRpc) return preferOwnBankIfPresent(loginUid, fromRpc);
       } else if (!/could not find the function|schema cache|404/i.test(rpcError.message)) {
         console.warn('[auth] resolve_member_boss:', rpcError.message);
       }
@@ -86,7 +135,7 @@ export async function resolveMemberAccess(
           loginUid,
           data?.ativo === true ? (data.boss_uid as string) : null,
         );
-        if (fromEmail) return fromEmail;
+        if (fromEmail) return preferOwnBankIfPresent(loginUid, fromEmail);
       }
     }
 
@@ -103,14 +152,14 @@ export async function resolveMemberAccess(
           loginUid,
           data && data.ativo !== false ? (data.boss_uid as string) : null,
         );
-        if (fromUid) return fromUid;
+        if (fromUid) return preferOwnBankIfPresent(loginUid, fromUid);
       }
     }
   } catch (error) {
     console.warn('[auth] resolveMemberAccess falhou:', error);
-    return fallbackMemberAccessFromPersistedSession(loginUid);
+    return preferOwnBankIfPresent(loginUid, fallbackMemberAccessFromPersistedSession(loginUid));
   }
-  return fallbackMemberAccessFromPersistedSession(loginUid);
+  return preferOwnBankIfPresent(loginUid, fallbackMemberAccessFromPersistedSession(loginUid));
 }
 
 export async function registerAuthorizedMemberLogin(

@@ -1,6 +1,10 @@
 -- =============================================================================
 -- TAF — Verifica e-mail permitido ANTES do login (anon + authenticated)
 -- Cole no SQL Editor do Supabase → Run (após o schema com chefe canônico).
+--
+-- Inclui: chefe canônico, e-mails autorizados, member_lookup ativo
+-- e contas que JÁ possuem banco na nuvem (não bloqueia o chefe existente
+-- se canonical_boss_email estiver desatualizado).
 -- =============================================================================
 
 create or replace function public.is_system_access_email(p_email text)
@@ -38,6 +42,32 @@ begin
     from public.member_lookup m
     where m.email_key = v_email
       and m.ativo = true
+  ) then
+    return true;
+  end if;
+
+  -- Já possui banco na nuvem (chefe existente / recovery de config)
+  if exists (
+    select 1
+    from auth.users u
+    where lower(trim(coalesce(u.email, ''))) = v_email
+      and (
+        exists (
+          select 1 from public.database_registry d where d.owner_uid = u.id
+        )
+        or exists (
+          select 1 from public.team_e2e_meta t where t.owner_uid = u.id
+        )
+        or exists (
+          select 1 from public.cadastros c where c.owner_uid = u.id
+        )
+        or exists (
+          select 1 from public.sessoes s where s.owner_uid = u.id
+        )
+        or exists (
+          select 1 from public.aplicadores a where a.owner_uid = u.id
+        )
+      )
   ) then
     return true;
   end if;

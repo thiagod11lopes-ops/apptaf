@@ -609,8 +609,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const signedIn = await signInWithEmailPassword(email, password);
         setRecoveryPending(false);
 
+        let access;
         try {
-          await assertSystemAccessAllowed(signedIn.uid, signedIn.email);
+          // Gate + resolução (chefe canônico / membro / dono de banco existente).
+          access = await assertSystemAccessAllowed(signedIn.uid, signedIn.email);
         } catch (error) {
           if (isSystemAccessBlockedError(error)) {
             await rejectBlockedAccess('unregistered');
@@ -619,8 +621,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw error;
         }
 
-        // Consulta a nuvem: e-mail autorizado → banco do chefe; senão → banco próprio.
-        const access = await resolveMemberAccess(signedIn.uid, signedIn.email);
         const isMember =
           access.isAuthorizedMember &&
           isCloudOwnerUid(access.dataOwnerUid) &&
@@ -677,8 +677,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await signUpWithEmailPassword(email, password);
         if (result.user && !result.needsEmailConfirmation) {
           setRecoveryPending(false);
+          let access;
           try {
-            await assertSystemAccessAllowed(result.user.uid, result.user.email);
+            access = await assertSystemAccessAllowed(result.user.uid, result.user.email);
           } catch (error) {
             if (isSystemAccessBlockedError(error)) {
               await rejectBlockedAccess('denied');
@@ -686,7 +687,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             throw error;
           }
-          const access = await resolveMemberAccess(result.user.uid, result.user.email);
           const isMember =
             access.isAuthorizedMember &&
             isCloudOwnerUid(access.dataOwnerUid) &&

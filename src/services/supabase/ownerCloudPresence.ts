@@ -1,6 +1,12 @@
 import { getSupabase } from '../../config/supabase';
 
-const PRESENCE_TABLES = ['cadastros', 'sessoes', 'aplicadores', 'team_e2e_meta'] as const;
+const PRESENCE_TABLES = [
+  'database_registry',
+  'team_e2e_meta',
+  'cadastros',
+  'sessoes',
+  'aplicadores',
+] as const;
 
 /**
  * Verifica se o UID já possui banco de dados na nuvem (qualquer linha própria).

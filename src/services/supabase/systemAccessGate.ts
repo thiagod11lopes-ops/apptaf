@@ -1,5 +1,6 @@
 /**
- * Gate de acesso: só o e-mail chefe canônico ou e-mails autorizados entram.
+ * Gate de acesso: só o e-mail chefe canônico, e-mails autorizados
+ * ou contas que já possuem banco na nuvem entram.
  */
 import { getSupabase } from '../../config/supabase';
 import {
@@ -9,6 +10,7 @@ import {
 } from '../../utils/normalizeAuthEmail';
 import { isCloudOwnerUid } from '../../utils/cloudOwnerUid';
 import { resolveMemberAccess, type MemberAccess } from './authorizedEmailsCloud';
+import { ownerHasExistingCloudData } from './ownerCloudPresence';
 
 export const SYSTEM_ACCESS_BLOCKED_MESSAGE =
   'Sistema Bloqueado. Email não cadastrado pelo administrador';
@@ -57,11 +59,16 @@ async function isCurrentUserCanonicalBoss(): Promise<boolean> {
   return false;
 }
 
+function ownBankAccess(loginUid: string): MemberAccess {
+  return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+}
+
 export type EmailAccessProbe = 'incomplete' | 'allowed' | 'blocked';
 
 /**
  * Checagem de e-mail sem login (usada no clique Entrar / Criar conta).
- * incomplete = e-mail incompleto ou sem como decidir (offline / RPC ausente).
+ * incomplete = e-mail incompleto ou sem como decidir (offline / RPC ausente /
+ * possível dono de banco com config canônica desatualizada — o login ainda valida).
  */
 export async function probeEmailSystemAccess(email: string): Promise<EmailAccessProbe> {
   const normalized = normalizeAuthEmail(email);
@@ -75,30 +82,34 @@ export async function probeEmailSystemAccess(email: string): Promise<EmailAccess
   const sb = getSupabase();
   if (!sb) return 'incomplete';
 
+  const canonical = await fetchCanonicalBossEmail();
+  if (canonical && normalized === canonical) return 'allowed';
+
   try {
     const { data, error } = await sb.rpc('is_system_access_email', {
       p_email: normalized,
     });
     if (!error && data === true) return 'allowed';
-    if (!error && data === false) return 'blocked';
+    if (!error && data === false) {
+      // RPC antiga pode negar o chefe se canonical_boss_email estiver errado.
+      // Não bloqueia aqui: assertSystemAccessAllowed libera quem já tem banco.
+      return 'incomplete';
+    }
 
     if (error && /could not find|schema cache|404/i.test(error.message)) {
-      const canonical = await fetchCanonicalBossEmail();
-      if (canonical && normalized === canonical) return 'allowed';
       // Sem RPC: não bloqueia no digitar (login ainda valida).
       return 'incomplete';
     }
   } catch {
-    const canonical = await fetchCanonicalBossEmail();
-    if (canonical && normalized === canonical) return 'allowed';
     return 'incomplete';
   }
 
-  return 'blocked';
+  return 'incomplete';
 }
 
 /**
- * Após autenticar no Auth: autoriza chefe canônico ou membro autorizado.
+ * Após autenticar no Auth: autoriza chefe canônico, membro autorizado
+ * ou conta que já possui banco na nuvem.
  * Caso contrário lança SystemAccessBlockedError.
  */
 export async function assertSystemAccessAllowed(
@@ -113,13 +124,18 @@ export async function assertSystemAccessAllowed(
   if (isMember) return access;
 
   if (await isCurrentUserCanonicalBoss()) {
-    return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+    return ownBankAccess(loginUid);
   }
 
   const canonical = await fetchCanonicalBossEmail();
   const emailKey = email?.trim() ? normalizeAuthEmail(email) : '';
   if (canonical && emailKey && emailKey === canonical) {
-    return { dataOwnerUid: loginUid, isAuthorizedMember: false };
+    return ownBankAccess(loginUid);
+  }
+
+  // Já criou/possui banco na nuvem → não bloqueia (mesmo se config canônica divergir).
+  if (isCloudOwnerUid(loginUid) && (await ownerHasExistingCloudData(loginUid))) {
+    return ownBankAccess(loginUid);
   }
 
   throw new SystemAccessBlockedError();

@@ -500,6 +500,11 @@ async function runCloudAuthoritativeMirror(options?: {
 }): Promise<{ ok: boolean; error?: string }> {
   if (cloudMirrorPromise) return cloudMirrorPromise;
 
+  // Espelho / sync completa só com a chave da nuvem ligada.
+  if (!isCloudLinkEnabled()) {
+    return { ok: false, error: 'cloud_link_off' };
+  }
+
   const silent = options?.silent !== false;
   const uid = (ownerUid ?? getCachedDataOwnerUid() ?? '').trim();
   if (!uid) return { ok: false, error: 'no_owner' };
@@ -1184,7 +1189,7 @@ export const syncManager = {
     notifyListeners();
   },
 
-  /** Chave da Home ligada/desligada — inicia ou para a comparação periódica com a nuvem. */
+  /** Chave da Home ligada/desligada — inicia ou para comparação, espelho e sync. */
   onCloudLinkChanged(enabled: boolean): void {
     if (!enabled) {
       this.cancelScheduledBackgroundSync();
@@ -1194,9 +1199,14 @@ export const syncManager = {
       return;
     }
     if (!syncAuthAvailable) return;
+    // Nova sessão com chave ligada — permite espelho nuvem→local.
+    cloudMirrorDoneOwner = null;
     scheduleCloudQueueEstimate();
     startCloudDiffWatch();
     this.scheduleBackgroundSync(400);
+    if (getConnectivityState() === 'ONLINE') {
+      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true }).catch(() => {});
+    }
     notifyListeners();
   },
 
@@ -1272,6 +1282,9 @@ export const syncManager = {
   }): Promise<{ ok: boolean; error?: string; timedOut?: boolean }> {
     const timeoutMs = options?.timeoutMs ?? 120_000;
     const silent = options?.silent !== false;
+    if (!isCloudLinkEnabled()) {
+      return { ok: false, error: 'cloud_link_off' };
+    }
     if (getConnectivityState() !== 'ONLINE') {
       return { ok: false, error: 'offline' };
     }

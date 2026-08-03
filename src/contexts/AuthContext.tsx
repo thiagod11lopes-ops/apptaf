@@ -42,7 +42,6 @@ import {
 import { clearMemoryCloudCache } from '../services/cloudDataCache';
 import { syncEngine, notifyDataChanged } from '../offline-first/sync/SyncEngine';
 import { syncManager } from '../offline-first/sync/SyncManager';
-import { getConnectivityState } from '../offline-first/sync/ConnectivityMonitor';
 import { resolveLocalSessionAfterLogin } from '../offline-first/sync/syncSessionPrepare';
 import { resolveMemberAccess } from '../offline-first/sync/firebase/FirebaseGateway';
 import {
@@ -306,16 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (supabaseEnabled) {
       await syncManager.bindSession(ownerUid);
       syncManager.setAuthAvailable(true);
-      if (getConnectivityState() === 'ONLINE') {
-        // Espelho em segundo plano — não trava "Concluindo login…".
-        void syncManager
-          .awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true })
-          .then(() => notifyDataChanged())
-          .catch(() => {});
-      }
-      void syncManager.refreshCloudDiff().catch((err) => {
-        console.warn('[auth] refreshCloudDiff (fallback) falhou:', err);
-      });
+      // Espelho/sync só quando a chave da nuvem for ligada (Home).
     }
   }, [supabaseEnabled]);
 
@@ -332,9 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         syncManager.setAuthAvailable(true);
         const owner = getCachedDataOwnerUid() ?? mapped.uid;
         void restoreE2eForOwner(owner, mapped.email);
-        if (getConnectivityState() === 'ONLINE') {
-          void syncManager.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
-        }
+        // Espelho/sync só com a chave da nuvem ligada.
         return true;
       }
 
@@ -397,20 +385,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (supabaseEnabled) {
             await syncManager.bindSession(session.dataOwnerUid);
             syncManager.setAuthAvailable(true);
-            // Online: espelho em segundo plano (2k+ cadastros não podem travar o login).
-            if (getConnectivityState() === 'ONLINE') {
-              void syncManager
-                .awaitCloudAuthoritativeMirror({
-                  timeoutMs: 180_000,
-                  silent: true,
-                })
-                .then(() => notifyDataChanged())
-                .catch(() => {});
-            }
+            // Espelho/sync só quando a chave da nuvem for ligada (Home).
             notifyDataChanged();
-            void syncManager.refreshCloudDiff().catch((err) => {
-              console.warn('[auth] refreshCloudDiff falhou:', err);
-            });
             void ensureDatabaseBankCode(session.dataOwnerUid).catch((err) => {
               console.warn('[auth] ensureDatabaseBankCode falhou:', err);
             });
@@ -664,14 +640,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
         }
         await waitForAuthenticatedUid(8_000);
-        if (supabaseEnabled) {
-          // Sync depois do login — não compete com a abertura da Home.
-          setTimeout(() => {
-            void syncManager.tryBackgroundSync().catch((err) => {
-              console.warn('[auth] sync pós-login:', err);
-            });
-          }, 2_500);
-        }
+        // Sync pós-login removida — só ocorre ao ligar a chave da nuvem.
       } finally {
         emailPasswordAuthInFlightRef.current = false;
       }
@@ -724,11 +693,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw new Error('É necessário aceitar os termos para criar um novo banco de dados.');
           }
           await waitForAuthenticatedUid(20_000);
-          if (supabaseEnabled) {
-            void syncManager.tryBackgroundSync().catch((err) => {
-              console.warn('[auth] sync pós-cadastro:', err);
-            });
-          }
+          // Sync pós-cadastro só ao ligar a chave da nuvem.
         }
         return { needsEmailConfirmation: result.needsEmailConfirmation };
       } finally {

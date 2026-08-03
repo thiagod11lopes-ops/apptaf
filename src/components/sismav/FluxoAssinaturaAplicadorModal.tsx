@@ -20,6 +20,7 @@ import {
   substituirRubricaAplicador,
   type AplicadorItemPersist,
 } from '../../services/aplicadoresIndexedDb';
+import { subscribeDataChanged } from '../../offline-first/sync/SyncEngine';
 import { isModoDemonstracaoAtivo } from '../../services/modoDemonstracao';
 import { verificarSenhaAplicador, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../../utils/aplicadorSenha';
 import {
@@ -126,14 +127,26 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
     if (!visible) return;
     resetFluxo();
 
-    setCarregandoAplicadores(true);
-    void getAllAplicadores({ includeDemo: isModoDemonstracaoAtivo() })
-      .then((lista) => {
-        const ordenados = [...lista].sort(compareByNomePtBr);
-        setAplicadores(ordenados);
-      })
-      .catch(() => setAplicadores([]))
-      .finally(() => setCarregandoAplicadores(false));
+    let cancelled = false;
+    const load = () => {
+      setCarregandoAplicadores(true);
+      void getAllAplicadores({ includeDemo: isModoDemonstracaoAtivo() })
+        .then((lista) => {
+          if (!cancelled) setAplicadores([...lista].sort(compareByNomePtBr));
+        })
+        .catch(() => {
+          if (!cancelled) setAplicadores([]);
+        })
+        .finally(() => {
+          if (!cancelled) setCarregandoAplicadores(false);
+        });
+    };
+    load();
+    const unsub = subscribeDataChanged(load);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, [visible, resetFluxo]);
 
   const selecionarAplicador = useCallback((id: string) => {

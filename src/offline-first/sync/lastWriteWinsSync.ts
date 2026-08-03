@@ -1192,9 +1192,8 @@ export async function estimateSyncQueueCounts(
   const drifts = [
     countActivePresenceDrift(plan.localCad, remoteCadForLww, remoteToCadastroRecord, ownerUid),
     countActivePresenceDrift(plan.localSess, remoteSessForLww, remoteToSessaoRecord, ownerUid),
-    ...(isAuthorizedMemberSession()
-      ? [{ extraDownloads: 0, extraUploads: 0 }]
-      : [countActivePresenceDrift(plan.localApp, remoteAppForLww, remoteToAplicadorRecord, ownerUid)]),
+    // Membro também precisa ver aplicadores faltantes na fila (select de senha/rúbrica).
+    countActivePresenceDrift(plan.localApp, remoteAppForLww, remoteToAplicadorRecord, ownerUid),
     countBusinessContentDrift('cadastros', plan.localCad, plan.remoteCad, remoteToCadastroRecord, ownerUid),
     countBusinessContentDrift('sessoes', plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),
   ];

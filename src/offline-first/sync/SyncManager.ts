@@ -981,7 +981,17 @@ async function runSyncPipeline(
       snap?.fetchMode === 'incremental' ? 'incremental' : 'full',
     );
     if (snap?.fetchMode === 'full' || !snap) {
-      await markFullFetchDone(ownerUid);
+      // Decrypt parcial: não “consumir” o full fetch — senão o próximo ciclo fica
+      // incremental com baseline incompleto (ex.: 1 aplicador) e nunca baixa o resto.
+      if (snap && snap.trustworthyForPrune === false) {
+        await forceNextFullRemoteFetch(ownerUid);
+        await syncLogger.warn(
+          'sync',
+          'Full fetch incompleto (decrypt parcial) — próximo sync repetirá full fetch',
+        );
+      } else {
+        await markFullFetchDone(ownerUid);
+      }
     }
     await loadLastSyncFromAudit();
 

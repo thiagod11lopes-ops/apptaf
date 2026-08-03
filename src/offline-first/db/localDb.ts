@@ -4,7 +4,7 @@ import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndex
 import type { AplicadorRecord, CadastroRecord, SessaoRecord } from '../types';
 import { getTafDatabase } from './tafDatabase';
 import { getDeviceId } from '../deviceId';
-import { getCachedLoginUid } from '../../services/firebase/authUid';
+import { getCachedDataOwnerUid, getCachedLoginUid } from '../../services/firebase/authUid';
 import { isAuthorizedMemberSession } from '../../utils/aplicadorSyncPolicy';
 import { bumpRecordMeta, markRecordSynced, ensureRecordMeta } from '../sync/recordMeta';
 import { decideLastWriteWins } from '../sync/lastWriteWins';
@@ -202,14 +202,28 @@ export async function listAplicadoresForDisplay(ownerUid: string | null): Promis
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
+  const cachedOwner = getCachedDataOwnerUid();
   const loginUid = getCachedLoginUid();
   // Não unir todos os ownerUids do IndexedDB: cópias órfãs de sessões antigas
   // continuariam aparecendo como "cadastrados" após o chefe remover na nuvem.
+  // Membro: só o banco do chefe (cache + persistido), nunca o loginUid do autorizado.
+  const pickBossOwner = (): string => {
+    for (const candidate of [cachedOwner, persisted, primary]) {
+      const v = candidate?.trim();
+      if (v && v !== ANONYMOUS_OWNER && v !== loginUid) return v;
+    }
+    return (persisted ?? cachedOwner ?? primary).trim() || ANONYMOUS_OWNER;
+  };
+  const bossOwner = isAuthorizedMemberSession() ? pickBossOwner() : null;
   const sources = isAuthorizedMemberSession()
-    ? uniqueOwnerSources(persisted ?? primary, ANONYMOUS_OWNER)
+    ? uniqueOwnerSources(bossOwner, ANONYMOUS_OWNER)
     : uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
   const batches = await Promise.all(sources.map((uid) => listAplicadores(uid)));
-  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
+  const mergeTarget = isAuthorizedMemberSession()
+    ? (bossOwner ?? primary)
+    : primary !== ANONYMOUS_OWNER
+      ? primary
+      : (persisted ?? primary);
   const merged = mergeRecordsById(mergeTarget, batches);
   return dedupeAplicadoresByNipNewest(merged) as AplicadorRecord[];
 }

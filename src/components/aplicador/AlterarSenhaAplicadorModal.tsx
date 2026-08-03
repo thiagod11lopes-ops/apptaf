@@ -18,6 +18,7 @@ import {
   alterarSenhaAplicador,
   type AplicadorItemPersist,
 } from '../../services/aplicadoresIndexedDb';
+import { subscribeDataChanged } from '../../offline-first/sync/SyncEngine';
 import {
   verificarSenhaAplicador,
   formatSenhaAplicadorInput,
@@ -66,11 +67,27 @@ export function AlterarSenhaAplicadorModal({ visible, onClose }: Props) {
     setSucesso('');
     setSalvando(false);
 
-    setCarregando(true);
-    void getAllAplicadores()
-      .then((lista) => setAplicadores([...lista].sort(compareByNomePtBr)))
-      .catch(() => setAplicadores([]))
-      .finally(() => setCarregando(false));
+    let cancelled = false;
+    const load = () => {
+      setCarregando(true);
+      void getAllAplicadores()
+        .then((lista) => {
+          if (!cancelled) setAplicadores([...lista].sort(compareByNomePtBr));
+        })
+        .catch(() => {
+          if (!cancelled) setAplicadores([]);
+        })
+        .finally(() => {
+          if (!cancelled) setCarregando(false);
+        });
+    };
+    load();
+    // Após sync da chave: lista completa do chefe chega no Dexie.
+    const unsub = subscribeDataChanged(load);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, [visible]);
 
   const selecionarAplicador = useCallback((id: string) => {

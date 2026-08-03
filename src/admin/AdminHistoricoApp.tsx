@@ -38,6 +38,9 @@ import {
 } from '../utils/corrigirGeneroPorNome';
 import { AdminHistoricoLogin } from './AdminHistoricoLogin';
 import {
+  ADMIN_E2E_NEEDS_PASSWORD,
+  flushAdminHistoricoCadastrosToCloud,
+  prepareAdminHistoricoCloudSession,
   resolveAdminHistoricoAccess,
   signOutAdminHistorico,
   type AdminHistoricoBossSession,
@@ -72,15 +75,39 @@ export function AdminHistoricoApp() {
     setGate('loading');
     const access = await resolveAdminHistoricoAccess();
     if (access.status === 'ok') {
-      setBossSession(access.session);
-      setGate('ready');
-      return;
+      try {
+        await prepareAdminHistoricoCloudSession(access.session);
+        setBossSession(access.session);
+        setGate('ready');
+        return;
+      } catch (e) {
+        const needsPassword =
+          e instanceof Error &&
+          (e.name === ADMIN_E2E_NEEDS_PASSWORD || e.message === ADMIN_E2E_NEEDS_PASSWORD);
+        if (!needsPassword) {
+          console.warn('[admin-historico] prepare cloud:', e);
+        }
+        // Sessão Auth ok, mas sem chave E2E — pede senha de novo.
+        setBossSession(null);
+        setGate('login');
+        return;
+      }
     }
     if (access.status === 'not_boss') {
       await signOutAdminHistorico().catch(() => undefined);
     }
     setBossSession(null);
     setGate('login');
+  }, []);
+
+  const enviarGeneroParaNuvem = useCallback(async () => {
+    const flush = await flushAdminHistoricoCadastrosToCloud();
+    if (!flush.ok) {
+      throw new Error(
+        flush.error ||
+          'Gênero salvo neste aparelho, mas não foi possível enviar à nuvem. Tente de novo.',
+      );
+    }
   }, []);
 
   const carregarBosses = useCallback(async () => {
@@ -159,12 +186,15 @@ export function AdminHistoricoApp() {
       setResultadoGenero(res);
       sincronizarMarcacoes(res.naoIdentificados);
       setListaNaoIdAberta(res.naoIdentificados.length > 0);
+      if (persistir && res.modificados > 0) {
+        await enviarGeneroParaNuvem();
+      }
     } catch (e) {
       setErroGenero(e instanceof Error ? e.message : 'Falha ao ler/corrigir gênero na Planilha.');
     } finally {
       setCorrigindoGenero(false);
     }
-  }, [sincronizarMarcacoes]);
+  }, [sincronizarMarcacoes, enviarGeneroParaNuvem]);
 
   const executarCorrecaoGenero = useCallback(() => {
     void atualizarResumoGenero(true);
@@ -188,6 +218,7 @@ export function AdminHistoricoApp() {
         setErroGenero('Cadastro não encontrado na Planilha.');
         return;
       }
+      await enviarGeneroParaNuvem();
       setEditando(null);
       const res = await carregarResumoGeneroPlanilha();
       setResultadoGenero(res);
@@ -198,7 +229,7 @@ export function AdminHistoricoApp() {
     } finally {
       setSalvandoGenero(false);
     }
-  }, [editando, sexoEdicao, sincronizarMarcacoes]);
+  }, [editando, sexoEdicao, sincronizarMarcacoes, enviarGeneroParaNuvem]);
 
   const salvarTodosGenerosMarcados = useCallback(async () => {
     const lista = resultadoGenero?.naoIdentificados ?? [];
@@ -215,6 +246,7 @@ export function AdminHistoricoApp() {
         setErroGenero('Nenhum gênero foi gravado. Faça login e tente de novo.');
         return;
       }
+      await enviarGeneroParaNuvem();
       const res = await carregarResumoGeneroPlanilha();
       setResultadoGenero(res);
       sincronizarMarcacoes(res.naoIdentificados);
@@ -224,7 +256,7 @@ export function AdminHistoricoApp() {
     } finally {
       setSalvandoLote(false);
     }
-  }, [resultadoGenero, marcacoesNaoId, sincronizarMarcacoes]);
+  }, [resultadoGenero, marcacoesNaoId, sincronizarMarcacoes, enviarGeneroParaNuvem]);
 
   useEffect(() => {
     void verificarAcesso();
@@ -320,6 +352,7 @@ export function AdminHistoricoApp() {
           <Text style={[styles.generoTitle, { color: theme.text }]}>Gênero — Planilha de cadastro</Text>
           <Text style={[styles.generoHint, { color: theme.textMuted }]}>
             Identifica o primeiro nome de cada militar da Planilha e corrige o gênero pelo dicionário.
+            Ao salvar, as alterações são enviadas para a nuvem do chefe.
           </Text>
 
           <TouchableOpacity

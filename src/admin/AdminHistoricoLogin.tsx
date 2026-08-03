@@ -45,7 +45,8 @@ export function AdminHistoricoLogin({ onSuccess }: Props) {
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Text style={[styles.title, { color: theme.text }]}>Admin — E-mails TAF</Text>
         <Text style={[styles.sub, { color: theme.textMuted }]}>
-          Entre com o e-mail e a senha do chefe para abrir o painel.
+          Entre com o e-mail e a senha do chefe para abrir o painel e sincronizar a Planilha com a
+          nuvem.
         </Text>
 
         <Text style={[styles.label, { color: theme.textMuted }]}>E-mail</Text>

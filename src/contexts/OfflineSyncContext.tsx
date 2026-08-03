@@ -105,11 +105,11 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     })();
   }, [authReady, firebaseEnabled, isAuthenticated, user?.uid, dataOwnerUid]);
 
-  // Religa/desliga sync quando o usuário mexer na chave da Home.
+  // Religa/desliga sync e comparação periódica quando o usuário mexer na chave da Home.
   useEffect(() => {
     return subscribeCloudLink((enabled) => {
+      syncManager.onCloudLinkChanged(enabled);
       if (!enabled) {
-        syncManager.cancelScheduledBackgroundSync();
         // Não cancela se ainda há sync em voo — o SyncManager fecha a chave ao concluir.
         const phase = getSyncManagerState().syncUi.phase;
         if (phase !== 'preparing' && phase !== 'syncing') {
@@ -120,7 +120,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       if (!authReady || !firebaseEnabled || !isAuthenticated) return;
       if (!getFirebaseAuth()?.currentUser) return;
       void syncManager.refreshCloudDiff({ forcePull: true }).catch(() => {});
-      syncManager.scheduleBackgroundSync(400);
     });
   }, [authReady, firebaseEnabled, isAuthenticated]);
 

@@ -350,6 +350,8 @@ function isCloudPermissionError(error: unknown): boolean {
 
 async function refreshCloudQueueEstimate(force = false, attempt = 0): Promise<void> {
   const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
+  // Comparação nuvem só com a chave ligada (evita download periódico com chave off).
+  if (!isCloudLinkEnabled()) return;
   if (uid === ANONYMOUS_OWNER || !syncAuthAvailable || syncInFlight) return;
   if (!connectivityMonitor.canSync()) return;
   if (queueEstimateInFlight && !force && attempt === 0) return;
@@ -441,6 +443,7 @@ function scheduleCloudDiffCyclePause(durationMs: number): void {
 }
 
 async function runCloudDiffCycle(): Promise<void> {
+  if (!isCloudLinkEnabled()) return;
   if (cloudDiffCompareInFlight || !syncAuthAvailable || syncInFlight) return;
   cloudDiffCompareInFlight = true;
   notifyListeners();
@@ -560,6 +563,10 @@ function ensureRealtimeBridge(uid: string | null | undefined): void {
 }
 
 function tickCloudDiffCountdown(): void {
+  if (!isCloudLinkEnabled()) {
+    stopCloudDiffWatch();
+    return;
+  }
   if (!syncAuthAvailable || syncInFlight || mode !== 'OFFLINE') return;
   if (cloudDiffCyclePaused || cloudDiffCompareInFlight) return;
 
@@ -581,10 +588,13 @@ function tickCloudDiffCountdown(): void {
   notifyListeners();
 }
 
-/** Cronômetro regressivo + comparação IndexedDB × nuvem enquanto logado e offline. */
+/**
+ * Cronômetro regressivo + comparação IndexedDB × nuvem.
+ * Só roda com a chave da nuvem ligada (padrão: desligada).
+ */
 function startCloudDiffWatch(): void {
   stopCloudDiffWatch();
-  if (!syncAuthAvailable) return;
+  if (!syncAuthAvailable || !isCloudLinkEnabled()) return;
   cloudDiffCountdownSec = CLOUD_DIFF_COUNTDOWN_SEC;
   void refreshCloudQueueEstimate(true);
   cloudDiffWatchTimer = setInterval(tickCloudDiffCountdown, 1000);
@@ -702,7 +712,7 @@ async function returnToOfflineMode(): Promise<void> {
       counters = await buildSyncCounters(uid, 0, 0);
     }
   }
-  if (syncAuthAvailable) {
+  if (syncAuthAvailable && isCloudLinkEnabled()) {
     startCloudDiffWatch();
   } else {
     counters = { ...counters, pendingDownloads: null };
@@ -1156,12 +1166,14 @@ export const syncManager = {
   setAuthAvailable(authenticated: boolean): void {
     syncAuthAvailable = authenticated;
     if (authenticated) {
-      scheduleCloudQueueEstimate();
-      startCloudDiffWatch();
+      // Comparação periódica / estimativa nuvem só com chave ligada.
+      if (isCloudLinkEnabled()) {
+        scheduleCloudQueueEstimate();
+        startCloudDiffWatch();
+        this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
+        void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
+      }
       ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
-      this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
-      // Espelho nuvem na sessão online (não bloqueia aqui — Auth pode await).
-      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
     } else {
       stopCloudDiffWatch();
       stopRealtimeBridge();
@@ -1169,6 +1181,22 @@ export const syncManager = {
       cloudMirrorDoneOwner = null;
       counters = { ...counters, pendingDownloads: null };
     }
+    notifyListeners();
+  },
+
+  /** Chave da Home ligada/desligada — inicia ou para a comparação periódica com a nuvem. */
+  onCloudLinkChanged(enabled: boolean): void {
+    if (!enabled) {
+      this.cancelScheduledBackgroundSync();
+      stopCloudDiffWatch();
+      counters = { ...counters, pendingDownloads: null };
+      notifyListeners();
+      return;
+    }
+    if (!syncAuthAvailable) return;
+    scheduleCloudQueueEstimate();
+    startCloudDiffWatch();
+    this.scheduleBackgroundSync(400);
     notifyListeners();
   },
 
@@ -1195,12 +1223,14 @@ export const syncManager = {
     await compactCadastrosIfNeeded(dataOwnerUid);
     await loadLastSyncFromAudit();
     await refreshPendingSummary();
-    scheduleCloudQueueEstimate();
     if (syncAuthAvailable) {
-      startCloudDiffWatch();
       ensureRealtimeBridge(dataOwnerUid);
-      this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
-      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
+      if (isCloudLinkEnabled()) {
+        scheduleCloudQueueEstimate();
+        startCloudDiffWatch();
+        this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
+        void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
+      }
     }
     notifyListeners();
   },
@@ -1506,7 +1536,9 @@ export const syncManager = {
 
   async refreshPending(): Promise<PendingSyncSummary> {
     const summary = await refreshPendingSummary();
-    scheduleCloudQueueEstimate();
+    if (isCloudLinkEnabled()) {
+      scheduleCloudQueueEstimate();
+    }
     notifyListeners();
     return summary;
   },
@@ -1528,15 +1560,15 @@ export const syncManager = {
   async endSystemWipe(dataOwnerUid: string): Promise<void> {
     await refreshAfterSystemWipe(dataOwnerUid);
     if (syncAuthAvailable && dataOwnerUid) {
-      startCloudDiffWatch();
       ensureRealtimeBridge(dataOwnerUid);
+      if (isCloudLinkEnabled()) startCloudDiffWatch();
     }
   },
 
   resumeAfterInterruptedWipe(): void {
     if (syncAuthAvailable) {
-      startCloudDiffWatch();
       ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
+      if (isCloudLinkEnabled()) startCloudDiffWatch();
     }
   },
 

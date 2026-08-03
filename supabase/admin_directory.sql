@@ -10,6 +10,7 @@
 -- Remove versões anteriores (evita conflito de assinatura)
 drop function if exists public.admin_list_boss_emails();
 drop function if exists public.admin_list_authorized_emails(uuid);
+drop function if exists public.admin_database_size_bytes();
 
 -- Lista e-mails chefe + quantidade de autorizados ativos
 create or replace function public.admin_list_boss_emails()
@@ -85,11 +86,31 @@ begin
 end;
 $$;
 
+-- Tamanho atual total do banco Postgres do projeto (sem filtro de período)
+create or replace function public.admin_database_size_bytes()
+returns bigint
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null or not public.is_canonical_boss() then
+    raise exception 'Apenas o chefe canonico autenticado pode acessar o painel admin';
+  end if;
+
+  return pg_database_size(current_database());
+end;
+$$;
+
 revoke all on function public.admin_list_boss_emails() from public;
 revoke all on function public.admin_list_authorized_emails(uuid) from public;
+revoke all on function public.admin_database_size_bytes() from public;
 revoke all on function public.admin_list_boss_emails() from anon;
 revoke all on function public.admin_list_authorized_emails(uuid) from anon;
+revoke all on function public.admin_database_size_bytes() from anon;
 
 -- Sem anon: o painel exige login do chefe
 grant execute on function public.admin_list_boss_emails() to authenticated;
 grant execute on function public.admin_list_authorized_emails(uuid) to authenticated;
+grant execute on function public.admin_database_size_bytes() to authenticated;

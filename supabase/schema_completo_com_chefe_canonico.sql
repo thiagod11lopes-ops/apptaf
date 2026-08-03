@@ -729,11 +729,29 @@ begin
 end;
 $$;
 
+create or replace function public.admin_database_size_bytes()
+returns bigint
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null or not public.is_canonical_boss() then
+    raise exception 'Apenas o chefe canonico autenticado pode acessar o painel admin';
+  end if;
+
+  return pg_database_size(current_database());
+end;
+$$;
+
 revoke all on function public.admin_list_boss_emails() from public;
 revoke all on function public.admin_list_authorized_emails(uuid) from public;
+revoke all on function public.admin_database_size_bytes() from public;
 
 grant execute on function public.admin_list_boss_emails() to authenticated;
 grant execute on function public.admin_list_authorized_emails(uuid) to authenticated;
+grant execute on function public.admin_database_size_bytes() to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 8) Login membro autorizado

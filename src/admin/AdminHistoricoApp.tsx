@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   ChevronRight,
   ExternalLink,
+  HardDrive,
   Mail,
   RefreshCw,
   Users,
@@ -19,8 +20,10 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import {
+  adminDatabaseSizeBytes,
   adminListAuthorizedEmails,
   adminListBossEmails,
+  formatAdminDataSize,
   type AdminAuthorizedRow,
   type AdminBossRow,
 } from '../services/supabase/adminDirectoryCloud';
@@ -59,6 +62,9 @@ export function AdminHistoricoApp() {
   const [members, setMembers] = useState<AdminAuthorizedRow[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [dbSizeBytes, setDbSizeBytes] = useState<number | null>(null);
+  const [dbSizeErro, setDbSizeErro] = useState<string | null>(null);
+  const [carregandoDbSize, setCarregandoDbSize] = useState(false);
 
   const [corrigindoGenero, setCorrigindoGenero] = useState(false);
   const [resultadoGenero, setResultadoGenero] = useState<ResultadoCorrecaoGenero | null>(null);
@@ -110,6 +116,29 @@ export function AdminHistoricoApp() {
     }
   }, []);
 
+  const carregarTamanhoBanco = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setDbSizeBytes(null);
+      setDbSizeErro(null);
+      return;
+    }
+    setCarregandoDbSize(true);
+    setDbSizeErro(null);
+    try {
+      const bytes = await adminDatabaseSizeBytes();
+      setDbSizeBytes(bytes);
+    } catch (e) {
+      setDbSizeBytes(null);
+      setDbSizeErro(
+        e instanceof Error
+          ? e.message
+          : 'Falha ao ler o tamanho do banco. Execute supabase/admin_directory.sql no Supabase.',
+      );
+    } finally {
+      setCarregandoDbSize(false);
+    }
+  }, []);
+
   const carregarBosses = useCallback(async () => {
     if (!isSupabaseConfigured()) {
       setErro(
@@ -131,6 +160,7 @@ export function AdminHistoricoApp() {
     try {
       const lista = await adminListBossEmails();
       setBosses(lista.filter((b) => b.email.includes('@')));
+      void carregarTamanhoBanco();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao carregar chefes.';
       setErro(
@@ -140,7 +170,7 @@ export function AdminHistoricoApp() {
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [carregarTamanhoBanco]);
 
   const abrirBoss = useCallback(async (boss: AdminBossRow) => {
     setSelectedBoss(boss);
@@ -348,6 +378,31 @@ export function AdminHistoricoApp() {
           </View>
         </View>
 
+        <View style={[styles.dbSizePanel, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+          <View style={styles.dbSizeRow}>
+            <HardDrive size={18} color={theme.primary} strokeWidth={2.2} />
+            <View style={styles.dbSizeText}>
+              <Text style={[styles.dbSizeLabel, { color: theme.textMuted }]}>
+                Dados atuais no banco (Supabase)
+              </Text>
+              {carregandoDbSize ? (
+                <ActivityIndicator color={theme.primary} style={{ alignSelf: 'flex-start' }} />
+              ) : (
+                <Text style={[styles.dbSizeValue, { color: theme.text }]}>
+                  {dbSizeBytes != null ? formatAdminDataSize(dbSizeBytes) : '—'}
+                </Text>
+              )}
+              {dbSizeErro ? (
+                <Text style={[styles.dbSizeHint, { color: theme.loss }]}>{dbSizeErro}</Text>
+              ) : (
+                <Text style={[styles.dbSizeHint, { color: theme.textMuted }]}>
+                  Tamanho total do banco Postgres do projeto (armazenamento atual, não é egress).
+                </Text>
+              )}
+            </View>
+          </View>
+        </View>
+
         <View style={[styles.generoPanel, { borderColor: theme.border, backgroundColor: theme.surface }]}>
           <Text style={[styles.generoTitle, { color: theme.text }]}>Gênero — Planilha de cadastro</Text>
           <Text style={[styles.generoHint, { color: theme.textMuted }]}>
@@ -503,7 +558,12 @@ export function AdminHistoricoApp() {
           <TouchableOpacity
             onPress={() => {
               if (page === 'bosses') void carregarBosses();
-              else if (selectedBoss) void abrirBoss(selectedBoss);
+              else if (selectedBoss) {
+                void abrirBoss(selectedBoss);
+                void carregarTamanhoBanco();
+              } else {
+                void carregarTamanhoBanco();
+              }
             }}
             style={[styles.toolBtn, { borderColor: theme.border }]}
             accessibilityLabel="Atualizar"
@@ -679,6 +739,17 @@ const styles = StyleSheet.create({
   heading: { fontSize: 24, fontWeight: '800', marginBottom: 6 },
   sub: { fontSize: 14, lineHeight: 20 },
   sessionHint: { fontSize: 12, marginTop: 6, fontWeight: '600' },
+  dbSizePanel: {
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusLg,
+    padding: 16,
+    marginBottom: 18,
+  },
+  dbSizeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  dbSizeText: { flex: 1, gap: 4 },
+  dbSizeLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  dbSizeValue: { fontSize: 28, fontWeight: '800' },
+  dbSizeHint: { fontSize: 12, lineHeight: 16 },
   linkBtn: {
     flexDirection: 'row',
     alignItems: 'center',

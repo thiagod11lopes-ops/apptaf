@@ -3,6 +3,8 @@
 -- Cole TODO este arquivo no SQL Editor do Supabase e clique em Run.
 -- Pode executar mais de uma vez sem erro (idempotente).
 -- NÃO substitui o schema.sql completo — só cria/atualiza as funções do admin.
+--
+-- Acesso: apenas o chefe canônico autenticado (não anon).
 -- =============================================================================
 
 -- Remove versões anteriores (evita conflito de assinatura)
@@ -17,16 +19,23 @@ returns table (
   authorized_count bigint,
   created_at timestamptz
 )
-language sql
+language plpgsql
+stable
 security definer
 set search_path = public
 as $$
+begin
+  if auth.uid() is null or not public.is_canonical_boss() then
+    raise exception 'Apenas o chefe canonico autenticado pode acessar o painel admin';
+  end if;
+
+  return query
   with bosses as (
-    select owner_uid as uid from public.team_e2e_meta
+    select t.owner_uid as uid from public.team_e2e_meta t
     union
-    select owner_uid from public.authorized_emails
+    select ae.owner_uid from public.authorized_emails ae
     union
-    select distinct boss_uid from public.member_lookup
+    select distinct m.boss_uid from public.member_lookup m
   )
   select
     b.uid as owner_uid,
@@ -45,6 +54,7 @@ as $$
   from bosses b
   left join auth.users u on u.id = b.uid
   order by 4 nulls last, 2;
+end;
 $$;
 
 -- Lista e-mails autorizados de um chefe (p_boss = owner_uid do chefe)
@@ -54,10 +64,17 @@ returns table (
   ativo boolean,
   criado_em timestamptz
 )
-language sql
+language plpgsql
+stable
 security definer
 set search_path = public
 as $$
+begin
+  if auth.uid() is null or not public.is_canonical_boss() then
+    raise exception 'Apenas o chefe canonico autenticado pode acessar o painel admin';
+  end if;
+
+  return query
   select
     lower(trim(ae.email)) as email,
     coalesce(ae.ativo, true) as ativo,
@@ -65,11 +82,14 @@ as $$
   from public.authorized_emails ae
   where ae.owner_uid = p_boss
   order by 1;
+end;
 $$;
 
--- Permissões para o app (chave anon / authenticated) chamar as funções
 revoke all on function public.admin_list_boss_emails() from public;
 revoke all on function public.admin_list_authorized_emails(uuid) from public;
+revoke all on function public.admin_list_boss_emails() from anon;
+revoke all on function public.admin_list_authorized_emails(uuid) from anon;
 
-grant execute on function public.admin_list_boss_emails() to anon, authenticated;
-grant execute on function public.admin_list_authorized_emails(uuid) to anon, authenticated;
+-- Sem anon: o painel exige login do chefe
+grant execute on function public.admin_list_boss_emails() to authenticated;
+grant execute on function public.admin_list_authorized_emails(uuid) to authenticated;

@@ -36,11 +36,20 @@ import {
   type CadastroNaoIdentificadoGenero,
   type ResultadoCorrecaoGenero,
 } from '../utils/corrigirGeneroPorNome';
+import { AdminHistoricoLogin } from './AdminHistoricoLogin';
+import {
+  resolveAdminHistoricoAccess,
+  signOutAdminHistorico,
+  type AdminHistoricoBossSession,
+} from './adminHistoricoAuth';
 
 type Page = 'bosses' | 'members';
+type Gate = 'loading' | 'login' | 'ready';
 
 export function AdminHistoricoApp() {
   const { theme } = useTheme();
+  const [gate, setGate] = useState<Gate>('loading');
+  const [bossSession, setBossSession] = useState<AdminHistoricoBossSession | null>(null);
   const [page, setPage] = useState<Page>('bosses');
   const [bosses, setBosses] = useState<AdminBossRow[]>([]);
   const [selectedBoss, setSelectedBoss] = useState<AdminBossRow | null>(null);
@@ -59,12 +68,34 @@ export function AdminHistoricoApp() {
   const [marcacoesNaoId, setMarcacoesNaoId] = useState<Record<string, 'M' | 'F'>>({});
   const [salvandoLote, setSalvandoLote] = useState(false);
 
+  const verificarAcesso = useCallback(async () => {
+    setGate('loading');
+    const access = await resolveAdminHistoricoAccess();
+    if (access.status === 'ok') {
+      setBossSession(access.session);
+      setGate('ready');
+      return;
+    }
+    if (access.status === 'not_boss') {
+      await signOutAdminHistorico().catch(() => undefined);
+    }
+    setBossSession(null);
+    setGate('login');
+  }, []);
+
   const carregarBosses = useCallback(async () => {
     if (!isSupabaseConfigured()) {
       setErro(
         'Supabase não está configurado neste deploy. No Vercel: Project → Settings → Environment Variables → adicione EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY (iguais ao .env local) → Redeploy. No GitHub Pages: configure os mesmos nomes em Settings → Secrets and variables → Actions.',
       );
       setBosses([]);
+      setCarregando(false);
+      return;
+    }
+    const access = await resolveAdminHistoricoAccess();
+    if (access.status !== 'ok') {
+      setBossSession(null);
+      setGate('login');
       setCarregando(false);
       return;
     }
@@ -196,13 +227,19 @@ export function AdminHistoricoApp() {
   }, [resultadoGenero, marcacoesNaoId, sincronizarMarcacoes]);
 
   useEffect(() => {
+    void verificarAcesso();
+  }, [verificarAcesso]);
+
+  useEffect(() => {
+    if (gate !== 'ready') return;
     void carregarBosses();
-  }, [carregarBosses]);
+  }, [gate, carregarBosses]);
 
   // Ao abrir/atualizar a página, mostra o que já está gravado na Planilha.
   useEffect(() => {
+    if (gate !== 'ready') return;
     void atualizarResumoGenero(false);
-  }, [atualizarResumoGenero]);
+  }, [gate, atualizarResumoGenero]);
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -217,9 +254,31 @@ export function AdminHistoricoApp() {
     window.location.href = `${window.location.origin}${base}`;
   }, []);
 
+  const sair = useCallback(async () => {
+    await signOutAdminHistorico().catch(() => undefined);
+    setBossSession(null);
+    setBosses([]);
+    setMembers([]);
+    setSelectedBoss(null);
+    setPage('bosses');
+    setGate('login');
+  }, []);
+
   const homens = resultadoGenero?.homens ?? 0;
   const mulheres = resultadoGenero?.mulheres ?? 0;
   const naoIdCount = resultadoGenero?.naoIdentificados.length ?? 0;
+
+  if (gate === 'loading') {
+    return (
+      <View style={[styles.root, styles.gateCenter, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
+
+  if (gate === 'login') {
+    return <AdminHistoricoLogin onSuccess={() => void verificarAcesso()} />;
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -232,15 +291,29 @@ export function AdminHistoricoApp() {
                 ? 'E-mails chefe cadastrados no sistema. Toque para ver os autorizados.'
                 : `Autorizados do chefe ${selectedBoss?.email ?? ''}.`}
             </Text>
+            {bossSession?.email ? (
+              <Text style={[styles.sessionHint, { color: theme.textMuted }]}>
+                Logado como {bossSession.email}
+              </Text>
+            ) : null}
           </View>
-          <TouchableOpacity
-            onPress={abrirAppPrincipal}
-            style={[styles.linkBtn, { borderColor: theme.border }]}
-            accessibilityLabel="Abrir aplicativo principal"
-          >
-            <ExternalLink size={16} color={theme.primary} strokeWidth={2.2} />
-            <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>App TAF</Text>
-          </TouchableOpacity>
+          <View style={styles.topBarActions}>
+            <TouchableOpacity
+              onPress={() => void sair()}
+              style={[styles.linkBtn, { borderColor: theme.border }]}
+              accessibilityLabel="Sair do painel admin"
+            >
+              <Text style={{ color: theme.text, fontWeight: '700', fontSize: 12 }}>Sair</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={abrirAppPrincipal}
+              style={[styles.linkBtn, { borderColor: theme.border }]}
+              accessibilityLabel="Abrir aplicativo principal"
+            >
+              <ExternalLink size={16} color={theme.primary} strokeWidth={2.2} />
+              <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>App TAF</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={[styles.generoPanel, { borderColor: theme.border, backgroundColor: theme.surface }]}>
@@ -550,6 +623,10 @@ const styles = StyleSheet.create({
     width: '100%',
     minHeight: Platform.OS === 'web' ? ('100vh' as unknown as number) : undefined,
   },
+  gateCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scroll: {
     padding: 20,
     paddingBottom: 48,
@@ -565,8 +642,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   topBarText: { flex: 1 },
+  topBarActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end' },
   heading: { fontSize: 24, fontWeight: '800', marginBottom: 6 },
   sub: { fontSize: 14, lineHeight: 20 },
+  sessionHint: { fontSize: 12, marginTop: 6, fontWeight: '600' },
   linkBtn: {
     flexDirection: 'row',
     alignItems: 'center',

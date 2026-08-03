@@ -11,10 +11,7 @@ import {
 } from './resultadoGeralHistorico';
 import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
 import { getNipsRestritosAtivos } from '../services/restritosStorage';
-import {
-  getNipsComFatorRiscoSim,
-  getNipsComFatoresRiscoPreenchidos,
-} from '../services/fatoresRiscoStorage';
+import { getNipsComFatoresRiscoPreenchidos } from '../services/fatoresRiscoStorage';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 
 const RESUMO_VAZIO: ResumoInicioTafHistorico = {
@@ -98,9 +95,8 @@ export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHi
       .map((row) => stripSessao(row as unknown as Record<string, unknown>));
 
     const ownerUid = getCachedDataOwnerUid();
-    const [nipsRestritos, nipsFatores, nipsFatoresPreenchidos] = await Promise.all([
+    const [nipsRestritos, nipsFatoresPreenchidos] = await Promise.all([
       getNipsRestritosAtivos(),
-      getNipsComFatorRiscoSim(ownerUid),
       getNipsComFatoresRiscoPreenchidos(ownerUid),
     ]);
 
@@ -109,7 +105,7 @@ export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHi
       cadastros,
       sessoesExcluidas,
       nipsRestritos,
-      nipsFatores,
+      new Set(),
       nipsFatoresPreenchidos,
     );
   } catch (error) {

@@ -249,7 +249,8 @@ export async function getAllFatoresRisco(
 
 /**
  * NIPs com alerta de fator de risco (algum “Sim” ou obesidade por IMC).
- * Usado no card da Home — alinhado a `temAlertaFatorRisco`.
+ * Alinhado a `temAlertaFatorRisco` (listagens/alertas). O card da Home usa
+ * `getNipsComFatoresRiscoPreenchidos`.
  */
 export async function getNipsComFatorRiscoSim(
   ownerUid?: string | null,

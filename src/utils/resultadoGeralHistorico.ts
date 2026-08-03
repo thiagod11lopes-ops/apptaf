@@ -460,7 +460,7 @@ export type ResumoInicioTafHistorico = {
   semTeste: number;
   /** Cadastrados com dispensa ativa (Restritos) — fora de pendente e concluído. */
   restritos: number;
-  /** Cadastrados com ao menos um fator de risco “sim”. */
+  /** Cadastrados com formulário de fatores de risco totalmente preenchido (com ou sem alerta). */
   fatoresRisco: number;
   /**
    * Sem data de nascimento válida e/ou sem fatores de risco preenchidos
@@ -554,9 +554,11 @@ export function calcularResumoInicioTafFromHistorico(
   cadastros: CadastroItemPersist[],
   sessoesExcluidas: SessaoAplicacaoTaf[] = [],
   nipsRestritosAtivos: Set<string> | ReadonlySet<string> = new Set(),
+  /** @deprecated Contagem do card usa `nipsFatoresPreenchidos` (formulário completo). */
   nipsFatoresRisco: Set<string> | ReadonlySet<string> = new Set(),
   nipsFatoresPreenchidos: Set<string> | ReadonlySet<string> = new Set(),
 ): ResumoInicioTafHistorico {
+  void nipsFatoresRisco;
   const cadastrosReais = cadastros.filter((c) => !isDemoCadastroId(c.id));
   const sessoesReais = sessoes.filter((s) => !isDemoSessaoId(s.id));
   const excluidasReais = sessoesExcluidas.filter((s) => !isDemoSessaoId(s.id));
@@ -575,11 +577,6 @@ export function calcularResumoInicioTafFromHistorico(
     const key = nipChaveCadastro(n) || (nipDigitos(n).length === 8 ? nipDigitos(n) : '');
     if (key) nipsRestritosNorm.add(key);
   }
-  const nipsFatoresNorm = new Set<string>();
-  for (const n of nipsFatoresRisco) {
-    const key = nipChaveCadastro(n) || (nipDigitos(n).length === 8 ? nipDigitos(n) : '');
-    if (key) nipsFatoresNorm.add(key);
-  }
   const nipsFatoresPreenchidosNorm = new Set<string>();
   for (const n of nipsFatoresPreenchidos) {
     const key = nipChaveCadastro(n) || (nipDigitos(n).length === 8 ? nipDigitos(n) : '');
@@ -597,7 +594,8 @@ export function calcularResumoInicioTafFromHistorico(
   let reprovados = 0;
   for (const c of cadastrosReais) {
     const nipC = nipChaveCadastro(c.nip);
-    if (nipC && nipsFatoresNorm.has(nipC)) {
+    // Formulário completo (Sim/Não em todos) — com ou sem intercorrência/alerta.
+    if (nipC && nipsFatoresPreenchidosNorm.has(nipC)) {
       fatoresRisco += 1;
     }
     if (cadastroIncompletoNascimentoOuFatores(c, nipsFatoresPreenchidosNorm)) {

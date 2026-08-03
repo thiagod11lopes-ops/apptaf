@@ -84,24 +84,21 @@ export class DataStore {
 
   async getResumo(ownerUid: string | null): Promise<ResumoInicioTafHistorico> {
     const { getNipsRestritosAtivos } = await import('../../services/restritosStorage');
-    const {
-      getNipsComFatorRiscoSim,
-      getNipsComFatoresRiscoPreenchidos,
-    } = await import('../../services/fatoresRiscoStorage');
-    const [cadastros, sessoes, nipsRestritos, nipsFatores, nipsFatoresPreenchidos] =
-      await Promise.all([
-        this.getCadastros(ownerUid),
-        this.getSessoes(ownerUid),
-        getNipsRestritosAtivos(),
-        getNipsComFatorRiscoSim(),
-        getNipsComFatoresRiscoPreenchidos(),
-      ]);
+    const { getNipsComFatoresRiscoPreenchidos } = await import(
+      '../../services/fatoresRiscoStorage'
+    );
+    const [cadastros, sessoes, nipsRestritos, nipsFatoresPreenchidos] = await Promise.all([
+      this.getCadastros(ownerUid),
+      this.getSessoes(ownerUid),
+      getNipsRestritosAtivos(),
+      getNipsComFatoresRiscoPreenchidos(),
+    ]);
     return calcularResumoInicioTafFromHistorico(
       sessoes,
       cadastros,
       [],
       nipsRestritos,
-      nipsFatores,
+      new Set(),
       nipsFatoresPreenchidos,
     );
   }

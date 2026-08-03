@@ -140,28 +140,29 @@ describe('calcularResumoInicioTafFromHistorico', () => {
     expect(resumo.semTeste).toBe(1);
     expect(resumo.completos).toBe(0);
     expect(resumo.parcial).toBe(0);
-    expect(resumo.fatoresRisco).toBe(0);
+    expect(resumo.fatoresRisco).toBe(2);
     expect(resumo.cadastroIncompleto).toBe(0);
     expect(resumo.completos + resumo.parcial + resumo.semTeste + resumo.restritos).toBe(
       resumo.totalCadastrados,
     );
   });
 
-  it('conta fatores de risco sem tirar de pendente/concluídos', () => {
+  it('conta formulário de fatores preenchido (com ou sem alerta), sem tirar de pendente', () => {
     const cadastros = [
-      cadastro({ id: 'c1', nip: '11.1111.11', nome: 'Com risco' }),
-      cadastro({ id: 'c2', nip: '22.2222.22', nome: 'Sem risco' }),
+      cadastro({ id: 'c1', nip: '11.1111.11', nome: 'Com alerta' }),
+      cadastro({ id: 'c2', nip: '22.2222.22', nome: 'Sem alerta' }),
+      cadastro({ id: 'c3', nip: '33.3333.33', nome: 'Sem formulário' }),
     ];
     const resumo = calcularResumoInicioTafFromHistorico(
       [],
       cadastros,
       [],
       new Set(),
-      new Set(['11111111']),
-      new Set(['11111111']),
+      new Set(['11111111']), // alerta — ignorado na contagem do card
+      new Set(['11111111', '22222222']), // ambos preencheram o formulário
     );
-    expect(resumo.fatoresRisco).toBe(1);
-    expect(resumo.semTeste).toBe(2);
+    expect(resumo.fatoresRisco).toBe(2);
+    expect(resumo.semTeste).toBe(3);
     expect(resumo.restritos).toBe(0);
     expect(resumo.cadastroIncompleto).toBe(1);
   });

@@ -704,7 +704,20 @@ async function uploadAplicador(uid: string, local: AplicadorRecord, hasRemote: b
     uid,
     toAplicadorFirestorePayload(stripForFirestore({ ...local, ownerUid: uid }) as AplicadorItemPersist),
   );
-  await persistSyncedLocal(uid, local, 'aplicadores');
+  // Texto da senha -> planilha do chefe. Falha propaga para a sync reintentar.
+  const { pushAplicadorSenhaPlaintextFromRecord } = await import(
+    '../../services/supabase/aplicadorSenhasCloud'
+  );
+  const hadSenha = Boolean(local.senha?.trim() && local.senhaHash?.trim());
+  const pushed = await pushAplicadorSenhaPlaintextFromRecord(uid, local);
+  if (hadSenha && !pushed) {
+    throw new Error('Falha ao enviar senha do aplicador para a planilha do chefe.');
+  }
+  const toPersist =
+    pushed && isAuthorizedMemberSession() && local.senha
+      ? ({ ...local, senha: undefined } as AplicadorRecord)
+      : local;
+  await persistSyncedLocal(uid, toPersist, 'aplicadores');
 }
 
 async function uploadPreCadastro(uid: string, local: PreCadastroRecord, hasRemote: boolean): Promise<void> {

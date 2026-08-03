@@ -16,13 +16,31 @@ export async function setAplicadorSenhaFirestore(
   senhaHash: string,
 ): Promise<void> {
   if (!ownerUid || !id) return;
+  const senhaFmt = senha.trim();
+  const hashFmt = senhaHash.trim();
+  if (!senhaFmt || !hashFmt) return;
   await upsertOwnerDoc(
     TABLE,
     ownerUid,
     id,
-    { id, senha, senhaHash, updatedAt: Date.now() },
+    { id, senha: senhaFmt, senhaHash: hashFmt, updatedAt: Date.now() },
     Date.now(),
   );
+}
+
+/**
+ * Após upload do hash em `aplicadores`, espelha o texto em `aplicador_senhas`
+ * para a planilha do e-mail chefe. Lança se falhar (para a sync reintentar).
+ */
+export async function pushAplicadorSenhaPlaintextFromRecord(
+  ownerUid: string,
+  record: { id: string; senha?: string; senhaHash?: string },
+): Promise<boolean> {
+  const senha = record.senha?.trim() ?? '';
+  const senhaHash = record.senhaHash?.trim() ?? '';
+  if (!ownerUid.trim() || !record.id.trim() || !senha || !senhaHash) return false;
+  await setAplicadorSenhaFirestore(ownerUid, record.id, senha, senhaHash);
+  return true;
 }
 
 export async function getAplicadorSenhasMapFirestore(

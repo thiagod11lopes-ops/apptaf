@@ -18,8 +18,6 @@ export type AplicadorItemPersist = {
 import { waitForAuthenticatedUid, resolveStorageOwnerUid } from './firebase/authUid';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { dataStore } from '../offline-first/store/DataStore';
-import { isBossDataSession } from '../utils/aplicadorSyncPolicy';
-
 function useOfflineFirstDb(): boolean {
   return getTafDatabase() != null;
 }
@@ -124,19 +122,30 @@ export async function addAplicador(item: AplicadorItemPersist): Promise<void> {
   }
 }
 
-/** Envia a senha em texto para a nuvem (coleção só-leitura do chefe). Best-effort. */
+/**
+ * Envia a senha em texto para `aplicador_senhas` (planilha do chefe).
+ * Retorna false se offline/sem E2E/falha — o texto fica no Dexie e a sync reenvia.
+ */
 async function pushAplicadorSenhaCloud(
   ownerUid: string | null,
   id: string,
   senha: string,
   senhaHash: string,
-): Promise<void> {
-  if (!ownerUid) return;
+): Promise<boolean> {
+  if (!ownerUid?.trim() || !id.trim() || !senha.trim() || !senhaHash.trim()) return false;
   try {
+    const { getActiveTeamKey } = await import('./supabase/e2eCrypto');
+    if (!getActiveTeamKey()) {
+      const { getFirebaseAuth } = await import('../config/firebase');
+      const { ensureE2eUnlockedForSession } = await import('./supabase/teamE2eSession');
+      await ensureE2eUnlockedForSession(ownerUid, getFirebaseAuth()?.currentUser?.email ?? null);
+    }
+    if (!getActiveTeamKey()) return false;
     const { setAplicadorSenhaFirestore } = await import('./firebase/aplicadorSenhasFirestore');
     await setAplicadorSenhaFirestore(ownerUid, id, senha, senhaHash);
+    return true;
   } catch {
-    // A senha funcional (hash) já sincroniza pela fila; o texto é complementar.
+    return false;
   }
 }
 
@@ -288,7 +297,9 @@ export async function alterarSenhaAplicador(id: string, novaSenha: string): Prom
   const { hashAplicadorSenha, formatSenhaAplicadorInput } = await import('../utils/aplicadorSenha');
   const senhaFmt = formatSenhaAplicadorInput(novaSenha);
   const senhaHash = await hashAplicadorSenha(senhaFmt);
-  const senhaPlano = isBossDataSession() ? senhaFmt : undefined;
+  // Chefe e autorizado: texto fica no Dexie até ir para aplicador_senhas (planilha do chefe).
+  // Não sobe na coleção aplicadores (stripSenha); só na tabela auxiliar.
+  const senhaPlano = senhaFmt;
 
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
@@ -318,7 +329,7 @@ export async function alterarSenhaAplicador(id: string, novaSenha: string): Prom
         const merged: AplicadorItemPersist = {
           ...existing,
           senhaHash,
-          ...(senhaPlano !== undefined ? { senha: senhaPlano } : {}),
+          senha: senhaPlano,
           updatedAt: Date.now(),
         };
         const putReq = store.put(merged);

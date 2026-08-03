@@ -67,7 +67,7 @@ export function aplicadorBusinessContentEqual(a: AplicadorItemPersist, b: Aplica
   return JSON.stringify(aplicadorBusinessSnapshot(a)) === JSON.stringify(aplicadorBusinessSnapshot(b));
 }
 
-/** Após download remoto: chefe preserva senha local; membro recebe só o subconjunto. */
+/** Após download remoto: chefe preserva senha local só se ainda bater com o hash; membro recebe só o subconjunto. */
 export function mergeAplicadorAfterRemoteDownload(
   remote: AplicadorItemPersist,
   existing: AplicadorRecord | undefined,
@@ -77,9 +77,16 @@ export function mergeAplicadorAfterRemoteDownload(
   if (isMember) {
     return toAplicadorMemberView(remoteClean);
   }
+  const remoteHash = (remoteClean.senhaHash ?? '').trim();
+  const localHash = (existing?.senhaHash ?? '').trim();
+  // Hash mudou (ex.: autorizado trocou a senha) — descarta texto antigo da planilha.
+  const keepLocalSenha =
+    Boolean(existing?.senha?.trim()) &&
+    Boolean(remoteHash) &&
+    remoteHash === localHash;
   return {
     ...remoteClean,
-    senha: existing?.senha,
+    senha: keepLocalSenha ? existing?.senha : undefined,
   };
 }
 

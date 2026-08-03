@@ -278,6 +278,10 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
           stripForCloud({ ...still, ownerUid: uid } as unknown as Record<string, unknown>) as unknown as AplicadorItemPersist,
         ),
       );
+      const { pushAplicadorSenhaPlaintextFromRecord } = await import(
+        '../../services/supabase/aplicadorSenhasCloud'
+      );
+      await pushAplicadorSenhaPlaintextFromRecord(uid, still);
     }
 
     if (!(await isQueuePayloadStillCurrent('aplicadores', entry.documentId, { syncVersion: sentVersion }))) {
@@ -286,7 +290,11 @@ async function executeQueueItem(entry: SyncQueueEntry): Promise<void> {
     }
     const fresh = await getAplicadorRaw(entry.documentId);
     if (fresh) {
-      await putAplicadorRecord(markRecordSynced({ ...fresh, ownerUid: uid }, getCachedLoginUid()));
+      const cleared =
+        isAuthorizedMemberSession() && fresh.senha
+          ? ({ ...fresh, senha: undefined } as typeof fresh)
+          : fresh;
+      await putAplicadorRecord(markRecordSynced({ ...cleared, ownerUid: uid }, getCachedLoginUid()));
     }
     return;
   }

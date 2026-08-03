@@ -7,12 +7,9 @@ import {
 } from '../../src/offline-first/sync/memberCloudWatch';
 
 describe('memberCloudWatch — políticas (dose 4)', () => {
-  it('membro não força full fetch a cada evento Realtime', () => {
+  it('Realtime nunca força full fetch (chefe nem membro)', () => {
     expect(shouldForceFullFetchOnRealtimeEvent(true)).toBe(false);
-  });
-
-  it('chefe força full fetch no Realtime', () => {
-    expect(shouldForceFullFetchOnRealtimeEvent(false)).toBe(true);
+    expect(shouldForceFullFetchOnRealtimeEvent(false)).toBe(false);
   });
 
   it('poll do membro força full só a cada N ticks', () => {

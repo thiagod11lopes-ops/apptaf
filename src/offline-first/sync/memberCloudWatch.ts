@@ -8,6 +8,7 @@ import { forceNextFullRemoteFetch } from './syncWatermark';
 import { isAuthorizedMemberSession } from '../../utils/aplicadorSyncPolicy';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { applyTeamWipeIfNeeded } from './syncTeamWipe';
+import { isCloudLinkEnabled } from './cloudLinkPreference';
 
 /** Após evento realtime remoto — coalesce lotes (CSV) antes do pull. */
 export const REALTIME_PULL_DEBOUNCE_MS = 2_000;
@@ -16,9 +17,12 @@ export const MEMBER_CLOUD_POLL_MS = 8_000;
 /** A cada N ticks do poll do membro: força full fetch (~96s). */
 export const MEMBER_FULL_FETCH_EVERY_TICKS = 12;
 
-/** Chefe força full no Realtime; membro não (evita loop em CSV). */
-export function shouldForceFullFetchOnRealtimeEvent(isAuthorizedMember: boolean): boolean {
-  return !isAuthorizedMember;
+/**
+ * Realtime não força mais full fetch (chefe nem membro).
+ * Pull incremental basta; full fetch fica no espelho ao ligar a chave.
+ */
+export function shouldForceFullFetchOnRealtimeEvent(_isAuthorizedMember: boolean): boolean {
+  return false;
 }
 
 /** Full fetch periódico no poll do membro. */
@@ -97,6 +101,8 @@ export type RealtimePullHost = {
 /** Handler de mudança remota (após debounce do RealtimeBridge). */
 export function handleRealtimeRemoteChange(host: RealtimePullHost): void {
   if (!host.isAuthAvailable()) return;
+  // Com chave desligada não puxa a nuvem por evento realtime.
+  if (!isCloudLinkEnabled()) return;
 
   void (async () => {
     const uid = host.getOwnerUid()?.trim();
@@ -111,7 +117,7 @@ export function handleRealtimeRemoteChange(host: RealtimePullHost): void {
           `applyTeamWipeIfNeeded falhou: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      // Full fetch a cada linha do CSV no membro gerava snapshots incompletos.
+      // Invalidação leve — pull incremental (sem full fetch a cada mudança).
       invalidateRemoteSnapshotCache();
       if (shouldForceFullFetchOnRealtimeEvent(isAuthorizedMemberSession())) {
         try {

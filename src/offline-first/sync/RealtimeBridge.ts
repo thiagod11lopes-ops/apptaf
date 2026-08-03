@@ -1,7 +1,7 @@
 /**
  * Escuta postgres_changes do Supabase no banco do dono (owner_uid).
- * Qualquer INSERT/UPDATE/DELETE em tabelas sincronizadas dispara um callback
- * (debounced) para o SyncManager puxar/aplicar via LWW.
+ * Ativo só com a chave da nuvem ligada. Eventos disparam pull incremental
+ * (debounced) — sem full fetch a cada mudança pequena.
  */
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabase } from '../../config/supabase';

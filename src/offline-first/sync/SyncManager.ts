@@ -560,7 +560,8 @@ async function runCloudAuthoritativeMirror(options?: {
 
 function ensureRealtimeBridge(uid: string | null | undefined): void {
   const owner = (uid || '').trim();
-  if (!owner || !syncAuthAvailable) {
+  // Realtime só com chave ligada — evita escuta/pull contínuos com chave off.
+  if (!owner || !syncAuthAvailable || !isCloudLinkEnabled()) {
     stopRealtimeBridge();
     return;
   }
@@ -1171,14 +1172,16 @@ export const syncManager = {
   setAuthAvailable(authenticated: boolean): void {
     syncAuthAvailable = authenticated;
     if (authenticated) {
-      // Comparação periódica / estimativa nuvem só com chave ligada.
+      // Comparação / Realtime / espelho só com chave ligada.
       if (isCloudLinkEnabled()) {
         scheduleCloudQueueEstimate();
         startCloudDiffWatch();
+        ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
         this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
         void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
+      } else {
+        stopRealtimeBridge();
       }
-      ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
     } else {
       stopCloudDiffWatch();
       stopRealtimeBridge();
@@ -1189,11 +1192,12 @@ export const syncManager = {
     notifyListeners();
   },
 
-  /** Chave da Home ligada/desligada — inicia ou para comparação, espelho e sync. */
+  /** Chave da Home ligada/desligada — inicia ou para comparação, Realtime, espelho e sync. */
   onCloudLinkChanged(enabled: boolean): void {
     if (!enabled) {
       this.cancelScheduledBackgroundSync();
       stopCloudDiffWatch();
+      stopRealtimeBridge();
       counters = { ...counters, pendingDownloads: null };
       notifyListeners();
       return;
@@ -1203,6 +1207,7 @@ export const syncManager = {
     cloudMirrorDoneOwner = null;
     scheduleCloudQueueEstimate();
     startCloudDiffWatch();
+    ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
     this.scheduleBackgroundSync(400);
     if (getConnectivityState() === 'ONLINE') {
       void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true }).catch(() => {});
@@ -1234,12 +1239,14 @@ export const syncManager = {
     await loadLastSyncFromAudit();
     await refreshPendingSummary();
     if (syncAuthAvailable) {
-      ensureRealtimeBridge(dataOwnerUid);
       if (isCloudLinkEnabled()) {
         scheduleCloudQueueEstimate();
         startCloudDiffWatch();
+        ensureRealtimeBridge(dataOwnerUid);
         this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
         void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
+      } else {
+        stopRealtimeBridge();
       }
     }
     notifyListeners();
@@ -1427,7 +1434,11 @@ export const syncManager = {
         return { ok: false, skipped: 'e2e' };
       }
 
-      if ((needsMirror || forceFromRealtime) && uid) {
+      // Realtime: só invalida cache (pull incremental). Full fetch só no espelho (needsMirror).
+      if (forceFromRealtime) {
+        invalidateRemoteSnapshotCache();
+      }
+      if (needsMirror && uid) {
         invalidateRemoteSnapshotCache();
         await forceNextFullRemoteFetch(uid);
       }

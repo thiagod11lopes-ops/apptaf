@@ -166,25 +166,31 @@ function writeWebLocalBackup(
   }
 }
 
+function readLegacyWebGlobal(): Record<string, FatoresRiscoRegistro> {
+  if (Platform.OS !== 'web') return {};
+  try {
+    if (typeof localStorage === 'undefined') return {};
+    return parseMap(localStorage.getItem(WEB_LS_KEY_LEGACY));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Une chaves legadas (sem owner / owner antigo) no mapa do chefe.
+ * Antes: se o scoped já tinha 1 NIP, a migração abortava e o 2º salvo em
+ * `fatoresRisco:registros` (sem UID) nunca entrava na contagem da Home.
+ */
 async function migrateLegacyIfNeeded(ownerUid: string): Promise<void> {
   if (!ownerUid) return;
   const scopedKey = storageKey(ownerUid);
   const existing = parseMap(await readAppMeta(scopedKey));
-  if (Object.keys(existing).length > 0) return;
-
   const legacyGlobal = parseMap(await readAppMeta(STORAGE_KEY_LEGACY));
   const legacyOwner = parseMap(await readAppMeta(`${LEGACY_OWNER_PREFIX}${ownerUid}`));
-  const legacyWeb = (() => {
-    if (Platform.OS !== 'web') return {};
-    try {
-      if (typeof localStorage === 'undefined') return {};
-      return parseMap(localStorage.getItem(WEB_LS_KEY_LEGACY));
-    } catch {
-      return {};
-    }
-  })();
-  const merged = mergeMaps(legacyOwner, legacyWeb, legacyGlobal);
+  const legacyWeb = readLegacyWebGlobal();
+  const merged = mergeMaps(legacyOwner, legacyWeb, legacyGlobal, existing);
   if (Object.keys(merged).length === 0) return;
+  if (JSON.stringify(merged) === JSON.stringify(existing)) return;
   await writeAppMeta(scopedKey, JSON.stringify(merged));
   writeWebLocalBackup(merged, ownerUid);
 }
@@ -198,7 +204,10 @@ async function readMap(
   }
   const primary = parseMap(await readAppMeta(storageKey(owner)));
   const webBackup = readWebLocalBackup(owner);
-  return mergeMaps(webBackup, primary);
+  // Sempre mescla legado global — cobre gravação sem ownerUid entre cadastros.
+  const legacyGlobal = owner ? parseMap(await readAppMeta(STORAGE_KEY_LEGACY)) : {};
+  const legacyWeb = owner ? readLegacyWebGlobal() : {};
+  return mergeMaps(legacyWeb, legacyGlobal, webBackup, primary);
 }
 
 async function writeMap(
@@ -209,6 +218,14 @@ async function writeMap(
   const payload = JSON.stringify(map);
   writeWebLocalBackup(map, owner);
   await writeAppMeta(storageKey(owner), payload);
+  // Evita cópia órfã na chave legada competir com o mapa do chefe.
+  if (owner) {
+    try {
+      await removeAppMeta(STORAGE_KEY_LEGACY);
+    } catch {
+      // ignore
+    }
+  }
   notifyDataChanged();
 }
 
@@ -230,15 +247,21 @@ export async function getAllFatoresRisco(
   return onlyActive(await readMap(ownerUid));
 }
 
-/** NIPs (8 dígitos) de cadastrados com ao menos um fator de risco “sim”. */
+/**
+ * NIPs com alerta de fator de risco (algum “Sim” ou obesidade por IMC).
+ * Usado no card da Home — alinhado a `temAlertaFatorRisco`.
+ */
 export async function getNipsComFatorRiscoSim(
   ownerUid?: string | null,
 ): Promise<Set<string>> {
   const map = await getAllFatoresRisco(ownerUid);
   const out = new Set<string>();
   for (const [nip, reg] of Object.entries(map)) {
-    if (!temFatorRiscoSim(reg.respostas)) continue;
-    const key = nipChaveCadastro(nip) || nipChaveCadastro(reg.nip);
+    if (!temAlertaFatorRisco(reg)) continue;
+    const key =
+      nipChaveCadastro(nip) ||
+      nipChaveCadastro(reg.nip) ||
+      (nipDigitos(nip).length === 8 ? nipDigitos(nip) : '');
     if (key) out.add(key);
   }
   return out;
@@ -298,7 +321,18 @@ export async function saveFatoresRisco(input: {
     throw new Error('NIP inválido');
   }
 
-  const map = await readMap();
+  // Garante ownerUid do chefe antes de gravar (evita chave legada sem UID).
+  let ownerUid = getCachedDataOwnerUid();
+  if (!ownerUid) {
+    try {
+      const { resolveStorageOwnerUid } = await import('./firebase/authUid');
+      ownerUid = await resolveStorageOwnerUid();
+    } catch {
+      ownerUid = null;
+    }
+  }
+
+  const map = await readMap(ownerUid);
   const prev = map[key];
   const registro: FatoresRiscoRegistro = {
     nip: key,
@@ -314,9 +348,9 @@ export async function saveFatoresRisco(input: {
   };
 
   map[key] = registro;
-  await writeMap(map);
+  await writeMap(map, ownerUid);
 
-  const confirmado = onlyActive(await readMap())[key];
+  const confirmado = onlyActive(await readMap(ownerUid))[key];
   if (!confirmado) {
     throw new Error('Falha ao confirmar gravação dos fatores de risco.');
   }

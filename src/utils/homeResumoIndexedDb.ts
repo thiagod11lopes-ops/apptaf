@@ -15,6 +15,7 @@ import {
   getNipsComFatorRiscoSim,
   getNipsComFatoresRiscoPreenchidos,
 } from '../services/fatoresRiscoStorage';
+import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 
 const RESUMO_VAZIO: ResumoInicioTafHistorico = {
   totalCadastrados: 0,
@@ -96,10 +97,11 @@ export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHi
       .filter((row) => row.deleted === true && !isDemoSessaoId(row.id))
       .map((row) => stripSessao(row as unknown as Record<string, unknown>));
 
+    const ownerUid = getCachedDataOwnerUid();
     const [nipsRestritos, nipsFatores, nipsFatoresPreenchidos] = await Promise.all([
       getNipsRestritosAtivos(),
-      getNipsComFatorRiscoSim(),
-      getNipsComFatoresRiscoPreenchidos(),
+      getNipsComFatorRiscoSim(ownerUid),
+      getNipsComFatoresRiscoPreenchidos(ownerUid),
     ]);
 
     return calcularResumoInicioTafFromHistorico(

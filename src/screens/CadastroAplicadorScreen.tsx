@@ -298,18 +298,26 @@ export default function CadastroAplicadorScreen() {
           const resolvido = await Promise.all(
             lista.map(async (a) => {
               const cloud = cloudMap[a.id];
-              // 1) Senha da nuvem com o mesmo hash atual (troca do autorizado / chefe).
+              // 1) Texto da nuvem que confere com o hash atual (troca do autorizado).
+              if (
+                cloud?.senha &&
+                a.senhaHash &&
+                (await verificarSenhaAplicador(cloud.senha, a.senhaHash))
+              ) {
+                return { ...a, senha: cloud.senha };
+              }
+              // 2) Mesmo hash gravado na nuvem (campo senhaHash).
               if (cloud && a.senhaHash && cloud.senhaHash === a.senhaHash && cloud.senha) {
                 return { ...a, senha: cloud.senha };
               }
-              // 2) Senha local válida — mantém. Backfill só se a nuvem ainda não tem esse hash.
+              // 3) Senha local válida — mantém e faz backfill na nuvem se faltar.
               if (a.senha && a.senhaHash && (await verificarSenhaAplicador(a.senha, a.senhaHash))) {
                 if (!cloud || cloud.senhaHash !== a.senhaHash) {
                   void setAplicadorSenhaFirestore(ownerUid, a.id, a.senha, a.senhaHash).catch(() => {});
                 }
                 return a;
               }
-              // 3) Texto local/nuvem desatualizado (hash já mudou) — não mostra senha velha.
+              // 4) Hash novo sem texto correspondente — traço até a senha chegar em aplicador_senhas.
               return { ...a, senha: undefined };
             }),
           );

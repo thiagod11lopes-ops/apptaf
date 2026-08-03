@@ -1,5 +1,6 @@
 import { requireSupabase } from '../../config/supabase';
-import { deleteOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
+import { maybeEncryptForCloud } from './e2eCrypto';
+import { deleteOwnerDoc, listOwnerDocs, rowToDoc } from './ownerDocs';
 
 export type AplicadorSenhaCloud = {
   senha: string;
@@ -9,23 +10,39 @@ export type AplicadorSenhaCloud = {
 
 const TABLE = 'aplicador_senhas';
 
-export async function setAplicadorSenhaFirestore(
+/**
+ * Grava senha em texto + hash para a planilha do chefe.
+ * Usa RPC security definer — autorizado consegue upsert sem SELECT na tabela.
+ */
+export async function setAplicadorSenhaCloud(
   ownerUid: string,
   id: string,
   senha: string,
   senhaHash: string,
 ): Promise<void> {
-  if (!ownerUid || !id) return;
+  if (!ownerUid?.trim() || !id?.trim()) {
+    throw new Error('ownerUid/id obrigatórios para gravar senha do aplicador.');
+  }
   const senhaFmt = senha.trim();
   const hashFmt = senhaHash.trim();
-  if (!senhaFmt || !hashFmt) return;
-  await upsertOwnerDoc(
-    TABLE,
-    ownerUid,
+  if (!senhaFmt || !hashFmt) {
+    throw new Error('senha/senhaHash obrigatórios para gravar senha do aplicador.');
+  }
+  const updatedAt = Date.now();
+  const encrypted = await maybeEncryptForCloud({
     id,
-    { id, senha: senhaFmt, senhaHash: hashFmt, updatedAt: Date.now() },
-    Date.now(),
-  );
+    senha: senhaFmt,
+    senhaHash: hashFmt,
+    updatedAt,
+  });
+  const sb = requireSupabase();
+  const { error } = await sb.rpc('upsert_aplicador_senha', {
+    p_owner_uid: ownerUid,
+    p_id: id,
+    p_data: encrypted,
+    p_updated_at: updatedAt,
+  });
+  if (error) throw new Error(error.message);
 }
 
 /**
@@ -39,11 +56,11 @@ export async function pushAplicadorSenhaPlaintextFromRecord(
   const senha = record.senha?.trim() ?? '';
   const senhaHash = record.senhaHash?.trim() ?? '';
   if (!ownerUid.trim() || !record.id.trim() || !senha || !senhaHash) return false;
-  await setAplicadorSenhaFirestore(ownerUid, record.id, senha, senhaHash);
+  await setAplicadorSenhaCloud(ownerUid, record.id, senha, senhaHash);
   return true;
 }
 
-export async function getAplicadorSenhasMapFirestore(
+export async function getAplicadorSenhasMapCloud(
   ownerUid: string,
 ): Promise<Record<string, AplicadorSenhaCloud>> {
   if (!ownerUid) return {};
@@ -67,17 +84,12 @@ export async function getAplicadorSenhasMapFirestore(
   }
 }
 
-export async function deleteAplicadorSenhaFirestore(ownerUid: string, id: string): Promise<void> {
+export async function deleteAplicadorSenhaCloud(ownerUid: string, id: string): Promise<void> {
   if (!ownerUid || !id) return;
   await deleteOwnerDoc(TABLE, ownerUid, id);
 }
 
-/** Mantém API antiga usada em imports. */
-export async function setAplicadorSenhaCloud(
-  ownerUid: string,
-  id: string,
-  senha: string,
-  senhaHash: string,
-): Promise<void> {
-  await setAplicadorSenhaFirestore(ownerUid, id, senha, senhaHash);
-}
+/** Aliases com nome Firestore — mantém imports existentes. */
+export const setAplicadorSenhaFirestore = setAplicadorSenhaCloud;
+export const getAplicadorSenhasMapFirestore = getAplicadorSenhasMapCloud;
+export const deleteAplicadorSenhaFirestore = deleteAplicadorSenhaCloud;

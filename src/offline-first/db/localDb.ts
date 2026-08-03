@@ -214,16 +214,31 @@ export async function listAplicadoresForDisplay(ownerUid: string | null): Promis
     }
     return (persisted ?? cachedOwner ?? primary).trim() || ANONYMOUS_OWNER;
   };
-  const bossOwner = isAuthorizedMemberSession() ? pickBossOwner() : null;
-  const sources = isAuthorizedMemberSession()
-    ? uniqueOwnerSources(bossOwner, ANONYMOUS_OWNER)
-    : uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
+  const member = isAuthorizedMemberSession();
+  const bossOwner = member ? pickBossOwner() : null;
+
+  // Autorizado: lê direto do Dexie tudo que não é do loginUid (cópia do chefe),
+  // para não perder linhas se o ownerUid em cache divergir um instante.
+  if (member) {
+    const db = getTafDatabase();
+    if (db) {
+      const rows = await db.aplicadores
+        .filter(
+          (r) =>
+            r.deleted !== true &&
+            r.ownerUid !== loginUid &&
+            (!bossOwner || r.ownerUid === bossOwner || r.ownerUid === ANONYMOUS_OWNER),
+        )
+        .toArray();
+      const mergeTarget = bossOwner ?? primary;
+      const merged = mergeRecordsById(mergeTarget, [rows]);
+      return dedupeAplicadoresByNipNewest(merged) as AplicadorRecord[];
+    }
+  }
+
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid);
   const batches = await Promise.all(sources.map((uid) => listAplicadores(uid)));
-  const mergeTarget = isAuthorizedMemberSession()
-    ? (bossOwner ?? primary)
-    : primary !== ANONYMOUS_OWNER
-      ? primary
-      : (persisted ?? primary);
+  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
   const merged = mergeRecordsById(mergeTarget, batches);
   return dedupeAplicadoresByNipNewest(merged) as AplicadorRecord[];
 }

@@ -6,7 +6,7 @@ import type { TombstonePayload } from './tombstone';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { toCadastroLight } from '../../utils/cadastroLight';
 import { toSessaoFromFirestoreDoc } from '../../utils/sessaoLight';
-import { isAuthorizedMemberSession, stripSenhaFromAplicador } from '../../utils/aplicadorSyncPolicy';
+import { stripSenhaFromAplicador } from '../../utils/aplicadorSyncPolicy';
 import {
   listCadastrosForSync,
   listSessoesForSync,
@@ -14,10 +14,7 @@ import {
 } from '../db/localDb';
 import { isUnsyncedLocalStatus } from './syncStatus';
 import { getRemoteSyncWatermark, isFullFetchDue } from './syncWatermark';
-import {
-  getAllAplicadoresFirestore,
-  getAplicadoresFirestoreSince,
-} from '../../services/supabase/aplicadoresCloud';
+import { getAllAplicadoresFirestore } from '../../services/supabase/aplicadoresCloud';
 import {
   getAllCadastrosFirestoreLight,
   getCadastrosFirestoreSince,
@@ -193,20 +190,14 @@ export async function fetchRemoteCollectionsSnapshot(
 
   if (canIncremental) {
     const since = Math.max(0, watermark - INCREMENTAL_SINCE_MARGIN_MS);
-    // Membro autorizado: aplicadores são poucos e SoT do chefe — sempre lista completa.
-    // Evita ficar preso com 1 aplicador quando o 1º sync foi parcial e o watermark
-    // avançou (deltas não trazem docs antigos que faltaram no baseline local).
-    const memberFullAplicadores = isAuthorizedMemberSession();
-    // Ativos: incremental (cadastros/sessões). Tombstones: só metadados.
-    const [deltaCad, deltaSess, deltaOrFullApp, allCadTombstones, allSessTombstones, allAppTombstones] =
+    // Aplicadores: sempre lista completa (coleção pequena). Incremental + baseline local
+    // deixava o autorizado preso com 1 aplicador se o 1º sync foi parcial.
+    // Cadastros/sessões seguem incremental. Tombstones: só metadados.
+    const [deltaCad, deltaSess, fullApp, allCadTombstones, allSessTombstones, allAppTombstones] =
       await Promise.all([
         fetchRemoteCollection('cadastros', ownerUid, () => getCadastrosFirestoreSince(ownerUid, since)),
         fetchRemoteCollection('sessoes', ownerUid, () => getSessoesFirestoreSince(ownerUid, since)),
-        fetchRemoteCollection('aplicadores', ownerUid, () =>
-          memberFullAplicadores
-            ? getAllAplicadoresFirestore(ownerUid)
-            : getAplicadoresFirestoreSince(ownerUid, since),
-        ),
+        fetchRemoteCollection('aplicadores', ownerUid, () => getAllAplicadoresFirestore(ownerUid)),
         fetchRemoteCollection('cadastros', ownerUid, () => listCadastrosTombstonesForSync(ownerUid)),
         fetchRemoteCollection('sessoes', ownerUid, () => listSessoesTombstonesForSync(ownerUid)),
         fetchRemoteCollection('aplicadores', ownerUid, () =>
@@ -230,9 +221,6 @@ export async function fetchRemoteCollectionsSnapshot(
     };
 
     const decryptFailures = getOwnerDocsDecryptFailureAccum();
-    const remoteApp = memberFullAplicadores
-      ? deltaOrFullApp.filter((r) => !tombIds.app.has(r.id))
-      : mergeById(baseline.remoteApp, deltaOrFullApp).filter((r) => !tombIds.app.has(r.id));
     cached = {
       ownerUid,
       fetchedAt: Date.now(),
@@ -241,7 +229,7 @@ export async function fetchRemoteCollectionsSnapshot(
       trustworthyForPrune: decryptFailures === 0,
       remoteCad: mergeById(baseline.remoteCad, deltaCad).filter((r) => !tombIds.cad.has(r.id)),
       remoteSess: mergeById(baseline.remoteSess, deltaSess).filter((r) => !tombIds.sess.has(r.id)),
-      remoteApp,
+      remoteApp: fullApp.filter((r) => !tombIds.app.has(r.id)),
       ...tombstones,
       remotePre: [],
     };

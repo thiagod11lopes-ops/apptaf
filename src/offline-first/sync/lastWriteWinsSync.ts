@@ -555,18 +555,9 @@ async function flushRemainingPendingRecords(
             deletionAudits,
           );
         } else {
-          // Aplicador local sem correspondente na nuvem do chefe → remove localmente.
-          const loginUid = getCachedLoginUid();
-          const pruned = markRecordSynced(
-            {
-              ...local,
-              ownerUid,
-              deleted: true,
-              updatedAt: Math.max(readUpdatedAt(local) + 1, Date.now()),
-            },
-            loginUid,
-          );
-          await putAplicadorRecord(pruned as AplicadorRecord);
+          // Sem remoto neste ciclo: só limpa a fila. Não apaga o local aqui —
+          // snapshot incompleto apagava aplicadores válidos e o select ficava com 1.
+          // A poda por ausência fica no full fetch confiável (cloud SoT).
           await syncQueue.clearPendingForDocument(ownerUid, 'aplicadores', item.id);
           stats.ignored += 1;
         }

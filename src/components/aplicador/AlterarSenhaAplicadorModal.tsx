@@ -14,10 +14,11 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { ModernModal } from '../sismav/ModernModal';
 import { Button } from '../Button';
 import {
-  getAllAplicadores,
   alterarSenhaAplicador,
+  getAllAplicadores,
   type AplicadorItemPersist,
 } from '../../services/aplicadoresIndexedDb';
+import { ensureAplicadoresFromCloud } from '../../services/aplicadoresCloudPull';
 import { subscribeDataChanged } from '../../offline-first/sync/SyncEngine';
 import {
   verificarSenhaAplicador,
@@ -68,22 +69,23 @@ export function AlterarSenhaAplicadorModal({ visible, onClose }: Props) {
     setSalvando(false);
 
     let cancelled = false;
-    const load = () => {
-      setCarregando(true);
-      void getAllAplicadores()
-        .then((lista) => {
-          if (!cancelled) setAplicadores([...lista].sort(compareByNomePtBr));
-        })
-        .catch(() => {
-          if (!cancelled) setAplicadores([]);
-        })
-        .finally(() => {
-          if (!cancelled) setCarregando(false);
-        });
+    const applyLista = (lista: AplicadorItemPersist[]) => {
+      if (!cancelled) setAplicadores([...lista].sort(compareByNomePtBr));
     };
-    load();
-    // Após sync da chave: lista completa do chefe chega no Dexie.
-    const unsub = subscribeDataChanged(load);
+    setCarregando(true);
+    // Pull direto da nuvem (lista completa do chefe) — não depende só do cache local.
+    void ensureAplicadoresFromCloud()
+      .then(applyLista)
+      .catch(() => applyLista([]))
+      .finally(() => {
+        if (!cancelled) setCarregando(false);
+      });
+    // Atualizações locais pós-sync: só relê Dexie (evita loop de pull).
+    const unsub = subscribeDataChanged(() => {
+      void getAllAplicadores()
+        .then(applyLista)
+        .catch(() => applyLista([]));
+    });
     return () => {
       cancelled = true;
       unsub();

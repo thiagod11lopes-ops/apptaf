@@ -264,13 +264,20 @@ export async function listOwnerDocsAfterCursor(
   return mapDecryptedRows(all);
 }
 
+export type OwnerDocMetadata = {
+  id: string;
+  owner_uid: string;
+  updated_at: number;
+  deleted: boolean;
+};
+
 /** Metadados públicos sem decrypt — id/owner_uid/updated_at/deleted. */
 export async function listOwnerDocMetadata(
   table: string,
   ownerUid: string,
-): Promise<Array<{ id: string; owner_uid: string; updated_at: number; deleted: boolean }>> {
+): Promise<OwnerDocMetadata[]> {
   const sb = requireSupabase();
-  const all: Array<{ id: string; owner_uid: string; updated_at: number; deleted: boolean }> = [];
+  const all: OwnerDocMetadata[] = [];
   let from = 0;
   const cols = tableSupportsDeleted(table)
     ? 'id, owner_uid, updated_at, deleted'
@@ -296,6 +303,92 @@ export async function listOwnerDocMetadata(
         owner_uid: row.owner_uid,
         updated_at: row.updated_at,
         deleted: row.deleted === true,
+      });
+    }
+    if (chunk.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return all;
+}
+
+/**
+ * Só soft-deletes — metadados sem coluna `data` (sem blob cifrado / sem decrypt).
+ * Usado pelo sync para detectar exclusões sem baixar a tabela inteira.
+ */
+export async function listOwnerDeletedDocMetadata(
+  table: string,
+  ownerUid: string,
+): Promise<OwnerDocMetadata[]> {
+  if (!tableSupportsDeleted(table)) return [];
+  const sb = requireSupabase();
+  const all: OwnerDocMetadata[] = [];
+  let from = 0;
+
+  for (;;) {
+    const { data, error } = await sb
+      .from(table)
+      .select('id, owner_uid, updated_at, deleted')
+      .eq('owner_uid', ownerUid)
+      .eq('deleted', true)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const chunk = (data ?? []) as Array<{
+      id: string;
+      owner_uid: string;
+      updated_at: number;
+      deleted?: boolean;
+    }>;
+    for (const row of chunk) {
+      all.push({
+        id: row.id,
+        owner_uid: row.owner_uid,
+        updated_at: row.updated_at,
+        deleted: true,
+      });
+    }
+    if (chunk.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return all;
+}
+
+/** Soft-deletes alterados desde `sinceUpdatedAt` (metadados apenas). */
+export async function listOwnerDeletedDocMetadataSince(
+  table: string,
+  ownerUid: string,
+  sinceUpdatedAt: number,
+): Promise<OwnerDocMetadata[]> {
+  if (!tableSupportsDeleted(table)) return [];
+  const sb = requireSupabase();
+  const all: OwnerDocMetadata[] = [];
+  let from = 0;
+  const since = Math.max(0, Math.floor(sinceUpdatedAt));
+
+  for (;;) {
+    const { data, error } = await sb
+      .from(table)
+      .select('id, owner_uid, updated_at, deleted')
+      .eq('owner_uid', ownerUid)
+      .eq('deleted', true)
+      .gte('updated_at', since)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const chunk = (data ?? []) as Array<{
+      id: string;
+      owner_uid: string;
+      updated_at: number;
+      deleted?: boolean;
+    }>;
+    for (const row of chunk) {
+      all.push({
+        id: row.id,
+        owner_uid: row.owner_uid,
+        updated_at: row.updated_at,
+        deleted: true,
       });
     }
     if (chunk.length < PAGE_SIZE) break;

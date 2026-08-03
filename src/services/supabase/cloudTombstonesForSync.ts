@@ -1,10 +1,17 @@
 /**
  * Leitura de tombstones remotos exclusiva para o motor de sync.
+ * Usa só metadados (id, updated_at, deleted) — não baixa a coluna `data`.
  * Não altera listagens da UI (getAll*Firestore* continuam filtrando deleted).
  */
 
 import type { TombstonePayload } from '../../offline-first/sync/tombstone';
-import { listOwnerDocs, listOwnerDocsSince, rowToDoc, type CloudDocRow } from './ownerDocs';
+import {
+  listOwnerDeletedDocMetadata,
+  listOwnerDeletedDocMetadataSince,
+  rowToDoc,
+  type CloudDocRow,
+  type OwnerDocMetadata,
+} from './ownerDocs';
 
 const TABLES = {
   cadastros: 'cadastros',
@@ -14,7 +21,24 @@ const TABLES = {
 
 export type SyncTombstoneCollection = keyof typeof TABLES;
 
-/** Converte linha da nuvem em tombstone mínimo para o sync (id + metadados LWW). */
+/** Converte metadados de soft-delete em tombstone mínimo para o LWW. */
+export function metadataToSyncTombstone(meta: OwnerDocMetadata): TombstonePayload {
+  const updatedAt =
+    typeof meta.updated_at === 'number' && meta.updated_at > 0
+      ? meta.updated_at
+      : Date.now();
+  return {
+    id: meta.id,
+    updatedAt,
+    deleted: true,
+    deletedAt: updatedAt,
+  };
+}
+
+/**
+ * Converte linha completa da nuvem em tombstone (legado / testes).
+ * Preferir `metadataToSyncTombstone` no caminho de sync.
+ */
 export function cloudRowToSyncTombstone(row: CloudDocRow): TombstonePayload | null {
   const data = (row.data ?? {}) as Record<string, unknown>;
   const isDeleted = row.deleted === true || data.deleted === true;
@@ -70,18 +94,9 @@ export function cloudRowToSyncTombstone(row: CloudDocRow): TombstonePayload | nu
   };
 }
 
-function rowsToSyncTombstones(rows: CloudDocRow[]): TombstonePayload[] {
-  const out: TombstonePayload[] = [];
-  for (const row of rows) {
-    const tombstone = cloudRowToSyncTombstone(row);
-    if (tombstone) out.push(tombstone);
-  }
-  return out;
-}
-
 async function listTombstonesForSync(table: string, uid: string): Promise<TombstonePayload[]> {
-  const rows = await listOwnerDocs(table, uid);
-  return rowsToSyncTombstones(rows);
+  const rows = await listOwnerDeletedDocMetadata(table, uid);
+  return rows.map(metadataToSyncTombstone);
 }
 
 async function listTombstonesSinceForSync(
@@ -89,8 +104,8 @@ async function listTombstonesSinceForSync(
   uid: string,
   sinceUpdatedAt: number,
 ): Promise<TombstonePayload[]> {
-  const rows = await listOwnerDocsSince(table, uid, sinceUpdatedAt);
-  return rowsToSyncTombstones(rows);
+  const rows = await listOwnerDeletedDocMetadataSince(table, uid, sinceUpdatedAt);
+  return rows.map(metadataToSyncTombstone);
 }
 
 export async function listCadastrosTombstonesForSync(uid: string): Promise<TombstonePayload[]> {

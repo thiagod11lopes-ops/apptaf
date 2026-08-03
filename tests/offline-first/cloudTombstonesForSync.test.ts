@@ -1,11 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { cloudRowToSyncTombstone } from '../../src/services/supabase/cloudTombstonesForSync';
+import {
+  cloudRowToSyncTombstone,
+  metadataToSyncTombstone,
+} from '../../src/services/supabase/cloudTombstonesForSync';
 import type { CloudDocRow } from '../../src/services/supabase/ownerDocs';
 import {
   findRemoteTombstone,
   isRemoteTombstone,
   withTombstoneDefaults,
 } from '../../src/offline-first/sync/remoteSnapshotCache';
+
+describe('metadataToSyncTombstone', () => {
+  it('monta tombstone só com metadados (sem data)', () => {
+    expect(
+      metadataToSyncTombstone({
+        id: 'cad-del',
+        owner_uid: 'owner',
+        updated_at: 12_000,
+        deleted: true,
+      }),
+    ).toEqual({
+      id: 'cad-del',
+      updatedAt: 12_000,
+      deleted: true,
+      deletedAt: 12_000,
+    });
+  });
+});
 
 describe('cloudRowToSyncTombstone', () => {
   it('retorna tombstone quando coluna deleted=true', () => {

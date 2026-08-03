@@ -193,8 +193,8 @@ export async function fetchRemoteCollectionsSnapshot(
 
   if (canIncremental) {
     const since = Math.max(0, watermark - INCREMENTAL_SINCE_MARGIN_MS);
-    // Ativos: incremental. Tombstones: sempre lista completa — exclusões não podem
-    // depender do watermark (relógio / delta perdido deixava histórico fantasma).
+    // Ativos: incremental. Tombstones: lista completa de soft-deletes, só metadados
+    // (id/updated_at/deleted) — sem baixar a coluna data cifrada.
     const [deltaCad, deltaSess, deltaApp, allCadTombstones, allSessTombstones, allAppTombstones] =
       await Promise.all([
         fetchRemoteCollection('cadastros', ownerUid, () => getCadastrosFirestoreSince(ownerUid, since)),

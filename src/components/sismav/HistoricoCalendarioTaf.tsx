@@ -41,11 +41,8 @@ import {
   tituloMesAno,
 } from '../../utils/historicoPorDia';
 import { agruparSessoesHistoricoPorTeste } from '../../utils/agruparSessoesHistoricoPorTeste';
-import { carregarRubricasDasSessoesPorNip } from '../../utils/rubricasDasSessoes';
-import {
-  PERMANENCIA_TEMPO_PDF_PADRAO,
-  salvarResultadosTafPdfEmDownloads,
-} from '../../utils/exportResultadosTafPdf';
+import { exportResumosSessoesDiaPdf } from '../../utils/exportResumoAplicacaoPdf';
+import { PERMANENCIA_TEMPO_PDF_PADRAO } from '../../utils/exportResultadosTafPdf';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
 import { formatNomeComPostoParts } from '../../utils/formatNomeComPosto';
 import { postoGradFromCadastro } from '../../utils/resultadoTafCadastro';
@@ -203,36 +200,12 @@ export function HistoricoCalendarioTaf({
     [onAviso],
   );
 
-  const prepararLinhasPdfDoDia = useCallback(async () => {
-    if (sessoesDoDia.length === 0) {
-      throw new Error('Não há participantes para exportar neste dia.');
-    }
-    const rubSessoes = await carregarRubricasDasSessoesPorNip();
-    const { montarBlocosResultadosTafPorAplicador } = await import(
-      '../../utils/resultadosTafPdfPorAplicador'
-    );
-    const blocos = montarBlocosResultadosTafPorAplicador({
-      sessoes: sessoesDoDia,
-      cadastros,
-      rubricasSessoes: rubSessoes,
-      somenteSessoesInformadas: true,
-    });
-    if (blocos.length === 0) {
-      throw new Error('Não há participantes para exportar neste dia.');
-    }
-    return { blocos };
-  }, [sessoesDoDia, cadastros]);
-
   const gerarPdfDoDia = useCallback(async () => {
     if (!diaSelecionado || sessoesDoDia.length === 0 || gerandoPdf) return;
     setGerandoPdf(true);
     onAviso?.(null);
     try {
-      const { blocos } = await prepararLinhasPdfDoDia();
-      const msg = await salvarResultadosTafPdfEmDownloads(
-        blocos,
-        `Resultados do dia — ${dataBrSelecionada}`,
-      );
+      const msg = await exportResumosSessoesDiaPdf(sessoesDoDia, dataBrSelecionada);
       onAviso?.(msg);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao gerar PDF do dia.';
@@ -242,9 +215,8 @@ export function HistoricoCalendarioTaf({
     }
   }, [
     diaSelecionado,
-    sessoesDoDia.length,
+    sessoesDoDia,
     gerandoPdf,
-    prepararLinhasPdfDoDia,
     dataBrSelecionada,
     onAviso,
   ]);

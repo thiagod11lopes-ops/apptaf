@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import { PressableScale } from '../premium/PressableScale';
 import type { TafCronometroEstado } from '../../hooks/useTafReactStopwatch';
+import { EditarCronometroPausadoModal } from './EditarCronometroPausadoModal';
 
 export type { TafCronometroEstado };
 
@@ -81,6 +82,8 @@ export function TafCronometroPanel({
   tempoExibido,
   estado,
   pausadoTexto,
+  onPausadoTextoChange,
+  onBlurPausado,
   onIniciar,
   onPausar,
   onContinuar,
@@ -94,9 +97,11 @@ export function TafCronometroPanel({
   const status = statusMeta(estado, theme);
   const compact = variant === 'compact';
   const blinkOpacity = useRef(new Animated.Value(1)).current;
+  const [editTempoVisible, setEditTempoVisible] = useState(false);
 
   useEffect(() => {
     if (estado !== 'pausado') {
+      setEditTempoVisible(false);
       blinkOpacity.stopAnimation();
       blinkOpacity.setValue(1);
       return;
@@ -169,12 +174,9 @@ export function TafCronometroPanel({
     </View>
   );
 
-  const timeNode = (
+  const timeDisplay = (
     <Animated.View
       style={[styles.digitsRow, estado === 'pausado' ? { opacity: blinkOpacity } : null]}
-      accessibilityLabel={
-        estado === 'pausado' ? `Cronômetro pausado em ${tempoMostrado}` : `Tempo ${tempoMostrado}`
-      }
     >
       {digitBlock(splitTempo.mm, 'min')}
       <Text style={[compact ? styles.digitSepCompact : styles.digitSep, { color: displayColor }]}>
@@ -186,6 +188,35 @@ export function TafCronometroPanel({
       </Text>
       {digitBlock(splitTempo.cs, 'cs')}
     </Animated.View>
+  );
+
+  const timeNode =
+    estado === 'pausado' ? (
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel={`Cronômetro pausado em ${tempoMostrado}. Toque para editar minutos e segundos.`}
+        accessibilityHint="Abre edição de minutos e segundos"
+        onPress={() => setEditTempoVisible(true)}
+        hitSlop={8}
+        style={styles.timePressable}
+      >
+        {timeDisplay}
+      </PressableScale>
+    ) : (
+      <View accessibilityLabel={`Tempo ${tempoMostrado}`}>{timeDisplay}</View>
+    );
+
+  const editTempoModal = (
+    <EditarCronometroPausadoModal
+      visible={editTempoVisible}
+      tempoAtual={tempoMostrado}
+      onClose={() => setEditTempoVisible(false)}
+      onConfirm={(fmt) => {
+        onPausadoTextoChange(fmt);
+        onBlurPausado();
+        setEditTempoVisible(false);
+      }}
+    />
   );
 
   const rodando = estado === 'rodando';
@@ -299,7 +330,13 @@ export function TafCronometroPanel({
           </View>
         </View>
         {hint ? <Text style={[styles.hintCompact, { color: theme.textMuted }]}>{hint}</Text> : null}
+        {estado === 'pausado' ? (
+          <Text style={[styles.hintCompact, { color: theme.textMuted }]}>
+            Toque no tempo para editar minutos e segundos
+          </Text>
+        ) : null}
         {footer ? <View style={styles.footerSlot}>{footer}</View> : null}
+        {editTempoModal}
       </View>
     );
   }
@@ -352,7 +389,11 @@ export function TafCronometroPanel({
         ]}
       >
         {timeNode}
-        <Text style={styles.displayHint}>min · seg · centésimos</Text>
+        <Text style={styles.displayHint}>
+          {estado === 'pausado'
+            ? 'toque no tempo para editar · min · seg · centésimos'
+            : 'min · seg · centésimos'}
+        </Text>
       </View>
 
       {controlsNode}
@@ -362,6 +403,7 @@ export function TafCronometroPanel({
       ) : null}
 
       {footer ? <View style={styles.footerSlot}>{footer}</View> : null}
+      {editTempoModal}
     </View>
   );
 }
@@ -439,6 +481,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
     gap: 2,
+  },
+  timePressable: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   digitBlock: {
     alignItems: 'center',

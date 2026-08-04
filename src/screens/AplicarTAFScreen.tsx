@@ -23,7 +23,6 @@ import {
   type AppStateStatus,
   InteractionManager,
 } from 'react-native';
-import { HeartPulse, Trash2 } from 'lucide-react-native';
 import { AppModal } from '../components/premium/AppModal';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { SafeAreaView as SafeAreaViewInsets } from 'react-native-safe-area-context';
@@ -41,16 +40,18 @@ import {
   AplicarTafSectionHeader,
   AplicarTafBackLink,
   AplicarTafPrimaryButton,
-  AplicarTafInput,
 } from '../components/taf/aplicar/AplicarTafUi';
 import { AplicarTafHomeLauncher } from '../components/taf/aplicar/AplicarTafHomeLauncher';
 import { AplicarTafFatoresRiscoPanel } from '../components/taf/aplicar/AplicarTafFatoresRiscoPanel';
 import { AplicarTafRestritosPanel } from '../components/taf/aplicar/AplicarTafRestritosPanel';
 import {
   FatoresRiscoInfoModal,
-  FATORES_RISCO_LARANJA,
 } from '../components/taf/aplicar/FatoresRiscoInfoModal';
 import { AplicarTafProvaSelector } from '../components/taf/aplicar/AplicarTafProvaSelector';
+import {
+  AplicarTafNipsList,
+  type NipFeedbackLinha,
+} from '../components/taf/aplicar/AplicarTafNipsList';
 import {
   AplicarTafPreCadastroCard,
   PRE_CADASTRO_ACCENTS,
@@ -96,7 +97,6 @@ import {
   TafProvaTempoModal,
   type TafProvaTempoModalProva,
 } from '../components/taf/TafProvaTempoModal';
-import { LabelNip } from '../components/LabelNip';
 import { RubricaCell } from '../components/RubricaThumb';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import { addSessaoAplicacao, getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
@@ -119,7 +119,6 @@ import {
   removerParticipanteModalidadeDoHistorico,
 } from '../utils/registroModalidadeHistorico';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
-import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
 import {
   filtrarCadastrosDemonstracao,
   nipFeedbackOkFromCadastro,
@@ -194,17 +193,10 @@ function formatNipInput(value: string) {
   return `${a}.${b}.${c}`;
 }
 
-function formatDateInput(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 8);
-  const dd = digits.slice(0, 2);
-  const mm = digits.slice(2, 4);
-  const yyyy = digits.slice(4, 8);
-  if (digits.length <= 2) return dd;
-  if (digits.length <= 4) return `${dd}/${mm}`;
-  return `${dd}/${mm}/${yyyy}`;
-}
-
 const MAX_PARTICIPANTES = 200;
+
+/** Prefill do número de voltas em corrida/caminhada. */
+const NUMERO_VOLTAS_PADRAO = '6';
 
 /** Duração da prova de permanência — ao atingir, exibe modal de finalização. */
 const PERMANENCIA_DURACAO_MS = 10 * 60 * 1000;
@@ -229,50 +221,6 @@ function limiteParticipantesPreCadastro(tipo: TipoProvaTAF | null): number {
 }
 
 /** Cronômetro da prova: controlado por react-timer-hook (MM:SS:CS). */
-
-type NipFeedbackLinha =
-  | {
-      tipo: 'ok';
-      texto: string;
-      nomeMilitar: string;
-      /** Nome sem posto (edição / persistência). */
-      nome: string;
-      categoria: 'Oficiais' | 'Praças';
-      oficial?: string;
-      praca?: string;
-      dataNascimento: string;
-      sexo?: 'M' | 'F';
-    }
-  | {
-      tipo: 'completar_dados';
-      nomeMilitar: string;
-      nome: string;
-      categoria: 'Oficiais' | 'Praças';
-      oficial?: string;
-      praca?: string;
-      cadastro: CadastroItemPersist;
-      dataNascimento: string;
-      sexo: 'M' | 'F';
-      erro?: string;
-    }
-  | { tipo: 'erro'; texto: string }
-  | null;
-
-
-/** Sufixo de idade ao lado do nome. */
-function textoIdadeMilitar(dataNascimento: string): string {
-  const idade = idadeFromDataNascimento(dataNascimento);
-  return idade != null ? `${idade} anos` : 'Idade?';
-}
-
-function textoGeneroMilitar(sexo?: 'M' | 'F'): string {
-  if (sexo === 'M') return 'Masculino';
-  if (sexo === 'F') return 'Feminino';
-  return 'Gênero?';
-}
-
-/** Prefill do número de voltas em corrida/caminhada. */
-const NUMERO_VOLTAS_PADRAO = '6';
 
 /** Campos de cadastro usados no feedback NIP e no modal de edição. */
 function camposCadastroParaFeedback(c: CadastroItemPersist) {
@@ -3541,393 +3489,22 @@ export default function AplicarTAFScreen() {
                 }
               />
 
-            {nipsParticipantes.map((nip, index) => {
-              const fb = nipFeedbackLinhas[index];
-              return (
-              <View
-                key={index}
-                style={[
-                  styles.nipGlassPanel,
-                  { borderColor: theme.border, backgroundColor: theme.isDark ? 'rgba(2,6,23,0.35)' : 'rgba(255,255,255,0.5)' },
-                ]}
-              >
-                <View style={styles.nipFieldBlock}>
-                  <View style={styles.nipLabelRow}>
-                    <LabelNip color={ui.label} fontSize={11} fontWeight="800" />
-                    <TouchableOpacity
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remover participante ${index + 1}`}
-                      onPress={() => setParticipanteNipParaExcluir(index)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      style={styles.nipTrashBtn}
-                    >
-                      <Trash2 size={18} color={theme.loss} strokeWidth={2.3} />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.nipInputRow}>
-                    <AplicarTafInput
-                      value={nip}
-                      onChangeText={(t) => atualizarNip(index, t)}
-                      placeholder="00.0000.00"
-                      keyboardType="number-pad"
-                      style={[
-                        styles.inputNipFlex,
-                        demoAtivo ? { opacity: 0.85 } : null,
-                      ]}
-                      autoCorrect={false}
-                      spellCheck={false}
-                      editable={!demoAtivo}
-                      accessibilityLabel={`NIP do participante ${index + 1}`}
-                      accessibilityState={{ disabled: demoAtivo }}
-                    />
-                    {!demoAtivo ? (
-                      <TouchableOpacity
-                        accessibilityLabel={`Confirmar NIP do participante ${index + 1}`}
-                        activeOpacity={0.9}
-                        onPress={() => verificarNipNoCadastro(index)}
-                        style={styles.nipOkBtnWrap}
-                      >
-                        <LinearGradient
-                          colors={[theme.primary, '#6366f1']}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={styles.nipOkBtn}
-                        >
-                          <Text style={[styles.nipOkBtnText, { color: theme.tokens.textOnPrimary }]}>
-                            OK
-                          </Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-                </View>
-
-                {fb?.tipo === 'ok' ? (
-                  <View
-                    style={[
-                      styles.militarIdentityCard,
-                      participanteTemFatorRisco(index)
-                        ? {
-                            borderColor: theme.isDark
-                              ? 'rgba(234,88,12,0.55)'
-                              : 'rgba(234,88,12,0.45)',
-                            borderWidth: 2,
-                            backgroundColor: theme.isDark
-                              ? 'rgba(234,88,12,0.1)'
-                              : 'rgba(255,247,237,0.85)',
-                          }
-                        : {
-                            borderColor: theme.isDark
-                              ? 'rgba(34,197,94,0.35)'
-                              : 'rgba(22,163,74,0.22)',
-                            backgroundColor: theme.isDark
-                              ? 'rgba(34,197,94,0.08)'
-                              : 'rgba(220,252,231,0.45)',
-                          },
-                    ]}
-                  >
-                    <LinearGradient
-                      colors={
-                        participanteTemFatorRisco(index)
-                          ? theme.isDark
-                            ? ['rgba(234,88,12,0.55)', 'rgba(251,146,60,0.25)']
-                            : ['rgba(234,88,12,0.7)', 'rgba(251,146,60,0.4)']
-                          : theme.isDark
-                            ? ['rgba(34,197,94,0.35)', 'rgba(56,189,248,0.2)']
-                            : ['rgba(34,197,94,0.55)', 'rgba(37,99,235,0.35)']
-                      }
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.militarIdentityStripe}
-                    />
-                    <View style={styles.militarIdentityRow}>
-                      <View
-                        style={[
-                          styles.militarNumOrb,
-                          {
-                            backgroundColor: participanteTemFatorRisco(index)
-                              ? theme.isDark
-                                ? 'rgba(234,88,12,0.22)'
-                                : 'rgba(254,215,170,0.7)'
-                              : theme.isDark
-                                ? 'rgba(34,197,94,0.22)'
-                                : PREMIUM.accentMuted,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.militarNumOrbText,
-                            {
-                              color: participanteTemFatorRisco(index)
-                                ? FATORES_RISCO_LARANJA
-                                : theme.success,
-                            },
-                          ]}
-                        >
-                          {index + 1}
-                        </Text>
-                      </View>
-                      <View style={styles.militarNomeCol}>
-                        <Text style={[styles.militarRoleLabel, { color: theme.textSecondary }]}>
-                          {labelAtleta}
-                        </Text>
-                        <Text
-                          accessibilityRole={!demoAtivo ? 'button' : undefined}
-                          accessibilityLabel="Editar dados do militar"
-                          accessibilityHint={
-                            !demoAtivo
-                              ? 'Abre edição de categoria, nome, idade e gênero'
-                              : undefined
-                          }
-                          onPress={
-                            !demoAtivo
-                              ? () => setModalEditarIdadeGeneroIndex(index)
-                              : participanteTemFatorRisco(index)
-                                ? () => abrirModalFatoresRiscoParticipante(index)
-                                : undefined
-                          }
-                          style={[
-                            styles.militarNomeText,
-                            {
-                              color: participanteTemFatorRisco(index)
-                                ? FATORES_RISCO_LARANJA
-                                : ui.text,
-                              textDecorationLine:
-                                !demoAtivo || participanteTemFatorRisco(index)
-                                  ? 'underline'
-                                  : 'none',
-                            },
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {fb.nomeMilitar}
-                        </Text>
-                        <View style={styles.militarMetaRow}>
-                          {demoAtivo ? (
-                            <>
-                              <View
-                                style={[
-                                  styles.militarMetaChip,
-                                  {
-                                    borderColor: theme.border,
-                                    backgroundColor: theme.isDark
-                                      ? 'rgba(255,255,255,0.06)'
-                                      : 'rgba(15,23,42,0.04)',
-                                    opacity: 0.9,
-                                  },
-                                ]}
-                                accessibilityLabel={`Idade: ${textoIdadeMilitar(fb.dataNascimento)}`}
-                              >
-                                <Text
-                                  style={[
-                                    styles.militarMetaChipText,
-                                    { color: theme.textSecondary },
-                                  ]}
-                                >
-                                  {textoIdadeMilitar(fb.dataNascimento)}
-                                </Text>
-                              </View>
-                              <View
-                                style={[
-                                  styles.militarMetaChip,
-                                  {
-                                    borderColor: theme.border,
-                                    backgroundColor: theme.isDark
-                                      ? 'rgba(255,255,255,0.06)'
-                                      : 'rgba(15,23,42,0.04)',
-                                    opacity: 0.9,
-                                  },
-                                ]}
-                                accessibilityLabel={`Gênero: ${textoGeneroMilitar(fb.sexo)}`}
-                              >
-                                <Text
-                                  style={[
-                                    styles.militarMetaChipText,
-                                    { color: theme.textSecondary },
-                                  ]}
-                                >
-                                  {textoGeneroMilitar(fb.sexo)}
-                                </Text>
-                              </View>
-                            </>
-                          ) : (
-                            <>
-                              <TouchableOpacity
-                                accessibilityRole="button"
-                                accessibilityLabel="Editar idade"
-                                accessibilityHint="Abre edição dos dados do militar"
-                                onPress={() => setModalEditarIdadeGeneroIndex(index)}
-                                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                                style={[
-                                  styles.militarMetaChip,
-                                  {
-                                    borderColor: theme.border,
-                                    backgroundColor: theme.isDark
-                                      ? 'rgba(255,255,255,0.06)'
-                                      : 'rgba(15,23,42,0.04)',
-                                  },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.militarMetaChipText,
-                                    { color: theme.textSecondary },
-                                  ]}
-                                >
-                                  {textoIdadeMilitar(fb.dataNascimento)}
-                                </Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                accessibilityRole="button"
-                                accessibilityLabel="Editar gênero"
-                                accessibilityHint="Abre edição dos dados do militar"
-                                onPress={() => setModalEditarIdadeGeneroIndex(index)}
-                                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                                style={[
-                                  styles.militarMetaChip,
-                                  {
-                                    borderColor: theme.border,
-                                    backgroundColor: theme.isDark
-                                      ? 'rgba(255,255,255,0.06)'
-                                      : 'rgba(15,23,42,0.04)',
-                                  },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.militarMetaChipText,
-                                    { color: theme.textSecondary },
-                                  ]}
-                                >
-                                  {textoGeneroMilitar(fb.sexo)}
-                                </Text>
-                              </TouchableOpacity>
-                            </>
-                          )}
-                        </View>
-                      </View>
-                      {(() => {
-                        const frCadastrado = participanteCadastradoFatoresRisco(index);
-                        const frCor = frCadastrado ? theme.success : FATORES_RISCO_LARANJA;
-                        const frBg = frCadastrado
-                          ? theme.isDark
-                            ? 'rgba(34,197,94,0.16)'
-                            : 'rgba(220,252,231,0.95)'
-                          : theme.isDark
-                            ? 'rgba(234,88,12,0.18)'
-                            : 'rgba(255,247,237,0.95)';
-                        const frBorder = frCadastrado
-                          ? theme.isDark
-                            ? 'rgba(34,197,94,0.45)'
-                            : 'rgba(34,197,94,0.35)'
-                          : theme.isDark
-                            ? 'rgba(234,88,12,0.5)'
-                            : 'rgba(234,88,12,0.4)';
-                        return (
-                          <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel={
-                              frCadastrado
-                                ? `Fatores de risco cadastrados — participante ${index + 1}`
-                                : `Fatores de risco pendentes — participante ${index + 1}`
-                            }
-                            accessibilityHint={
-                              frCadastrado
-                                ? 'Abre a página para editar os fatores de risco'
-                                : 'Abre a página para cadastrar os fatores de risco'
-                            }
-                            onPress={() => onPressIconeFatoresRiscoParticipante(index)}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                            activeOpacity={0.82}
-                            style={[
-                              styles.militarFatoresIconBtn,
-                              {
-                                borderColor: frBorder,
-                                backgroundColor: frBg,
-                                shadowColor: frCor,
-                              },
-                            ]}
-                          >
-                            <View
-                              style={[
-                                styles.militarFatoresIconGlow,
-                                { backgroundColor: frCor },
-                              ]}
-                            />
-                            <HeartPulse size={20} color={frCor} strokeWidth={2.35} />
-                          </TouchableOpacity>
-                        );
-                      })()}
-                    </View>
-                  </View>
-                ) : null}
-                {fb?.tipo === 'completar_dados' ? (
-                  <View
-                    style={[
-                      styles.dadosNipBox,
-                      { backgroundColor: inputBg, borderColor: inputBorder },
-                    ]}
-                  >
-                    <Text style={[ts.bodySecondary, styles.dadosNipLead]}>
-                      {fb.nomeMilitar}: informe data de nascimento e gênero. Os dados serão salvos no
-                      cadastro.
-                    </Text>
-                    <Text style={[ts.label, styles.dadosNipFieldLabel]}>Data de nascimento</Text>
-                    <AplicarTafInput
-                      value={fb.dataNascimento}
-                      onChangeText={(t) =>
-                        atualizarDadosNipLinha(index, { dataNascimento: formatDateInput(t) })
-                      }
-                      placeholder="DD/MM/AAAA"
-                      keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-                      inputMode="numeric"
-                      maxLength={10}
-                      accessibilityLabel={`Data de nascimento do participante ${index + 1}`}
-                    />
-                    <Text style={[ts.label, styles.dadosNipFieldLabel]}>Gênero</Text>
-                    <View style={[styles.dadosNipSegmented, { borderColor: theme.border }]}>
-                      {(['M', 'F'] as const).map((sx) => {
-                        const active = fb.sexo === sx;
-                        return (
-                          <TouchableOpacity
-                            key={sx}
-                            accessibilityLabel={sx === 'M' ? 'Masculino' : 'Feminino'}
-                            onPress={() => atualizarDadosNipLinha(index, { sexo: sx })}
-                            style={[
-                              styles.dadosNipSegmentBtn,
-                              {
-                                backgroundColor: active ? selectedBgColor : theme.backgroundSecondary,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                ts.caption,
-                                { color: active ? selectedTextColor : theme.textSecondary },
-                                styles.dadosNipSegmentText,
-                              ]}
-                            >
-                              {sx === 'M' ? 'Masculino' : 'Feminino'}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                    {fb.erro ? <Text style={styles.feedbackErro}>{fb.erro}</Text> : null}
-                    <AplicarTafPrimaryButton
-                      label="Salvar e confirmar"
-                      onPress={() => void confirmarDadosNipLinha(index)}
-                    />
-                  </View>
-                ) : fb ? (
-                  <Text style={fb.tipo === 'ok' ? styles.feedbackOk : styles.feedbackErro}>
-                    {fb.tipo === 'ok' || fb.tipo === 'erro' ? fb.texto : ''}
-                  </Text>
-                ) : null}
-              </View>
-            );
-            })}
+            <AplicarTafNipsList
+              nips={nipsParticipantes}
+              feedbackLinhas={nipFeedbackLinhas}
+              demoAtivo={demoAtivo}
+              labelAtleta={labelAtleta}
+              onAtualizarNip={atualizarNip}
+              onVerificarNip={(index) => void verificarNipNoCadastro(index)}
+              onRemoverPress={setParticipanteNipParaExcluir}
+              onEditarMilitar={setModalEditarIdadeGeneroIndex}
+              onAtualizarDados={atualizarDadosNipLinha}
+              onConfirmarDados={(index) => void confirmarDadosNipLinha(index)}
+              participanteTemFatorRisco={participanteTemFatorRisco}
+              participanteCadastradoFatoresRisco={participanteCadastradoFatoresRisco}
+              onPressFatoresRisco={onPressIconeFatoresRiscoParticipante}
+              onAbrirInfoFatoresRisco={abrirModalFatoresRiscoParticipante}
+            />
 
             {erroParticipantes ? <Text style={styles.erroText}>{erroParticipantes}</Text> : null}
             <AplicarTafPrimaryButton
@@ -4180,183 +3757,6 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   },
   btnIniciarDisabled: {
     opacity: 0.72,
-  },
-  nipGlassPanel: {
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusMd + 2,
-    padding: 12,
-    marginBottom: 10,
-    gap: 10,
-  },
-  nipFieldBlock: {
-    gap: 6,
-  },
-  nipLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  nipTrashBtn: {
-    padding: 4,
-    borderRadius: 8,
-  },
-  nipInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  nipOkBtnWrap: {
-    width: 56,
-    height: 48,
-    borderRadius: PREMIUM.radiusMd + 2,
-    overflow: 'hidden',
-    flexShrink: 0,
-  },
-  nipOkBtn: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nipOkBtnText: {
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 0.4,
-  },
-  inputNipFlex: {
-    flex: 1,
-    minWidth: 0,
-    marginTop: 0,
-    paddingVertical: 12,
-  },
-  militarIdentityCard: {
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusMd,
-    overflow: 'hidden',
-  },
-  militarIdentityStripe: {
-    height: 2,
-    width: '100%',
-  },
-  militarIdentityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  militarNumOrb: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  militarNumOrbText: {
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  militarNomeCol: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  militarRoleLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  militarNomeText: {
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  militarMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  militarMetaChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  militarMetaChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  militarFatoresIconBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    overflow: 'hidden',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  militarFatoresIconGlow: {
-    position: 'absolute',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    opacity: 0.18,
-  },
-  feedbackOk: {
-    marginTop: 8,
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.isDark ? ui.text : theme.success,
-  },
-  feedbackErro: {
-    marginTop: 8,
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.isDark ? ui.text : '#B91C1C',
-  },
-  dadosNipBox: {
-    marginTop: 10,
-    padding: 12,
-    borderRadius: PREMIUM.radiusMd,
-    borderWidth: 1,
-    gap: 8,
-  },
-  dadosNipLead: {
-    lineHeight: 18,
-  },
-  dadosNipFieldLabel: {
-    marginTop: 4,
-    marginBottom: 0,
-  },
-  dadosNipSegmented: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: PREMIUM.radiusMd,
-    overflow: 'hidden',
-  },
-  dadosNipSegmentBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dadosNipSegmentText: {
-    fontWeight: '700',
-  },
-  btnSalvarDadosNip: {
-    marginTop: 4,
-    paddingVertical: 12,
-    borderRadius: PREMIUM.radiusMd,
-    alignItems: 'center',
   },
   erroText: {
     marginTop: 8,

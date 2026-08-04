@@ -538,13 +538,18 @@ export function HistoricoCalendarioTaf({
             </Text>
           ) : null}
 
-          {sessoesDoDia.map((sessao) => (
+          {sessoesDoDia.map((sessao) => {
+            const nomeAplicador = sessao.aplicadorAssinatura?.nome?.trim();
+            const tituloCard = nomeAplicador
+              ? `${tituloTipoProva(sessao.tipoProva)} — Aplicador (${nomeAplicador})`
+              : tituloTipoProva(sessao.tipoProva);
+            return (
             <View
               key={sessao.id}
               style={[styles.sessaoCard, { borderColor: theme.border, backgroundColor: theme.surface }]}
             >
               <Text style={[ts.label, { color: theme.primary }]}>
-                {tituloTipoProva(sessao.tipoProva)}
+                {tituloCard}
               </Text>
               <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 8 }]}>
                 {sessao.resultados.length} participante{sessao.resultados.length !== 1 ? 's' : ''}
@@ -687,7 +692,8 @@ export function HistoricoCalendarioTaf({
                 );
               })}
             </View>
-          ))}
+            );
+          })}
 
         </View>
       ) : null}

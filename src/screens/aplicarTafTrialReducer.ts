@@ -1,6 +1,9 @@
 /**
  * Estado da tabela de prova (voltas / chegada / tempos / desistência) — atualização atômica
  * para cada clique, evitando dessincronizar tempos entre participantes.
+ *
+ * `marcacoesOrdem`: ordem dos cliques de marcação no teste inteiro.
+ * A última chave ativa = única marcação laranja; demais marcadas = verdes.
  */
 
 export type TrialTableState = {
@@ -11,11 +14,16 @@ export type TrialTableState = {
   desistenciaParticipantes: boolean[];
   /** Corrida: voltas já marcadas no momento da desistência (para nota REP. (n VOLTA/VOLTAS)). */
   desistenciaVoltasParticipantes: number[];
+  /**
+   * Pilha de cliques de marcação (global entre militares).
+   * Chaves: `volta:p:v` | `chegada:p` | `perm:p:aprovado`
+   */
+  marcacoesOrdem: string[];
 };
 
 export type TrialTableAction =
   | { type: 'resetAll' }
-  | { type: 'hydrate'; state: TrialTableState }
+  | { type: 'hydrate'; state: Partial<TrialTableState> }
   | { type: 'prepararProva'; nParticipantes: number; tipoProva: 'corrida' | 'natacao' | 'caminhada' }
   | { type: 'resizeChecksGrid'; p: number; v: number }
   | { type: 'resizeChegadaNatacao'; p: number }
@@ -40,6 +48,12 @@ export type TrialTableAction =
       type: 'setTempoParticipante';
       participante: number;
       elapsedMs: number | null;
+    }
+  | {
+      type: 'syncMarcacaoPermanencia';
+      participante: number;
+      /** null = desmarcado; reprovado não entra no laranja/verde. */
+      opcao: 'aprovado' | 'reprovado' | null;
     };
 
 export const initialTrialTableState: TrialTableState = {
@@ -48,7 +62,104 @@ export const initialTrialTableState: TrialTableState = {
   temposMilitaresMs: [],
   desistenciaParticipantes: [],
   desistenciaVoltasParticipantes: [],
+  marcacoesOrdem: [],
 };
+
+export function chaveMarcacaoVolta(participante: number, volta: number): string {
+  return `volta:${participante}:${volta}`;
+}
+
+export function chaveMarcacaoChegada(participante: number): string {
+  return `chegada:${participante}`;
+}
+
+export function chaveMarcacaoPermAprovado(participante: number): string {
+  return `perm:${participante}:aprovado`;
+}
+
+function pushMarcacao(ordem: string[], key: string): string[] {
+  return [...ordem.filter((k) => k !== key), key];
+}
+
+function removeMarcacao(ordem: string[], key: string): string[] {
+  return ordem.filter((k) => k !== key);
+}
+
+function removeMarcacoesDoParticipante(ordem: string[], participante: number): string[] {
+  const voltaPrefix = `volta:${participante}:`;
+  const chegada = chaveMarcacaoChegada(participante);
+  const perm = chaveMarcacaoPermAprovado(participante);
+  return ordem.filter(
+    (k) => !k.startsWith(voltaPrefix) && k !== chegada && k !== perm,
+  );
+}
+
+function marcacaoAindaAtiva(state: TrialTableState, key: string): boolean {
+  if (key.startsWith('volta:')) {
+    const parts = key.split(':');
+    const p = Number(parts[1]);
+    const v = Number(parts[2]);
+    if (!Number.isFinite(p) || !Number.isFinite(v)) return false;
+    return state.checksVoltas[p]?.[v] === true;
+  }
+  if (key.startsWith('chegada:')) {
+    const p = Number(key.slice('chegada:'.length));
+    if (!Number.isFinite(p)) return false;
+    return state.chegadaNatacao[p] === true;
+  }
+  if (key.startsWith('perm:') && key.endsWith(':aprovado')) {
+    // Validado na UI via resultadosPermanencia; ordem só guarda o clique.
+    return true;
+  }
+  return false;
+}
+
+/** Remove chaves órfãs e devolve a última marcação ainda ativa (laranja). */
+export function ultimaMarcacaoLaranjaKey(
+  state: Pick<TrialTableState, 'marcacoesOrdem' | 'checksVoltas' | 'chegadaNatacao'>,
+  opts?: { permanenteAprovadoAtivo?: (participante: number) => boolean },
+): string | null {
+  const ordem = state.marcacoesOrdem ?? [];
+  for (let i = ordem.length - 1; i >= 0; i -= 1) {
+    const key = ordem[i]!;
+    if (key.startsWith('perm:') && key.endsWith(':aprovado')) {
+      const m = /^perm:(\d+):aprovado$/.exec(key);
+      if (!m) continue;
+      const p = Number(m[1]);
+      if (!Number.isFinite(p)) continue;
+      if (opts?.permanenteAprovadoAtivo?.(p)) return key;
+      continue;
+    }
+    if (marcacaoAindaAtiva(state as TrialTableState, key)) return key;
+  }
+  return null;
+}
+
+function pruneMarcacoesOrdem(state: TrialTableState): string[] {
+  const ordem = state.marcacoesOrdem ?? [];
+  return ordem.filter((key) => {
+    if (key.startsWith('perm:') && key.endsWith(':aprovado')) {
+      // Mantém até syncMarcacaoPermanencia remover; prune não tem resultadosPermanencia.
+      return true;
+    }
+    return marcacaoAindaAtiva(state, key);
+  });
+}
+
+/** Reconstrói ordem espacial (legado / hydrate sem pilha). */
+function rebuildMarcacoesOrdemEspacial(state: TrialTableState): string[] {
+  const keys: string[] = [];
+  for (let p = 0; p < state.checksVoltas.length; p += 1) {
+    const row = state.checksVoltas[p] ?? [];
+    for (let v = 0; v < row.length; v += 1) {
+      if (row[v]) keys.push(chaveMarcacaoVolta(p, v));
+    }
+  }
+  for (let p = 0; p < state.chegadaNatacao.length; p += 1) {
+    if (state.chegadaNatacao[p]) keys.push(chaveMarcacaoChegada(p));
+  }
+  return keys;
+}
 
 function ensureBoolRow(arr: boolean[], len: number, fill = false): boolean[] {
   const next = arr.slice(0, len);
@@ -71,6 +182,29 @@ function countVoltasMarcadas(row: boolean[] | undefined): number {
   return n;
 }
 
+function normalizeHydrateState(raw: Partial<TrialTableState>): TrialTableState {
+  const base: TrialTableState = {
+    checksVoltas: Array.isArray(raw.checksVoltas)
+      ? raw.checksVoltas.map((row) => (Array.isArray(row) ? [...row] : []))
+      : [],
+    chegadaNatacao: Array.isArray(raw.chegadaNatacao) ? [...raw.chegadaNatacao] : [],
+    temposMilitaresMs: Array.isArray(raw.temposMilitaresMs) ? [...raw.temposMilitaresMs] : [],
+    desistenciaParticipantes: Array.isArray(raw.desistenciaParticipantes)
+      ? [...raw.desistenciaParticipantes]
+      : [],
+    desistenciaVoltasParticipantes: Array.isArray(raw.desistenciaVoltasParticipantes)
+      ? [...raw.desistenciaVoltasParticipantes]
+      : [],
+    marcacoesOrdem: Array.isArray(raw.marcacoesOrdem) ? [...raw.marcacoesOrdem] : [],
+  };
+  if (base.marcacoesOrdem.length === 0) {
+    base.marcacoesOrdem = rebuildMarcacoesOrdemEspacial(base);
+  } else {
+    base.marcacoesOrdem = pruneMarcacoesOrdem(base);
+  }
+  return base;
+}
+
 export function aplicarTafTrialReducer(
   state: TrialTableState,
   action: TrialTableAction,
@@ -80,23 +214,7 @@ export function aplicarTafTrialReducer(
       return initialTrialTableState;
 
     case 'hydrate':
-      return {
-        checksVoltas: Array.isArray(action.state.checksVoltas)
-          ? action.state.checksVoltas.map((row) => (Array.isArray(row) ? [...row] : []))
-          : [],
-        chegadaNatacao: Array.isArray(action.state.chegadaNatacao)
-          ? [...action.state.chegadaNatacao]
-          : [],
-        temposMilitaresMs: Array.isArray(action.state.temposMilitaresMs)
-          ? [...action.state.temposMilitaresMs]
-          : [],
-        desistenciaParticipantes: Array.isArray(action.state.desistenciaParticipantes)
-          ? [...action.state.desistenciaParticipantes]
-          : [],
-        desistenciaVoltasParticipantes: Array.isArray(action.state.desistenciaVoltasParticipantes)
-          ? [...action.state.desistenciaVoltasParticipantes]
-          : [],
-      };
+      return normalizeHydrateState(action.state);
 
     case 'prepararProva': {
       const { nParticipantes: n, tipoProva } = action;
@@ -111,6 +229,7 @@ export function aplicarTafTrialReducer(
         chegadaNatacao,
         desistenciaParticipantes,
         desistenciaVoltasParticipantes,
+        marcacoesOrdem: [],
       };
     }
 
@@ -124,12 +243,29 @@ export function aplicarTafTrialReducer(
         }
         next[i] = row;
       }
-      return { ...state, checksVoltas: next };
+      const nextState: TrialTableState = { ...state, checksVoltas: next };
+      nextState.marcacoesOrdem = pruneMarcacoesOrdem(nextState).filter((key) => {
+        if (!key.startsWith('volta:')) return true;
+        const parts = key.split(':');
+        const pi = Number(parts[1]);
+        const vi = Number(parts[2]);
+        return pi < p && vi < v;
+      });
+      return nextState;
     }
 
     case 'resizeChegadaNatacao': {
       const { p } = action;
-      return { ...state, chegadaNatacao: ensureBoolRow(state.chegadaNatacao, p) };
+      const nextState: TrialTableState = {
+        ...state,
+        chegadaNatacao: ensureBoolRow(state.chegadaNatacao, p),
+      };
+      nextState.marcacoesOrdem = pruneMarcacoesOrdem(nextState).filter((key) => {
+        if (!key.startsWith('chegada:')) return true;
+        const pi = Number(key.slice('chegada:'.length));
+        return pi < p;
+      });
+      return nextState;
     }
 
     case 'resizeTempos': {
@@ -163,7 +299,17 @@ export function aplicarTafTrialReducer(
       while (nextTempos.length <= participante) nextTempos.push(null);
       nextTempos[participante] = willBeChecked ? elapsedMs : null;
 
-      return { ...state, chegadaNatacao: nextChegada, temposMilitaresMs: nextTempos };
+      const key = chaveMarcacaoChegada(participante);
+      const marcacoesOrdem = willBeChecked
+        ? pushMarcacao(state.marcacoesOrdem ?? [], key)
+        : removeMarcacao(state.marcacoesOrdem ?? [], key);
+
+      return {
+        ...state,
+        chegadaNatacao: nextChegada,
+        temposMilitaresMs: nextTempos,
+        marcacoesOrdem,
+      };
     }
 
     case 'toggleVoltaCorrida': {
@@ -177,6 +323,7 @@ export function aplicarTafTrialReducer(
       // Prefixo contíguo da esquerda: [✓ ✓ ✓ □ □]
       let prefixLen = 0;
       while (prefixLen < n && nextChecks[participante][prefixLen]) prefixLen += 1;
+      const prefixAntes = prefixLen;
 
       const row = Array.from({ length: n }, (_, j) => j < prefixLen);
 
@@ -191,12 +338,31 @@ export function aplicarTafTrialReducer(
 
       nextChecks[participante] = row;
 
+      const prefixDepois = countVoltasMarcadas(row);
+      let marcacoesOrdem = [...(state.marcacoesOrdem ?? [])];
+      if (prefixDepois > prefixAntes) {
+        marcacoesOrdem = pushMarcacao(
+          marcacoesOrdem,
+          chaveMarcacaoVolta(participante, prefixDepois - 1),
+        );
+      } else if (prefixDepois < prefixAntes) {
+        marcacoesOrdem = removeMarcacao(
+          marcacoesOrdem,
+          chaveMarcacaoVolta(participante, prefixAntes - 1),
+        );
+      }
+
       const lastMarcada = n > 0 && row[n - 1] === true;
       const nextTempos = [...state.temposMilitaresMs];
       while (nextTempos.length <= participante) nextTempos.push(null);
       nextTempos[participante] = lastMarcada ? elapsedMs : null;
 
-      return { ...state, checksVoltas: nextChecks, temposMilitaresMs: nextTempos };
+      return {
+        ...state,
+        checksVoltas: nextChecks,
+        temposMilitaresMs: nextTempos,
+        marcacoesOrdem,
+      };
     }
 
     case 'setDesistencia': {
@@ -247,6 +413,7 @@ export function aplicarTafTrialReducer(
         temposMilitaresMs: nextTempos,
         chegadaNatacao: nextChegada,
         checksVoltas: nextChecks,
+        marcacoesOrdem: removeMarcacoesDoParticipante(state.marcacoesOrdem ?? [], participante),
       };
     }
 
@@ -257,6 +424,18 @@ export function aplicarTafTrialReducer(
       nextTempos[participante] =
         elapsedMs != null && Number.isFinite(elapsedMs) && elapsedMs >= 0 ? elapsedMs : null;
       return { ...state, temposMilitaresMs: nextTempos };
+    }
+
+    case 'syncMarcacaoPermanencia': {
+      const { participante, opcao } = action;
+      let marcacoesOrdem = [...(state.marcacoesOrdem ?? [])];
+      const key = chaveMarcacaoPermAprovado(participante);
+      if (opcao === 'aprovado') {
+        marcacoesOrdem = pushMarcacao(marcacoesOrdem, key);
+      } else {
+        marcacoesOrdem = removeMarcacao(marcacoesOrdem, key);
+      }
+      return { ...state, marcacoesOrdem };
     }
 
     default:

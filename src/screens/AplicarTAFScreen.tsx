@@ -166,6 +166,7 @@ import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import {
   aplicarTafTrialReducer,
   initialTrialTableState,
+  ultimaMarcacaoLaranjaKey,
 } from './aplicarTafTrialReducer';
 import {
   addPreCadastroTaf,
@@ -388,6 +389,7 @@ export default function AplicarTAFScreen() {
     desistenciaParticipantes,
     desistenciaVoltasParticipantes,
   } = trialTable;
+
   const [continuidadeProvaVisible, setContinuidadeProvaVisible] = useState(false);
   const [continuidadeProvaMeta, setContinuidadeProvaMeta] = useState<{
     provaLabel: string;
@@ -431,6 +433,14 @@ export default function AplicarTAFScreen() {
   const [modalPermanenciaFinalizadaVisible, setModalPermanenciaFinalizadaVisible] =
     useState(false);
   const [erroPermanencia, setErroPermanencia] = useState('');
+
+  const ultimaMarcacaoChecklistKey = useMemo(
+    () =>
+      ultimaMarcacaoLaranjaKey(trialTable, {
+        permanenteAprovadoAtivo: (p) => resultadoPermanenciaLinhas[p] === 'aprovado',
+      }),
+    [trialTable, resultadoPermanenciaLinhas],
+  );
 
   const stopwatch = useTafReactStopwatch({
     getMaxMs: () =>
@@ -827,6 +837,7 @@ export default function AplicarTAFScreen() {
         temposMilitaresMs: [...trialTable.temposMilitaresMs],
         desistenciaParticipantes: [...trialTable.desistenciaParticipantes],
         desistenciaVoltasParticipantes: [...(trialTable.desistenciaVoltasParticipantes ?? [])],
+        marcacoesOrdem: [...(trialTable.marcacoesOrdem ?? [])],
       },
       numeroVoltas,
       voltasConfirmadas: voltasConfirmadasProva,
@@ -2350,6 +2361,7 @@ export default function AplicarTAFScreen() {
         temposMilitaresMs: Array.from({ length: nParticipantesConfirmado }, () => null),
         desistenciaParticipantes: [],
         desistenciaVoltasParticipantes: [],
+        marcacoesOrdem: [],
       },
     });
     setCorridaEtapa('tabela_permanencia');
@@ -2395,6 +2407,12 @@ export default function AplicarTAFScreen() {
         while (next.length <= index) next.push(null);
         next[index] = nextOp;
         return next;
+      });
+
+      dispatchTrial({
+        type: 'syncMarcacaoPermanencia',
+        participante: index,
+        opcao: nextOp,
       });
 
       // Aprovado → 10:00 fixos; reprovado → tempo atual do cronômetro; desmarcar → limpa.
@@ -2859,6 +2877,7 @@ export default function AplicarTAFScreen() {
               temposMilitaresMs: Array.from({ length: n }, () => null),
               desistenciaParticipantes: [],
               desistenciaVoltasParticipantes: [],
+              marcacoesOrdem: [],
             },
           });
           setCorridaEtapa('tabela_permanencia');
@@ -3710,6 +3729,7 @@ export default function AplicarTAFScreen() {
         onPressNomeParticipante={abrirModalFatoresRiscoParticipante}
         checksVoltas={checksVoltas}
         chegadaNatacao={chegadaNatacao}
+        ultimaMarcacaoKey={ultimaMarcacaoChecklistKey}
         onToggleVolta={toggleCheckVolta}
         onToggleChegada={toggleMarcarChegadaNatacao}
         desistenciaParticipantes={desistenciaParticipantes}

@@ -112,6 +112,11 @@ export type TafProvaTempoModalProps = {
   onPressNomeParticipante?: (index: number) => void;
   checksVoltas?: boolean[][];
   chegadaNatacao?: boolean[];
+  /**
+   * Chave da única marcação laranja no teste (`volta:p:v` | `chegada:p` | `perm:p:aprovado`).
+   * Demais marcações já feitas ficam verdes.
+   */
+  ultimaMarcacaoKey?: string | null;
   onToggleVolta?: (participante: number, volta: number) => void;
   onToggleChegada?: (participante: number) => void;
   /** Corrida/natação: desistência por participante. */
@@ -243,7 +248,7 @@ function CheckVolta({
   touchLarge?: boolean;
   /** Número de ordem do militar (mesmo do cadastro). */
   numero: number;
-  /** Último checklist marcado da sequência — laranja; anteriores verdes. */
+  /** Única marcação laranja do teste inteiro (global entre militares). */
   ultimoMarcado?: boolean;
 }) {
   const onStyle =
@@ -289,6 +294,7 @@ function CheckPermanenciaModal({
   variant,
   touchLarge,
   numero,
+  ultimoMarcado = false,
 }: {
   label: string;
   checked: boolean;
@@ -297,12 +303,23 @@ function CheckPermanenciaModal({
   touchLarge?: boolean;
   /** Número de ordem do militar (mesmo do cadastro). */
   numero: number;
+  /** Aprovado: laranja só se for a marcação global ativa. */
+  ultimoMarcado?: boolean;
 }) {
   const { theme } = useTheme();
-  // Único marcado da linha: aprovado = laranja (não verde); reprovado = vermelho.
   const onStyle =
-    variant === 'aprovado' ? styles.checkBoxOnUltimo : styles.checkPermOnReprov;
-  const labelColor = variant === 'aprovado' ? '#ea580c' : theme.loss;
+    variant === 'reprovado'
+      ? styles.checkPermOnReprov
+      : checked && ultimoMarcado
+        ? styles.checkBoxOnUltimo
+        : styles.checkBoxOn;
+  const labelColor = !checked
+    ? theme.textSecondary
+    : variant === 'reprovado'
+      ? theme.loss
+      : ultimoMarcado
+        ? '#ea580c'
+        : '#16a34a';
 
   return (
     <TouchableOpacity
@@ -408,6 +425,7 @@ export function TafProvaTempoModal({
   onPressNomeParticipante,
   checksVoltas = [],
   chegadaNatacao = [],
+  ultimaMarcacaoKey = null,
   onToggleVolta,
   onToggleChegada,
   desistenciaParticipantes = [],
@@ -708,6 +726,10 @@ export function TafProvaTempoModal({
                             numero={index + 1}
                             checked={resultadosPermanencia[index] === 'aprovado'}
                             variant="aprovado"
+                            ultimoMarcado={
+                              resultadosPermanencia[index] === 'aprovado' &&
+                              ultimaMarcacaoKey === `perm:${index}:aprovado`
+                            }
                             touchLarge={isNativeMobile}
                             onPress={() => onTogglePermanencia(index, 'aprovado')}
                           />
@@ -726,7 +748,10 @@ export function TafProvaTempoModal({
                         <CheckVolta
                           numero={index + 1}
                           checked={chegadaNatacao[index] ?? false}
-                          ultimoMarcado={chegadaNatacao[index] === true}
+                          ultimoMarcado={
+                            (chegadaNatacao[index] ?? false) &&
+                            ultimaMarcacaoKey === `chegada:${index}`
+                          }
                           a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
                           touchLarge={isNativeMobile}
                           onPress={() => onToggleChegada(index)}
@@ -739,17 +764,15 @@ export function TafProvaTempoModal({
                       !desistiu
                         ? (() => {
                             const row = checksVoltas[index] ?? [];
-                            let ultimoIdx = -1;
-                            for (let j = 0; j < nColunasVoltasAtivas; j += 1) {
-                              if (row[j]) ultimoIdx = j;
-                              else break;
-                            }
                             return Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
                               <CheckVolta
                                 key={`volta-${index}-${v}`}
                                 numero={index + 1}
                                 checked={row[v] ?? false}
-                                ultimoMarcado={v === ultimoIdx}
+                                ultimoMarcado={
+                                  (row[v] ?? false) &&
+                                  ultimaMarcacaoKey === `volta:${index}:${v}`
+                                }
                                 a11y={`Volta ${v + 1}, participante ${index + 1}`}
                                 touchLarge={isNativeMobile}
                                 onPress={() => onToggleVolta(index, v)}

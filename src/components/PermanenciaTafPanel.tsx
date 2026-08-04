@@ -26,6 +26,8 @@ type PermanenciaTafPanelProps = {
   participantes: ParticipantePermanencia[];
   resultados: ResultadoPermanenciaOpcao[];
   onToggleResultado: (index: number, opcao: 'aprovado' | 'reprovado') => void;
+  /** Chave `perm:p:aprovado` da única marcação laranja do teste. */
+  ultimaMarcacaoKey?: string | null;
   tempoExibido: string;
   cronometroEstado: CronometroPermanenciaEstado;
   cronometroPausadoTexto: string;
@@ -47,6 +49,7 @@ function CheckPermanencia({
   variant,
   labelColor,
   numero,
+  ultimoMarcado = false,
 }: {
   label: string;
   checked: boolean;
@@ -54,10 +57,22 @@ function CheckPermanencia({
   variant: 'aprovado' | 'reprovado';
   labelColor: string;
   numero: number;
+  /** Aprovado: laranja só se for a única marcação global ativa. */
+  ultimoMarcado?: boolean;
 }) {
-  // Único marcado: aprovado = laranja (não verde); reprovado = vermelho.
-  const onStyle = variant === 'aprovado' ? styles.checkOnUltimo : styles.checkOnReprovado;
-  const textColor = variant === 'aprovado' ? '#ea580c' : labelColor;
+  const onStyle =
+    variant === 'reprovado'
+      ? styles.checkOnReprovado
+      : checked && ultimoMarcado
+        ? styles.checkOnUltimo
+        : styles.checkOnAprovado;
+  const textColor = !checked
+    ? labelColor
+    : variant === 'reprovado'
+      ? labelColor
+      : ultimoMarcado
+        ? '#ea580c'
+        : '#16a34a';
   return (
     <TouchableOpacity
       accessibilityRole="checkbox"
@@ -79,9 +94,7 @@ function CheckPermanencia({
           </Text>
         )}
       </View>
-      <Text style={[styles.checkLabel, { color: checked && variant === 'aprovado' ? textColor : labelColor }]}>
-        {label}
-      </Text>
+      <Text style={[styles.checkLabel, { color: textColor }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -90,6 +103,7 @@ export function PermanenciaTafPanel({
   participantes,
   resultados,
   onToggleResultado,
+  ultimaMarcacaoKey = null,
   tempoExibido,
   cronometroEstado,
   cronometroPausadoTexto,
@@ -139,6 +153,9 @@ export function PermanenciaTafPanel({
                   numero={p.index + 1}
                   checked={r === 'aprovado'}
                   variant="aprovado"
+                  ultimoMarcado={
+                    r === 'aprovado' && ultimaMarcacaoKey === `perm:${p.index}:aprovado`
+                  }
                   labelColor={ui.text}
                   onPress={() => onToggleResultado(p.index, 'aprovado')}
                 />

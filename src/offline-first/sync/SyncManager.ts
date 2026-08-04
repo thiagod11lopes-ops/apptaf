@@ -168,7 +168,9 @@ const CLOUD_DIFF_CYCLE_PAUSE_NEEDS_SYNC_MS = 2_500;
 const listeners = new Set<Listener>();
 
 function buildCloudDiffWatch(): { countdownSec: number | null; flashMessage: string | null } {
-  const watchEligible = syncAuthAvailable && mode === 'OFFLINE' && !syncInFlight;
+  // Watcher de diff só aparece/conta com BNC ligado.
+  const watchEligible =
+    syncAuthAvailable && mode === 'OFFLINE' && !syncInFlight && isCloudLinkEnabled();
   return {
     countdownSec:
       watchEligible && !cloudDiffCyclePaused && !cloudDiffCompareInFlight
@@ -1619,16 +1621,16 @@ export const syncManager = {
 
   async endSystemWipe(dataOwnerUid: string): Promise<void> {
     await refreshAfterSystemWipe(dataOwnerUid);
-    if (syncAuthAvailable && dataOwnerUid) {
+    if (syncAuthAvailable && dataOwnerUid && isCloudLinkEnabled()) {
       ensureRealtimeBridge(dataOwnerUid);
-      if (isCloudLinkEnabled()) startCloudDiffWatch();
+      startCloudDiffWatch();
     }
   },
 
   resumeAfterInterruptedWipe(): void {
-    if (syncAuthAvailable) {
+    if (syncAuthAvailable && isCloudLinkEnabled()) {
       ensureRealtimeBridge(ownerUid ?? getCachedDataOwnerUid());
-      if (isCloudLinkEnabled()) startCloudDiffWatch();
+      startCloudDiffWatch();
     }
   },
 

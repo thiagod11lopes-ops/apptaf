@@ -112,6 +112,9 @@ export function handleRealtimeRemoteChange(host: RealtimePullHost): void {
   if (!isCloudLinkEnabled()) return;
 
   void (async () => {
+    // BNC pode ter sido desligado enquanto o debounce/async rodava.
+    if (!isCloudLinkEnabled()) return;
+
     const uid = host.getOwnerUid()?.trim();
     if (uid) {
       try {
@@ -124,6 +127,7 @@ export function handleRealtimeRemoteChange(host: RealtimePullHost): void {
           `applyTeamWipeIfNeeded falhou: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
+      if (!isCloudLinkEnabled()) return;
       // Invalidação leve — pull incremental (sem full fetch a cada mudança).
       invalidateRemoteSnapshotCache();
       if (shouldForceFullFetchOnRealtimeEvent(isAuthorizedMemberSession())) {
@@ -134,6 +138,7 @@ export function handleRealtimeRemoteChange(host: RealtimePullHost): void {
         }
       }
     }
+    if (!isCloudLinkEnabled()) return;
     host.requestForcePull();
     host.clearBackgroundCooldown();
     host.refreshQueueEstimate();

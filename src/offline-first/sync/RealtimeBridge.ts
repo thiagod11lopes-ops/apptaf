@@ -1,7 +1,9 @@
 /**
  * Escuta postgres_changes do Supabase no banco do dono (owner_uid).
- * Ativo só com a chave da nuvem ligada. Eventos disparam pull incremental
+ * Ativo só com a chave da nuvem (BNC) ligada. Eventos disparam pull incremental
  * (debounced) — sem full fetch a cada mudança pequena.
+ *
+ * Etapa 2: o bridge se auto-desliga quando BNC cai (não depende só do SyncManager).
  */
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabase } from '../../config/supabase';
@@ -10,6 +12,7 @@ import {
   endRealtimeApply,
   setRealtimeListening,
 } from '../../services/offline/cloudSyncActivity';
+import { isCloudLinkEnabled, subscribeCloudLink } from './cloudLinkPreference';
 import { syncLogger } from './SyncLogger';
 import { REALTIME_PULL_DEBOUNCE_MS } from './memberCloudWatch';
 
@@ -47,6 +50,10 @@ function clearDebounce(): void {
 }
 
 function fireRemoteChange(): void {
+  if (!isCloudLinkEnabled()) {
+    stopRealtimeBridge();
+    return;
+  }
   if (Date.now() < suppressUntilMs) return;
   if (!onRemoteChange) return;
   beginRealtimeApply();
@@ -59,6 +66,10 @@ function fireRemoteChange(): void {
 }
 
 function scheduleRemoteChange(): void {
+  if (!isCloudLinkEnabled()) {
+    stopRealtimeBridge();
+    return;
+  }
   if (Date.now() < suppressUntilMs) return;
   clearDebounce();
   debounceTimer = setTimeout(() => {
@@ -80,6 +91,7 @@ export function stopRealtimeBridge(): void {
   }
   channel = null;
   activeOwnerUid = null;
+  onRemoteChange = null;
   setRealtimeListening(false);
 }
 
@@ -87,6 +99,12 @@ export function startRealtimeBridge(
   ownerUid: string,
   handler: RemoteChangeHandler,
 ): void {
+  // Canal WebSocket só com BNC ligado — evita escuta residual com chave off.
+  if (!isCloudLinkEnabled()) {
+    stopRealtimeBridge();
+    return;
+  }
+
   const uid = (ownerUid || '').trim();
   if (!uid) {
     stopRealtimeBridge();
@@ -101,6 +119,7 @@ export function startRealtimeBridge(
   }
 
   stopRealtimeBridge();
+  if (!isCloudLinkEnabled()) return;
   onRemoteChange = handler;
 
   const sb = getSupabase();
@@ -128,6 +147,10 @@ export function startRealtimeBridge(
   }
 
   channel = builder.subscribe((status) => {
+    if (!isCloudLinkEnabled()) {
+      stopRealtimeBridge();
+      return;
+    }
     if (status === 'SUBSCRIBED') {
       setRealtimeListening(true);
       void syncLogger.info('realtime', 'Escuta em tempo real ativa', { ownerUid: uid });
@@ -143,3 +166,8 @@ export function startRealtimeBridge(
 export function isRealtimeBridgeActive(): boolean {
   return channel != null && activeOwnerUid != null;
 }
+
+/** BNC off → derruba canal imediatamente (defesa em profundidade). */
+subscribeCloudLink((enabled) => {
+  if (!enabled) stopRealtimeBridge();
+});

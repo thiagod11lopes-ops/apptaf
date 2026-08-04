@@ -1275,6 +1275,13 @@ export const syncManager = {
     if (getConnectivityState() === 'ONLINE') {
       void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true }).catch(() => {});
     }
+    // Hydrate registry (código do banco) só agora — etapa 17.
+    const bankOwner = ownerUid ?? getCachedDataOwnerUid();
+    if (bankOwner) {
+      void import('../../services/supabase/databaseRegistryCloud')
+        .then(({ ensureDatabaseBankCode }) => ensureDatabaseBankCode(bankOwner))
+        .catch(() => {});
+    }
     notifyListeners();
   },
   async bindSession(dataOwnerUid: string): Promise<void> {

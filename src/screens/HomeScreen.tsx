@@ -22,7 +22,10 @@ import {
 } from '../services/supabase/databaseRegistryCloud';
 import { listRecentKnownAuthEmails } from '../offline-first/auth/knownAuthEmails';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
-import { isCloudLinkEnabled } from '../offline-first/sync/cloudLinkPreference';
+import {
+  isCloudLinkEnabled,
+  subscribeCloudLink,
+} from '../offline-first/sync/cloudLinkPreference';
 const tafImage = require('../../TAF1.png');
 
 const RESUMO_INICIAL: ResumoInicioTafHistorico = {
@@ -134,6 +137,9 @@ export default function HomeScreen() {
   const [bankCode, setBankCode] = useState<string | null>(() =>
     isAuthenticated ? readCachedDatabaseBankCode(dataOwnerUid) : null,
   );
+  const [cloudLinkOn, setCloudLinkOn] = useState(isCloudLinkEnabled);
+
+  useEffect(() => subscribeCloudLink(setCloudLinkOn), []);
 
   useEffect(() => {
     if (!authReady) return;
@@ -145,7 +151,8 @@ export default function HomeScreen() {
         return;
       }
       if (!cancelled) setBankCode(readCachedDatabaseBankCode(owner));
-      if (isAuthenticated && isCloudLinkEnabled()) {
+      // Etapa 17: hydrate do registry na nuvem só com chave ligada.
+      if (isAuthenticated && cloudLinkOn) {
         const code = await ensureDatabaseBankCode(owner);
         if (!cancelled) setBankCode(code);
       }
@@ -153,7 +160,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [authReady, isAuthenticated, dataOwnerUid, user?.uid]);
+  }, [authReady, isAuthenticated, dataOwnerUid, user?.uid, cloudLinkOn]);
 
   /** Cards = espelho local (Dexie) com cache em memória. Debounce evita tempestade. */
   const resumoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);

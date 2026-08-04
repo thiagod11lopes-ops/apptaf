@@ -1,6 +1,7 @@
 import { getSupabase, requireSupabase } from '../../config/supabase';
 import { readAppMetaCache, writeAppMeta } from '../../offline-first/db/appMeta';
 import { isCloudOwnerUid } from '../../utils/cloudOwnerUid';
+import { isCloudLinkEnabled } from '../../offline-first/sync/cloudLinkPreference';
 import { adminListBossEmails } from './adminDirectoryCloud';
 
 const META_PREFIX = 'database:bankCode:';
@@ -76,13 +77,18 @@ async function resolveBankCodeFromBossDirectory(ownerUid: string): Promise<strin
 
 /**
  * Obtém ou cria o código do banco (BNC001…) na nuvem para o ownerUid (chefe).
- * Fallbacks: leitura da tabela → lista de chefes (admin) → cache/local.
+ * Etapa 17: com a chave da nuvem desligada, só usa cache/local — zero RPC/rede.
+ * Fallbacks (chave on): leitura da tabela → lista de chefes (admin) → cache/local.
  */
 export async function ensureDatabaseBankCode(ownerUid: string | null | undefined): Promise<string | null> {
   const uid = (ownerUid ?? '').trim();
   if (!uid || !isCloudOwnerUid(uid)) return null;
 
   const cached = readCachedDatabaseBankCode(uid);
+  if (!isCloudLinkEnabled()) {
+    return cached ?? (await allocateLocalBankCode(uid));
+  }
+
   const sb = getSupabase();
   if (!sb) return cached ?? (await allocateLocalBankCode(uid));
 

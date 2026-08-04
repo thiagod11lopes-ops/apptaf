@@ -76,6 +76,7 @@ import {
 import { getActiveTeamKey } from '../services/supabase/e2eCrypto';
 import { fetchTeamE2eMeta } from '../services/supabase/teamE2eCloud';
 import { ensureDatabaseBankCode } from '../services/supabase/databaseRegistryCloud';
+import { isCloudLinkEnabled } from '../offline-first/sync/cloudLinkPreference';
 
 type AuthContextType = {
   user: AppAuthUser | null;
@@ -385,11 +386,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (supabaseEnabled) {
             await syncManager.bindSession(session.dataOwnerUid);
             syncManager.setAuthAvailable(true);
-            // Espelho/sync só quando a chave da nuvem for ligada (Home).
+            // Espelho/registry da nuvem: só com chave ligada (etapa 17).
             notifyDataChanged();
-            void ensureDatabaseBankCode(session.dataOwnerUid).catch((err) => {
-              console.warn('[auth] ensureDatabaseBankCode falhou:', err);
-            });
+            if (isCloudLinkEnabled()) {
+              void ensureDatabaseBankCode(session.dataOwnerUid).catch((err) => {
+                console.warn('[auth] ensureDatabaseBankCode falhou:', err);
+              });
+            }
           } else {
             notifyDataChanged();
           }

@@ -109,7 +109,8 @@ export default function ConfiguracoesScreen() {
       const owner = dataOwnerUid ?? getCachedDataOwnerUid();
       if (!owner) return;
       if (!cancelled) setBankCode(readCachedDatabaseBankCode(owner));
-      if (isAuthenticated) {
+      // Etapa 17: registry na nuvem só com chave ligada.
+      if (isAuthenticated && cloudLinkOn) {
         const code = await ensureDatabaseBankCode(owner);
         if (!cancelled) setBankCode(code);
       }
@@ -117,7 +118,7 @@ export default function ConfiguracoesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [authReady, isAuthenticated, dataOwnerUid]);
+  }, [authReady, isAuthenticated, dataOwnerUid, cloudLinkOn]);
 
   useFocusEffect(
     useCallback(() => {

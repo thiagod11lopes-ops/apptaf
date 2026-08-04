@@ -137,6 +137,16 @@ export function montarListaPendencias(
   return lista.sort(compareByNomePtBr);
 }
 
+/** Militares com ao menos um teste e TAF incompleto. */
+export function filtrarPendenciasParciais(lista: PendenciaTafItem[]): PendenciaTafItem[] {
+  return lista.filter((p) => p.situacao === 'Parcial');
+}
+
+/** Militares cadastrados que ainda não fizeram nenhum teste. */
+export function filtrarPendenciasTotais(lista: PendenciaTafItem[]): PendenciaTafItem[] {
+  return lista.filter((p) => p.situacao === 'Sem teste');
+}
+
 export function calcularContagemPendencias(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],

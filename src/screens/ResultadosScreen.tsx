@@ -63,7 +63,13 @@ import { TafCenteredTabHeader, TafGlassPanel } from '../components/mobile/TafTab
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Resultados'>;
-type AbaResultados = 'historico' | 'consulta' | 'pendencia' | 'geral' | 'concluido';
+type AbaResultados =
+  | 'historico'
+  | 'consulta'
+  | 'pendencia'
+  | 'pendenciaTotal'
+  | 'geral'
+  | 'concluido';
 
 export default function ResultadosScreen() {
   const { theme } = useTheme();
@@ -199,7 +205,7 @@ export default function ResultadosScreen() {
           title="Resultados"
           subtitle={
             normaVista
-              ? `${NORMA_TAF_LABEL[normaVista]} · histórico · gerenciar · geral · pendências · concluídos`
+              ? `${NORMA_TAF_LABEL[normaVista]} · histórico · gerenciar · geral · pendência parcial · pendência total · concluídos`
               : 'Selecione TAF Armada ou TAF CFN'
           }
           footer={<TopActionIcons activeRoute="Resultados" inline centered />}
@@ -373,8 +379,10 @@ export default function ResultadosScreen() {
           <ResultadosGeralPanel normaTaf={normaVista} onVerHistoricoMilitar={abrirHistoricoMilitar} />
         ) : aba === 'concluido' ? (
           <ResultadosConcluidoPanel normaTaf={normaVista} />
+        ) : aba === 'pendenciaTotal' ? (
+          <ResultadosPendenciaParcialPanel normaTaf={normaVista} modo="total" />
         ) : (
-          <ResultadosPendenciaParcialPanel normaTaf={normaVista} />
+          <ResultadosPendenciaParcialPanel normaTaf={normaVista} modo="parcial" />
         )}
           </>
         ) : (

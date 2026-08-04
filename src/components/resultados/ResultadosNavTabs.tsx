@@ -6,7 +6,13 @@ import { PREMIUM } from '../../theme/premium';
 import { getAplicarTafGlass } from '../taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from '../mobile/TafTabChrome';
 
-export type AbaResultadosNav = 'historico' | 'consulta' | 'pendencia' | 'geral' | 'concluido';
+export type AbaResultadosNav =
+  | 'historico'
+  | 'consulta'
+  | 'pendencia'
+  | 'pendenciaTotal'
+  | 'geral'
+  | 'concluido';
 
 type Props = {
   value: AbaResultadosNav;
@@ -22,7 +28,8 @@ const ROW_PRINCIPAL: TabDef[] = [
 ];
 
 const ROW_SECUNDARIA: TabDef[] = [
-  { id: 'pendencia', label: 'Pendência' },
+  { id: 'pendencia', label: 'Pendência Parcial' },
+  { id: 'pendenciaTotal', label: 'Pendência Total' },
   { id: 'concluido', label: 'Concluído' },
 ];
 

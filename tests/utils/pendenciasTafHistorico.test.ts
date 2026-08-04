@@ -7,6 +7,8 @@ import {
 } from '../../src/utils/resultadoTafCadastro';
 import {
   calcularContagemPendencias,
+  filtrarPendenciasParciais,
+  filtrarPendenciasTotais,
   montarListaConcluidos,
   montarListaPendencias,
 } from '../../src/utils/pendenciasTafHistorico';
@@ -118,5 +120,33 @@ describe('pendência corrida/caminhada substitutivas', () => {
     const concluidos = montarListaConcluidos([], cadastros);
     expect(concluidos).toHaveLength(1);
     expect(concluidos[0]?.nome).toBe('Teste Silva');
+  });
+
+  it('separa pendência parcial (com testes) da total (sem nenhum teste)', () => {
+    const cadastros = [
+      cadastroBase({ id: 'c1', nip: '12.3456.01', nome: 'Parcial Silva' }),
+      cadastroBase({ id: 'c2', nip: '12.3456.02', nome: 'Sem Teste' }),
+    ];
+    const sessoes: SessaoAplicacaoTaf[] = [
+      {
+        id: 's1',
+        criadoEm: '2026-01-01T12:00:00.000Z',
+        dataAplicacao: '01/01/2026',
+        tipoProva: 'corrida',
+        resultados: [
+          {
+            corredor: 1,
+            nome: 'Parcial Silva',
+            nip: '12.3456.01',
+            tempoMs: 12 * 60 * 1000,
+            notaTexto: '90',
+            prova: 'corrida',
+          },
+        ],
+      },
+    ];
+    const lista = montarListaPendencias(sessoes, cadastros);
+    expect(filtrarPendenciasParciais(lista).map((p) => p.nome)).toEqual(['Parcial Silva']);
+    expect(filtrarPendenciasTotais(lista).map((p) => p.nome)).toEqual(['Sem Teste']);
   });
 });

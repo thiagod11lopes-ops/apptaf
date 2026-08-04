@@ -13,10 +13,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
-import { montarListaPendencias, type PendenciaTafItem } from '../utils/pendenciasTafHistorico';
+import { montarListaPendencias, type PendenciaTafItem, filtrarPendenciasParciais, filtrarPendenciasTotais } from '../utils/pendenciasTafHistorico';
 import {
   CFN_CHIP_LABELS,
   montarListaPendenciasCfn,
+  filtrarPendenciasParciaisCfn,
+  filtrarPendenciasTotaisCfn,
   type PendenciaCfnItem,
 } from '../utils/pendenciasTafCfnHistorico';
 import { prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
@@ -52,7 +54,18 @@ function ChipModalidade({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
-export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { normaTaf?: NormaTafVista }) {
+export type ModoPendenciaPainel = 'parcial' | 'total';
+
+type Props = {
+  normaTaf?: NormaTafVista;
+  /** `parcial` = ao menos um teste; `total` = nenhum teste. */
+  modo?: ModoPendenciaPainel;
+};
+
+export function ResultadosPendenciaParcialPanel({
+  normaTaf = 'armada',
+  modo = 'parcial',
+}: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -68,7 +81,12 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
     Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
       .then(([cadastros, sessoes]) => {
         if (normaTaf === 'cfn') {
-          setListaCfn(montarListaPendenciasCfn(sessoes, cadastros));
+          const todas = montarListaPendenciasCfn(sessoes, cadastros);
+          setListaCfn(
+            modo === 'total'
+              ? filtrarPendenciasTotaisCfn(todas)
+              : filtrarPendenciasParciaisCfn(todas),
+          );
           setLista([]);
           return;
         }
@@ -77,7 +95,10 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
           cadastros,
           'armada',
         );
-        setLista(montarListaPendencias(sessoesNorma, cadastrosNorma));
+        const todas = montarListaPendencias(sessoesNorma, cadastrosNorma);
+        setLista(
+          modo === 'total' ? filtrarPendenciasTotais(todas) : filtrarPendenciasParciais(todas),
+        );
         setListaCfn([]);
       })
       .catch(() => {
@@ -85,7 +106,7 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
         setListaCfn([]);
       })
       .finally(() => setCarregando(false));
-  }, [normaTaf]);
+  }, [normaTaf, modo]);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,7 +122,12 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
       return;
     }
     if (lista.length === 0) {
-      Alert.alert('Sem dados', 'Não há militares com pendência para gerar o PDF.');
+      Alert.alert(
+        'Sem dados',
+        modo === 'total'
+          ? 'Não há militares sem teste para gerar o PDF.'
+          : 'Não há militares com pendência parcial para gerar o PDF.',
+      );
       return;
     }
     setGerandoPdf(true);
@@ -114,7 +140,12 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
     } finally {
       setGerandoPdf(false);
     }
-  }, [lista, normaTaf]);
+  }, [lista, normaTaf, modo]);
+
+  const tituloVazio =
+    modo === 'total'
+      ? 'Nenhum militar sem teste.'
+      : 'Nenhuma pendência parcial registrada.';
 
   return (
     <View style={styles.wrap}>
@@ -154,7 +185,7 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
       {!carregando && listaVisivel.length === 0 ? (
         <TafGlassPanel style={styles.emptyCard}>
           <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
-            Nenhuma pendência registrada.
+            {tituloVazio}
           </Text>
         </TafGlassPanel>
       ) : null}
@@ -208,9 +239,11 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
                   ))}
                 </View>
 
-                <Text style={[ts.caption, styles.faltaLabel, { color: theme.loss }]}>
-                  Falta: {item.faltam.join(', ')}
-                </Text>
+                {item.faltam.length > 0 ? (
+                  <Text style={[ts.caption, styles.faltaLabel, { color: theme.loss }]}>
+                    Falta: {item.faltam.join(', ')}
+                  </Text>
+                ) : null}
               </TafGlassPanel>
             </View>
           ))
@@ -265,9 +298,11 @@ export function ResultadosPendenciaParcialPanel({ normaTaf = 'armada' }: { norma
                   <ChipModalidade label="Permanência" ok={item.temPermanencia} />
                 </View>
 
-                <Text style={[ts.caption, styles.faltaLabel, { color: theme.loss }]}>
-                  Falta: {item.faltam.join(', ')}
-                </Text>
+                {item.faltam.length > 0 ? (
+                  <Text style={[ts.caption, styles.faltaLabel, { color: theme.loss }]}>
+                    Falta: {item.faltam.join(', ')}
+                  </Text>
+                ) : null}
               </TafGlassPanel>
             </View>
           ))

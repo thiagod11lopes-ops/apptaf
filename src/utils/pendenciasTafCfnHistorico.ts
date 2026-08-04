@@ -348,6 +348,16 @@ export function montarListaPendenciasCfn(
   return montarListaCfn(sessoes, cadastros, itemPendenciaFromCadastro, itemPendenciaFromAgg);
 }
 
+/** CFN: ao menos um teste e incompleto. */
+export function filtrarPendenciasParciaisCfn(lista: PendenciaCfnItem[]): PendenciaCfnItem[] {
+  return lista.filter((p) => p.situacao === 'Parcial');
+}
+
+/** CFN: nenhum teste. */
+export function filtrarPendenciasTotaisCfn(lista: PendenciaCfnItem[]): PendenciaCfnItem[] {
+  return lista.filter((p) => p.situacao === 'Sem teste');
+}
+
 export function montarListaConcluidosCfn(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],

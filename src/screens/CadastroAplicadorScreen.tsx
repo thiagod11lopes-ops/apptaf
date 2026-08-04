@@ -18,11 +18,9 @@ import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
 import {
   getAllAplicadores,
-  excluirRubricaAplicador,
   type AplicadorItemPersist,
 } from '../services/aplicadoresIndexedDb';
 import { aplicadorRepository } from '../offline-first/repositories/AplicadorRepository';
-import { hashAplicadorSenha, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../utils/aplicadorSenha';
 import { nipDigitos } from '../utils/nipFormat';
 import { PREMIUM } from '../theme/premium';
 import { fontFamily } from '../theme/typography';
@@ -63,14 +61,12 @@ export default function CadastroAplicadorScreen() {
   const [pracaSelecionada, setPracaSelecionada] = useState('');
   const [nip, setNip] = useState('');
   const [nome, setNome] = useState('');
-  const [senha, setSenha] = useState('');
   const [aplicadores, setAplicadores] = useState<AplicadorItemPersist[]>([]);
   const [faltantes, setFaltantes] = useState<string[]>([]);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [mostrarTabela, setMostrarTabela] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [excluirId, setExcluirId] = useState<string | null>(null);
-  const [excluirRubricaId, setExcluirRubricaId] = useState<string | null>(null);
   const [modalNipDuplicado, setModalNipDuplicado] = useState(false);
   const [nipDuplicadoInfo, setNipDuplicadoInfo] = useState<{ nip: string; nome: string } | null>(
     null,
@@ -98,13 +94,6 @@ export default function CadastroAplicadorScreen() {
     const faltantesAgora: string[] = [];
     if (!nip.trim()) faltantesAgora.push('NIP');
     if (!nome.trim()) faltantesAgora.push('Nome');
-    if (!editandoId && !senha.trim()) faltantesAgora.push('Senha');
-    if (!editandoId && senha.trim() && !isSenhaAplicadorValid(senha)) {
-      faltantesAgora.push('Senha (4 números)');
-    }
-    if (editandoId && senha.trim() && !isSenhaAplicadorValid(senha)) {
-      faltantesAgora.push('Senha (4 números)');
-    }
     if (categoria === 'Oficiais' && !oficialSelecionado.trim()) faltantesAgora.push('Oficial');
     if (categoria === 'Praças' && !pracaSelecionada.trim()) faltantesAgora.push('Graduação');
 
@@ -143,13 +132,6 @@ export default function CadastroAplicadorScreen() {
 
     const isEdicao = !!editandoId;
     const id = editandoId ?? `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    const anterior = editandoId ? aplicadores.find((a) => a.id === editandoId) : undefined;
-    let senhaHash = anterior?.senhaHash;
-    let senhaPlano = anterior?.senha;
-    if (senha.trim()) {
-      senhaHash = await hashAplicadorSenha(senha);
-      senhaPlano = formatSenhaAplicadorInput(senha);
-    }
 
     const novo: AplicadorItemPersist = {
       id,
@@ -158,9 +140,10 @@ export default function CadastroAplicadorScreen() {
       categoria,
       oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
       praca: categoria === 'Praças' ? pracaSelecionada : undefined,
-      senha: senhaPlano,
-      senhaHash,
-      rubricaSvg: anterior?.rubricaSvg,
+      // Senha/rúbrica salva não são mais usadas.
+      senha: undefined,
+      senhaHash: undefined,
+      rubricaSvg: undefined,
       updatedAt: Date.now(),
     };
 
@@ -168,25 +151,12 @@ export default function CadastroAplicadorScreen() {
     setErroNuvem(null);
     try {
       await aplicadorRepository.save(novo);
-      if (senha.trim() && senhaHash && senhaPlano) {
-        try {
-          const [{ setAplicadorSenhaFirestore }, { resolveStorageOwnerUid }] = await Promise.all([
-            import('../services/firebase/aplicadorSenhasFirestore'),
-            import('../services/firebase/authUid'),
-          ]);
-          const ownerUid = await resolveStorageOwnerUid();
-          await setAplicadorSenhaFirestore(ownerUid, id, senhaPlano, senhaHash);
-        } catch {
-          // Senha em texto é complementar; a senhaHash já sincroniza normalmente.
-        }
-      }
       setAplicadores((prev) => {
         if (editandoId) return prev.map((a) => (a.id === id ? novo : a));
         return [...prev, novo];
       });
 
       setEditandoId(null);
-      setSenha('');
 
       if (!isEdicao) {
         setModalCadastroSucesso(true);
@@ -220,7 +190,6 @@ export default function CadastroAplicadorScreen() {
     }
     setNip(item.nip || '');
     setNome(item.nome || '');
-    setSenha(item.senha || '');
   }
 
   async function handleConfirmarExcluir() {
@@ -232,16 +201,6 @@ export default function CadastroAplicadorScreen() {
     setErroNuvem(null);
     try {
       await aplicadorRepository.remove(id);
-      try {
-        const [{ deleteAplicadorSenhaFirestore }, { resolveStorageOwnerUid }] = await Promise.all([
-          import('../services/firebase/aplicadorSenhasFirestore'),
-          import('../services/firebase/authUid'),
-        ]);
-        const ownerUid = await resolveStorageOwnerUid();
-        await deleteAplicadorSenhaFirestore(ownerUid, id);
-      } catch {
-        // Limpeza da senha em texto é complementar.
-      }
       setAplicadores((prev) => prev.filter((a) => a.id !== id));
       if (editandoId === id) setEditandoId(null);
     } catch (err) {
@@ -252,82 +211,11 @@ export default function CadastroAplicadorScreen() {
     }
   }
 
-  async function handleConfirmarExcluirRubrica() {
-    if (!excluirRubricaId) return;
-    const id = excluirRubricaId;
-    setExcluirRubricaId(null);
-    setSalvando(true);
-    setErroNuvem(null);
-    try {
-      await excluirRubricaAplicador(id);
-      setAplicadores((prev) =>
-        prev.map((a) => {
-          if (a.id !== id) return a;
-          const next = { ...a };
-          delete next.rubricaSvg;
-          return next;
-        }),
-      );
-    } catch (err) {
-      recarregarAplicadores();
-      setErroNuvem(err instanceof Error ? err.message : 'Falha ao excluir rúbrica.');
-    } finally {
-      setSalvando(false);
-    }
-  }
-
   const recarregarAplicadores = useCallback(() => {
     getAllAplicadores()
-      .then(async (lista) => {
-        if (!isBoss) {
-          setAplicadores(lista);
-          return;
-        }
-        try {
-          const [
-            { getAplicadorSenhasMapFirestore, setAplicadorSenhaFirestore },
-            { resolveStorageOwnerUid },
-            { verificarSenhaAplicador },
-          ] = await Promise.all([
-            import('../services/firebase/aplicadorSenhasFirestore'),
-            import('../services/firebase/authUid'),
-            import('../utils/aplicadorSenha'),
-          ]);
-          const ownerUid = await resolveStorageOwnerUid();
-          const cloudMap = await getAplicadorSenhasMapFirestore(ownerUid);
-          const resolvido = await Promise.all(
-            lista.map(async (a) => {
-              const cloud = cloudMap[a.id];
-              // 1) Texto da nuvem que confere com o hash atual (troca do autorizado).
-              if (
-                cloud?.senha &&
-                a.senhaHash &&
-                (await verificarSenhaAplicador(cloud.senha, a.senhaHash))
-              ) {
-                return { ...a, senha: cloud.senha };
-              }
-              // 2) Mesmo hash gravado na nuvem (campo senhaHash).
-              if (cloud && a.senhaHash && cloud.senhaHash === a.senhaHash && cloud.senha) {
-                return { ...a, senha: cloud.senha };
-              }
-              // 3) Senha local válida — mantém e faz backfill na nuvem se faltar.
-              if (a.senha && a.senhaHash && (await verificarSenhaAplicador(a.senha, a.senhaHash))) {
-                if (!cloud || cloud.senhaHash !== a.senhaHash) {
-                  void setAplicadorSenhaFirestore(ownerUid, a.id, a.senha, a.senhaHash).catch(() => {});
-                }
-                return a;
-              }
-              // 4) Hash novo sem texto correspondente — traço até a senha chegar em aplicador_senhas.
-              return { ...a, senha: undefined };
-            }),
-          );
-          setAplicadores(resolvido);
-        } catch {
-          setAplicadores(lista);
-        }
-      })
-      .catch(() => undefined);
-  }, [isBoss]);
+      .then((lista) => setAplicadores(lista))
+      .catch(() => setAplicadores([]));
+  }, []);
 
   useAuthDataReload(recarregarAplicadores, { scopes: ['aplicadores'] });
 
@@ -552,32 +440,6 @@ export default function CadastroAplicadorScreen() {
                 />
               </View>
 
-              <View style={styles.section}>
-                <FieldLabel>{editandoId ? 'Senha (deixe vazio para manter)' : 'Senha (4 números)'}</FieldLabel>
-                <TextInput
-                  value={senha}
-                  onChangeText={(t) => setSenha(formatSenhaAplicadorInput(t))}
-                  placeholder={editandoId ? 'Nova senha (opcional)' : '0000'}
-                  placeholderTextColor={theme.textMuted}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="off"
-                  keyboardType="number-pad"
-                  inputMode="numeric"
-                  maxLength={4}
-                  style={[
-                    styles.input,
-                    {
-                      borderColor: inputBorderColor,
-                      backgroundColor: inputBgColor,
-                      color: inputTextColor,
-                      fontFamily: regularFont,
-                    },
-                  ]}
-                />
-              </View>
-
               <View style={styles.btnRow}>
                 <TouchableOpacity
                   accessibilityLabel="cadastrar aplicador"
@@ -608,8 +470,8 @@ export default function CadastroAplicadorScreen() {
           {!isBoss ? (
             <Card elevated style={styles.formCard}>
               <Text style={[ts.bodySecondary, { color: theme.textSecondary, textAlign: 'center' }]}>
-                O cadastro de aplicadores é exclusivo do e-mail chefe. E-mails autorizados usam nome, posto,
-                NIP e senha apenas ao finalizar provas.
+                O cadastro de aplicadores é exclusivo do e-mail chefe. E-mails autorizados selecionam o
+                aplicador e desenham a rúbrica ao finalizar cada prova.
               </Text>
             </Card>
           ) : null}
@@ -654,7 +516,6 @@ export default function CadastroAplicadorScreen() {
                   isBoss={isBoss}
                   onEditar={handleEditar}
                   onExcluir={(item) => setExcluirId(item.id)}
-                  onExcluirRubrica={(item) => setExcluirRubricaId(item.id)}
                 />
               )}
             </>
@@ -699,48 +560,6 @@ export default function CadastroAplicadorScreen() {
                 ]}
               >
                 <Text style={[ts.caption, { color: dangerColor }]}>Excluir</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      ) : null}
-
-      {excluirRubricaId ? (
-        <View style={[styles.modalOverlay, { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.45)' }]}>
-          <View style={[styles.modalCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[ts.h2, { color: theme.text }]}>Excluir rúbrica?</Text>
-              <TouchableOpacity
-                accessibilityLabel="Fechar modal"
-                onPress={() => setExcluirRubricaId(null)}
-                style={[styles.modalCloseBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
-              >
-                <X size={18} color={theme.textSecondary} strokeWidth={2} />
-              </TouchableOpacity>
-            </View>
-            <Text style={[ts.bodySecondary, styles.modalSubtitle, { color: theme.textSecondary }]}>
-              A rúbrica salva será removida. Na próxima assinatura o aplicador precisará desenhar novamente.
-            </Text>
-            <View style={styles.modalBtns}>
-              <TouchableOpacity
-                onPress={() => setExcluirRubricaId(null)}
-                style={[styles.modalBtn, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}
-              >
-                <Text style={[ts.caption, { color: theme.textSecondary }]}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => void handleConfirmarExcluirRubrica()}
-                disabled={salvando}
-                style={[
-                  styles.modalBtn,
-                  {
-                    borderColor: dangerColor,
-                    backgroundColor: theme.lossMuted,
-                    opacity: salvando ? 0.55 : 1,
-                  },
-                ]}
-              >
-                <Text style={[ts.caption, { color: dangerColor }]}>Excluir rúbrica</Text>
               </TouchableOpacity>
             </View>
           </View>

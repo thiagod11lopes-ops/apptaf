@@ -9,7 +9,6 @@ import { getUiColors } from '../theme/uiColors';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from './mobile/TafTabChrome';
 import { compareByNomePtBr } from '../utils/compareNomePtBr';
-import { RubricaCell } from './RubricaThumb';
 
 function postoGradLabel(item: AplicadorItemPersist): string {
   if (item.categoria === 'Oficiais') return (item.oficial || '').trim() || '—';
@@ -47,7 +46,6 @@ type Props = {
   isBoss: boolean;
   onEditar?: (item: AplicadorItemPersist) => void;
   onExcluir?: (item: AplicadorItemPersist) => void;
-  onExcluirRubrica?: (item: AplicadorItemPersist) => void;
 };
 
 export function AplicadoresCadastradosTable({
@@ -55,7 +53,6 @@ export function AplicadoresCadastradosTable({
   isBoss,
   onEditar,
   onExcluir,
-  onExcluirRubrica,
 }: Props) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -118,58 +115,6 @@ export function AplicadoresCadastradosTable({
                 <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>CATEGORIA</Text>
                 <Text style={[styles.modernMetaValue, { color: ui.text }]}>{item.categoria}</Text>
               </View>
-              {isBoss ? (
-                <View style={styles.modernMetaItem}>
-                  <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>SENHA</Text>
-                  <Text
-                    style={[styles.modernMetaValue, styles.senhaValue, { color: ui.text }]}
-                    numberOfLines={1}
-                  >
-                    {item.senha?.trim() || '—'}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            <View style={styles.rubricaBlock}>
-              <View style={styles.rubricaHeader}>
-                <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>RÚBRICA</Text>
-                {isBoss && item.rubricaSvg?.trim() && onExcluirRubrica ? (
-                  <TouchableOpacity
-                    accessibilityLabel={`Excluir rúbrica de ${item.nome}`}
-                    accessibilityRole="button"
-                    onPress={() => onExcluirRubrica(item)}
-                    style={[styles.rubricaTrashBtn, styles.modernIconBtnDanger]}
-                  >
-                    <Trash2 size={16} color={theme.loss} strokeWidth={2.4} />
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-              {item.rubricaSvg?.trim() ? (
-                <View
-                  style={[
-                    styles.rubricaPreview,
-                    {
-                      borderColor: glass.border,
-                      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.96)' : '#FFFFFF',
-                    },
-                  ]}
-                >
-                  <RubricaCell svgUri={item.rubricaSvg} maxWidth={280} maxHeight={96} />
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.rubricaPreview,
-                    styles.rubricaPreviewEmpty,
-                    { borderColor: glass.border },
-                  ]}
-                >
-                  <Text style={[styles.rubricaVazia, { color: theme.textMuted }]}>
-                    Será salva na primeira assinatura
-                  </Text>
-                </View>
-              )}
             </View>
           </TafGlassPanel>
         </View>
@@ -247,47 +192,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.1,
-  },
-  senhaValue: {
-    fontVariant: ['tabular-nums'],
-    letterSpacing: 2,
-  },
-  rubricaBlock: {
-    marginTop: 14,
-    gap: 8,
-  },
-  rubricaHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  rubricaTrashBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rubricaPreview: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minHeight: 88,
-    width: '100%',
-    overflow: 'hidden',
-  },
-  rubricaPreviewEmpty: {
-    backgroundColor: 'transparent',
-  },
-  rubricaVazia: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.1,
-    textAlign: 'center',
   },
 });

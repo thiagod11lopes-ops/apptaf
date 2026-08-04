@@ -407,7 +407,7 @@ export default function AplicarTAFScreen() {
   const preCadastroOrigemIdRef = useRef<string | null>(null);
   /**
    * Gravação adiada: nada é lançado no sistema (nem notas no cadastro, nem a sessão)
-   * até o aplicador confirmar senha + rúbrica. Estes buffers guardam o que será gravado.
+   * até o aplicador confirmar a rúbrica. Estes buffers guardam o que será gravado.
    */
   const pendingCadastrosRef = useRef<CadastroItemPersist[]>([]);
   const pendingCleanupsRef = useRef<Array<() => Promise<void>>>([]);
@@ -1084,7 +1084,7 @@ export default function AplicarTAFScreen() {
 
   /**
    * Grava DE FATO no sistema tudo que estava pendente (notas no cadastro, limpezas de
-   * histórico e a sessão) — somente após o aplicador confirmar senha + rúbrica.
+   * histórico e a sessão) — somente após o aplicador confirmar a rúbrica.
    * No Modo Teste: só a sessão (demo-sess-*), sem alterar cadastros reais.
    */
   const commitAplicacao = useCallback(
@@ -1168,7 +1168,7 @@ export default function AplicarTAFScreen() {
   const onCancelarAssinaturaAplicador = useCallback(() => {
     Alert.alert(
       'Descartar aplicação?',
-      'Enquanto o aplicador não confirmar a senha e a rúbrica, nada é lançado no sistema. Deseja descartar esta aplicação?',
+      'Enquanto o aplicador não confirmar a rúbrica, nada é lançado no sistema. Deseja descartar esta aplicação?',
       [
         { text: 'Voltar', style: 'cancel' },
         {
@@ -1727,7 +1727,7 @@ export default function AplicarTAFScreen() {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
     // Mescla a rúbrica do candidato no buffer (ainda sem gravar);
-    // a gravação real ocorre só após o aplicador confirmar senha + rúbrica.
+    // a gravação real ocorre só após o aplicador confirmar a rúbrica.
     pendingCadastrosRef.current = aplicarRubricasEmCadastros(
       pendingCadastrosRef.current,
       atualizados,

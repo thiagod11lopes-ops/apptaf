@@ -1281,6 +1281,9 @@ export const syncManager = {
       void import('../../services/supabase/databaseRegistryCloud')
         .then(({ ensureDatabaseBankCode }) => ensureDatabaseBankCode(bankOwner))
         .catch(() => {});
+      // Etapa 18: unlock E2E completo (probe/wrap) ao ligar a chave.
+      const email = getFirebaseAuth()?.currentUser?.email ?? null;
+      void ensureE2eUnlockedForSession(bankOwner, email).catch(() => {});
     }
     notifyListeners();
   },

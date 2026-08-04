@@ -20,6 +20,7 @@ import { getTafDatabase } from '../db/tafDatabase';
 import { decideLastWriteWins, type SyncRecord } from './lastWriteWins';
 import { remoteDocToSyncRecord } from './tombstone';
 import { fetchRemoteCollectionsSnapshot } from './remoteSnapshotCache';
+import { isCloudLinkEnabled } from './cloudLinkPreference';
 import { syncQueue } from './SyncQueue';
 import { syncLogger } from './SyncLogger';
 import { getDeviceId } from '../deviceId';
@@ -233,6 +234,8 @@ async function persistConflictAudit(
  */
 export async function scanAndAuditRealConflicts(ownerUid: string): Promise<AuditedRealConflict[]> {
   if (!ownerUid.trim()) return [];
+  // Etapa 18: auditoria local×remoto exige chave da nuvem (fetch remoto).
+  if (!isCloudLinkEnabled()) return [];
 
   const [localCad, localSess, localApp, remoteSnap, opMap] = await Promise.all([
     listCadastrosForSync(ownerUid, true),

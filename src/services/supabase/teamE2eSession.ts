@@ -10,6 +10,7 @@ import {
   upsertTeamE2eMemberWrap,
 } from './teamE2eMemberWrapsCloud';
 import { normalizeAuthEmail } from '../../utils/normalizeAuthEmail';
+import { isCloudLinkEnabled } from '../../offline-first/sync/cloudLinkPreference';
 
 const SESSION_STORAGE_KEY = 'taf:e2e:teamKey';
 /**
@@ -246,22 +247,25 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
   }
   const { stored, source } = detailed;
 
-  // Se a meta na nuvem mudou (wipe / nova senha), descarta DEK local antiga.
-  try {
-    const meta = await withTimeout(fetchTeamE2eMeta(ownerUid), 2_500, null);
-    if (meta) {
-      if (stored.keyVersion == null) {
-        // Payload antigo sem versão — não confiar às cegas com meta online.
-        clearE2eSession();
-        return false;
+  // Etapa 18: com chave da nuvem off, não consulta meta/probe — só DEK local.
+  if (isCloudLinkEnabled()) {
+    // Se a meta na nuvem mudou (wipe / nova senha), descarta DEK local antiga.
+    try {
+      const meta = await withTimeout(fetchTeamE2eMeta(ownerUid), 2_500, null);
+      if (meta) {
+        if (stored.keyVersion == null) {
+          // Payload antigo sem versão — não confiar às cegas com meta online.
+          clearE2eSession();
+          return false;
+        }
+        if (meta.key_version !== stored.keyVersion) {
+          clearE2eSession();
+          return false;
+        }
       }
-      if (meta.key_version !== stored.keyVersion) {
-        clearE2eSession();
-        return false;
-      }
+    } catch {
+      /* offline — tenta usar a chave local mesmo assim (sem trust) */
     }
-  } catch {
-    /* offline — tenta usar a chave local mesmo assim (sem trust) */
   }
 
   const key = await importStoredTeamKey(stored);
@@ -270,11 +274,13 @@ export async function restoreE2eFromSessionStorage(ownerUid: string): Promise<bo
   // Dose 6: NÃO marcar trust só por key_version / localStorage.
   trustActiveTeamKey = false;
   writeStoredE2eSession(stored, { allowDurable: false });
-  // Probe: se OK, concede trust e aí persiste durable.
-  void verifyStoredKeyInBackground(ownerUid, {
-    grantTrustOnSuccess: true,
-    source,
-  });
+  if (isCloudLinkEnabled()) {
+    // Probe: se OK, concede trust e aí persiste durable.
+    void verifyStoredKeyInBackground(ownerUid, {
+      grantTrustOnSuccess: true,
+      source,
+    });
+  }
   return true;
 }
 
@@ -297,6 +303,8 @@ async function verifyStoredKeyInBackground(
   ownerUid: string,
   options?: { grantTrustOnSuccess?: boolean; source?: StoredE2eSessionSource },
 ): Promise<void> {
+  // Etapa 18: probe na nuvem só com chave ligada.
+  if (!isCloudLinkEnabled()) return;
   try {
     // Timeout: se já trusted, assume OK; se restore cego, timeout = falha (não promove verde).
     const timeoutFallback = trustActiveTeamKey;
@@ -373,10 +381,19 @@ export async function ensureE2eUnlockedForSession(
 ): Promise<boolean> {
   if (!ownerUid.trim()) return false;
 
+  const cloudOn = isCloudLinkEnabled();
+
   if (getActiveTeamKey()) {
-    // Não bloqueia UI com probe — valida depois.
-    void verifyStoredKeyInBackground(ownerUid);
+    // Não bloqueia UI com probe — valida depois (só com chave nuvem ligada).
+    if (cloudOn) {
+      void verifyStoredKeyInBackground(ownerUid);
+    }
     return true;
+  }
+
+  // Etapa 18: chave off → só DEK do storage local (sem wrap/probe/heal na nuvem).
+  if (!cloudOn) {
+    return restoreE2eFromSessionStorage(ownerUid);
   }
 
   const emailKey = normalizeAuthEmail(email ?? '');
@@ -666,6 +683,8 @@ export async function activateE2eFromLoginPassword(
 
 /** Remove docs cifrados com chave antiga — roda em background após o unlock. */
 async function healCloudAfterUnlock(ownerUid: string): Promise<void> {
+  // Etapa 18: limpeza na nuvem só com chave ligada.
+  if (!isCloudLinkEnabled()) return;
   try {
     const { purgeUndecryptableOwnerDocs } = await import('./ownerDocs');
     const removed = await withTimeout(purgeUndecryptableOwnerDocs(ownerUid), 20_000, 0);

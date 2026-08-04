@@ -13,6 +13,7 @@ import {
   resolveE2eUiStatus,
   type E2eUiStatus,
 } from '../offline-first/sync/e2eUiStatus';
+import { isCloudLinkEnabled, subscribeCloudLink } from '../offline-first/sync/cloudLinkPreference';
 
 export type E2eEncryptionStatusState = {
   /** Compat: true só quando status === 'ready' (verde verdadeiro). */
@@ -40,6 +41,13 @@ export function useE2eEncryptionStatus(): E2eEncryptionStatusState {
   const [memberWrapPresent, setMemberWrapPresent] = useState<boolean | null>(null);
   const [status, setStatus] = useState<E2eUiStatus>(() => computeStatus(null));
   const [checking, setChecking] = useState(false);
+  const [cloudLinkTick, setCloudLinkTick] = useState(0);
+
+  useEffect(() => {
+    return subscribeCloudLink(() => {
+      setCloudLinkTick((n) => n + 1);
+    });
+  }, []);
 
   useEffect(() => {
     return subscribeActiveTeamKey(() => {
@@ -69,7 +77,10 @@ export function useE2eEncryptionStatus(): E2eEncryptionStatusState {
 
         let wrapKnown: boolean | null = null;
         const needsWrapProbe =
-          isAuthorizedMemberSession() && !isE2eKeyActive() && !isE2eSessionTrusted();
+          isCloudLinkEnabled() &&
+          isAuthorizedMemberSession() &&
+          !isE2eKeyActive() &&
+          !isE2eSessionTrusted();
 
         if (needsWrapProbe && user?.email?.trim()) {
           try {
@@ -93,7 +104,7 @@ export function useE2eEncryptionStatus(): E2eEncryptionStatusState {
     return () => {
       cancelled = true;
     };
-  }, [dataOwnerUid, isAuthenticated, user?.email]);
+  }, [dataOwnerUid, isAuthenticated, user?.email, cloudLinkTick]);
 
   useEffect(() => {
     setStatus(computeStatus(memberWrapPresent));

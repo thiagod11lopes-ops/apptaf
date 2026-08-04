@@ -141,6 +141,8 @@ let recordSyncStartedAt = 0;
 let storedEnsureAuth: EnsureAuthenticatedFn | null = null;
 let backgroundSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let backgroundSyncRunning = false;
+/** Debounce de refreshPending + auto-sync após escritas locais em rajada. */
+let onlineWriteFlushTimer: ReturnType<typeof setTimeout> | null = null;
 /** Evita tempestade de retries quando chega evento durante sync. */
 let backgroundSyncRetryAfterBusy = false;
 /** Após falha silenciosa, evita martelar a nuvem. */
@@ -1404,6 +1406,10 @@ export const syncManager = {
       clearTimeout(backgroundSyncTimer);
       backgroundSyncTimer = null;
     }
+    if (onlineWriteFlushTimer) {
+      clearTimeout(onlineWriteFlushTimer);
+      onlineWriteFlushTimer = null;
+    }
   },
 
   /** Sync silenciosa — sem modal; erros de E2E/offline são ignorados (não atrapalham UI). */
@@ -1622,14 +1628,18 @@ export const syncManager = {
 
   openSyncModal(): void {},
 
-  /** Após escrita local: atualiza badge e agenda auto-sync se online e BNC ligado. */
+  /** Após escrita local: atualiza badge (debounced) e agenda auto-sync se online e BNC ligado. */
   scheduleOnlineWriteFlush(): void {
-    void this.refreshPending().then(() => {
-      if (!isCloudLinkEnabled()) return;
-      if (getConnectivityState() === 'ONLINE' && syncAuthAvailable) {
-        this.scheduleBackgroundSync(AUTO_SYNC_DEBOUNCE_MS);
-      }
-    });
+    if (onlineWriteFlushTimer) clearTimeout(onlineWriteFlushTimer);
+    onlineWriteFlushTimer = setTimeout(() => {
+      onlineWriteFlushTimer = null;
+      void this.refreshPending().then(() => {
+        if (!isCloudLinkEnabled()) return;
+        if (getConnectivityState() === 'ONLINE' && syncAuthAvailable) {
+          this.scheduleBackgroundSync(AUTO_SYNC_DEBOUNCE_MS);
+        }
+      });
+    }, AUTO_SYNC_DEBOUNCE_MS);
   },
   async refreshPending(): Promise<PendingSyncSummary> {
     const summary = await refreshPendingSummary();

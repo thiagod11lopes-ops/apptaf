@@ -6,6 +6,7 @@ import {
   type DataChangeScope,
 } from '../offline-first/sync/SyncEngine';
 
+/** Debounce das recargas reagindo a notifyDataChanged (pós-mutação / pós-sync). */
 const DATA_CHANGE_DEBOUNCE_MS = 800;
 
 export type AuthDataReloadOptions = {
@@ -43,13 +44,19 @@ export function useAuthDataReload(
     }
   }, []);
 
+  // Foco: imediato (usuário acabou de abrir a tela).
   useFocusEffect(
     useCallback(() => {
       if (!authReady) return;
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
       void runReload();
     }, [authReady, runReload, user?.uid, isAuthorizedMember, dataOwnerUid]),
   );
 
+  // Mutação local / pós-sync: trailing debounce (coalesce tempestade de eventos).
   useEffect(() => {
     if (!authReady) return;
     const scopes = scopesRef.current;
@@ -57,6 +64,7 @@ export function useAuthDataReload(
       () => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
+          debounceRef.current = null;
           void runReload();
         }, DATA_CHANGE_DEBOUNCE_MS);
       },

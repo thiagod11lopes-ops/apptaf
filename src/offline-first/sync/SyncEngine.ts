@@ -101,9 +101,10 @@ const MIN_PROCESS_GAP_MS = 12_000;
 const CLOUD_PULL_TIMEOUT_MS = 35_000;
 let lastProcessFinishedAt = 0;
 
-/** Coalesce: vários notifies no mesmo tick viram um flush com união de escopos. */
+/** Coalesce: notifies em rajada viram um flush (união de escopos) após quietude curta. */
+const DATA_CHANGE_COALESCE_MS = 100;
 let pendingNotify: Set<DataChangeScope> | 'all' | null = null;
-let notifyFlushScheduled = false;
+let notifyFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function normalizeNotifyScopes(scopes?: DataChangeNotifyArg): Set<DataChangeScope> | 'all' {
   if (scopes == null || scopes === 'all') return 'all';
@@ -146,16 +147,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 function notify(scopes?: DataChangeNotifyArg): void {
   mergePendingNotify(normalizeNotifyScopes(scopes));
-  if (notifyFlushScheduled) return;
-  notifyFlushScheduled = true;
-  queueMicrotask(() => {
-    notifyFlushScheduled = false;
+  if (notifyFlushTimer) clearTimeout(notifyFlushTimer);
+  notifyFlushTimer = setTimeout(() => {
+    notifyFlushTimer = null;
     const event = pendingNotify ?? 'all';
     pendingNotify = null;
     listeners.forEach((listener) => {
       if (listenerMatchesPending(listener.filter, event)) listener.fn();
     });
-  });
+  }, DATA_CHANGE_COALESCE_MS);
 }
 
 /** UID usado nas escritas Firestore — sempre a conta de dados da sessão autenticada. */

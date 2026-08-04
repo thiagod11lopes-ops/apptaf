@@ -182,7 +182,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return subscribeDataChanged(() => {
-      // Atualiza badge e agenda auto-sync (debounce) quando houver internet.
+      // Badge pendente + auto-sync (ambos debounceados no SyncManager).
       syncManager.scheduleOnlineWriteFlush();
     });
   }, []);

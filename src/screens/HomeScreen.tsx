@@ -4,7 +4,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
-import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
@@ -34,7 +33,7 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   reprovados: 0,
 };
 
-/** Debounce do cálculo dos cards (foco + notifyDataChanged + fase de sync). */
+/** Debounce do cálculo dos cards (foco + notifyDataChanged coalescido). */
 const HOME_RESUMO_DEBOUNCE_MS = 600;
 
 function resumoInicioEquals(a: ResumoInicioTafHistorico, b: ResumoInicioTafHistorico): boolean {
@@ -63,7 +62,6 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const { isNarrowPhone } = useAplicarTafLayout();
   const { user, authReady, isAuthenticated, dataOwnerUid } = useAuth();
-  const { syncUi } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const [emailFixoPrefixo, setEmailFixoPrefixo] = useState<string | null>(null);
@@ -211,7 +209,7 @@ export default function HomeScreen() {
     [],
   );
 
-  // useAuthDataReload + sync: sempre debounce (coalesce tempestade de eventos).
+  // useAuthDataReload: debounce + escopos — cobre mutação local e pós-sync (notify).
   useAuthDataReload(() => scheduleRecarregarResumo('debounce'), {
     scopes: ['cadastros', 'sessoes', 'fatores', 'restritos'],
   });
@@ -221,15 +219,6 @@ export default function HomeScreen() {
     if (!cardsPaintReady) return;
     scheduleRecarregarResumo('immediate');
   }, [cardsPaintReady, scheduleRecarregarResumo]);
-
-  // Após sync automático relevante — debounce (ignora phase "offline", que dispara demais).
-  useEffect(() => {
-    if (!cardsPaintReady) return;
-    const phase = syncUi.phase;
-    if (phase === 'success' || phase === 'already_up_to_date' || phase === 'error') {
-      scheduleRecarregarResumo('debounce');
-    }
-  }, [cardsPaintReady, syncUi.phase, scheduleRecarregarResumo]);
 
   return (
     <MobileScreenScaffold scroll={false} style={styles.page} contentContainerStyle={styles.pageContent}>

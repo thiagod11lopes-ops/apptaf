@@ -22,6 +22,7 @@ import {
 } from '../../services/aplicadoresIndexedDb';
 import { ensureAplicadoresFromCloud } from '../../services/aplicadoresCloudPull';
 import { subscribeDataChanged } from '../../offline-first/sync/SyncEngine';
+import { createTrailingDebounce } from '../../utils/trailingDebounce';
 import { isModoDemonstracaoAtivo } from '../../services/modoDemonstracao';
 import { verificarSenhaAplicador, formatSenhaAplicadorInput, isSenhaAplicadorValid } from '../../utils/aplicadorSenha';
 import {
@@ -140,16 +141,20 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
       .finally(() => {
         if (!cancelled) setCarregandoAplicadores(false);
       });
+    const debounce = createTrailingDebounce(400);
     const unsub = subscribeDataChanged(
       () => {
-        void getAllAplicadores({ includeDemo })
-          .then(applyLista)
-          .catch(() => applyLista([]));
+        debounce.schedule(() => {
+          void getAllAplicadores({ includeDemo })
+            .then(applyLista)
+            .catch(() => applyLista([]));
+        });
       },
       { scopes: ['aplicadores'] },
     );
     return () => {
       cancelled = true;
+      debounce.cancel();
       unsub();
     };
   }, [visible, resetFluxo]);

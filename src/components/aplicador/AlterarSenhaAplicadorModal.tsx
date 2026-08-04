@@ -20,6 +20,7 @@ import {
 } from '../../services/aplicadoresIndexedDb';
 import { ensureAplicadoresFromCloud } from '../../services/aplicadoresCloudPull';
 import { subscribeDataChanged } from '../../offline-first/sync/SyncEngine';
+import { createTrailingDebounce } from '../../utils/trailingDebounce';
 import {
   verificarSenhaAplicador,
   formatSenhaAplicadorInput,
@@ -81,16 +82,20 @@ export function AlterarSenhaAplicadorModal({ visible, onClose }: Props) {
         if (!cancelled) setCarregando(false);
       });
     // Atualizações locais pós-sync: só relê Dexie (evita loop de pull).
+    const debounce = createTrailingDebounce(400);
     const unsub = subscribeDataChanged(
       () => {
-        void getAllAplicadores()
-          .then(applyLista)
-          .catch(() => applyLista([]));
+        debounce.schedule(() => {
+          void getAllAplicadores()
+            .then(applyLista)
+            .catch(() => applyLista([]));
+        });
       },
       { scopes: ['aplicadores'] },
     );
     return () => {
       cancelled = true;
+      debounce.cancel();
       unsub();
     };
   }, [visible]);

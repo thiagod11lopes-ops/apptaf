@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Image, Platform, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, Platform, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
-import { CloudLinkToggle } from '../components/premium/CloudLinkToggle';
 import { StatCard } from '../components/sismav/StatCard';
 import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
 import { loadResumoInicioFromIndexedDb } from '../utils/homeResumoIndexedDb';
@@ -20,12 +19,7 @@ import {
 } from '../services/supabase/databaseRegistryCloud';
 import { listRecentKnownAuthEmails } from '../offline-first/auth/knownAuthEmails';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
-import {
-  isCloudLinkEnabled,
-  setCloudLinkEnabled,
-  subscribeCloudLink,
-} from '../offline-first/sync/cloudLinkPreference';
-
+import { isCloudLinkEnabled } from '../offline-first/sync/cloudLinkPreference';
 const tafImage = require('../../TAF1.png');
 
 const RESUMO_INICIAL: ResumoInicioTafHistorico = {
@@ -52,12 +46,10 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const { isNarrowPhone } = useAplicarTafLayout();
   const { user, authReady, isAuthenticated, dataOwnerUid } = useAuth();
-  const { syncUi, startSyncFromToggle, cancelOnlineMode } = useOfflineSyncState();
+  const { syncUi } = useOfflineSyncState();
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const [cloudLinkOn, setCloudLinkOn] = useState(isCloudLinkEnabled);
   const [emailFixoPrefixo, setEmailFixoPrefixo] = useState<string | null>(null);
-  const [togglingCloud, setTogglingCloud] = useState(false);
 
   const pctConcluidos = useMemo(() => {
     const total = resumo.totalCadastrados;
@@ -94,8 +86,6 @@ export default function HomeScreen() {
     return fromSession ?? emailFixoPrefixo;
   }, [user?.email, emailFixoPrefixo]);
 
-  useEffect(() => subscribeCloudLink(setCloudLinkOn), []);
-
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -116,32 +106,6 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, [user?.email, isAuthenticated]);
-
-  const onToggleCloudLink = useCallback(
-    async (next: boolean) => {
-      if (togglingCloud) return;
-      if (next && !isAuthenticated) {
-        Alert.alert('Login necessário', 'Faça login para ligar a conexão com a nuvem.');
-        return;
-      }
-      setTogglingCloud(true);
-      try {
-        setCloudLinkEnabled(next);
-        if (next) {
-          const res = await startSyncFromToggle();
-          if (!res.ok) {
-            setCloudLinkEnabled(false);
-            Alert.alert('Nuvem', res.error ?? 'Não foi possível conectar à nuvem.');
-          }
-        } else {
-          cancelOnlineMode();
-        }
-      } finally {
-        setTogglingCloud(false);
-      }
-    },
-    [togglingCloud, isAuthenticated, startSyncFromToggle, cancelOnlineMode],
-  );
 
   const [bankCode, setBankCode] = useState<string | null>(() =>
     isAuthenticated ? readCachedDatabaseBankCode(dataOwnerUid) : null,
@@ -231,15 +195,14 @@ export default function HomeScreen() {
               {emailPrefixo}
             </Text>
           ) : null}
-          {bankCode || emailPrefixo || isAuthenticated ? (
-            <View style={styles.bankRow}>
-              <CloudLinkToggle
-                value={cloudLinkOn}
-                onValueChange={(v) => void onToggleCloudLink(v)}
-                disabled={togglingCloud}
-                bankLabel={bankCode?.trim() || 'BNC'}
-              />
-            </View>
+          {bankCode ? (
+            <Text
+              style={[styles.bankCode, { color: theme.textMuted }]}
+              numberOfLines={1}
+              accessibilityLabel={`Banco de dados ${bankCode}`}
+            >
+              {bankCode}
+            </Text>
           ) : null}
         </View>
         <TopActionIcons activeRoute="Home" inline centered />
@@ -429,12 +392,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
     letterSpacing: 0.2,
   },
-  bankRow: {
-    marginTop: 6,
+  bankCode: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 15,
+    textAlign: 'center',
     width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 2,
+    letterSpacing: 0.8,
   },
   statsPanel: {
     flexShrink: 0,

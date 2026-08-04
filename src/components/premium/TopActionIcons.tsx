@@ -91,7 +91,7 @@ export function TopActionIcons({
   const [cloudLinkOn, setCloudLinkOn] = useState(isCloudLinkEnabled);
   useEffect(() => subscribeCloudLink(setCloudLinkOn), []);
   const networkOnline = connectivity === 'ONLINE' || connectivity === 'SYNCING';
-  /** Só considera “online na nuvem” se a chave da Home estiver ligada. */
+  /** Só considera “online na nuvem” se a chave BNC estiver ligada. */
   const cloudOnline = cloudLinkOn && networkOnline;
   /** Envio ou recebimento ativo com a nuvem → ícone azul. */
   const cloudTransferring =
@@ -171,7 +171,7 @@ export function TopActionIcons({
           ? `Pendente · ${cloudPendingParts.join(' · ')}`
           : 'Online · igual à nuvem';
   const cloudTooltipDescription = !cloudLinkOn
-    ? 'Conexão com a nuvem desligada. Ligue a chave ao lado do banco de dados na página principal para sincronizar.'
+    ? 'Conexão com a nuvem desligada. Ligue o BNC em Configurações para sincronizar.'
     : !networkOnline
       ? 'Sem internet — toque para ver o status. Alterações ficam no IndexedDB até reconectar.'
       : cloudTransferring

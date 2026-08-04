@@ -1,5 +1,5 @@
-import React, { useCallback, useState, type ReactNode } from 'react';
-import { View, Text, Switch, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { View, Text, Switch, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { ChevronDown } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,7 +9,21 @@ import { BackupTafCsvBlock } from '../components/BackupTafCsvBlock';
 import { ExcluirTodosDadosBlock } from '../components/ExcluirTodosDadosBlock';
 import { ExclusoesEspecificasDangerBlock } from '../components/ExclusoesEspecificasDangerBlock';
 import { AuthorizedEmailsBlock } from '../components/AuthorizedEmailsBlock';
+import { CloudLinkToggle } from '../components/premium/CloudLinkToggle';
+import { SyncLiveStatusModal } from '../components/sismav/SyncLiveStatusModal';
 import { useAuth } from '../contexts/AuthContext';
+import { useOfflineSyncState } from '../contexts/OfflineSyncContext';
+import {
+  isCloudLinkEnabled,
+  setCloudLinkEnabled,
+  subscribeCloudLink,
+} from '../offline-first/sync/cloudLinkPreference';
+import { syncManager } from '../offline-first/sync/SyncManager';
+import {
+  ensureDatabaseBankCode,
+  readCachedDatabaseBankCode,
+} from '../services/supabase/databaseRegistryCloud';
+import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 
 type CollapsibleSectionProps = {
   title: string;
@@ -69,7 +83,8 @@ function CollapsibleSettingsSection({
 
 export default function ConfiguracoesScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
-  const { isBoss, isAuthenticated, firebaseEnabled } = useAuth();
+  const { isBoss, isAuthenticated, firebaseEnabled, authReady, dataOwnerUid } = useAuth();
+  const { startSyncFromToggle, cancelOnlineMode } = useOfflineSyncState();
   const navigation = useNavigation();
   const ts = theme.textStyles;
   const showBossSections = isAuthenticated && firebaseEnabled && isBoss;
@@ -78,6 +93,31 @@ export default function ConfiguracoesScreen() {
   const [emailsOpen, setEmailsOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
+  const [cloudLinkOn, setCloudLinkOn] = useState(isCloudLinkEnabled);
+  const [togglingCloud, setTogglingCloud] = useState(false);
+  const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
+  const [bankCode, setBankCode] = useState<string | null>(() =>
+    isAuthenticated ? readCachedDatabaseBankCode(dataOwnerUid) : null,
+  );
+
+  useEffect(() => subscribeCloudLink(setCloudLinkOn), []);
+
+  useEffect(() => {
+    if (!authReady) return;
+    let cancelled = false;
+    void (async () => {
+      const owner = dataOwnerUid ?? getCachedDataOwnerUid();
+      if (!owner) return;
+      if (!cancelled) setBankCode(readCachedDatabaseBankCode(owner));
+      if (isAuthenticated) {
+        const code = await ensureDatabaseBankCode(owner);
+        if (!cancelled) setBankCode(code);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, isAuthenticated, dataOwnerUid]);
 
   useFocusEffect(
     useCallback(() => {
@@ -85,6 +125,44 @@ export default function ConfiguracoesScreen() {
       setBackupOpen(false);
       setDangerOpen(false);
     }, []),
+  );
+
+  const openSyncStatus = useCallback(() => {
+    setSyncStatusModalVisible(true);
+    if (!isCloudLinkEnabled()) return;
+    void syncManager.refreshCloudDiff({ forcePull: true }).catch(() => {});
+  }, []);
+
+  const onToggleCloudLink = useCallback(
+    async (next: boolean) => {
+      if (togglingCloud) return;
+      if (next && !isAuthenticated) {
+        Alert.alert('Login necessário', 'Faça login para ligar a conexão com a nuvem.');
+        return;
+      }
+      setTogglingCloud(true);
+      try {
+        setCloudLinkEnabled(next);
+        if (next) {
+          // Mesmo fluxo do ícone da nuvem: abre o modal e inicia a sincronização.
+          setSyncStatusModalVisible(true);
+          const res = await startSyncFromToggle();
+          if (!res.ok) {
+            setCloudLinkEnabled(false);
+            setSyncStatusModalVisible(false);
+            Alert.alert('Nuvem', res.error ?? 'Não foi possível conectar à nuvem.');
+            return;
+          }
+          void syncManager.refreshCloudDiff({ forcePull: true }).catch(() => {});
+        } else {
+          cancelOnlineMode();
+          setSyncStatusModalVisible(false);
+        }
+      } finally {
+        setTogglingCloud(false);
+      }
+    },
+    [togglingCloud, isAuthenticated, startSyncFromToggle, cancelOnlineMode],
   );
 
   return (
@@ -105,6 +183,36 @@ export default function ConfiguracoesScreen() {
               accessibilityLabel="Ativar modo claro"
               trackColor={{ false: theme.border, true: theme.accentMuted }}
               thumbColor={!isDark ? theme.primary : '#FFFFFF'}
+            />
+          </View>
+        </Card>
+
+        <Card elevated>
+          <View style={styles.row}>
+            <View style={styles.rowText}>
+              <Text style={ts.h2}>Conexão com a nuvem</Text>
+              <Text style={[ts.caption, styles.gap]}>
+                {cloudLinkOn
+                  ? 'BNC ligado · sincronizando aparelho com a nuvem'
+                  : 'BNC desligado · dados apenas neste aparelho'}
+              </Text>
+              <Pressable
+                onPress={openSyncStatus}
+                accessibilityRole="button"
+                accessibilityLabel="Ver status da sincronização com a nuvem"
+                hitSlop={8}
+                style={styles.syncStatusLinkWrap}
+              >
+                <Text style={[ts.caption, { color: theme.primary, fontWeight: '700' }]}>
+                  Ver atualizações
+                </Text>
+              </Pressable>
+            </View>
+            <CloudLinkToggle
+              value={cloudLinkOn}
+              onValueChange={(v) => void onToggleCloudLink(v)}
+              disabled={togglingCloud}
+              bankLabel={bankCode?.trim() || 'BNC'}
             />
           </View>
         </Card>
@@ -148,6 +256,11 @@ export default function ConfiguracoesScreen() {
           Design SISMAV · modo escuro por padrão · preferência salva localmente.
         </Text>
       </ScrollView>
+
+      <SyncLiveStatusModal
+        visible={syncStatusModalVisible}
+        onClose={() => setSyncStatusModalVisible(false)}
+      />
     </View>
   );
 }
@@ -163,6 +276,7 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1, paddingRight: 12 },
   gap: { marginTop: 6 },
+  syncStatusLinkWrap: { marginTop: 8, alignSelf: 'flex-start' },
   collapseHeader: {
     flexDirection: 'row',
     alignItems: 'center',

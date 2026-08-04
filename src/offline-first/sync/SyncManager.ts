@@ -1508,7 +1508,7 @@ export const syncManager = {
 
   async startSyncFromToggle(ensureAuth?: EnsureAuthenticatedFn): Promise<{ ok: boolean; error?: string }> {
     if (!isCloudLinkEnabled()) {
-      return { ok: false, error: 'Ligue a conexão com a nuvem na página principal.' };
+      return { ok: false, error: 'Ligue a conexão com a nuvem em Configurações.' };
     }
     if (!syncAuthAvailable || !getFirebaseAuth()?.currentUser) {
       return { ok: false, error: SYNC_AUTH_REQUIRED_MESSAGE };

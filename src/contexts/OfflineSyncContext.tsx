@@ -105,7 +105,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     })();
   }, [authReady, firebaseEnabled, isAuthenticated, user?.uid, dataOwnerUid]);
 
-  // Religa/desliga sync e comparação periódica quando o usuário mexer na chave da Home.
+  // Religa/desliga sync e comparação periódica quando o usuário mexer na chave da nuvem.
   useEffect(() => {
     return subscribeCloudLink((enabled) => {
       syncManager.onCloudLinkChanged(enabled);

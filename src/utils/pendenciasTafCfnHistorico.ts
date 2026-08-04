@@ -4,7 +4,8 @@ import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultad
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { compareByNomePtBr } from './compareNomePtBr';
 import { formatNipInput, nipDigitos } from './nipFormat';
-import { prepararDadosResultadosNorma } from './normaTafResultados';
+import { prepararDadosResultadosNorma, filtrarSessoesPorNorma } from './normaTafResultados';
+import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 import {
   temAvaliacaoCorrida,
   temAvaliacaoNatacao,
@@ -302,8 +303,21 @@ function montarListaCfn<T>(
   cadastros: CadastroItemPersist[],
   mapItemCadastro: (c: CadastroItemPersist, agg: AggCfn | undefined) => T | null,
   mapItemAgg: (agg: AggCfn) => T | null,
+  opts?: { todosCadastros?: boolean },
 ): T[] {
-  const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(sessoes, cadastros, 'cfn');
+  let sessoesNorma: SessaoAplicacaoTaf[];
+  let cadastrosNorma: CadastroItemPersist[];
+
+  if (opts?.todosCadastros) {
+    const sessoesSemDemo = sessoes.filter((s) => !s.id.startsWith('demo-sess-'));
+    const cadastrosSemDemo = cadastros.filter((c) => !c.id.startsWith('demo-cad-'));
+    const unificadas = unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
+    sessoesNorma = filtrarSessoesPorNorma(unificadas, 'cfn');
+    cadastrosNorma = cadastrosSemDemo;
+  } else {
+    ({ sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(sessoes, cadastros, 'cfn'));
+  }
+
   const aggs = agregarCfnPorParticipante(sessoesNorma, cadastrosNorma);
   const aggMap = new Map<string, AggCfn>();
   for (const agg of aggs) aggMap.set(agg.id, agg);
@@ -356,6 +370,20 @@ export function filtrarPendenciasParciaisCfn(lista: PendenciaCfnItem[]): Pendenc
 /** CFN: nenhum teste. */
 export function filtrarPendenciasTotaisCfn(lista: PendenciaCfnItem[]): PendenciaCfnItem[] {
   return lista.filter((p) => p.situacao === 'Sem teste');
+}
+
+/**
+ * Pendência Total (CFN): todos os cadastros sem nenhum teste CFN.
+ */
+export function montarListaPendenciasTotaisCfn(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[] = [],
+): PendenciaCfnItem[] {
+  return filtrarPendenciasTotaisCfn(
+    montarListaCfn(sessoes, cadastros, itemPendenciaFromCadastro, itemPendenciaFromAgg, {
+      todosCadastros: true,
+    }),
+  );
 }
 
 export function montarListaConcluidosCfn(

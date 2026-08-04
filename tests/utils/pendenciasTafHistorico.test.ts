@@ -11,6 +11,7 @@ import {
   filtrarPendenciasTotais,
   montarListaConcluidos,
   montarListaPendencias,
+  montarListaPendenciasTotais,
 } from '../../src/utils/pendenciasTafHistorico';
 import { listarResultadosGeralFromHistorico } from '../../src/utils/resultadoGeralHistorico';
 
@@ -148,5 +149,41 @@ describe('pendência corrida/caminhada substitutivas', () => {
     const lista = montarListaPendencias(sessoes, cadastros);
     expect(filtrarPendenciasParciais(lista).map((p) => p.nome)).toEqual(['Parcial Silva']);
     expect(filtrarPendenciasTotais(lista).map((p) => p.nome)).toEqual(['Sem Teste']);
+  });
+
+  it('montarListaPendenciasTotais inclui cadastros sem nenhum teste (base completa)', () => {
+    const muitosSemTeste = Array.from({ length: 5 }, (_, i) =>
+      cadastroBase({
+        id: `sem-${i}`,
+        nip: `12.3456.${String(10 + i).padStart(2, '0')}`,
+        nome: `Sem Teste ${i}`,
+      }),
+    );
+    const cadastros = [
+      cadastroBase({ id: 'c1', nip: '12.3456.01', nome: 'Com Teste' }),
+      ...muitosSemTeste,
+    ];
+    const sessoes: SessaoAplicacaoTaf[] = [
+      {
+        id: 's1',
+        criadoEm: '2026-01-01T12:00:00.000Z',
+        dataAplicacao: '01/01/2026',
+        tipoProva: 'corrida',
+        resultados: [
+          {
+            corredor: 1,
+            nome: 'Com Teste',
+            nip: '12.3456.01',
+            tempoMs: 12 * 60 * 1000,
+            notaTexto: '90',
+            prova: 'corrida',
+          },
+        ],
+      },
+    ];
+    const total = montarListaPendenciasTotais(sessoes, cadastros);
+    expect(total).toHaveLength(5);
+    expect(total.every((p) => p.situacao === 'Sem teste')).toBe(true);
+    expect(total.some((p) => p.nome === 'Com Teste')).toBe(false);
   });
 });

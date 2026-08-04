@@ -13,12 +13,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { getAllCadastros } from '../services/cadastrosIndexedDb';
 import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
-import { montarListaPendencias, type PendenciaTafItem, filtrarPendenciasParciais, filtrarPendenciasTotais } from '../utils/pendenciasTafHistorico';
+import { montarListaPendencias, type PendenciaTafItem, filtrarPendenciasParciais, montarListaPendenciasTotais } from '../utils/pendenciasTafHistorico';
 import {
   CFN_CHIP_LABELS,
   montarListaPendenciasCfn,
   filtrarPendenciasParciaisCfn,
-  filtrarPendenciasTotaisCfn,
+  montarListaPendenciasTotaisCfn,
   type PendenciaCfnItem,
 } from '../utils/pendenciasTafCfnHistorico';
 import { prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
@@ -81,13 +81,17 @@ export function ResultadosPendenciaParcialPanel({
     Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
       .then(([cadastros, sessoes]) => {
         if (normaTaf === 'cfn') {
-          const todas = montarListaPendenciasCfn(sessoes, cadastros);
           setListaCfn(
             modo === 'total'
-              ? filtrarPendenciasTotaisCfn(todas)
-              : filtrarPendenciasParciaisCfn(todas),
+              ? montarListaPendenciasTotaisCfn(sessoes, cadastros)
+              : filtrarPendenciasParciaisCfn(montarListaPendenciasCfn(sessoes, cadastros)),
           );
           setLista([]);
+          return;
+        }
+        if (modo === 'total') {
+          setLista(montarListaPendenciasTotais(sessoes, cadastros));
+          setListaCfn([]);
           return;
         }
         const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
@@ -95,10 +99,7 @@ export function ResultadosPendenciaParcialPanel({
           cadastros,
           'armada',
         );
-        const todas = montarListaPendencias(sessoesNorma, cadastrosNorma);
-        setLista(
-          modo === 'total' ? filtrarPendenciasTotais(todas) : filtrarPendenciasParciais(todas),
-        );
+        setLista(filtrarPendenciasParciais(montarListaPendencias(sessoesNorma, cadastrosNorma)));
         setListaCfn([]);
       })
       .catch(() => {

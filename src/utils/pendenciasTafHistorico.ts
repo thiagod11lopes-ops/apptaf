@@ -2,11 +2,15 @@ import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import { nipDigitos } from './nipFormat';
 import type { PendenciaParcialItem } from './resultadoTafCadastro';
-import { temAvaliacaoCorridaOuCaminhada } from './resultadoTafCadastro';
+import {
+  temAvaliacaoCorridaOuCaminhada,
+  temAvaliacaoNatacao,
+  temAvaliacaoPermanencia,
+} from './resultadoTafCadastro';
 import { agregarHistoricoPorParticipante } from './resultadoGeralHistorico';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 import { compareByNomePtBr } from './compareNomePtBr';
-
+import { filtrarSessoesPorNorma } from './normaTafResultados';
 export type FiltroPendenciaTaf = 'total' | 'corrida' | 'natacao' | 'permanencia';
 
 export type PendenciaTafItem = PendenciaParcialItem & {
@@ -77,8 +81,8 @@ function itemFromCadastro(
 ): PendenciaTafItem | null {
   const temCorrida =
     !!agg?.corrida || !!agg?.caminhada || temAvaliacaoCorridaOuCaminhada(c);
-  const temNatacao = !!agg?.natacao;
-  const temPermanencia = !!agg?.permanencia;
+  const temNatacao = !!agg?.natacao || temAvaliacaoNatacao(c);
+  const temPermanencia = !!agg?.permanencia || temAvaliacaoPermanencia(c);
   if (temCorrida && temNatacao && temPermanencia) return null;
 
   const faltam: string[] = [];
@@ -145,6 +149,21 @@ export function filtrarPendenciasParciais(lista: PendenciaTafItem[]): PendenciaT
 /** Militares cadastrados que ainda não fizeram nenhum teste. */
 export function filtrarPendenciasTotais(lista: PendenciaTafItem[]): PendenciaTafItem[] {
   return lista.filter((p) => p.situacao === 'Sem teste');
+}
+
+/**
+ * Pendência Total (Armada): todos os cadastros sem nenhum teste Armada.
+ * Usa a base completa de cadastros (não só quem já tem resultado).
+ */
+export function montarListaPendenciasTotais(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[] = [],
+): PendenciaTafItem[] {
+  const sessoesSemDemo = sessoes.filter((s) => !s.id.startsWith('demo-sess-'));
+  const cadastrosSemDemo = cadastros.filter((c) => !c.id.startsWith('demo-cad-'));
+  const unificadas = unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
+  const sessoesArmada = filtrarSessoesPorNorma(unificadas, 'armada');
+  return filtrarPendenciasTotais(montarListaPendencias(sessoesArmada, cadastrosSemDemo));
 }
 
 export function calcularContagemPendencias(

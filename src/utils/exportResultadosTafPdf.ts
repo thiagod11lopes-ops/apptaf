@@ -5,7 +5,7 @@ import type { ResultadoTafLinha } from './resultadoTafCadastro';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { celulaRubricaHtml, PDF_TABELA_COMPACTA_STYLES, RUBRICA_PDF_STYLES } from './rubricaHtml';
 import {
-  blocosAplicadorAssinaturaHtml,
+  blocoAplicadorAssinaturaHtml,
   PDF_APLICADOR_ASSINATURA_STYLES,
 } from './pdfAplicadorAssinaturaHtml';
 import {
@@ -29,6 +29,7 @@ import {
   SalvamentoCanceladoError,
   sanitizarNomeArquivo,
 } from './salvarArquivoNaPasta';
+import type { ResultadosTafPdfBloco } from './resultadosTafPdfPorAplicador';
 
 /** Estima quantas folhas A4 paisagem serão necessárias para imprimir a tabela de resultados. */
 export function estimarFolhasA4PdfResultadosTaf(
@@ -38,6 +39,15 @@ export function estimarFolhasA4PdfResultadosTaf(
   return estimarFolhasPdfPorLinhas(
     quantidadeLinhas,
     comAssinaturaAplicador ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
+  );
+}
+
+/** Estima folhas somando blocos por aplicador (cada bloco começa em folha nova). */
+export function estimarFolhasA4PdfResultadosTafBlocos(blocos: ResultadosTafPdfBloco[]): number {
+  if (blocos.length === 0) return 0;
+  return blocos.reduce(
+    (acc, b) => acc + Math.max(1, estimarFolhasA4PdfResultadosTaf(b.linhas.length, true)),
+    0,
   );
 }
 
@@ -85,18 +95,12 @@ function contarColunasResultadosTaf(mostrarCorrida: boolean, mostrarCaminhada: b
   return n;
 }
 
-export function buildResultadosTafHtml(
+function buildLinhasTabelaHtml(
   linhas: ResultadoTafLinha[],
-  subtitulo: string,
-  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
-): string {
-  const dataStr = new Date().toLocaleString('pt-BR');
-  const { mostrarCorrida, mostrarCaminhada } = colunasDistanciaPdfVisiveis(linhas);
-  const titulo = tituloResultadosTafPdf(mostrarCorrida, mostrarCaminhada);
-  const theadHtml = buildResultadosTafTheadHtml(mostrarCorrida, mostrarCaminhada);
-  const colspan = contarColunasResultadosTaf(mostrarCorrida, mostrarCaminhada);
-
-  const rows = linhas.map((r) => {
+  mostrarCorrida: boolean,
+  mostrarCaminhada: boolean,
+): string[] {
+  return linhas.map((r) => {
     const dist = valoresCorridaCaminhadaParaPdf(r);
     const celulas = [
       `<td>${escapeHtmlPdf(r.postoGrad)}</td>`,
@@ -126,30 +130,97 @@ export function buildResultadosTafHtml(
     );
     return `<tr>${celulas.join('')}</tr>`;
   });
+}
 
-  const metaHtml = `${escapeHtmlPdf(subtitulo)} · Gerado em ${escapeHtmlPdf(dataStr)} · ${linhas.length} registro(s)`;
-  const comAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));
+export function buildResultadosTafHtml(
+  blocos: ResultadosTafPdfBloco[],
+  subtitulo: string,
+): string {
+  const dataStr = new Date().toLocaleString('pt-BR');
+  const todasLinhas = blocos.flatMap((b) => b.linhas);
+  const { mostrarCorrida, mostrarCaminhada } = colunasDistanciaPdfVisiveis(todasLinhas);
+  const titulo = tituloResultadosTafPdf(mostrarCorrida, mostrarCaminhada);
+  const theadHtml = buildResultadosTafTheadHtml(mostrarCorrida, mostrarCaminhada);
+  const colspan = contarColunasResultadosTaf(mostrarCorrida, mostrarCaminhada);
+  const totalRegistros = todasLinhas.length;
 
-  const conteudoHtml = buildPdfTableHtml({
-    tableClass: 'resultados-taf',
-    theadHtml,
-    rowHtml: rows,
-    emptyColspan: colspan,
-    rowsPerPage: comAssinatura ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
+  const secoes = blocos.map((bloco, index) => {
+    const rows = buildLinhasTabelaHtml(bloco.linhas, mostrarCorrida, mostrarCaminhada);
+    const tabelaHtml = buildPdfTableHtml({
+      tableClass: 'resultados-taf',
+      theadHtml,
+      rowHtml: rows,
+      emptyColspan: colspan,
+      rowsPerPage: PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
+    });
+    const assinaturaHtml = blocoAplicadorAssinaturaHtml(bloco.aplicadorAssinatura);
+    const pageBreak = index > 0 ? ' pdf-aplicador-bloco--break' : '';
+    return `<section class="pdf-aplicador-bloco${pageBreak}">
+      <h2 class="pdf-aplicador-rotulo">${escapeHtmlPdf(bloco.rotuloAplicador)}</h2>
+      ${tabelaHtml}
+      <div class="pdf-aplicador-assinatura-slot">${assinaturaHtml || '<div class="aplicador-assinatura"><div class="aplicador-rubrica aplicador-rubrica-vazia"></div><hr class="aplicador-linha"/><p class="aplicador-identificacao"><span class="aplicador-nome">Aplicador</span></p></div>'}</div>
+    </section>`;
   });
+
+  const metaHtml = `${escapeHtmlPdf(subtitulo)} · Gerado em ${escapeHtmlPdf(dataStr)} · ${totalRegistros} registro(s) · ${blocos.length} aplicador(es)`;
 
   return buildPdfLandscapeDocument({
     documentTitle: 'Resultados TAF',
     titulo,
     metaHtml,
-    conteudoHtml,
-    aplicadorHtml: blocosAplicadorAssinaturaHtml(aplicadorAssinaturas),
+    conteudoHtml: secoes.join('\n'),
+    // Assinatura fica por bloco — não usa rodapé global fixo.
+    aplicadorHtml: undefined,
     extraStyles: `
       ${PDF_TABELA_COMPACTA_STYLES}
       ${RUBRICA_PDF_STYLES}
       ${PDF_APLICADOR_ASSINATURA_STYLES}
+      .pdf-aplicador-bloco {
+        page-break-inside: avoid;
+      }
+      .pdf-aplicador-bloco--break {
+        page-break-before: always;
+        break-before: page;
+      }
+      .pdf-aplicador-rotulo {
+        font-size: 13px;
+        font-weight: 800;
+        color: #1e293b;
+        margin: 0 0 8px;
+      }
+      .pdf-aplicador-assinatura-slot {
+        margin-top: 14px;
+        display: flex;
+        justify-content: center;
+      }
     `,
   });
+}
+
+/** Compat: uma tabela + lista de assinaturas → um bloco (ou N se já vierem blocos). */
+export function normalizarBlocosResultadosTafPdf(
+  linhasOuBlocos: ResultadoTafLinha[] | ResultadosTafPdfBloco[],
+  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
+): ResultadosTafPdfBloco[] {
+  if (
+    Array.isArray(linhasOuBlocos) &&
+    linhasOuBlocos.length > 0 &&
+    'rotuloAplicador' in (linhasOuBlocos[0] as object)
+  ) {
+    return linhasOuBlocos as ResultadosTafPdfBloco[];
+  }
+  const linhas = linhasOuBlocos as ResultadoTafLinha[];
+  if (linhas.length === 0) return [];
+  const assinatura = aplicadorAssinaturas?.find((a) => a.nome?.trim());
+  return [
+    {
+      linhas,
+      aplicadorAssinatura: assinatura,
+      rotuloAplicador: assinatura?.nome?.trim()
+        ? `Aplicador: ${assinatura.nome.trim()}`
+        : 'Sem aplicador',
+    },
+  ];
 }
 
 function nomeArquivoPdfResultados(subtitulo: string): string {
@@ -161,15 +232,16 @@ function nomeArquivoPdfResultados(subtitulo: string): string {
 }
 
 export async function exportResultadosTafPdf(
-  linhas: ResultadoTafLinha[],
+  linhasOuBlocos: ResultadoTafLinha[] | ResultadosTafPdfBloco[],
   subtitulo: string,
   aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): Promise<void> {
-  if (linhas.length === 0) {
+  const blocos = normalizarBlocosResultadosTafPdf(linhasOuBlocos, aplicadorAssinaturas);
+  if (blocos.length === 0) {
     throw new Error('Não há resultados para exportar.');
   }
 
-  const html = buildResultadosTafHtml(linhas, subtitulo, aplicadorAssinaturas);
+  const html = buildResultadosTafHtml(blocos, subtitulo);
 
   if (Platform.OS === 'web') {
     const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
@@ -204,22 +276,22 @@ export async function exportResultadosTafPdf(
 }
 
 /**
- * Gera um único PDF com todos os resultados e salva em Downloads
- * (sem abrir o PDF na tela; mesmo fluxo do Salvar do resumo).
+ * Gera um único PDF com resultados separados por aplicador e salva em Downloads.
  */
 export async function salvarResultadosTafPdfEmDownloads(
-  linhas: ResultadoTafLinha[],
+  linhasOuBlocos: ResultadoTafLinha[] | ResultadosTafPdfBloco[],
   subtitulo: string,
   aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): Promise<string> {
-  if (linhas.length === 0) {
+  const blocos = normalizarBlocosResultadosTafPdf(linhasOuBlocos, aplicadorAssinaturas);
+  if (blocos.length === 0) {
     throw new Error('Não há resultados para exportar.');
   }
 
   const filename = nomeArquivoPdfResultados(subtitulo);
 
   if (Platform.OS === 'web') {
-    const blob = await gerarResultadosTafPdfBlobWeb(linhas, subtitulo, aplicadorAssinaturas);
+    const blob = await gerarResultadosTafPdfBlobWeb(blocos, subtitulo);
     const resultado = await entregarPdfBlobWeb(blob, filename);
     if (!resultado.ok) {
       throw new SalvamentoCanceladoError();
@@ -227,7 +299,7 @@ export async function salvarResultadosTafPdfEmDownloads(
     return mensagemSucessoSalvarNaPasta(resultado);
   }
 
-  const html = buildResultadosTafHtml(linhas, subtitulo, aplicadorAssinaturas);
+  const html = buildResultadosTafHtml(blocos, subtitulo);
   const { uri } = await Print.printToFileAsync({
     html,
     width: PDF_A4_LANDSCAPE_WIDTH,

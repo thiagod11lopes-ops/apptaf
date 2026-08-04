@@ -54,10 +54,9 @@ import {
 import { removerParticipanteModalidadeDoHistorico } from '../utils/registroModalidadeHistorico';
 import {
   exportResultadosTafPdf,
-  estimarFolhasA4PdfResultadosTaf,
+  estimarFolhasA4PdfResultadosTafBlocos,
 } from '../utils/exportResultadosTafPdf';
-import { coletarAssinaturasAplicadorParaPdf } from '../utils/assinaturaAplicadorDasSessoes';
-import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import type { ResultadosTafPdfBloco } from '../utils/resultadosTafPdfPorAplicador';
 import { listarResultadosCompletosFromHistorico, enriquecerLinhasDistanciaMetaFromHistorico } from '../utils/resultadoGeralHistorico';
 import { cadastroComResultadoNorma, prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
 import { modalidadeCorridaCaminhadaDispensavel } from '../utils/corridaCaminhadaExcludente';
@@ -155,8 +154,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
   const [carregandoPdf, setCarregandoPdf] = useState(false);
   const [modalGerarPdf, setModalGerarPdf] = useState<
     (ConfirmacaoGerarResultadosPdfInfo & {
-      linhas: ResultadoTafLinha[];
-      assinaturas: AplicadorAssinaturaResumo[];
+      blocos: ResultadosTafPdfBloco[];
     }) | null
   >(null);
   const [todosCadastros, setTodosCadastros] = useState<Awaited<ReturnType<typeof getAllCadastros>>>([]);
@@ -285,38 +283,69 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       rubricasSessoes.size > 0 ? Promise.resolve(rubricasSessoes) : carregarRubricasDasSessoesPorNip(),
       carregarRubricasCadastrosPorIds(baseLinhas.map((l) => l.id)),
     ]);
-    let linhasPdf = linhasCompletasHistoricoComRubricas(sessoes, lista, rubSessoes, rubCadastros);
+    const linhasCompletas = linhasCompletasHistoricoComRubricas(
+      sessoes,
+      lista,
+      rubSessoes,
+      rubCadastros,
+    );
 
     let subtitulo =
       'Integrantes com TAF completo (corrida, natação e permanência) — Aplicar TAF e Registrador';
 
     const nipTrim = nip.trim();
     const nomeTrim = nome.trim();
+    let filtroLinhas = linhasCompletas;
     if (nipTrim || nomeTrim) {
       if (!buscou) {
         setAviso('Busque um militar antes de gerar o PDF filtrado.');
         return;
       }
-      linhasPdf = linhasPdf.filter((l) => linhaCombinaNipNome(l, nipTrim, nomeTrim));
-      if (linhasPdf.length === 0) {
+      filtroLinhas = linhasCompletas.filter((l) => linhaCombinaNipNome(l, nipTrim, nomeTrim));
+      if (filtroLinhas.length === 0) {
         setAviso('Este militar não completou as três provas no histórico.');
         return;
       }
       subtitulo = `Filtro: ${[nipTrim && `NIP ${nipTrim}`, nomeTrim && `Nome ${nomeTrim}`]
         .filter(Boolean)
         .join(' · ')} · TAF completo`;
-    } else if (linhasPdf.length === 0) {
+    } else if (filtroLinhas.length === 0) {
       setAviso('Nenhum militar com TAF completo no histórico.');
       return;
     }
 
-    const assinaturas = await coletarAssinaturasAplicadorParaPdf(sessoes);
+    const { montarBlocosResultadosTafPorAplicador } = await import(
+      '../utils/resultadosTafPdfPorAplicador'
+    );
+    const idsCompletos = new Set(filtroLinhas.map((l) => l.id));
+    const nipsCompletos = new Set(
+      filtroLinhas.map((l) => nipDigitos(l.nip)).filter((d) => d.length >= 8),
+    );
+    const blocos = montarBlocosResultadosTafPorAplicador({
+      sessoes,
+      cadastros: lista,
+      rubricasSessoes: rubSessoes,
+      somenteSessoesInformadas: false,
+    })
+      .map((b) => ({
+        ...b,
+        linhas: b.linhas.filter(
+          (l) => idsCompletos.has(l.id) || nipsCompletos.has(nipDigitos(l.nip)),
+        ),
+      }))
+      .filter((b) => b.linhas.length > 0);
+
+    if (blocos.length === 0) {
+      setAviso('Nenhum militar com TAF completo no histórico.');
+      return;
+    }
+
+    const totalLinhas = blocos.reduce((acc, b) => acc + b.linhas.length, 0);
     setModalGerarPdf({
-      linhas: linhasPdf,
+      blocos,
       subtitulo,
-      qtdMilitares: linhasPdf.length,
-      folhasA4: estimarFolhasA4PdfResultadosTaf(linhasPdf.length, assinaturas.length > 0),
-      assinaturas,
+      qtdMilitares: totalLinhas,
+      folhasA4: estimarFolhasA4PdfResultadosTafBlocos(blocos),
     });
   }, [
     nip,
@@ -333,11 +362,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     if (!modalGerarPdf) return;
     setCarregandoPdf(true);
     try {
-      await exportResultadosTafPdf(
-        modalGerarPdf.linhas,
-        modalGerarPdf.subtitulo,
-        modalGerarPdf.assinaturas,
-      );
+      await exportResultadosTafPdf(modalGerarPdf.blocos, modalGerarPdf.subtitulo);
       setModalGerarPdf(null);
     } catch (e) {
       setAviso(e instanceof Error ? e.message : 'Falha ao gerar PDF.');

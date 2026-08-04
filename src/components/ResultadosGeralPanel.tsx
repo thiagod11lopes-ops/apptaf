@@ -18,7 +18,7 @@ import {
   getAllSessoesAplicacao,
   type SessaoAplicacaoTaf,
 } from '../services/resultadosAplicadosIndexedDb';
-import { enriquecerLinhasComRubricas, type ResultadoGeralItem } from '../utils/resultadoTafCadastro';
+import { type ResultadoGeralItem } from '../utils/resultadoTafCadastro';
 import type { FiltroHistoricoMilitar } from '../utils/filtrarSessoesHistoricoMilitar';
 import { listarResultadosGeralFromHistorico } from '../utils/resultadoGeralHistorico';
 import { prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
@@ -27,7 +27,6 @@ import { ConfirmacaoExcluirResultadoGeralModal } from './sismav/ConfirmacaoExclu
 import { excluirTodosResultadosTafMilitar } from '../utils/atualizarResultadoTaf';
 import { nipDigitos } from '../utils/nipFormat';
 import { carregarRubricasDasSessoesPorNip } from '../utils/rubricasDasSessoes';
-import { coletarAssinaturasAplicadorParaPdf } from '../utils/assinaturaAplicadorDasSessoes';
 import { salvarResultadosTafPdfEmDownloads } from '../utils/exportResultadosTafPdf';
 import { formatBrDateKey } from '../utils/backupNaming';
 import { PREMIUM } from '../theme/premium';
@@ -126,11 +125,22 @@ export function ResultadosGeralPanel({
     setAvisoPdf(null);
     try {
       const rubSessoes = await carregarRubricasDasSessoesPorNip();
-      const linhas = enriquecerLinhasComRubricas(lista, cadastros, rubSessoes);
-      const assinaturas = await coletarAssinaturasAplicadorParaPdf(sessoes);
+      const { montarBlocosResultadosTafPorAplicador } = await import(
+        '../utils/resultadosTafPdfPorAplicador'
+      );
+      const blocos = montarBlocosResultadosTafPorAplicador({
+        sessoes,
+        cadastros,
+        rubricasSessoes: rubSessoes,
+        somenteSessoesInformadas: false,
+      });
+      if (blocos.length === 0) {
+        setAvisoPdf('Não há resultados para exportar.');
+        return;
+      }
       const normaLabel = normaTaf === 'cfn' ? 'CFN' : 'Armada';
       const subtitulo = `Resultado Geral completo — ${normaLabel} — ${formatBrDateKey(new Date())}`;
-      const msg = await salvarResultadosTafPdfEmDownloads(linhas, subtitulo, assinaturas);
+      const msg = await salvarResultadosTafPdfEmDownloads(blocos, subtitulo);
       setAvisoPdf(msg);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao salvar o arquivo completo.';

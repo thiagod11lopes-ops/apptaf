@@ -1,6 +1,7 @@
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { postoGradExibicaoAssinatura } from '../types/aplicadorAssinatura';
 import type { ResultadoTafLinha } from './resultadoTafCadastro';
+import type { ResultadosTafPdfBloco } from './resultadosTafPdfPorAplicador';
 import {
   colunasDistanciaPdfVisiveis,
   valoresCorridaCaminhadaParaPdf,
@@ -30,14 +31,76 @@ function tituloResultadosTafPdf(mostrarCorrida: boolean, mostrarCaminhada: boole
   return `Resultados TAF — ${prefixo}, Natacao e Permanencia`;
 }
 
+function desenharAssinaturaAplicador(
+  doc: import('jspdf').jsPDF,
+  assinatura: AplicadorAssinaturaResumo | undefined,
+  pageW: number,
+  pageH: number,
+  marginX: number,
+  usableW: number,
+  marginBottom: number,
+  pngOf: (svg?: string) => string | null,
+): void {
+  if (!assinatura?.nome?.trim()) {
+    // Sem aplicador / sem rúbrica: deixa área em branco (só linha guia).
+    const baseY = pageH - marginBottom + 12;
+    const cx = marginX + usableW / 2;
+    doc.setDrawColor(148, 163, 184);
+    doc.setLineWidth(0.6);
+    doc.line(cx - 50, baseY + 22, cx + 50, baseY + 22);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text(pdfTexto('Aplicador'), cx, baseY + 34, { align: 'center' });
+    return;
+  }
+
+  const baseY = pageH - marginBottom + 8;
+  const cx = marginX + usableW / 2;
+  const svg = assinatura.rubricaSvg?.trim();
+  if (svg) {
+    const png = pngOf(svg);
+    const iw = 56;
+    const ih = 22;
+    if (png) {
+      try {
+        doc.addImage(png, 'PNG', cx - iw / 2, baseY - 4, iw, ih);
+      } catch {
+        desenharRubricaJsPdf(doc, svg, cx - iw / 2, baseY - 4, iw, ih);
+      }
+    } else {
+      desenharRubricaJsPdf(doc, svg, cx - iw / 2, baseY - 4, iw, ih);
+    }
+  }
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineWidth(0.6);
+  doc.line(cx - 50, baseY + 22, cx + 50, baseY + 22);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(30, 41, 59);
+  doc.text(pdfTexto(postoGradExibicaoAssinatura(assinatura)), cx, baseY + 32, {
+    align: 'center',
+  });
+  doc.setFont('helvetica', 'normal');
+  doc.text(pdfTexto(assinatura.nome), cx, baseY + 42, { align: 'center' });
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(pdfTexto(`NIP ${assinatura.nip || '—'}`), cx, baseY + 51, { align: 'center' });
+  void pageW;
+}
+
 /**
- * PDF A4 paisagem (web/iPhone) com todos os resultados do dia em um único arquivo.
+ * PDF A4 paisagem: uma tabela (ou conjunto de folhas) por aplicador,
+ * cada uma com a rúbrica própria daquele aplicador.
  */
 export async function gerarResultadosTafPdfBlobWeb(
-  linhas: ResultadoTafLinha[],
+  blocos: ResultadosTafPdfBloco[],
   subtitulo: string,
-  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): Promise<Blob> {
+  if (blocos.length === 0) {
+    throw new Error('Não há resultados para exportar.');
+  }
+
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -49,12 +112,11 @@ export async function gerarResultadosTafPdfBlobWeb(
   const pageH = doc.internal.pageSize.getHeight();
   const marginX = 18;
   const marginTop = 24;
-  const temAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));
-  const marginBottom = temAssinatura ? 70 : 28;
+  const marginBottom = 70;
   const usableW = pageW - marginX * 2;
 
-  const { mostrarCorrida, mostrarCaminhada } = colunasDistanciaPdfVisiveis(linhas);
-  const linhasPdf = linhas.map((r) => ({ ...r, ...valoresCorridaCaminhadaParaPdf(r) }));
+  const todasLinhas = blocos.flatMap((b) => b.linhas);
+  const { mostrarCorrida, mostrarCaminhada } = colunasDistanciaPdfVisiveis(todasLinhas);
 
   const rubW = 28;
   const rubH = 16;
@@ -113,7 +175,7 @@ export async function gerarResultadosTafPdfBlobWeb(
   const scale = usableW / totalW;
   const colWs = colunas.map((c) => c.width * scale);
 
-  const temRubrica = linhasPdf.some(
+  const temRubrica = todasLinhas.some(
     (r) =>
       (mostrarCorrida && r.rubricaCorridaSvg) ||
       (mostrarCaminhada && r.rubricaCaminhadaSvg) ||
@@ -124,6 +186,7 @@ export async function gerarResultadosTafPdfBlobWeb(
   const headerH = 16;
   const geradoEm = new Date().toLocaleString('pt-BR');
   const tituloDoc = tituloResultadosTafPdf(mostrarCorrida, mostrarCaminhada);
+  const totalRegistros = todasLinhas.length;
 
   const pngCache = new Map<string, string | null>();
   const pngOf = (svg?: string) => {
@@ -136,9 +199,9 @@ export async function gerarResultadosTafPdfBlobWeb(
   };
 
   let y = marginTop;
-  let page = 1;
+  let primeiraPagina = true;
 
-  const desenharCabecalhoPagina = () => {
+  const desenharCabecalhoPagina = (rotuloAplicador: string) => {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(17, 24, 39);
@@ -148,10 +211,15 @@ export async function gerarResultadosTafPdfBlobWeb(
     doc.setFontSize(8);
     doc.setTextColor(75, 85, 99);
     doc.text(
-      pdfTexto(`${subtitulo} · Gerado em ${geradoEm} · ${linhasPdf.length} registro(s)`),
+      pdfTexto(`${subtitulo} · Gerado em ${geradoEm} · ${totalRegistros} registro(s)`),
       marginX,
       y,
     );
+    y += 12;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text(pdfTexto(rotuloAplicador), marginX, y);
     y += 12;
   };
 
@@ -174,62 +242,8 @@ export async function gerarResultadosTafPdfBlobWeb(
     y += headerH;
   };
 
-  const novaPagina = () => {
-    desenharRodapeAssinatura();
-    doc.addPage();
-    page += 1;
-    y = marginTop;
-    desenharCabecalhoPagina();
-    desenharHeaderTabela();
-  };
-
-  const desenharRodapeAssinatura = () => {
-    if (!temAssinatura || !aplicadorAssinaturas?.length) return;
-    const assinaturas = aplicadorAssinaturas.filter((a) => a.nome?.trim());
-    if (assinaturas.length === 0) return;
-    const baseY = pageH - marginBottom + 8;
-    const slotW = usableW / Math.min(assinaturas.length, 3);
-    assinaturas.slice(0, 3).forEach((a, idx) => {
-      const cx = marginX + slotW * idx + slotW / 2;
-      const svg = a.rubricaSvg?.trim();
-      if (svg) {
-        const png = pngOf(svg);
-        const iw = 56;
-        const ih = 22;
-        if (png) {
-          try {
-            doc.addImage(png, 'PNG', cx - iw / 2, baseY - 4, iw, ih);
-          } catch {
-            desenharRubricaJsPdf(doc, svg, cx - iw / 2, baseY - 4, iw, ih);
-          }
-        } else {
-          desenharRubricaJsPdf(doc, svg, cx - iw / 2, baseY - 4, iw, ih);
-        }
-      }
-      doc.setDrawColor(148, 163, 184);
-      doc.setLineWidth(0.6);
-      doc.line(cx - 50, baseY + 22, cx + 50, baseY + 22);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7);
-      doc.setTextColor(30, 41, 59);
-      doc.text(pdfTexto(postoGradExibicaoAssinatura(a)), cx, baseY + 32, { align: 'center' });
-      doc.setFont('helvetica', 'normal');
-      doc.text(pdfTexto(a.nome), cx, baseY + 42, { align: 'center' });
-      doc.setFontSize(6.5);
-      doc.setTextColor(100, 116, 139);
-      doc.text(pdfTexto(`NIP ${a.nip || '—'}`), cx, baseY + 51, { align: 'center' });
-    });
-    void page;
-  };
-
-  desenharCabecalhoPagina();
-  desenharHeaderTabela();
-
-  for (const linha of linhasPdf) {
-    if (y + rowH > pageH - marginBottom) {
-      novaPagina();
-    }
-
+  const desenharLinha = (linhaRaw: ResultadoTafLinha) => {
+    const linha = { ...linhaRaw, ...valoresCorridaCaminhadaParaPdf(linhaRaw) };
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.4);
     doc.line(marginX, y + rowH, marginX + usableW, y + rowH);
@@ -266,8 +280,50 @@ export async function gerarResultadosTafPdfBlobWeb(
       x += w;
     }
     y += rowH;
+  };
+
+  for (let bi = 0; bi < blocos.length; bi += 1) {
+    const bloco = blocos[bi]!;
+    if (!primeiraPagina) {
+      doc.addPage();
+      y = marginTop;
+    }
+    primeiraPagina = false;
+
+    desenharCabecalhoPagina(bloco.rotuloAplicador);
+    desenharHeaderTabela();
+
+    for (const linha of bloco.linhas) {
+      if (y + rowH > pageH - marginBottom) {
+        desenharAssinaturaAplicador(
+          doc,
+          bloco.aplicadorAssinatura,
+          pageW,
+          pageH,
+          marginX,
+          usableW,
+          marginBottom,
+          pngOf,
+        );
+        doc.addPage();
+        y = marginTop;
+        desenharCabecalhoPagina(bloco.rotuloAplicador);
+        desenharHeaderTabela();
+      }
+      desenharLinha(linha);
+    }
+
+    desenharAssinaturaAplicador(
+      doc,
+      bloco.aplicadorAssinatura,
+      pageW,
+      pageH,
+      marginX,
+      usableW,
+      marginBottom,
+      pngOf,
+    );
   }
 
-  desenharRodapeAssinatura();
   return doc.output('blob');
 }

@@ -41,14 +41,11 @@ import {
   tituloMesAno,
 } from '../../utils/historicoPorDia';
 import { agruparSessoesHistoricoPorTeste } from '../../utils/agruparSessoesHistoricoPorTeste';
-import { listarResultadosGeralFromHistorico } from '../../utils/resultadoGeralHistorico';
-import { enriquecerLinhasComRubricas } from '../../utils/resultadoTafCadastro';
 import { carregarRubricasDasSessoesPorNip } from '../../utils/rubricasDasSessoes';
 import {
   PERMANENCIA_TEMPO_PDF_PADRAO,
   salvarResultadosTafPdfEmDownloads,
 } from '../../utils/exportResultadosTafPdf';
-import { coletarAssinaturasAplicadorParaPdf } from '../../utils/assinaturaAplicadorDasSessoes';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
 import { formatNomeComPostoParts } from '../../utils/formatNomeComPosto';
 import { postoGradFromCadastro } from '../../utils/resultadoTafCadastro';
@@ -207,21 +204,23 @@ export function HistoricoCalendarioTaf({
   );
 
   const prepararLinhasPdfDoDia = useCallback(async () => {
-    const linhasBase = listarResultadosGeralFromHistorico(sessoesDoDia, cadastros, {
-      somenteSessoesInformadas: true,
-    });
-    if (linhasBase.length === 0) {
+    if (sessoesDoDia.length === 0) {
       throw new Error('Não há participantes para exportar neste dia.');
     }
     const rubSessoes = await carregarRubricasDasSessoesPorNip();
-    const linhas = enriquecerLinhasComRubricas(linhasBase, cadastros, rubSessoes);
-    let assinaturas = await coletarAssinaturasAplicadorParaPdf(sessoesDoDia);
-    // Se o dia não trouxe rúbrica (sessões antigas), usa assinaturas do histórico geral.
-    if (!assinaturas.some((a) => a.rubricaSvg?.trim())) {
-      const gerais = await coletarAssinaturasAplicadorParaPdf();
-      if (gerais.length > 0) assinaturas = gerais;
+    const { montarBlocosResultadosTafPorAplicador } = await import(
+      '../../utils/resultadosTafPdfPorAplicador'
+    );
+    const blocos = montarBlocosResultadosTafPorAplicador({
+      sessoes: sessoesDoDia,
+      cadastros,
+      rubricasSessoes: rubSessoes,
+      somenteSessoesInformadas: true,
+    });
+    if (blocos.length === 0) {
+      throw new Error('Não há participantes para exportar neste dia.');
     }
-    return { linhas, assinaturas };
+    return { blocos };
   }, [sessoesDoDia, cadastros]);
 
   const gerarPdfDoDia = useCallback(async () => {
@@ -229,11 +228,10 @@ export function HistoricoCalendarioTaf({
     setGerandoPdf(true);
     onAviso?.(null);
     try {
-      const { linhas, assinaturas } = await prepararLinhasPdfDoDia();
+      const { blocos } = await prepararLinhasPdfDoDia();
       const msg = await salvarResultadosTafPdfEmDownloads(
-        linhas,
+        blocos,
         `Resultados do dia — ${dataBrSelecionada}`,
-        assinaturas,
       );
       onAviso?.(msg);
     } catch (e) {
@@ -494,7 +492,7 @@ export function HistoricoCalendarioTaf({
               onPress={() => void gerarPdfDoDia()}
               disabled={gerandoPdf}
               style={[styles.btnPdfOuter, gerandoPdf ? { opacity: 0.7 } : null]}
-              accessibilityLabel="Gerar PDF único com resultados do dia em Downloads"
+              accessibilityLabel="Gerar PDF do dia com tabelas separadas por aplicador"
             >
               <LinearGradient
                 colors={[...theme.tokens.gradientPrimaryBtn]}

@@ -392,11 +392,27 @@ async function refreshCloudQueueEstimate(force = false, attempt = 0): Promise<vo
 }
 
 function scheduleCloudQueueEstimate(force = false): void {
+  if (!isCloudLinkEnabled()) {
+    if (queueEstimateTimer) {
+      clearTimeout(queueEstimateTimer);
+      queueEstimateTimer = null;
+    }
+    return;
+  }
   if (queueEstimateTimer) clearTimeout(queueEstimateTimer);
   queueEstimateTimer = setTimeout(() => {
     queueEstimateTimer = null;
     void refreshCloudQueueEstimate(force);
   }, 600);
+}
+
+/** Para todos os timers/polls que só fazem sentido com a chave BNC ligada. */
+function stopCloudPollTimers(): void {
+  stopCloudDiffWatch();
+  if (queueEstimateTimer) {
+    clearTimeout(queueEstimateTimer);
+    queueEstimateTimer = null;
+  }
 }
 
 function stopCloudDiffWatch(): void {
@@ -721,6 +737,7 @@ async function returnToOfflineMode(): Promise<void> {
   if (syncAuthAvailable && isCloudLinkEnabled()) {
     startCloudDiffWatch();
   } else {
+    stopCloudPollTimers();
     counters = { ...counters, pendingDownloads: null };
   }
   notifyListeners();
@@ -1190,10 +1207,15 @@ export const syncManager = {
         this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
         void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
       } else {
+        this.cancelScheduledBackgroundSync();
+        stopCloudPollTimers();
         stopRealtimeBridge();
+        stopMemberCloudPoll();
+        counters = { ...counters, pendingDownloads: null };
       }
     } else {
-      stopCloudDiffWatch();
+      this.cancelScheduledBackgroundSync();
+      stopCloudPollTimers();
       stopRealtimeBridge();
       stopMemberCloudPoll();
       cloudMirrorDoneOwner = null;
@@ -1202,12 +1224,13 @@ export const syncManager = {
     notifyListeners();
   },
 
-  /** Chave da Home ligada/desligada — inicia ou para comparação, Realtime, espelho e sync. */
+  /** Chave BNC ligada/desligada — inicia ou para comparação, Realtime, espelho e sync. */
   onCloudLinkChanged(enabled: boolean): void {
     if (!enabled) {
       this.cancelScheduledBackgroundSync();
-      stopCloudDiffWatch();
+      stopCloudPollTimers();
       stopRealtimeBridge();
+      stopMemberCloudPoll();
       counters = { ...counters, pendingDownloads: null };
       notifyListeners();
       return;
@@ -1224,7 +1247,6 @@ export const syncManager = {
     }
     notifyListeners();
   },
-
   async bindSession(dataOwnerUid: string): Promise<void> {
     ownerUid = dataOwnerUid;
     syncEngine.bindOwner(dataOwnerUid);
@@ -1256,7 +1278,11 @@ export const syncManager = {
         this.scheduleBackgroundSync(SESSION_START_SYNC_MS);
         void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
       } else {
+        this.cancelScheduledBackgroundSync();
+        stopCloudPollTimers();
         stopRealtimeBridge();
+        stopMemberCloudPoll();
+        counters = { ...counters, pendingDownloads: null };
       }
     }
     notifyListeners();
@@ -1559,15 +1585,15 @@ export const syncManager = {
 
   openSyncModal(): void {},
 
-  /** Após escrita local: atualiza badge e agenda auto-sync se online. */
+  /** Após escrita local: atualiza badge e agenda auto-sync se online e BNC ligado. */
   scheduleOnlineWriteFlush(): void {
     void this.refreshPending().then(() => {
+      if (!isCloudLinkEnabled()) return;
       if (getConnectivityState() === 'ONLINE' && syncAuthAvailable) {
         this.scheduleBackgroundSync(AUTO_SYNC_DEBOUNCE_MS);
       }
     });
   },
-
   async refreshPending(): Promise<PendingSyncSummary> {
     const summary = await refreshPendingSummary();
     if (isCloudLinkEnabled()) {

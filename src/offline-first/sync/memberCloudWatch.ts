@@ -59,9 +59,15 @@ export function stopMemberCloudPoll(): void {
  */
 export function startMemberCloudPoll(host: MemberCloudPollHost): void {
   stopMemberCloudPoll();
+  // Poll só com BNC ligado — evita tick de 8s e full fetch com chave off.
+  if (!isCloudLinkEnabled()) return;
   if (!host.isAuthAvailable() || !isAuthorizedMemberSession()) return;
 
   memberCloudPollTimer = setInterval(() => {
+    if (!isCloudLinkEnabled()) {
+      stopMemberCloudPoll();
+      return;
+    }
     if (!host.isAuthAvailable() || host.isSyncBusy()) return;
     if (getConnectivityState() !== 'ONLINE') return;
     if (!isAuthorizedMemberSession()) return;
@@ -69,6 +75,7 @@ export function startMemberCloudPoll(host: MemberCloudPollHost): void {
     memberCloudPollTick += 1;
     const tick = memberCloudPollTick;
     void (async () => {
+      if (!isCloudLinkEnabled()) return;
       const uid = host.getOwnerUid()?.trim();
       if (!uid) return;
       host.requestForcePull();

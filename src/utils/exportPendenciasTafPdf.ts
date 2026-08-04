@@ -1,24 +1,26 @@
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import {
   FILTRO_PENDENCIA_LABEL,
   type FiltroPendenciaTaf,
   type PendenciaTafItem,
 } from './pendenciasTafHistorico';
-import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
-import {
-  blocosAplicadorAssinaturaHtml,
-  PDF_APLICADOR_ASSINATURA_STYLES,
-} from './pdfAplicadorAssinaturaHtml';
 import {
   buildPdfLandscapeDocument,
   buildPdfTableHtml,
   escapeHtmlPdf,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
-  PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
+import {
+  baixarArquivoParaDownloads,
+  entregarPdfBlobWeb,
+  mensagemSucessoSalvarNaPasta,
+  sanitizarNomeArquivo,
+  SalvamentoCanceladoError,
+} from './salvarArquivoNaPasta';
+import { formatBrDateKey } from './backupNaming';
+import { gerarPendenciasTafPdfBlobWeb } from './gerarPendenciasTafPdfWeb';
 
 function chipHtml(label: string, ok: boolean): string {
   const bg = ok ? '#dcfce7' : '#fee2e2';
@@ -111,17 +113,16 @@ const PENDENCIAS_EXTRA_STYLES = `
   }
 `;
 
+/** HTML nativo — sem assinatura de aplicador. */
 export function buildPendenciasTafHtml(
   itens: PendenciaTafItem[],
   filtro: FiltroPendenciaTaf,
-  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
   const tituloFiltro = FILTRO_PENDENCIA_LABEL[filtro];
-  const comAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));
 
   const rows = itens.map(
-      (r) => `<tr>
+    (r) => `<tr>
         <td class="mono">${escapeHtmlPdf(r.nip)}</td>
         <td class="col-nome"><strong>${escapeHtmlPdf(r.nome)}</strong></td>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
@@ -130,7 +131,7 @@ export function buildPendenciasTafHtml(
         <td class="chips">${chipHtml('Corrida', r.temCorrida)} ${chipHtml('Natação', r.temNatacao)} ${chipHtml('Perm.', r.temPermanencia)}</td>
         <td class="falta">${escapeHtmlPdf(r.faltam.join(', ') || '—')}</td>
       </tr>`,
-    );
+  );
 
   const kpiHtml = `
     <div class="kpi-row">
@@ -156,7 +157,6 @@ export function buildPendenciasTafHtml(
     emptyColspan: 7,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
-    rowsPerPage: comAssinatura ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
   });
 
   return buildPdfLandscapeDocument({
@@ -164,51 +164,49 @@ export function buildPendenciasTafHtml(
     titulo: tituloFiltro,
     metaHtml: `Relatório de pendências do Teste de Aptidão Física · Gerado em ${escapeHtmlPdf(dataStr)}`,
     conteudoHtml,
-    aplicadorHtml: blocosAplicadorAssinaturaHtml(aplicadorAssinaturas),
-    extraStyles: `${PENDENCIAS_EXTRA_STYLES}${PDF_APLICADOR_ASSINATURA_STYLES}`,
+    extraStyles: PENDENCIAS_EXTRA_STYLES,
   });
 }
 
+function nomeArquivoPendencias(filtro: FiltroPendenciaTaf): string {
+  const base = sanitizarNomeArquivo(FILTRO_PENDENCIA_LABEL[filtro]).replace(/\s+/g, '_');
+  return sanitizarNomeArquivo(`${base}_${formatBrDateKey()}`, '.pdf');
+}
+
+/**
+ * Baixa o PDF de pendências (sem abrir nova aba; sem assinatura de aplicador).
+ */
 export async function exportPendenciasTafPdf(
   itens: PendenciaTafItem[],
   filtro: FiltroPendenciaTaf,
-  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
-): Promise<void> {
+): Promise<string> {
   if (itens.length === 0) {
     throw new Error('Não há militares com pendência para exportar.');
   }
 
-  const html = buildPendenciasTafHtml(itens, filtro, aplicadorAssinaturas);
-  const titulo = FILTRO_PENDENCIA_LABEL[filtro];
+  const filename = nomeArquivoPendencias(filtro);
 
   if (Platform.OS === 'web') {
-    const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
-    if (!win) {
-      throw new Error(
-        'Não foi possível abrir a visualização do PDF. Permita pop-ups neste site e tente novamente.',
-      );
-    }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    return;
+    const blob = await gerarPendenciasTafPdfBlobWeb(itens, filtro);
+    const resultado = await entregarPdfBlobWeb(blob, filename);
+    if (!resultado.ok) throw new SalvamentoCanceladoError();
+    return mensagemSucessoSalvarNaPasta(resultado);
   }
 
+  const html = buildPendenciasTafHtml(itens, filtro);
   const { uri } = await Print.printToFileAsync({
     html,
     width: PDF_A4_LANDSCAPE_WIDTH,
     height: PDF_A4_LANDSCAPE_HEIGHT,
   });
 
-  const canShare = await Sharing.isAvailableAsync();
-  if (canShare) {
-    await Sharing.shareAsync(uri, {
-      mimeType: 'application/pdf',
-      dialogTitle: `Salvar PDF — ${titulo}`,
-      UTI: 'com.adobe.pdf',
-    });
-  } else {
-    Alert.alert('PDF gerado', 'Arquivo salvo na área de cache do app.');
-  }
+  const resultado = await baixarArquivoParaDownloads({
+    sourceUri: uri,
+    filename,
+    mimeType: 'application/pdf',
+    uti: 'com.adobe.pdf',
+    dialogTitle: `Salvar PDF — ${FILTRO_PENDENCIA_LABEL[filtro]}`,
+  });
+  if (!resultado.ok) throw new SalvamentoCanceladoError();
+  return mensagemSucessoSalvarNaPasta(resultado);
 }

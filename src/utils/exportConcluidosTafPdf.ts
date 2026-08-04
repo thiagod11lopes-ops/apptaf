@@ -1,20 +1,22 @@
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import type { ConcluidoTafItem } from './pendenciasTafHistorico';
-import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
-import {
-  blocosAplicadorAssinaturaHtml,
-  PDF_APLICADOR_ASSINATURA_STYLES,
-} from './pdfAplicadorAssinaturaHtml';
 import {
   buildPdfLandscapeDocument,
   buildPdfTableHtml,
   escapeHtmlPdf,
   PDF_A4_LANDSCAPE_HEIGHT,
   PDF_A4_LANDSCAPE_WIDTH,
-  PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA,
 } from './pdfLayout';
+import {
+  baixarArquivoParaDownloads,
+  entregarPdfBlobWeb,
+  mensagemSucessoSalvarNaPasta,
+  sanitizarNomeArquivo,
+  SalvamentoCanceladoError,
+} from './salvarArquivoNaPasta';
+import { formatBrDateKey } from './backupNaming';
+import { gerarConcluidosTafPdfBlobWeb } from './gerarConcluidosTafPdfWeb';
 
 function chipHtml(label: string): string {
   return `<span class="chip chip-ok">${escapeHtmlPdf(label)} ✓</span>`;
@@ -105,15 +107,12 @@ const CONCLUIDOS_EXTRA_STYLES = `
   }
 `;
 
-export function buildConcluidosTafHtml(
-  itens: ConcluidoTafItem[],
-  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
-): string {
+/** HTML nativo — sem assinatura de aplicador. */
+export function buildConcluidosTafHtml(itens: ConcluidoTafItem[]): string {
   const dataStr = new Date().toLocaleString('pt-BR');
-  const comAssinatura = Boolean(aplicadorAssinaturas?.some((a) => a.nome?.trim()));
 
   const rows = itens.map(
-      (r) => `<tr>
+    (r) => `<tr>
         <td class="mono">${escapeHtmlPdf(r.nip)}</td>
         <td class="col-nome"><strong>${escapeHtmlPdf(r.nome)}</strong></td>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
@@ -121,7 +120,7 @@ export function buildConcluidosTafHtml(
         <td><span class="badge-ok">Concluído</span></td>
         <td class="chips">${chipHtml('Corrida')} ${chipHtml('Natação')} ${chipHtml('Perm.')}</td>
       </tr>`,
-    );
+  );
 
   const kpiHtml = `
     <div class="kpi-row">
@@ -144,7 +143,6 @@ export function buildConcluidosTafHtml(
     emptyColspan: 6,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
-    rowsPerPage: comAssinatura ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
   });
 
   return buildPdfLandscapeDocument({
@@ -152,49 +150,41 @@ export function buildConcluidosTafHtml(
     titulo: 'Militares com TAF concluído',
     metaHtml: `Relatório de militares que concluíram todas as modalidades do TAF · Gerado em ${escapeHtmlPdf(dataStr)}`,
     conteudoHtml,
-    aplicadorHtml: blocosAplicadorAssinaturaHtml(aplicadorAssinaturas),
-    extraStyles: `${CONCLUIDOS_EXTRA_STYLES}${PDF_APLICADOR_ASSINATURA_STYLES}`,
+    extraStyles: CONCLUIDOS_EXTRA_STYLES,
   });
 }
 
-export async function exportConcluidosTafPdf(
-  itens: ConcluidoTafItem[],
-  aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
-): Promise<void> {
+/**
+ * Baixa o PDF de concluídos (sem abrir nova aba; sem assinatura de aplicador).
+ */
+export async function exportConcluidosTafPdf(itens: ConcluidoTafItem[]): Promise<string> {
   if (itens.length === 0) {
     throw new Error('Não há militares com TAF concluído para exportar.');
   }
 
-  const html = buildConcluidosTafHtml(itens, aplicadorAssinaturas);
+  const filename = sanitizarNomeArquivo(`TAF_Concluido_${formatBrDateKey()}`, '.pdf');
 
   if (Platform.OS === 'web') {
-    const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
-    if (!win) {
-      throw new Error(
-        'Não foi possível abrir a visualização do PDF. Permita pop-ups neste site e tente novamente.',
-      );
-    }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    return;
+    const blob = await gerarConcluidosTafPdfBlobWeb(itens);
+    const resultado = await entregarPdfBlobWeb(blob, filename);
+    if (!resultado.ok) throw new SalvamentoCanceladoError();
+    return mensagemSucessoSalvarNaPasta(resultado);
   }
 
+  const html = buildConcluidosTafHtml(itens);
   const { uri } = await Print.printToFileAsync({
     html,
     width: PDF_A4_LANDSCAPE_WIDTH,
     height: PDF_A4_LANDSCAPE_HEIGHT,
   });
 
-  const canShare = await Sharing.isAvailableAsync();
-  if (canShare) {
-    await Sharing.shareAsync(uri, {
-      mimeType: 'application/pdf',
-      dialogTitle: 'Salvar PDF — TAF Concluído',
-      UTI: 'com.adobe.pdf',
-    });
-  } else {
-    Alert.alert('PDF gerado', 'Arquivo salvo na área de cache do app.');
-  }
+  const resultado = await baixarArquivoParaDownloads({
+    sourceUri: uri,
+    filename,
+    mimeType: 'application/pdf',
+    uti: 'com.adobe.pdf',
+    dialogTitle: 'Salvar PDF — TAF Concluído',
+  });
+  if (!resultado.ok) throw new SalvamentoCanceladoError();
+  return mensagemSucessoSalvarNaPasta(resultado);
 }

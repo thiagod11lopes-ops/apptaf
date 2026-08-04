@@ -11,7 +11,7 @@ import { agregarHistoricoPorParticipante } from './resultadoGeralHistorico';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 import { compareByNomePtBr } from './compareNomePtBr';
 import { filtrarSessoesPorNorma } from './normaTafResultados';
-export type FiltroPendenciaTaf = 'total' | 'corrida' | 'natacao' | 'permanencia';
+export type FiltroPendenciaTaf = 'total' | 'parcial' | 'corrida' | 'natacao' | 'permanencia';
 
 export type PendenciaTafItem = PendenciaParcialItem & {
   postoGrad: string;
@@ -19,10 +19,11 @@ export type PendenciaTafItem = PendenciaParcialItem & {
   situacao: 'Sem teste' | 'Parcial';
 };
 
-export type ContagemPendenciasTaf = Record<FiltroPendenciaTaf, number>;
+export type ContagemPendenciasTaf = Record<'total' | 'corrida' | 'natacao' | 'permanencia', number>;
 
 export const FILTRO_PENDENCIA_LABEL: Record<FiltroPendenciaTaf, string> = {
   total: 'Pendência Total',
+  parcial: 'Pendência Parcial',
   corrida: 'Pendência Corrida',
   natacao: 'Pendência Natação',
   permanencia: 'Pendência Permanência',
@@ -186,6 +187,8 @@ export function filtrarPendencias(
   switch (filtro) {
     case 'total':
       return lista;
+    case 'parcial':
+      return lista.filter((p) => p.situacao === 'Parcial');
     case 'corrida':
       return lista.filter((p) => !p.temCorrida);
     case 'natacao':

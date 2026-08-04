@@ -23,7 +23,6 @@ import {
 } from '../utils/pendenciasTafCfnHistorico';
 import { prepararDadosResultadosNorma, type NormaTafVista } from '../utils/normaTafResultados';
 import { exportPendenciasTafPdf } from '../utils/exportPendenciasTafPdf';
-import { coletarAssinaturasAplicadorParaPdf } from '../utils/assinaturaAplicadorDasSessoes';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
@@ -133,10 +132,10 @@ export function ResultadosPendenciaParcialPanel({
     }
     setGerandoPdf(true);
     try {
-      const assinaturas = await coletarAssinaturasAplicadorParaPdf();
-      await exportPendenciasTafPdf(lista, 'total', assinaturas);
+      await exportPendenciasTafPdf(lista, modo === 'total' ? 'total' : 'parcial');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Não foi possível gerar o PDF.';
+      if (/cancelad/i.test(msg)) return;
       Alert.alert('Erro ao gerar PDF', msg);
     } finally {
       setGerandoPdf(false);

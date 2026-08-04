@@ -18,6 +18,11 @@ import { AplicarTafInput, AplicarTafPrimaryButton } from './AplicarTafUi';
 import { FATORES_RISCO_LARANJA } from './FatoresRiscoInfoModal';
 import type { CadastroItemPersist } from '../../../services/cadastrosIndexedDb';
 import { idadeFromDataNascimento } from '../../../utils/idadeFromDataNascimento';
+import { cadastroPrecisaVinculo } from '../../../utils/cadastroDadosTaf';
+import {
+  VinculoCarreiraRm2Checks,
+  type VinculoMilitar,
+} from './VinculoCarreiraRm2Checks';
 
 export type NipFeedbackLinha =
   | {
@@ -31,6 +36,7 @@ export type NipFeedbackLinha =
       praca?: string;
       dataNascimento: string;
       sexo?: 'M' | 'F';
+      vinculo?: 'carreira' | 'rm2';
     }
   | {
       tipo: 'completar_dados';
@@ -42,6 +48,8 @@ export type NipFeedbackLinha =
       cadastro: CadastroItemPersist;
       dataNascimento: string;
       sexo: 'M' | 'F';
+      /** Preenchido quando o cadastro ainda não tem Carreira/RM2. */
+      vinculo?: VinculoMilitar | null;
       erro?: string;
     }
   | { tipo: 'erro'; texto: string }
@@ -56,7 +64,10 @@ export type AplicarTafNipsListProps = {
   onVerificarNip: (index: number) => void;
   onRemoverPress: (index: number) => void;
   onEditarMilitar: (index: number) => void;
-  onAtualizarDados: (index: number, patch: { dataNascimento?: string; sexo?: 'M' | 'F' }) => void;
+  onAtualizarDados: (
+    index: number,
+    patch: { dataNascimento?: string; sexo?: 'M' | 'F'; vinculo?: VinculoMilitar | null },
+  ) => void;
   onConfirmarDados: (index: number) => void | Promise<void>;
   participanteTemFatorRisco: (index: number) => boolean;
   participanteCadastradoFatoresRisco: (index: number) => boolean;
@@ -105,7 +116,10 @@ type NipParticipanteRowProps = {
   onVerificarNip: (index: number) => void;
   onRemoverPress: (index: number) => void;
   onEditarMilitar: (index: number) => void;
-  onAtualizarDados: (index: number, patch: { dataNascimento?: string; sexo?: 'M' | 'F' }) => void;
+  onAtualizarDados: (
+    index: number,
+    patch: { dataNascimento?: string; sexo?: 'M' | 'F'; vinculo?: VinculoMilitar | null },
+  ) => void;
   onConfirmarDados: (index: number) => void | Promise<void>;
   participanteTemFatorRisco: (index: number) => boolean;
   participanteCadastradoFatoresRisco: (index: number) => boolean;
@@ -431,21 +445,32 @@ const NipParticipanteRow = memo(function NipParticipanteRow({
           style={[rowStyles.dadosNipBox, { backgroundColor: inputBg, borderColor: inputBorder }]}
         >
           <Text style={[ts.bodySecondary, rowStyles.dadosNipLead]}>
-            {fb.nomeMilitar}: informe data de nascimento e gênero. Os dados serão salvos no
-            cadastro.
+            {fb.nomeMilitar}: informe data de nascimento
+            {cadastroPrecisaVinculo(fb.cadastro) ? ', Carreira ou RM2' : ''} e gênero. Os dados serão
+            salvos no cadastro.
           </Text>
           <Text style={[ts.label, rowStyles.dadosNipFieldLabel]}>Data de nascimento</Text>
-          <AplicarTafInput
-            value={fb.dataNascimento}
-            onChangeText={(t) =>
-              onAtualizarDados(index, { dataNascimento: formatDateInput(t) })
-            }
-            placeholder="DD/MM/AAAA"
-            keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-            inputMode="numeric"
-            maxLength={10}
-            accessibilityLabel={`Data de nascimento do participante ${index + 1}`}
-          />
+          <View style={rowStyles.dadosNipDnRow}>
+            <View style={rowStyles.dadosNipDnInput}>
+              <AplicarTafInput
+                value={fb.dataNascimento}
+                onChangeText={(t) =>
+                  onAtualizarDados(index, { dataNascimento: formatDateInput(t) })
+                }
+                placeholder="DD/MM/AAAA"
+                keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                inputMode="numeric"
+                maxLength={10}
+                accessibilityLabel={`Data de nascimento do participante ${index + 1}`}
+              />
+            </View>
+            {cadastroPrecisaVinculo(fb.cadastro) ? (
+              <VinculoCarreiraRm2Checks
+                value={fb.vinculo ?? null}
+                onChange={(next) => onAtualizarDados(index, { vinculo: next })}
+              />
+            ) : null}
+          </View>
           <Text style={[ts.label, rowStyles.dadosNipFieldLabel]}>Gênero</Text>
           <View style={[rowStyles.dadosNipSegmented, { borderColor: theme.border }]}>
             {(['M', 'F'] as const).map((sx) => {
@@ -746,6 +771,15 @@ function createNipsListStyles(theme: AppTheme, ui: ReturnType<typeof getUiColors
     dadosNipFieldLabel: {
       marginTop: 4,
       marginBottom: 0,
+    },
+    dadosNipDnRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    dadosNipDnInput: {
+      flex: 1,
+      minWidth: 0,
     },
     dadosNipSegmented: {
       flexDirection: 'row',

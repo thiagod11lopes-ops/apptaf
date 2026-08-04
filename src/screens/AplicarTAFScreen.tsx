@@ -129,7 +129,7 @@ import {
   desativarModoDemonstracaoSeAtivo,
   subscribeModoDemonstracao,
 } from '../services/modoDemonstracao';
-import { cadastroPrecisaCompletarDadosTaf, dataNascimentoCadastroValida } from '../utils/cadastroDadosTaf';
+import { cadastroPrecisaCompletarDadosTaf, dataNascimentoCadastroValida, vinculoCadastroValido } from '../utils/cadastroDadosTaf';
 import { dataHojeBr } from '../utils/tafRegistro';
 import { detectarConflitoCorridaCaminhada, removerModalidadeOpostaDistanciaDoHistorico } from '../utils/corridaCaminhadaExcludente';
 import { formatMsByModality, parseTafPerformanceInput, type TafModality } from '../taf/tafTimeFormat';
@@ -233,6 +233,7 @@ function camposCadastroParaFeedback(c: CadastroItemPersist) {
     praca: c.praca,
     dataNascimento: (c.dataNascimento || '').trim(),
     sexo: c.sexo,
+    vinculo: c.vinculo === 'carreira' || c.vinculo === 'rm2' ? c.vinculo : undefined,
   };
 }
 
@@ -1970,7 +1971,11 @@ export default function AplicarTAFScreen() {
 
   const continuarAposCadastroEncontrado = useCallback(
     async (index: number, c: CadastroItemPersist) => {
-      if (cadastroPrecisaCompletarDadosTaf(c)) {
+      if (
+        cadastroPrecisaCompletarDadosTaf(c, {
+          exigirVinculo: !isModoDemonstracaoAtivo(),
+        })
+      ) {
         const campos = camposCadastroParaFeedback(c);
         setNipFeedbackLinhas((prev) => {
           const next = [...prev];
@@ -1978,6 +1983,7 @@ export default function AplicarTAFScreen() {
             tipo: 'completar_dados',
             ...campos,
             sexo: c.sexo === 'F' ? 'F' : 'M',
+            vinculo: c.vinculo === 'carreira' || c.vinculo === 'rm2' ? c.vinculo : null,
             cadastro: c,
           };
           return next;
@@ -2042,7 +2048,14 @@ export default function AplicarTAFScreen() {
   );
 
   const atualizarDadosNipLinha = useCallback(
-    (index: number, patch: Partial<{ dataNascimento: string; sexo: 'M' | 'F' }>) => {
+    (
+      index: number,
+      patch: Partial<{
+        dataNascimento: string;
+        sexo: 'M' | 'F';
+        vinculo: 'carreira' | 'rm2' | null;
+      }>,
+    ) => {
       if (isModoDemonstracaoAtivo()) return;
       setNipFeedbackLinhas((prev) => {
         const fb = prev[index];
@@ -2061,18 +2074,30 @@ export default function AplicarTAFScreen() {
       const fb = nipFeedbackLinhas[index];
       if (fb?.tipo !== 'completar_dados') return;
 
-      const dataNasc = fb.dataNascimento.trim();
-      if (!dataNascimentoCadastroValida(dataNasc)) {
+      const setErroLinha = (erro: string) => {
         setNipFeedbackLinhas((prev) => {
           const next = [...prev];
           const cur = prev[index];
           if (cur?.tipo !== 'completar_dados') return prev;
-          next[index] = {
-            ...cur,
-            erro: 'Informe a data de nascimento no formato DD/MM/AAAA.',
-          };
+          next[index] = { ...cur, erro };
           return next;
         });
+      };
+
+      const dataNasc = fb.dataNascimento.trim();
+      if (!dataNascimentoCadastroValida(dataNasc)) {
+        setErroLinha('Informe a data de nascimento no formato DD/MM/AAAA.');
+        return;
+      }
+
+      const vinculoFinal =
+        fb.vinculo === 'carreira' || fb.vinculo === 'rm2'
+          ? fb.vinculo
+          : fb.cadastro.vinculo === 'carreira' || fb.cadastro.vinculo === 'rm2'
+            ? fb.cadastro.vinculo
+            : null;
+      if (!vinculoCadastroValido(vinculoFinal)) {
+        setErroLinha('Selecione Carreira ou RM2.');
         return;
       }
 
@@ -2080,21 +2105,13 @@ export default function AplicarTAFScreen() {
         ...fb.cadastro,
         dataNascimento: dataNasc,
         sexo: fb.sexo,
+        vinculo: vinculoFinal,
       };
 
       try {
         await addCadastro(atualizado);
       } catch {
-        setNipFeedbackLinhas((prev) => {
-          const next = [...prev];
-          const cur = prev[index];
-          if (cur?.tipo !== 'completar_dados') return prev;
-          next[index] = {
-            ...cur,
-            erro: 'Não foi possível salvar os dados. Tente novamente.',
-          };
-          return next;
-        });
+        setErroLinha('Não foi possível salvar os dados. Tente novamente.');
         return;
       }
 
@@ -2124,6 +2141,9 @@ export default function AplicarTAFScreen() {
         praca: dados.categoria === 'Praças' ? dados.praca : undefined,
         dataNascimento: dados.dataNascimento,
         sexo: dados.sexo,
+        ...(dados.vinculo === 'carreira' || dados.vinculo === 'rm2'
+          ? { vinculo: dados.vinculo }
+          : {}),
       };
       await addCadastro(atualizado);
       definirNipOk(index, atualizado);
@@ -3620,6 +3640,7 @@ export default function AplicarTAFScreen() {
         }
         dataNascimento={modalEditarOk?.dataNascimento ?? ''}
         sexo={modalEditarOk?.sexo}
+        vinculo={modalEditarOk?.vinculo ?? null}
         onClose={() => setModalEditarIdadeGeneroIndex(null)}
         onSalvar={salvarEdicaoIdadeGenero}
       />

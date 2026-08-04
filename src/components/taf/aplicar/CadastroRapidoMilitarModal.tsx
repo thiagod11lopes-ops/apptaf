@@ -18,6 +18,10 @@ import { addCadastro, type CadastroItemPersist } from '../../../services/cadastr
 import { formatNipInput } from '../../../utils/nipFormat';
 import { dataNascimentoCadastroValida } from '../../../utils/cadastroDadosTaf';
 import { idadeFromDataNascimento } from '../../../utils/idadeFromDataNascimento';
+import {
+  VinculoCarreiraRm2Checks,
+  type VinculoMilitar,
+} from './VinculoCarreiraRm2Checks';
 
 const POSTOS_OFICIAIS = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG', 'CALTE'] as const;
 const GRADUACOES_PRACAS = ['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'] as const;
@@ -49,6 +53,7 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
   const [nome, setNome] = useState('');
   const [dataNascimento, setDataNascimento] = useState('');
   const [sexo, setSexo] = useState<'M' | 'F'>('M');
+  const [vinculo, setVinculo] = useState<VinculoMilitar | null>(null);
   const [categoria, setCategoria] = useState<Categoria>('Praças');
   const [posto, setPosto] = useState<string>('MN');
   const [erro, setErro] = useState('');
@@ -63,6 +68,7 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
     setNome('');
     setDataNascimento('');
     setSexo('M');
+    setVinculo(null);
     setCategoria('Praças');
     setPosto('MN');
     setErro('');
@@ -89,6 +95,10 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
       setErro('Informe a data de nascimento no formato DD/MM/AAAA.');
       return;
     }
+    if (vinculo !== 'carreira' && vinculo !== 'rm2') {
+      setErro('Selecione Carreira ou RM2.');
+      return;
+    }
     if (!posto.trim()) {
       setErro(categoria === 'Oficiais' ? 'Selecione o posto.' : 'Selecione a graduação.');
       return;
@@ -109,6 +119,7 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
         nome: nomeTrim,
         dataNascimento: dataNascimento.trim(),
         sexo,
+        vinculo,
         categoria,
         oficial: categoria === 'Oficiais' ? posto : undefined,
         praca: categoria === 'Praças' ? posto : undefined,
@@ -262,15 +273,20 @@ export function CadastroRapidoMilitarModal({ visible, nip, onClose, onCadastrado
           />
 
           <Text style={[styles.label, { color: theme.textMuted }]}>Data de nascimento</Text>
-          <AplicarTafInput
-            value={dataNascimento}
-            onChangeText={(t) => setDataNascimento(formatDateInput(t))}
-            placeholder="DD/MM/AAAA"
-            keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-            inputMode="numeric"
-            maxLength={10}
-            accessibilityLabel="Data de nascimento"
-          />
+          <View style={styles.dnRow}>
+            <View style={styles.dnInput}>
+              <AplicarTafInput
+                value={dataNascimento}
+                onChangeText={(t) => setDataNascimento(formatDateInput(t))}
+                placeholder="DD/MM/AAAA"
+                keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                inputMode="numeric"
+                maxLength={10}
+                accessibilityLabel="Data de nascimento"
+              />
+            </View>
+            <VinculoCarreiraRm2Checks value={vinculo} onChange={setVinculo} />
+          </View>
           <Text style={[styles.idadeHint, { color: theme.textSecondary }]}>
             {idade != null ? `Idade: ${idade} anos` : 'Necessária para calcular a nota'}
           </Text>
@@ -368,6 +384,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   idadeHint: { fontSize: 13, fontWeight: '600' },
+  dnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dnInput: {
+    flex: 1,
+    minWidth: 0,
+  },
   segmented: {
     flexDirection: 'row',
     borderWidth: 1,

@@ -22,6 +22,7 @@ export type ProvaAtivaNipFeedback =
       cadastro: CadastroItemPersist;
       dataNascimento: string;
       sexo: 'M' | 'F';
+      vinculo?: 'carreira' | 'rm2' | null;
       erro?: string;
     }
   | { tipo: 'erro'; texto: string }

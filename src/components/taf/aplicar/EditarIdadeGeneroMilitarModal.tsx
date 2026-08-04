@@ -9,6 +9,10 @@ import { idadeFromDataNascimento } from '../../../utils/idadeFromDataNascimento'
 import { dataNascimentoCadastroValida } from '../../../utils/cadastroDadosTaf';
 import { AplicarTafInput } from './AplicarTafUi';
 import { formatNipInput } from '../../../utils/nipFormat';
+import {
+  VinculoCarreiraRm2Checks,
+  type VinculoMilitar,
+} from './VinculoCarreiraRm2Checks';
 
 const POSTOS_OFICIAIS = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG', 'CALTE'] as const;
 const GRADUACOES_PRACAS = ['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'] as const;
@@ -32,6 +36,7 @@ export type EditarDadosMilitarPayload = {
   praca?: string;
   dataNascimento: string;
   sexo: 'M' | 'F';
+  vinculo?: VinculoMilitar;
 };
 
 type Props = {
@@ -42,6 +47,8 @@ type Props = {
   postoGrad?: string;
   dataNascimento: string;
   sexo?: 'M' | 'F';
+  /** Se já definido no cadastro, o checklist não é exibido. */
+  vinculo?: VinculoMilitar | null;
   onClose: () => void;
   onSalvar: (dados: EditarDadosMilitarPayload) => Promise<void>;
 };
@@ -54,6 +61,7 @@ export function EditarIdadeGeneroMilitarModal({
   postoGrad: postoInicial,
   dataNascimento: dataInicial,
   sexo: sexoInicial,
+  vinculo: vinculoInicial,
   onClose,
   onSalvar,
 }: Props) {
@@ -65,8 +73,14 @@ export function EditarIdadeGeneroMilitarModal({
   const [posto, setPosto] = useState(postoInicial?.trim() || 'MN');
   const [dataNascimento, setDataNascimento] = useState(dataInicial);
   const [sexo, setSexo] = useState<'M' | 'F'>(sexoInicial === 'F' ? 'F' : 'M');
+  const [vinculo, setVinculo] = useState<VinculoMilitar | null>(
+    vinculoInicial === 'carreira' || vinculoInicial === 'rm2' ? vinculoInicial : null,
+  );
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+
+  const precisaVinculo =
+    vinculoInicial !== 'carreira' && vinculoInicial !== 'rm2';
 
   useEffect(() => {
     if (!visible) return;
@@ -84,9 +98,10 @@ export function EditarIdadeGeneroMilitarModal({
     );
     setDataNascimento(dataInicial);
     setSexo(sexoInicial === 'F' ? 'F' : 'M');
+    setVinculo(vinculoInicial === 'carreira' || vinculoInicial === 'rm2' ? vinculoInicial : null);
     setErro('');
     setSalvando(false);
-  }, [visible, nomeInicial, categoriaInicial, postoInicial, dataInicial, sexoInicial]);
+  }, [visible, nomeInicial, categoriaInicial, postoInicial, dataInicial, sexoInicial, vinculoInicial]);
 
   const idade = useMemo(() => idadeFromDataNascimento(dataNascimento), [dataNascimento]);
   const nipFmt = useMemo(() => formatNipInput(nip), [nip]);
@@ -112,6 +127,10 @@ export function EditarIdadeGeneroMilitarModal({
       setErro(categoria === 'Oficiais' ? 'Selecione o posto.' : 'Selecione a graduação.');
       return;
     }
+    if (precisaVinculo && vinculo !== 'carreira' && vinculo !== 'rm2') {
+      setErro('Selecione Carreira ou RM2.');
+      return;
+    }
     setSalvando(true);
     setErro('');
     try {
@@ -122,6 +141,7 @@ export function EditarIdadeGeneroMilitarModal({
         praca: categoria === 'Praças' ? posto : undefined,
         dataNascimento: data,
         sexo,
+        ...(vinculo === 'carreira' || vinculo === 'rm2' ? { vinculo } : {}),
       });
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível salvar.');
@@ -223,15 +243,22 @@ export function EditarIdadeGeneroMilitarModal({
         />
 
         <Text style={[styles.label, { color: theme.textMuted }]}>Data de nascimento</Text>
-        <AplicarTafInput
-          value={dataNascimento}
-          onChangeText={(t) => setDataNascimento(formatDateInput(t))}
-          placeholder="DD/MM/AAAA"
-          keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
-          inputMode="numeric"
-          maxLength={10}
-          accessibilityLabel="Data de nascimento"
-        />
+        <View style={styles.dnRow}>
+          <View style={styles.dnInput}>
+            <AplicarTafInput
+              value={dataNascimento}
+              onChangeText={(t) => setDataNascimento(formatDateInput(t))}
+              placeholder="DD/MM/AAAA"
+              keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+              inputMode="numeric"
+              maxLength={10}
+              accessibilityLabel="Data de nascimento"
+            />
+          </View>
+          {precisaVinculo ? (
+            <VinculoCarreiraRm2Checks value={vinculo} onChange={setVinculo} />
+          ) : null}
+        </View>
         <Text style={[styles.idadeHint, { color: theme.textSecondary }]}>
           {idade != null ? `Idade: ${idade} anos` : 'Informe a data para calcular a idade'}
         </Text>
@@ -318,6 +345,15 @@ const styles = StyleSheet.create({
   },
   labelFirst: { marginTop: 0 },
   idadeHint: { fontSize: 13, fontWeight: '600' },
+  dnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dnInput: {
+    flex: 1,
+    minWidth: 0,
+  },
   segmented: {
     flexDirection: 'row',
     borderWidth: 1,

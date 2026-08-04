@@ -229,13 +229,27 @@ export default function AplicacaoTAFScreen() {
   }, [dataNascimento]);
 
   const salvarEdicaoIdadeGenero = useCallback(
-    async (dados: { dataNascimento: string; sexo: 'M' | 'F' }) => {
+    async (dados: {
+      nome: string;
+      categoria: 'Oficiais' | 'Praças';
+      oficial?: string;
+      praca?: string;
+      dataNascimento: string;
+      sexo: 'M' | 'F';
+      vinculo?: 'carreira' | 'rm2';
+    }) => {
       if (!cadastro) return;
       const atualizado: CadastroItemPersist = {
         ...cadastro,
         dataNascimento: dados.dataNascimento,
         sexo: dados.sexo,
-        nome: nome.trim() || cadastro.nome,
+        nome: (dados.nome || nome).trim() || cadastro.nome,
+        categoria: dados.categoria,
+        oficial: dados.categoria === 'Oficiais' ? dados.oficial : undefined,
+        praca: dados.categoria === 'Praças' ? dados.praca : undefined,
+        ...(dados.vinculo === 'carreira' || dados.vinculo === 'rm2'
+          ? { vinculo: dados.vinculo }
+          : {}),
       };
       await addCadastro(atualizado);
       aplicarCadastroEncontrado(atualizado);
@@ -842,8 +856,13 @@ export default function AplicacaoTAFScreen() {
         visible={modalEditarIdadeGenero && cadastro != null}
         nome={nome || (cadastro?.nome ?? '')}
         nip={nip}
+        categoria={cadastro?.categoria === 'Oficiais' ? 'Oficiais' : 'Praças'}
+        postoGrad={
+          cadastro?.categoria === 'Oficiais' ? cadastro?.oficial : cadastro?.praca
+        }
         dataNascimento={dataNascimento}
         sexo={cadastro?.sexo}
+        vinculo={cadastro?.vinculo === 'carreira' || cadastro?.vinculo === 'rm2' ? cadastro.vinculo : null}
         onClose={() => setModalEditarIdadeGenero(false)}
         onSalvar={salvarEdicaoIdadeGenero}
       />

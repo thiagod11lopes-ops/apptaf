@@ -8,6 +8,24 @@ export function sexoCadastroValido(sexo?: 'M' | 'F'): boolean {
   return sexo === 'M' || sexo === 'F';
 }
 
-export function cadastroPrecisaCompletarDadosTaf(c: CadastroItemPersist): boolean {
-  return !dataNascimentoCadastroValida(c.dataNascimento) || !sexoCadastroValido(c.sexo);
+export function vinculoCadastroValido(
+  vinculo?: CadastroItemPersist['vinculo'] | null,
+): vinculo is 'carreira' | 'rm2' {
+  return vinculo === 'carreira' || vinculo === 'rm2';
+}
+
+export function cadastroPrecisaVinculo(c: Pick<CadastroItemPersist, 'vinculo'>): boolean {
+  return !vinculoCadastroValido(c.vinculo);
+}
+
+export function cadastroPrecisaCompletarDadosTaf(
+  c: CadastroItemPersist,
+  opts?: { exigirVinculo?: boolean },
+): boolean {
+  const exigirVinculo = opts?.exigirVinculo !== false;
+  return (
+    !dataNascimentoCadastroValida(c.dataNascimento) ||
+    !sexoCadastroValido(c.sexo) ||
+    (exigirVinculo && cadastroPrecisaVinculo(c))
+  );
 }

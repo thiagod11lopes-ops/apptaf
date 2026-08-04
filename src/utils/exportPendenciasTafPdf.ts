@@ -22,13 +22,6 @@ import {
 import { formatBrDateKey } from './backupNaming';
 import { gerarPendenciasTafPdfBlobWeb } from './gerarPendenciasTafPdfWeb';
 
-function chipHtml(label: string, ok: boolean): string {
-  const bg = ok ? '#dcfce7' : '#fee2e2';
-  const color = ok ? '#166534' : '#991b1b';
-  const icon = ok ? '✓' : '—';
-  return `<span class="chip" style="background:${bg};color:${color}">${escapeHtmlPdf(label)} ${icon}</span>`;
-}
-
 const PENDENCIAS_EXTRA_STYLES = `
   table.pendencias-taf {
     width: 100%;
@@ -66,15 +59,6 @@ const PENDENCIAS_EXTRA_STYLES = `
     background: #fafbfc;
   }
   .mono { font-family: ui-monospace, monospace; font-weight: 700; }
-  .chip {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 999px;
-    font-size: 9px;
-    font-weight: 700;
-    margin: 1px 2px;
-  }
-  .chips { white-space: nowrap; }
   .falta { color: #dc2626; font-weight: 700; font-size: 10px; }
   .badge {
     display: inline-block;
@@ -128,7 +112,6 @@ export function buildPendenciasTafHtml(
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td>${escapeHtmlPdf(r.categoria)}</td>
         <td><span class="badge badge-${r.situacao === 'Sem teste' ? 'muted' : 'warn'}">${escapeHtmlPdf(r.situacao)}</span></td>
-        <td class="chips">${chipHtml('Corrida', r.temCorrida)} ${chipHtml('Natação', r.temNatacao)} ${chipHtml('Perm.', r.temPermanencia)}</td>
         <td class="falta">${escapeHtmlPdf(r.faltam.join(', ') || '—')}</td>
       </tr>`,
   );
@@ -146,7 +129,6 @@ export function buildPendenciasTafHtml(
           <th>P/G</th>
           <th>Categoria</th>
           <th>Situação</th>
-          <th>Modalidades</th>
           <th>Pendências</th>
         </tr>`;
 
@@ -154,7 +136,7 @@ export function buildPendenciasTafHtml(
     tableClass: 'pendencias-taf',
     theadHtml,
     rowHtml: rows,
-    emptyColspan: 7,
+    emptyColspan: 6,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
   });

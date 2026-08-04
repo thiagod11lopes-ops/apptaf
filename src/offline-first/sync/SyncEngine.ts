@@ -25,6 +25,7 @@ import { pushPendingAuthorizedEmails } from './syncAuthorizedEmails';
 import { getRemoteSyncWatermark } from './syncWatermark';
 import { INCREMENTAL_SINCE_MARGIN_MS } from './remoteSnapshotCache';
 import type { AplicadorRecord, CadastroRecord, SessaoRecord, SyncQueueEntry } from '../types';
+import { isCloudLinkEnabled } from './cloudLinkPreference';
 import {
   applyRemoteAplicador,
   applyRemoteCadastro,
@@ -732,29 +733,35 @@ export class SyncEngine {
     plannedUploads: number;
     plannedDownloads: number;
   }> {
+    const fail = (reason: string) => ({
+      success: false as const,
+      stats: { uploads: 0, downloads: 0, ignored: 0, errors: [reason] },
+      alreadyUpToDate: false,
+      plannedUploads: 0,
+      plannedDownloads: 0,
+      audit: {
+        ownerUid: ownerUid ?? '',
+        userId: null,
+        deviceId: 'unknown',
+        startedAt: Date.now(),
+        finishedAt: Date.now(),
+        durationMs: 0,
+        uploads: 0,
+        downloads: 0,
+        ignored: 0,
+        failures: 1,
+        errors: [reason],
+        result: 'FAILED' as const,
+        strategy: 'last_write_wins' as const,
+      },
+    });
+
+    // Etapa 3: LWW só com BNC ligado.
+    if (!isCloudLinkEnabled()) {
+      return fail('cloud_link_off');
+    }
     if (!ownerUid) {
-      return {
-        success: false,
-        stats: { uploads: 0, downloads: 0, ignored: 0, errors: ['no_owner'] },
-        alreadyUpToDate: false,
-        plannedUploads: 0,
-        plannedDownloads: 0,
-        audit: {
-          ownerUid: '',
-          userId: null,
-          deviceId: 'unknown',
-          startedAt: Date.now(),
-          finishedAt: Date.now(),
-          durationMs: 0,
-          uploads: 0,
-          downloads: 0,
-          ignored: 0,
-          failures: 1,
-          errors: ['no_owner'],
-          result: 'FAILED',
-          strategy: 'last_write_wins',
-        },
-      };
+      return fail('no_owner');
     }
     await reconcileSessionPendingOwner(ownerUid);
     const result = await executeLastWriteWinsSync(ownerUid, options);

@@ -541,10 +541,17 @@ async function runCloudAuthoritativeMirror(options?: {
 
   cloudMirrorPromise = (async () => {
     try {
+      if (!isCloudLinkEnabled()) {
+        return { ok: false, error: 'cloud_link_off' };
+      }
       try {
         await applyTeamWipeIfNeeded(uid, getCachedLoginUid());
       } catch {
         // segue o espelho
+      }
+
+      if (!isCloudLinkEnabled()) {
+        return { ok: false, error: 'cloud_link_off' };
       }
 
       const email = getFirebaseAuth()?.currentUser?.email ?? null;
@@ -558,6 +565,10 @@ async function runCloudAuthoritativeMirror(options?: {
       if (!getActiveTeamKey()) {
         await syncLogger.info('sync', 'Espelho nuvem adiado: E2E inativo');
         return { ok: false, error: 'e2e' };
+      }
+
+      if (!isCloudLinkEnabled()) {
+        return { ok: false, error: 'cloud_link_off' };
       }
 
       await forceNextFullRemoteFetch(uid);
@@ -762,6 +773,10 @@ async function runSyncPipeline(
   options?: { silent?: boolean },
 ): Promise<{ ok: boolean; error?: string }> {
   const silent = options?.silent === true;
+  // Etapa 3: bloqueio duro — sem BNC não entra em LWW / upload / download.
+  if (!isCloudLinkEnabled()) {
+    return { ok: false, error: 'cloud_link_off' };
+  }
   if (syncInFlight) return { ok: false, error: 'sync_in_progress' };
 
   let queueEstimateWaitMs = 0;
@@ -894,6 +909,11 @@ async function runSyncPipeline(
     }
 
     let lastProgressPhase: string | undefined;
+
+    // BNC pode ter sido desligado durante o prepare — não inicia LWW.
+    if (!isCloudLinkEnabled()) {
+      throw new Error('cloud_link_off');
+    }
 
     const result = await syncEngine.runLastWriteWinsSync({
       backupId: backupIdBeforeSync,
@@ -1501,8 +1521,14 @@ export const syncManager = {
   /**
    * Revalida diferenças locais × nuvem.
    * `forcePull`: full fetch + LWW mesmo sem pendências estimadas (foco do app / realtime).
+   * Com BNC off: só atualiza pendências locais — zero rede / LWW.
    */
   async refreshCloudDiff(options?: { forcePull?: boolean }): Promise<void> {
+    if (!isCloudLinkEnabled()) {
+      await refreshPendingSummary();
+      notifyListeners();
+      return;
+    }
     if (!syncAuthAvailable || syncInFlight) {
       await refreshPendingSummary();
       notifyListeners();

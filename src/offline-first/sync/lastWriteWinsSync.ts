@@ -75,7 +75,7 @@ import {
 } from './deletionGarbageCollection';
 import type { SyncStepId } from './syncSteps';
 import { getPendingSyncItems } from './pendingSyncItems';
-import { buildDownloadBreakdown, type SyncQueueBreakdown } from './syncQueueBreakdown';
+import { buildDownloadBreakdown, EMPTY_SYNC_QUEUE_BREAKDOWN, type SyncQueueBreakdown } from './syncQueueBreakdown';
 import {
   decideSyncedLocalOnlyAbsence,
   shouldAllowCloudAbsencePrune,
@@ -103,6 +103,7 @@ import {
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 import { alignRedundantDownloads } from './redundantDownloadGuard';
 import { syncLogger } from './SyncLogger';
+import { isCloudLinkEnabled } from './cloudLinkPreference';
 
 const DOWNLOAD_CONCURRENCY = 8;
 
@@ -1176,6 +1177,14 @@ export async function estimateSyncQueueCounts(
   pendingDownloads: number;
   downloadBreakdown: SyncQueueBreakdown;
 }> {
+  // Sem BNC: não consulta nuvem para estimar diff.
+  if (!isCloudLinkEnabled()) {
+    return {
+      pendingUploads: 0,
+      pendingDownloads: 0,
+      downloadBreakdown: { ...EMPTY_SYNC_QUEUE_BREAKDOWN },
+    };
+  }
   const plan = await buildSyncPlanSnapshot(ownerUid, forceRemote);
   let pendingUploads = plan.plannedUploads;
   let pendingDownloads = plan.plannedDownloads;
@@ -1307,6 +1316,31 @@ export async function executeLastWriteWinsSync(
   plannedDownloads: number;
 }> {
   const startedAt = Date.now();
+  // Última linha de defesa: LWW não roda com BNC desligado.
+  if (!isCloudLinkEnabled()) {
+    return {
+      success: false,
+      stats: { uploads: 0, downloads: 0, ignored: 0, errors: ['cloud_link_off'] },
+      alreadyUpToDate: false,
+      plannedUploads: 0,
+      plannedDownloads: 0,
+      audit: {
+        ownerUid,
+        userId: null,
+        deviceId: 'unknown',
+        startedAt,
+        finishedAt: Date.now(),
+        durationMs: 0,
+        uploads: 0,
+        downloads: 0,
+        ignored: 0,
+        failures: 1,
+        errors: ['cloud_link_off'],
+        result: 'FAILED',
+        strategy: 'last_write_wins',
+      },
+    };
+  }
   const stats: LwwSyncStats = { uploads: 0, downloads: 0, ignored: 0, errors: [] };
   const deletionAudits: DeletionAuditEntry[] = [];
   const deviceId = await getDeviceId();

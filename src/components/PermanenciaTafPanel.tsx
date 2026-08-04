@@ -55,7 +55,9 @@ function CheckPermanencia({
   labelColor: string;
   numero: number;
 }) {
-  const onStyle = variant === 'aprovado' ? styles.checkOnAprovado : styles.checkOnReprovado;
+  // Único marcado: aprovado = laranja (não verde); reprovado = vermelho.
+  const onStyle = variant === 'aprovado' ? styles.checkOnUltimo : styles.checkOnReprovado;
+  const textColor = variant === 'aprovado' ? '#ea580c' : labelColor;
   return (
     <TouchableOpacity
       accessibilityRole="checkbox"
@@ -77,7 +79,9 @@ function CheckPermanencia({
           </Text>
         )}
       </View>
-      <Text style={[styles.checkLabel, { color: labelColor }]}>{label}</Text>
+      <Text style={[styles.checkLabel, { color: checked && variant === 'aprovado' ? textColor : labelColor }]}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -261,6 +265,10 @@ const styles = StyleSheet.create({
   checkOnAprovado: {
     borderColor: '#15803D',
     backgroundColor: '#15803D',
+  },
+  checkOnUltimo: {
+    borderColor: '#ea580c',
+    backgroundColor: '#ea580c',
   },
   checkOnReprovado: {
     borderColor: '#B91C1C',

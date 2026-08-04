@@ -235,6 +235,7 @@ function CheckVolta({
   a11y,
   touchLarge,
   numero,
+  ultimoMarcado = false,
 }: {
   checked: boolean;
   onPress: () => void;
@@ -242,7 +243,16 @@ function CheckVolta({
   touchLarge?: boolean;
   /** Número de ordem do militar (mesmo do cadastro). */
   numero: number;
+  /** Último checklist marcado da sequência — laranja; anteriores verdes. */
+  ultimoMarcado?: boolean;
 }) {
+  const onStyle =
+    checked && ultimoMarcado
+      ? styles.checkBoxOnUltimo
+      : checked
+        ? styles.checkBoxOn
+        : styles.checkBoxOff;
+
   return (
     <TouchableOpacity
       accessibilityRole="checkbox"
@@ -253,7 +263,7 @@ function CheckVolta({
       hitSlop={touchLarge ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined}
       style={[styles.checkOuter, touchLarge ? styles.checkOuterLarge : null]}
     >
-      <View style={[styles.checkBox, checked ? styles.checkBoxOn : styles.checkBoxOff]}>
+      <View style={[styles.checkBox, onStyle]}>
         {checked ? (
           <Check size={14} color="#FFFFFF" strokeWidth={3} />
         ) : (
@@ -289,8 +299,10 @@ function CheckPermanenciaModal({
   numero: number;
 }) {
   const { theme } = useTheme();
-  const onStyle = variant === 'aprovado' ? styles.checkPermOnAprov : styles.checkPermOnReprov;
-  const labelColor = variant === 'aprovado' ? '#15803D' : theme.loss;
+  // Único marcado da linha: aprovado = laranja (não verde); reprovado = vermelho.
+  const onStyle =
+    variant === 'aprovado' ? styles.checkBoxOnUltimo : styles.checkPermOnReprov;
+  const labelColor = variant === 'aprovado' ? '#ea580c' : theme.loss;
 
   return (
     <TouchableOpacity
@@ -714,6 +726,7 @@ export function TafProvaTempoModal({
                         <CheckVolta
                           numero={index + 1}
                           checked={chegadaNatacao[index] ?? false}
+                          ultimoMarcado={chegadaNatacao[index] === true}
                           a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
                           touchLarge={isNativeMobile}
                           onPress={() => onToggleChegada(index)}
@@ -724,16 +737,25 @@ export function TafProvaTempoModal({
                       nColunasVoltasAtivas > 0 &&
                       onToggleVolta &&
                       !desistiu
-                        ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
-                            <CheckVolta
-                              key={`volta-${index}-${v}`}
-                              numero={index + 1}
-                              checked={checksVoltas[index]?.[v] ?? false}
-                              a11y={`Volta ${v + 1}, participante ${index + 1}`}
-                              touchLarge={isNativeMobile}
-                              onPress={() => onToggleVolta(index, v)}
-                            />
-                          ))
+                        ? (() => {
+                            const row = checksVoltas[index] ?? [];
+                            let ultimoIdx = -1;
+                            for (let j = 0; j < nColunasVoltasAtivas; j += 1) {
+                              if (row[j]) ultimoIdx = j;
+                              else break;
+                            }
+                            return Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
+                              <CheckVolta
+                                key={`volta-${index}-${v}`}
+                                numero={index + 1}
+                                checked={row[v] ?? false}
+                                ultimoMarcado={v === ultimoIdx}
+                                a11y={`Volta ${v + 1}, participante ${index + 1}`}
+                                touchLarge={isNativeMobile}
+                                onPress={() => onToggleVolta(index, v)}
+                              />
+                            ));
+                          })()
                         : null}
                     </ScrollView>
                   ) : null}
@@ -1240,6 +1262,10 @@ const styles = StyleSheet.create({
   checkBoxOn: {
     borderColor: '#15803D',
     backgroundColor: '#15803D',
+  },
+  checkBoxOnUltimo: {
+    borderColor: '#ea580c',
+    backgroundColor: '#ea580c',
   },
   checkPermRow: {
     flexDirection: 'row',

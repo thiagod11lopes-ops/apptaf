@@ -34,6 +34,22 @@ const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   reprovados: 0,
 };
 
+/** Debounce do cálculo dos cards (foco + notifyDataChanged + fase de sync). */
+const HOME_RESUMO_DEBOUNCE_MS = 600;
+
+function resumoInicioEquals(a: ResumoInicioTafHistorico, b: ResumoInicioTafHistorico): boolean {
+  return (
+    a.totalCadastrados === b.totalCadastrados &&
+    a.completos === b.completos &&
+    a.parcial === b.parcial &&
+    a.semTeste === b.semTeste &&
+    a.restritos === b.restritos &&
+    a.fatoresRisco === b.fatoresRisco &&
+    a.cadastroIncompleto === b.cadastroIncompleto &&
+    (a.reprovados ?? 0) === (b.reprovados ?? 0)
+  );
+}
+
 /** Parte local do e-mail + "@" — ex.: lopes.thiago.oliveira@marinha.mil.br → lopes.thiago.oliveira@ */
 function emailPrefixoExibicao(email: string | null | undefined): string | null {
   const raw = (email ?? '').trim().toLowerCase();
@@ -135,25 +151,51 @@ export default function HomeScreen() {
     };
   }, [authReady, isAuthenticated, dataOwnerUid, user?.uid]);
 
-  /** Cards = espelho local do banco na nuvem (atualizado automaticamente online). */
-  const recarregarResumo = useCallback(async () => {
-    // Antes do 1º paint: não bloqueia a UI com IndexedDB + cálculo dos cards.
+  /** Cards = espelho local (Dexie). Debounce evita recalcular a cada foco/sync/notify. */
+  const resumoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resumoInFlightRef = useRef(false);
+  const resumoPendingRef = useRef(false);
+
+  const loadResumoNow = useCallback(async () => {
     if (!cardsPaintReadyRef.current) return;
+    if (resumoInFlightRef.current) {
+      resumoPendingRef.current = true;
+      return;
+    }
+    resumoInFlightRef.current = true;
     try {
-      const next = await loadResumoInicioFromIndexedDb();
-      setResumo(next);
-    } catch (error) {
-      console.warn('[home] falha ao recalcular cards:', error);
+      do {
+        resumoPendingRef.current = false;
+        try {
+          const next = await loadResumoInicioFromIndexedDb();
+          setResumo((prev) => (resumoInicioEquals(prev, next) ? prev : next));
+        } catch (error) {
+          console.warn('[home] falha ao recalcular cards:', error);
+        }
+      } while (resumoPendingRef.current);
+    } finally {
+      resumoInFlightRef.current = false;
     }
-    if (isAuthenticated && dataOwnerUid && isCloudLinkEnabled()) {
-      try {
-        const code = await ensureDatabaseBankCode(dataOwnerUid);
-        setBankCode(code);
-      } catch {
-        // mantém código anterior
+  }, []);
+
+  const scheduleRecarregarResumo = useCallback(
+    (mode: 'immediate' | 'debounce' = 'debounce') => {
+      if (!cardsPaintReadyRef.current) return;
+      if (resumoDebounceRef.current) {
+        clearTimeout(resumoDebounceRef.current);
+        resumoDebounceRef.current = null;
       }
-    }
-  }, [isAuthenticated, dataOwnerUid]);
+      if (mode === 'immediate') {
+        void loadResumoNow();
+        return;
+      }
+      resumoDebounceRef.current = setTimeout(() => {
+        resumoDebounceRef.current = null;
+        void loadResumoNow();
+      }, HOME_RESUMO_DEBOUNCE_MS);
+    },
+    [loadResumoNow],
+  );
 
   useEffect(() => {
     return runAfterFirstPaint(() => {
@@ -162,27 +204,30 @@ export default function HomeScreen() {
     });
   }, []);
 
-  useAuthDataReload(recarregarResumo);
+  useEffect(
+    () => () => {
+      if (resumoDebounceRef.current) clearTimeout(resumoDebounceRef.current);
+    },
+    [],
+  );
 
-  // Primeiro carregamento só depois do paint (independente do foco/sync).
+  // useAuthDataReload + sync: sempre debounce (coalesce tempestade de eventos).
+  useAuthDataReload(() => scheduleRecarregarResumo('debounce'));
+
+  // Primeiro carregamento após o paint — imediato (sem esperar debounce).
   useEffect(() => {
     if (!cardsPaintReady) return;
-    void recarregarResumo();
-  }, [cardsPaintReady, recarregarResumo]);
+    scheduleRecarregarResumo('immediate');
+  }, [cardsPaintReady, scheduleRecarregarResumo]);
 
-  // Após sync automático (sucesso, já atualizado ou erro), atualiza os cards.
+  // Após sync automático relevante — debounce (ignora phase "offline", que dispara demais).
   useEffect(() => {
     if (!cardsPaintReady) return;
     const phase = syncUi.phase;
-    if (
-      phase === 'success' ||
-      phase === 'already_up_to_date' ||
-      phase === 'error' ||
-      phase === 'offline'
-    ) {
-      void recarregarResumo();
+    if (phase === 'success' || phase === 'already_up_to_date' || phase === 'error') {
+      scheduleRecarregarResumo('debounce');
     }
-  }, [cardsPaintReady, syncUi.phase, recarregarResumo]);
+  }, [cardsPaintReady, syncUi.phase, scheduleRecarregarResumo]);
 
   return (
     <MobileScreenScaffold scroll={false} style={styles.page} contentContainerStyle={styles.pageContent}>

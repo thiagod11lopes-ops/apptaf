@@ -8,12 +8,14 @@ import {
   TextInput,
   Platform,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { PenLine, Pencil, Sparkles, Trash2, X } from 'lucide-react-native';
+import { PenLine, Pencil, Sparkles, Trash2, X, FileDown } from 'lucide-react-native';
 import { AppModal } from '../premium/AppModal';
 import { RubricaCaptureModal } from '../RubricaCaptureModal';
 import { ConfirmacaoExcluirResultadoModal } from './ConfirmacaoExcluirResultadoModal';
+import { SalvarPdfFeedbackModal } from './SalvarPdfFeedbackModal';
 import {
   DataNascimentoAtencaoModal,
   type DataNascimentoAtencaoInfo,
@@ -31,6 +33,7 @@ import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../../se
 import type { ResultadoCorridaItem } from '../../navigation/types';
 import { formatMsByModality } from '../../taf/tafTimeFormat';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from '../../utils/exportResultadosTafPdf';
+import { exportResumoAplicacaoPdf } from '../../utils/exportResumoAplicacaoPdf';
 import { formatTempoColunaResultado } from '../../utils/formatTempoColunaResultado';
 import { isNotaReprovacaoTexto } from '../../utils/notaReprovacaoTexto';
 import { RubricaCell } from '../RubricaThumb';
@@ -335,6 +338,12 @@ export function HistoricoSessaoDetalheModal({
   const [excluindo, setExcluindo] = useState(false);
   const [dnInfo, setDnInfo] = useState<DataNascimentoAtencaoInfo | null>(null);
   const [salvandoDn, setSalvandoDn] = useState(false);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [feedbackPdf, setFeedbackPdf] = useState<{
+    tipo: 'ok' | 'erro';
+    titulo: string;
+    mensagem: string;
+  } | null>(null);
 
   const modoTafNaval = sessao?.normaTaf === 'cfn';
   const tipo = sessao?.tipoProva ?? 'corrida';
@@ -365,6 +374,7 @@ export function HistoricoSessaoDetalheModal({
     setErro('');
     setExcluirIdx(null);
     setDnInfo(null);
+    setFeedbackPdf(null);
     void getAllCadastros()
       .then(setCadastros)
       .catch(() => setCadastros([]));
@@ -375,6 +385,38 @@ export function HistoricoSessaoDetalheModal({
     tipo === 'permanencia' || provaEhReps(tipo) || linhas.some((r) => r.desempenhoTexto?.trim())
       ? 'Desempenho'
       : 'Tempo';
+
+  const gerarPdfAplicacao = useCallback(async () => {
+    if (!sessao || gerandoPdf || linhas.length === 0) return;
+    setGerandoPdf(true);
+    setFeedbackPdf(null);
+    try {
+      const resultados = linhas.map((r) => ({
+        ...r,
+        prova: r.prova ?? sessao.tipoProva,
+      }));
+      const msg = await exportResumoAplicacaoPdf(
+        resultados,
+        tituloTipoProva(sessao.tipoProva),
+        sessao.aplicadorAssinatura,
+      );
+      setFeedbackPdf({
+        tipo: 'ok',
+        titulo: 'PDF salvo com sucesso',
+        mensagem: msg || 'O arquivo foi salvo na pasta Downloads.',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Não foi possível salvar o PDF.';
+      if (/cancelad/i.test(msg)) return;
+      setFeedbackPdf({
+        tipo: 'erro',
+        titulo: 'Erro ao salvar PDF',
+        mensagem: msg,
+      });
+    } finally {
+      setGerandoPdf(false);
+    }
+  }, [sessao, gerandoPdf, linhas]);
 
   const persistirSessao = useCallback(
     async (nextLinhas: ResultadoCorridaItem[], nextMetas: MetaLinha[]) => {
@@ -1042,6 +1084,31 @@ export function HistoricoSessaoDetalheModal({
             <Text style={[styles.erro, { color: theme.loss }]}>{erro}</Text>
           ) : null}
 
+          <View style={styles.acoesBar}>
+            <TouchableOpacity
+              onPress={() => void gerarPdfAplicacao()}
+              disabled={gerandoPdf || linhas.length === 0}
+              accessibilityLabel="Gerar PDF desta aplicação"
+              accessibilityRole="button"
+              style={[
+                styles.btnPdf,
+                {
+                  backgroundColor: theme.primary,
+                  opacity: gerandoPdf || linhas.length === 0 ? 0.7 : 1,
+                },
+              ]}
+            >
+              {gerandoPdf ? (
+                <ActivityIndicator color={theme.text} />
+              ) : (
+                <>
+                  <FileDown size={17} color={theme.text} strokeWidth={2.5} />
+                  <Text style={[styles.btnPdfText, { color: theme.text }]}>Gerar PDF</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
           <ScrollView
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
@@ -1352,6 +1419,14 @@ export function HistoricoSessaoDetalheModal({
         }}
         onSalvar={(data) => void salvarDataNascimentoInformada(data)}
       />
+
+      <SalvarPdfFeedbackModal
+        visible={!!feedbackPdf}
+        tipo={feedbackPdf?.tipo ?? 'ok'}
+        titulo={feedbackPdf?.titulo ?? ''}
+        mensagem={feedbackPdf?.mensagem ?? ''}
+        onClose={() => setFeedbackPdf(null)}
+      />
     </AppModal>
   );
 }
@@ -1425,6 +1500,26 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontSize: 12,
     fontWeight: '700',
+  },
+  acoesBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    gap: 10,
+  },
+  btnPdf: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  btnPdfText: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   closeBtn: {
     width: 40,

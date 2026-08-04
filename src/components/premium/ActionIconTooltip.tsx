@@ -70,8 +70,6 @@ export function ActionIconTooltip({
             },
             Platform.OS === 'web'
               ? ({
-                  backdropFilter: 'blur(14px)',
-                  WebkitBackdropFilter: 'blur(14px)',
                   boxShadow: theme.isDark ? bubbleShadowDark : bubbleShadowLight,
                   animation: 'actionIconTooltipIn 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
                 } as object)

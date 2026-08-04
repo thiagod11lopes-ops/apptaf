@@ -150,30 +150,23 @@ const styles = StyleSheet.create({
     width: 520,
     height: 520,
     borderRadius: 260,
-    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    // Sem CSS filter:blur — caríssimo no Chromium em desktop.
+    backgroundColor: 'rgba(99, 102, 241, 0.07)',
     top: '50%',
     left: '50%',
     marginTop: -260,
     marginLeft: -260,
-    ...Platform.select({
-      web: { filter: 'blur(80px)' } as object,
-      default: {},
-    }),
   },
   ambientGlowSecondary: {
     position: 'absolute',
     width: 360,
     height: 360,
     borderRadius: 180,
-    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    backgroundColor: 'rgba(56, 189, 248, 0.05)',
     top: '42%',
     left: '54%',
     marginTop: -180,
     marginLeft: -180,
-    ...Platform.select({
-      web: { filter: 'blur(60px)' } as object,
-      default: {},
-    }),
   },
   phoneAssembly: {
     width: '100%',

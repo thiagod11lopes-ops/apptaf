@@ -233,10 +233,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.52)',
-    ...(Platform.OS === 'web'
-      ? ({ backdropFilter: 'blur(10px)' } as object)
-      : null),
+    backgroundColor: 'rgba(15, 23, 42, 0.62)',
   },
   cardWrap: {
     alignItems: 'center',

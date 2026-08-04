@@ -1,5 +1,6 @@
 import { Platform, StyleSheet } from 'react-native';
 import type { AppTheme } from '../../../theme/premium';
+import { IS_WEB } from '../../../utils/webVisualPerf';
 
 export function getAplicarTafBackdrop(theme: AppTheme) {
   return theme.isDark
@@ -8,6 +9,14 @@ export function getAplicarTafBackdrop(theme: AppTheme) {
 }
 
 export function getAplicarTafGlass(theme: AppTheme) {
+  // Web: fundo mais opaco (sem backdrop-blur) — menos composição por painel.
+  if (IS_WEB) {
+    return {
+      bg: theme.isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.96)',
+      border: theme.isDark ? 'rgba(148, 163, 184, 0.28)' : 'rgba(148, 163, 184, 0.4)',
+      highlight: theme.isDark ? 'rgba(56, 189, 248, 0.1)' : 'rgba(37, 99, 235, 0.06)',
+    };
+  }
   return {
     bg: theme.isDark ? 'rgba(15, 23, 42, 0.72)' : 'rgba(255, 255, 255, 0.78)',
     border: theme.isDark ? 'rgba(148, 163, 184, 0.22)' : 'rgba(148, 163, 184, 0.35)',

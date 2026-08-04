@@ -421,7 +421,6 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     padding: 16,
-    ...(Platform.OS === 'web' ? ({ backdropFilter: 'blur(14px)' } as object) : null),
   },
   scrollContent: {
     flexGrow: 1,

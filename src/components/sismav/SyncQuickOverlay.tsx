@@ -122,10 +122,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.48)',
-    ...(Platform.OS === 'web'
-      ? ({ backdropFilter: 'blur(14px)' } as object)
-      : null),
+    backgroundColor: 'rgba(15, 23, 42, 0.62)',
   },
   core: {
     width: RING_SIZE,

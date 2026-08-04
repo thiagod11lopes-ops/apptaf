@@ -175,7 +175,7 @@ export function AplicarTafGlassPanel({
 
   return (
     <View style={[styles.panelOuter, style]}>
-      {accent && accent !== 'none' ? (
+      {accent && accent !== 'none' && Platform.OS !== 'web' ? (
         <LinearGradient
           colors={[accentColor, 'transparent']}
           start={{ x: 0, y: 0 }}
@@ -187,7 +187,6 @@ export function AplicarTafGlassPanel({
         style={[
           styles.panelInner,
           { padding: isNativeMobile ? 14 : 18 },
-          Platform.OS === 'web' ? ({ backdropFilter: 'blur(18px)' } as object) : null,
           {
             backgroundColor: glass.bg,
             borderColor: glass.border,

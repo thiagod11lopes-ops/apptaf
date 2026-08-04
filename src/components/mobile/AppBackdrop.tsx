@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
+import { View, StyleSheet, Platform, type LayoutChangeEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getMobileAppBackdrop } from './mobileAppTheme';
@@ -17,6 +17,10 @@ export function AppBackdrop() {
     }
   }, []);
 
+  // Web: marca d'água menor (menos decode/reflow); nativo mantém o visual amplo.
+  const logoMultiplier = Platform.OS === 'web' ? 1 : 2;
+  const logoOpacity = Platform.OS === 'web' ? (theme.isDark ? 0.12 : 0.1) : undefined;
+
   return (
     <View style={styles.root} pointerEvents="none" onLayout={onLayout}>
       <LinearGradient
@@ -28,7 +32,8 @@ export function AppBackdrop() {
         <LogombWatermark
           containerWidth={layout.width}
           containerHeight={layout.height}
-          sizeMultiplier={2}
+          sizeMultiplier={logoMultiplier}
+          opacity={logoOpacity}
         />
       ) : null}
     </View>

@@ -3711,7 +3711,6 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    ...(Platform.OS === 'web' ? ({ backdropFilter: 'blur(12px)' } as object) : null),
   },
   modalFuturisticCard: {
     width: '100%',

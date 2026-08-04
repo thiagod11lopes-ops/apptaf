@@ -46,25 +46,36 @@ function CheckPermanencia({
   onPress,
   variant,
   labelColor,
+  numero,
 }: {
   label: string;
   checked: boolean;
   onPress: () => void;
   variant: 'aprovado' | 'reprovado';
   labelColor: string;
+  numero: number;
 }) {
   const onStyle = variant === 'aprovado' ? styles.checkOnAprovado : styles.checkOnReprovado;
   return (
     <TouchableOpacity
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
-      accessibilityLabel={label}
+      accessibilityLabel={`${label}, participante ${numero}`}
       activeOpacity={0.85}
       onPress={onPress}
       style={styles.checkRow}
     >
       <View style={[styles.checkBox, checked ? onStyle : styles.checkOff]}>
-        {checked ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
+        {checked ? (
+          <Check size={14} color="#FFFFFF" strokeWidth={3} />
+        ) : (
+          <Text
+            style={[styles.checkNumero, numero >= 10 ? styles.checkNumeroWide : null]}
+            numberOfLines={1}
+          >
+            {numero}
+          </Text>
+        )}
       </View>
       <Text style={[styles.checkLabel, { color: labelColor }]}>{label}</Text>
     </TouchableOpacity>
@@ -121,6 +132,7 @@ export function PermanenciaTafPanel({
               <View style={styles.checksRow}>
                 <CheckPermanencia
                   label="Aprovado"
+                  numero={p.index + 1}
                   checked={r === 'aprovado'}
                   variant="aprovado"
                   labelColor={ui.text}
@@ -128,6 +140,7 @@ export function PermanenciaTafPanel({
                 />
                 <CheckPermanencia
                   label="Reprovado"
+                  numero={p.index + 1}
                   checked={r === 'reprovado'}
                   variant="reprovado"
                   labelColor={ui.text}
@@ -236,6 +249,14 @@ const styles = StyleSheet.create({
   checkOff: {
     borderColor: 'rgba(17,24,39,0.22)',
     backgroundColor: 'transparent',
+  },
+  checkNumero: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: 'rgba(71, 85, 105, 0.92)',
+  },
+  checkNumeroWide: {
+    fontSize: 10,
   },
   checkOnAprovado: {
     borderColor: '#15803D',

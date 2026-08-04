@@ -234,11 +234,14 @@ function CheckVolta({
   onPress,
   a11y,
   touchLarge,
+  numero,
 }: {
   checked: boolean;
   onPress: () => void;
   a11y: string;
   touchLarge?: boolean;
+  /** Número de ordem do militar (mesmo do cadastro). */
+  numero: number;
 }) {
   return (
     <TouchableOpacity
@@ -251,7 +254,19 @@ function CheckVolta({
       style={[styles.checkOuter, touchLarge ? styles.checkOuterLarge : null]}
     >
       <View style={[styles.checkBox, checked ? styles.checkBoxOn : styles.checkBoxOff]}>
-        {checked ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
+        {checked ? (
+          <Check size={14} color="#FFFFFF" strokeWidth={3} />
+        ) : (
+          <Text
+            style={[
+              styles.checkNumero,
+              numero >= 10 ? styles.checkNumeroWide : null,
+            ]}
+            numberOfLines={1}
+          >
+            {numero}
+          </Text>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -263,12 +278,15 @@ function CheckPermanenciaModal({
   onPress,
   variant,
   touchLarge,
+  numero,
 }: {
   label: string;
   checked: boolean;
   onPress: () => void;
   variant: 'aprovado' | 'reprovado';
   touchLarge?: boolean;
+  /** Número de ordem do militar (mesmo do cadastro). */
+  numero: number;
 }) {
   const { theme } = useTheme();
   const onStyle = variant === 'aprovado' ? styles.checkPermOnAprov : styles.checkPermOnReprov;
@@ -278,14 +296,26 @@ function CheckPermanenciaModal({
     <TouchableOpacity
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
-      accessibilityLabel={label}
+      accessibilityLabel={`${label}, participante ${numero}`}
       activeOpacity={0.85}
       onPress={onPress}
       hitSlop={touchLarge ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined}
       style={[styles.checkPermRow, touchLarge ? styles.checkOuterLarge : null]}
     >
       <View style={[styles.checkPermBox, checked ? onStyle : styles.checkPermOff]}>
-        {checked ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
+        {checked ? (
+          <Check size={14} color="#FFFFFF" strokeWidth={3} />
+        ) : (
+          <Text
+            style={[
+              styles.checkNumero,
+              numero >= 10 ? styles.checkNumeroWide : null,
+            ]}
+            numberOfLines={1}
+          >
+            {numero}
+          </Text>
+        )}
       </View>
       <Text style={[styles.checkPermLabel, { color: labelColor }]}>{label}</Text>
     </TouchableOpacity>
@@ -663,6 +693,7 @@ export function TafProvaTempoModal({
                         <>
                           <CheckPermanenciaModal
                             label="Aprovado"
+                            numero={index + 1}
                             checked={resultadosPermanencia[index] === 'aprovado'}
                             variant="aprovado"
                             touchLarge={isNativeMobile}
@@ -670,6 +701,7 @@ export function TafProvaTempoModal({
                           />
                           <CheckPermanenciaModal
                             label="Reprovado"
+                            numero={index + 1}
                             checked={resultadosPermanencia[index] === 'reprovado'}
                             variant="reprovado"
                             touchLarge={isNativeMobile}
@@ -680,6 +712,7 @@ export function TafProvaTempoModal({
 
                       {prova === 'natacao' && onToggleChegada && !desistiu ? (
                         <CheckVolta
+                          numero={index + 1}
                           checked={chegadaNatacao[index] ?? false}
                           a11y={`Marcar chegada, ${labelAtleta} ${index + 1}`}
                           touchLarge={isNativeMobile}
@@ -694,6 +727,7 @@ export function TafProvaTempoModal({
                         ? Array.from({ length: nColunasVoltasAtivas }, (__, v) => (
                             <CheckVolta
                               key={`volta-${index}-${v}`}
+                              numero={index + 1}
                               checked={checksVoltas[index]?.[v] ?? false}
                               a11y={`Volta ${v + 1}, participante ${index + 1}`}
                               touchLarge={isNativeMobile}
@@ -1192,6 +1226,16 @@ const styles = StyleSheet.create({
   checkBoxOff: {
     borderColor: 'rgba(100, 116, 139, 0.35)',
     backgroundColor: 'transparent',
+  },
+  checkNumero: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: 'rgba(71, 85, 105, 0.92)',
+    letterSpacing: 0,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+  },
+  checkNumeroWide: {
+    fontSize: 11,
   },
   checkBoxOn: {
     borderColor: '#15803D',

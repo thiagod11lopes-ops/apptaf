@@ -329,7 +329,7 @@ export default function CadastroAplicadorScreen() {
       .catch(() => undefined);
   }, [isBoss]);
 
-  useAuthDataReload(recarregarAplicadores);
+  useAuthDataReload(recarregarAplicadores, { scopes: ['aplicadores'] });
 
   useEffect(() => {
     if (!modalCadastroSucesso) return;

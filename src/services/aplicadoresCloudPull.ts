@@ -129,7 +129,7 @@ export async function ensureAplicadoresFromCloud(opts?: {
         }
       }
 
-      if (changed) notifyDataChanged();
+      if (changed) notifyDataChanged('aplicadores');
     } catch (error) {
       console.warn(
         '[aplicadores] pull direto da nuvem falhou:',

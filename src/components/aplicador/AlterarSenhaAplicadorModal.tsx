@@ -81,11 +81,14 @@ export function AlterarSenhaAplicadorModal({ visible, onClose }: Props) {
         if (!cancelled) setCarregando(false);
       });
     // Atualizações locais pós-sync: só relê Dexie (evita loop de pull).
-    const unsub = subscribeDataChanged(() => {
-      void getAllAplicadores()
-        .then(applyLista)
-        .catch(() => applyLista([]));
-    });
+    const unsub = subscribeDataChanged(
+      () => {
+        void getAllAplicadores()
+          .then(applyLista)
+          .catch(() => applyLista([]));
+      },
+      { scopes: ['aplicadores'] },
+    );
     return () => {
       cancelled = true;
       unsub();

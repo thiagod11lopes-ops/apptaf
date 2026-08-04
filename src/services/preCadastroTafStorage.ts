@@ -49,7 +49,7 @@ export async function addPreCadastroTaf(item: PreCadastroTaf): Promise<void> {
   const ownerUid = await resolveOwnerUid();
   const userId = getCachedLoginUid();
   await savePreCadastroRecord(item, ownerUid, userId);
-  notifyDataChanged();
+  notifyDataChanged('preCadastros');
 }
 
 export async function removePreCadastroTaf(id: string): Promise<boolean> {
@@ -58,7 +58,7 @@ export async function removePreCadastroTaf(id: string): Promise<boolean> {
   const rows = await listPreCadastros(ownerUid, true);
   if (!rows.some((r) => r.id === id)) return false;
   await softDeletePreCadastroRecord(id, ownerUid, userId);
-  notifyDataChanged();
+  notifyDataChanged('preCadastros');
   return true;
 }
 

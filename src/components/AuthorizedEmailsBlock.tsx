@@ -130,7 +130,7 @@ export function AuthorizedEmailsBlock() {
         );
       }
       await recarregar();
-      notifyDataChanged();
+      notifyDataChanged('emails');
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível autorizar o e-mail.');
     } finally {
@@ -173,7 +173,7 @@ export function AuthorizedEmailsBlock() {
           setMsg(`Acesso liberado para ${email}. O colega já pode entrar no seu banco.`);
         }
         await recarregar();
-        notifyDataChanged();
+        notifyDataChanged('emails');
       } catch (e) {
         setErro(e instanceof Error ? e.message : 'Não foi possível alterar o acesso.');
       } finally {
@@ -200,7 +200,7 @@ export function AuthorizedEmailsBlock() {
           setMsg(`Acesso de ${email} removido na nuvem.`);
         }
         await recarregar();
-        notifyDataChanged();
+        notifyDataChanged('emails');
       } catch (e) {
         setErro(e instanceof Error ? e.message : 'Não foi possível remover o e-mail.');
       } finally {

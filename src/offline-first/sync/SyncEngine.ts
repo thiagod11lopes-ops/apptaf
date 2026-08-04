@@ -71,7 +71,23 @@ import {
   toAplicadorFirestorePayload,
 } from '../../utils/aplicadorSyncPolicy';
 
-type StoreListener = () => void;
+/** Escopos de mutação local — ouvintes filtram para evitar reload global. */
+export type DataChangeScope =
+  | 'cadastros'
+  | 'aplicadores'
+  | 'sessoes'
+  | 'emails'
+  | 'fatores'
+  | 'restritos'
+  | 'preCadastros';
+
+export type DataChangeNotifyArg = DataChangeScope | readonly DataChangeScope[] | 'all';
+
+type StoreListener = {
+  fn: () => void;
+  /** null = ouve qualquer mudança (compatível com comportamento antigo). */
+  filter: ReadonlySet<DataChangeScope> | null;
+};
 
 let ownerUid: string | null = null;
 let onlineModeUid: string | null = null;
@@ -85,6 +101,40 @@ const MIN_PROCESS_GAP_MS = 12_000;
 const CLOUD_PULL_TIMEOUT_MS = 35_000;
 let lastProcessFinishedAt = 0;
 
+/** Coalesce: vários notifies no mesmo tick viram um flush com união de escopos. */
+let pendingNotify: Set<DataChangeScope> | 'all' | null = null;
+let notifyFlushScheduled = false;
+
+function normalizeNotifyScopes(scopes?: DataChangeNotifyArg): Set<DataChangeScope> | 'all' {
+  if (scopes == null || scopes === 'all') return 'all';
+  if (typeof scopes === 'string') return new Set([scopes]);
+  return scopes.length === 0 ? 'all' : new Set(scopes);
+}
+
+function mergePendingNotify(next: Set<DataChangeScope> | 'all'): void {
+  if (pendingNotify === 'all' || next === 'all') {
+    pendingNotify = 'all';
+    return;
+  }
+  if (pendingNotify == null) {
+    pendingNotify = new Set(next);
+    return;
+  }
+  for (const scope of next) pendingNotify.add(scope);
+}
+
+function listenerMatchesPending(
+  filter: ReadonlySet<DataChangeScope> | null,
+  event: Set<DataChangeScope> | 'all',
+): boolean {
+  if (filter == null) return true;
+  if (event === 'all') return true;
+  for (const scope of filter) {
+    if (event.has(scope)) return true;
+  }
+  return false;
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     promise,
@@ -94,8 +144,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-function notify(): void {
-  listeners.forEach((fn) => fn());
+function notify(scopes?: DataChangeNotifyArg): void {
+  mergePendingNotify(normalizeNotifyScopes(scopes));
+  if (notifyFlushScheduled) return;
+  notifyFlushScheduled = true;
+  queueMicrotask(() => {
+    notifyFlushScheduled = false;
+    const event = pendingNotify ?? 'all';
+    pendingNotify = null;
+    listeners.forEach((listener) => {
+      if (listenerMatchesPending(listener.filter, event)) listener.fn();
+    });
+  });
 }
 
 /** UID usado nas escritas Firestore — sempre a conta de dados da sessão autenticada. */
@@ -487,9 +547,10 @@ export class SyncEngine {
     processTimer = null;
   }
 
-  subscribe(listener: StoreListener): () => void {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
+  subscribe(listener: () => void, filter: ReadonlySet<DataChangeScope> | null = null): () => void {
+    const entry: StoreListener = { fn: listener, filter };
+    listeners.add(entry);
+    return () => listeners.delete(entry);
   }
 
   /** @deprecated sync manual — mutações locais não disparam upload automático */
@@ -785,11 +846,21 @@ export class SyncEngine {
 
 export const syncEngine = new SyncEngine();
 
-/** Notifica ouvintes após mutação local (sem sync automático). */
-export function notifyDataChanged(): void {
-  notify();
+/**
+ * Notifica ouvintes após mutação local (sem sync automático).
+ * Sem argumento (ou `'all'`) = invalidação ampla; preferir escopos específicos.
+ */
+export function notifyDataChanged(scopes?: DataChangeNotifyArg): void {
+  notify(scopes);
 }
 
-export function subscribeDataChanged(listener: StoreListener): () => void {
-  return syncEngine.subscribe(listener);
+export function subscribeDataChanged(
+  listener: () => void,
+  options?: { scopes?: readonly DataChangeScope[] },
+): () => void {
+  const filter =
+    options?.scopes != null && options.scopes.length > 0
+      ? new Set(options.scopes)
+      : null;
+  return syncEngine.subscribe(listener, filter);
 }

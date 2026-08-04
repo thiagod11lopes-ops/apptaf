@@ -87,9 +87,8 @@ export async function wipeAllTestesData(options: {
     .map((c) => limparTodosResultadosTafCadastro(c));
   if (limpos.length > 0) {
     await dataStore.upsertCadastrosBatch(limpos, ownerUid);
-  } else {
-    notifyDataChanged();
   }
+  notifyDataChanged(['sessoes', 'cadastros']);
 
   invalidateRemoteSnapshotCache();
   syncManager.scheduleOnlineWriteFlush();
@@ -104,7 +103,7 @@ export async function wipeAllTestesData(options: {
 /** Exclui todos os fatores de risco; demais dados permanecem. */
 export async function wipeAllFatoresRiscoData(): Promise<WipeAllFatoresRiscoResult> {
   const registrosRemovidos = await clearAllFatoresRisco();
-  notifyDataChanged();
+  notifyDataChanged('fatores');
   return { registrosRemovidos };
 }
 
@@ -125,7 +124,7 @@ export async function wipeAllRestritosData(options: {
   }
 
   const registrosRemovidos = await clearAllRestritos(options.uid);
-  notifyDataChanged();
+  notifyDataChanged('restritos');
   invalidateRemoteSnapshotCache();
   syncManager.scheduleOnlineWriteFlush();
 
@@ -157,7 +156,7 @@ export async function wipeAllModoTesteSessoes(options: {
     }
   }
 
-  notifyDataChanged();
+  notifyDataChanged('sessoes');
   return { sessoesDeleted: demoIds.length };
 }
 
@@ -177,7 +176,7 @@ export async function wipeAllDatasNascimentoCadastros(options: {
   if (atualizados.length > 0) {
     await dataStore.upsertCadastrosBatch(atualizados, ownerUid);
   } else {
-    notifyDataChanged();
+    notifyDataChanged('cadastros');
   }
 
   invalidateRemoteSnapshotCache();

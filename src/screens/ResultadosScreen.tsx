@@ -103,7 +103,9 @@ export default function ResultadosScreen() {
       .finally(() => setCarregando(false));
   }, []);
 
-  useAuthDataReload(carregar);
+  useAuthDataReload(carregar, {
+    scopes: ['cadastros', 'sessoes', 'fatores', 'restritos'],
+  });
 
   const sessoesPorNorma = useMemo(() => {
     if (!normaVista) return [];

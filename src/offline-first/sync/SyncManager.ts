@@ -656,7 +656,13 @@ async function compactCadastrosIfNeeded(uid: string): Promise<void> {
     const removedAp = await compactDuplicateAplicadoresByNip(uid);
     if (removedCad > 0 || removedAp > 0) {
       await refreshPendingSummary();
-      notifyDataChanged();
+      notifyDataChanged(
+        removedCad > 0 && removedAp > 0
+          ? (['cadastros', 'aplicadores'] as const)
+          : removedCad > 0
+            ? 'cadastros'
+            : 'aplicadores',
+      );
     }
   } catch (error) {
     await syncLogger.warn(
@@ -675,7 +681,7 @@ async function applyCountersAfterSuccessfulSync(): Promise<void> {
     try {
       const removedOrphans = await pruneAplicadoresOutsideDataOwner(uid);
       if (removedOrphans > 0) {
-        notifyDataChanged();
+        notifyDataChanged('aplicadores');
       }
     } catch (error) {
       await syncLogger.warn(

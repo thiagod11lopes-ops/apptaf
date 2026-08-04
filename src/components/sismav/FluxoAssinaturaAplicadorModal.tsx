@@ -140,11 +140,14 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
       .finally(() => {
         if (!cancelled) setCarregandoAplicadores(false);
       });
-    const unsub = subscribeDataChanged(() => {
-      void getAllAplicadores({ includeDemo })
-        .then(applyLista)
-        .catch(() => applyLista([]));
-    });
+    const unsub = subscribeDataChanged(
+      () => {
+        void getAllAplicadores({ includeDemo })
+          .then(applyLista)
+          .catch(() => applyLista([]));
+      },
+      { scopes: ['aplicadores'] },
+    );
     return () => {
       cancelled = true;
       unsub();

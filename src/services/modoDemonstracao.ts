@@ -53,7 +53,7 @@ export async function toggleModoDemonstracaoSistema(): Promise<{ ativo: boolean 
     await writeAppMeta(DEMO_MODO_ATIVO_KEY, '1');
   }
 
-  notifyDataChanged();
+  notifyDataChanged(['cadastros', 'aplicadores', 'sessoes']);
   notifyListeners();
   return { ativo: !estavaAtivo };
 }
@@ -66,7 +66,7 @@ export async function desativarModoDemonstracaoSeAtivo(): Promise<boolean> {
   const ownerUid = resolveOwnerUid(await resolveStorageOwnerUid());
   await removeDemoCadastrosAndAplicador(ownerUid);
   await removeAppMeta(DEMO_MODO_ATIVO_KEY);
-  notifyDataChanged();
+  notifyDataChanged(['cadastros', 'aplicadores', 'sessoes']);
   notifyListeners();
   return true;
 }
@@ -102,7 +102,7 @@ export async function garantirModoNormalNaAbertura(): Promise<void> {
       if (!backupRaw?.trim()) return;
       await limparResiduoModoDemoAntigo();
       await removeAppMeta(DEMO_MODO_ATIVO_KEY);
-      notifyDataChanged();
+      notifyDataChanged(['cadastros', 'aplicadores', 'sessoes']);
       notifyListeners();
     })().catch((error) => {
       garantiaModoNormalPromise = null;

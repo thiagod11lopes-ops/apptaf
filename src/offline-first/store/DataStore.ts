@@ -106,27 +106,27 @@ export class DataStore {
 
   async upsertCadastro(item: CadastroItemPersist, ownerUid: string | null): Promise<void> {
     await saveCadastro(item, resolveOwnerUid(ownerUid), getCachedLoginUid());
-    notifyDataChanged();
+    notifyDataChanged('cadastros');
   }
 
   async upsertAplicador(item: AplicadorItemPersist, ownerUid: string | null): Promise<void> {
     await saveAplicador(item, resolveOwnerUid(ownerUid), getCachedLoginUid());
-    notifyDataChanged();
+    notifyDataChanged('aplicadores');
   }
 
   async upsertCadastrosBatch(items: CadastroItemPersist[], ownerUid: string | null): Promise<void> {
     await saveCadastrosBatch(items, resolveOwnerUid(ownerUid), getCachedLoginUid());
-    notifyDataChanged();
+    notifyDataChanged('cadastros');
   }
 
   async deleteCadastro(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteCadastro(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
-    notifyDataChanged();
+    notifyDataChanged('cadastros');
   }
 
   async deleteAplicador(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteAplicador(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
-    notifyDataChanged();
+    notifyDataChanged('aplicadores');
   }
 
   async updateAplicadorSenha(
@@ -142,7 +142,7 @@ export class DataStore {
       getCachedLoginUid(),
       senhaPlano,
     );
-    notifyDataChanged();
+    notifyDataChanged('aplicadores');
     return record != null;
   }
 
@@ -157,7 +157,7 @@ export class DataStore {
       resolveOwnerUid(ownerUid),
       getCachedLoginUid(),
     );
-    if (record) notifyDataChanged();
+    if (record) notifyDataChanged('aplicadores');
     return record != null;
   }
 
@@ -172,7 +172,7 @@ export class DataStore {
       resolveOwnerUid(ownerUid),
       getCachedLoginUid(),
     );
-    if (record) notifyDataChanged();
+    if (record) notifyDataChanged('aplicadores');
     return record != null;
   }
 
@@ -182,18 +182,18 @@ export class DataStore {
       resolveOwnerUid(ownerUid),
       getCachedLoginUid(),
     );
-    if (record) notifyDataChanged();
+    if (record) notifyDataChanged('aplicadores');
     return record != null;
   }
 
   async upsertSessao(sessao: SessaoAplicacaoTaf, ownerUid: string | null): Promise<void> {
     await saveSessao(sessao, resolveOwnerUid(ownerUid), getCachedLoginUid());
-    notifyDataChanged();
+    notifyDataChanged('sessoes');
   }
 
   async deleteSessao(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteSessao(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
-    notifyDataChanged();
+    notifyDataChanged('sessoes');
   }
 
   async getSessaoById(id: string, ownerUid: string | null): Promise<SessaoAplicacaoTaf | null> {

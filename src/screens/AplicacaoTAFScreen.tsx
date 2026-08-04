@@ -136,7 +136,7 @@ export default function AplicacaoTAFScreen() {
       .catch(() => undefined);
   }, []);
 
-  useAuthDataReload(carregarCadastros);
+  useAuthDataReload(carregarCadastros, { scopes: ['cadastros'] });
 
   const resetForm = useCallback(() => {
     setNip('');

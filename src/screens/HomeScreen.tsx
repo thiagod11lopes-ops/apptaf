@@ -212,7 +212,9 @@ export default function HomeScreen() {
   );
 
   // useAuthDataReload + sync: sempre debounce (coalesce tempestade de eventos).
-  useAuthDataReload(() => scheduleRecarregarResumo('debounce'));
+  useAuthDataReload(() => scheduleRecarregarResumo('debounce'), {
+    scopes: ['cadastros', 'sessoes', 'fatores', 'restritos'],
+  });
 
   // Primeiro carregamento após o paint — imediato (sem esperar debounce).
   useEffect(() => {

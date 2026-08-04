@@ -52,7 +52,9 @@ export default function EstatisticasScreen() {
     }
   }, []);
 
-  useAuthDataReload(carregar);
+  useAuthDataReload(carregar, {
+    scopes: ['cadastros', 'sessoes', 'fatores', 'restritos'],
+  });
 
   const s = stats;
   const sparkTotais = useMemo(

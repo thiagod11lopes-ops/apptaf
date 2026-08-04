@@ -335,7 +335,7 @@ export default function CadastroScreenModern() {
       .catch(() => undefined);
   }, []);
 
-  useAuthDataReload(recarregarCadastros);
+  useAuthDataReload(recarregarCadastros, { scopes: ['cadastros'] });
 
   useEffect(() => {
     if (!modalCadastroSucesso) return;

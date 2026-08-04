@@ -226,7 +226,7 @@ async function writeMap(
       // ignore
     }
   }
-  notifyDataChanged();
+  notifyDataChanged('fatores');
 }
 
 function onlyActive(

@@ -81,7 +81,7 @@ export function EstatisticasDnPendentePanel() {
     }
   }, []);
 
-  useAuthDataReload(carregar);
+  useAuthDataReload(carregar, { scopes: ['cadastros', 'sessoes'] });
 
   const { qtdPendente, qtdOk, comDn } = useMemo(() => {
     const okList: CadastroItemPersist[] = [];

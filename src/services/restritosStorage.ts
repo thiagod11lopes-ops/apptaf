@@ -111,7 +111,7 @@ async function writeMap(
     await writeAppMeta(storageKey(owner), payload);
     writeWebKey(webLsKey(owner), map);
   }
-  notifyDataChanged();
+  notifyDataChanged('restritos');
 }
 
 function onlyActive(

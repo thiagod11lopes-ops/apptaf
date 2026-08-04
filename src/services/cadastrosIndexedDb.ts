@@ -58,12 +58,18 @@ import { waitForAuthenticatedUid, resolveStorageOwnerUid, getCachedDataOwnerUid 
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { dataStore } from '../offline-first/store/DataStore';
 import {
+  getCadastrosListCached,
+  invalidateCadastrosListCache,
+  peekCadastrosListCache,
+} from './cadastrosListCache';
+import {
   readOfflineCloudEntry,
   upsertCadastroOffline,
   upsertCadastrosLoteOffline,
   deleteCadastroOffline,
 } from './offline/offlineCloudEngine';
 
+export { invalidateCadastrosListCache, peekCadastrosListCache };
 function useOfflineFirstDb(): boolean {
   return getTafDatabase() != null;
 }
@@ -121,6 +127,7 @@ export async function clearLocalCadastros(): Promise<void> {
   } catch {
     // Sem IndexedDB.
   }
+  invalidateCadastrosListCache();
 }
 
 async function resolveCloudCadastros(
@@ -143,11 +150,16 @@ export async function getAllCadastros(opts?: {
           setTimeout(() => resolve(getCachedDataOwnerUid()), 8000);
         }),
       ]);
-      return await dataStore.getCadastros(uid, opts);
+      return await getCadastrosListCached(uid, opts, (owner) =>
+        dataStore.getCadastros(owner, { includeDemo: true }),
+      );
     } catch {
       // Fallback: lista local sem bloquear o fluxo de aplicar resultado.
       try {
-        return await dataStore.getCadastros(getCachedDataOwnerUid(), opts);
+        const uid = getCachedDataOwnerUid();
+        return await getCadastrosListCached(uid, opts, (owner) =>
+          dataStore.getCadastros(owner, { includeDemo: true }),
+        );
       } catch {
         return [];
       }
@@ -156,24 +168,28 @@ export async function getAllCadastros(opts?: {
   try {
     const uid = await waitForAuthenticatedUid(8000);
     if (uid) {
-      const entry = await readOfflineCloudEntry(uid, { autoSync: false });
-      return entry.cadastros;
+      return await getCadastrosListCached(uid, opts, async (owner) => {
+        const entry = await readOfflineCloudEntry(owner ?? uid, { autoSync: false });
+        return entry.cadastros;
+      });
     }
   } catch {
     // segue para local
   }
-  return getAllCadastrosLocal();
+  return getCadastrosListCached(null, opts, () => getAllCadastrosLocal());
 }
 
 export async function addCadastro(item: CadastroItemPersist): Promise<void> {
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
     await dataStore.upsertCadastro(item, uid);
+    invalidateCadastrosListCache();
     return;
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertCadastroOffline(uid, item);
+    invalidateCadastrosListCache();
     return;
   }
   try {
@@ -194,6 +210,7 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
   } catch {
     // Sem impedir a funcionalidade da UI.
   }
+  invalidateCadastrosListCache();
 }
 
 export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<void> {
@@ -201,11 +218,13 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
     await dataStore.upsertCadastrosBatch(items, uid);
+    invalidateCadastrosListCache();
     return;
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertCadastrosLoteOffline(uid, items);
+    invalidateCadastrosListCache();
     return;
   }
   try {
@@ -222,17 +241,20 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
   } catch {
     // Sem impedir a funcionalidade da UI.
   }
+  invalidateCadastrosListCache();
 }
 
 export async function deleteCadastro(id: string): Promise<void> {
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
     await dataStore.deleteCadastro(id, uid);
+    invalidateCadastrosListCache();
     return;
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
     await deleteCadastroOffline(uid, id);
+    invalidateCadastrosListCache();
     return;
   }
   try {
@@ -248,4 +270,5 @@ export async function deleteCadastro(id: string): Promise<void> {
   } catch {
     // Sem impedir a UX.
   }
+  invalidateCadastrosListCache();
 }

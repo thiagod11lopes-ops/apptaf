@@ -32,6 +32,7 @@ import { PressableScale } from '../components/premium/PressableScale';
 import {
   addCadastro,
   getAllCadastros,
+  peekCadastrosListCache,
   type CadastroItemPersist,
 } from '../services/cadastrosIndexedDb';
 import type { ResultadoCorridaItem } from '../navigation/types';
@@ -109,7 +110,9 @@ export default function AplicacaoTAFScreen() {
   const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
   const modoNaval = normaTaf === 'cfn';
 
-  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
+  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>(
+    () => peekCadastrosListCache() ?? [],
+  );
   const [nip, setNip] = useState('');
   const [nome, setNome] = useState('');
   const [dataNascimento, setDataNascimento] = useState('');

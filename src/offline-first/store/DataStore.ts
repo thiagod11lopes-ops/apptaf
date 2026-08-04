@@ -28,6 +28,7 @@ import {
   getSessaoById,
 } from '../db/localDb';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
+import { invalidateCadastrosListCache } from '../../services/cadastrosListCache';
 import { notifyDataChanged, subscribeDataChanged } from '../sync/SyncEngine';
 import { syncQueue } from '../sync/SyncQueue';
 import { sanitizeAplicadorForDisplay } from '../../utils/aplicadorSyncPolicy';
@@ -106,6 +107,7 @@ export class DataStore {
 
   async upsertCadastro(item: CadastroItemPersist, ownerUid: string | null): Promise<void> {
     await saveCadastro(item, resolveOwnerUid(ownerUid), getCachedLoginUid());
+    invalidateCadastrosListCache();
     notifyDataChanged('cadastros');
   }
 
@@ -116,11 +118,13 @@ export class DataStore {
 
   async upsertCadastrosBatch(items: CadastroItemPersist[], ownerUid: string | null): Promise<void> {
     await saveCadastrosBatch(items, resolveOwnerUid(ownerUid), getCachedLoginUid());
+    invalidateCadastrosListCache();
     notifyDataChanged('cadastros');
   }
 
   async deleteCadastro(id: string, ownerUid: string | null): Promise<void> {
     await softDeleteCadastro(id, resolveOwnerUid(ownerUid), getCachedLoginUid());
+    invalidateCadastrosListCache();
     notifyDataChanged('cadastros');
   }
 

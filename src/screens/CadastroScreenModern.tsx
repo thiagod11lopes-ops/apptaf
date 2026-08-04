@@ -19,7 +19,7 @@ import { CarregarPlanilhaCadastro } from '../components/CarregarPlanilhaCadastro
 import { LabelNip } from '../components/LabelNip';
 import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
-import { addCadastro, deleteCadastro, getAllCadastros } from '../services/cadastrosIndexedDb';
+import { addCadastro, deleteCadastro, getAllCadastros, peekCadastrosListCache } from '../services/cadastrosIndexedDb';
 import {
   notaCorridaParaPersistencia,
   textoNotaCorridaFromCadastro,
@@ -102,7 +102,9 @@ export default function CadastroScreenModern() {
   const [nome, setNome] = useState<string>('');
   const [dataNascimento, setDataNascimento] = useState<string>('');
   const [sexo, setSexo] = useState<'M' | 'F'>('M');
-  const [cadastros, setCadastros] = useState<CadastroItem[]>([]);
+  const [cadastros, setCadastros] = useState<CadastroItem[]>(
+    () => (peekCadastrosListCache() as CadastroItem[] | null) ?? [],
+  );
   const [faltantes, setFaltantes] = useState<string[]>([]);
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false);

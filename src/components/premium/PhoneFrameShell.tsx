@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppBackdrop } from '../mobile/AppBackdrop';
+import { IS_WEB } from '../../utils/webVisualPerf';
 
 type Props = {
   children: React.ReactNode;
@@ -17,6 +18,9 @@ const BEZEL = 3;
 const DESKTOP_BG = '#07070d';
 
 function SideButton({ style }: { style: object }) {
+  if (IS_WEB) {
+    return <View style={[styles.sideButton, styles.sideButtonWeb, style]} />;
+  }
   return (
     <LinearGradient
       colors={['#5c5c62', '#b8b8be', '#7a7a80', '#4a4a50']}
@@ -28,6 +32,17 @@ function SideButton({ style }: { style: object }) {
 }
 
 function DynamicIsland() {
+  if (IS_WEB) {
+    return (
+      <View style={styles.dynamicIsland} pointerEvents="none">
+        <View style={styles.dynamicIslandPillWeb}>
+          <View style={styles.cameraLens}>
+            <View style={styles.cameraLensInner} />
+          </View>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.dynamicIsland} pointerEvents="none">
       <LinearGradient
@@ -57,6 +72,28 @@ function HomeIndicator({ dark }: { dark: boolean }) {
   );
 }
 
+function ScreenBody({ children, isDark }: { children: React.ReactNode; isDark: boolean }) {
+  return (
+    <View style={styles.bezelRing}>
+      <View style={[styles.screenClip, { backgroundColor: 'transparent' }]}>
+        <AppBackdrop />
+        <DynamicIsland />
+        <ScrollView
+          style={[styles.screenScroll, styles.screenScrollTransparent]}
+          contentContainerStyle={styles.screenScrollContent}
+          showsVerticalScrollIndicator
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          {...(Platform.OS === 'web' ? { className: 'phone-screen-scroll' as never } : {})}
+        >
+          <View style={styles.screenContent}>{children}</View>
+        </ScrollView>
+        <HomeIndicator dark={isDark} />
+      </View>
+    </View>
+  );
+}
+
 export function PhoneFrameShell({ children }: Props) {
   const { usePhoneFrame, isWeb } = useDeviceLayout();
   const { isDark, theme } = useTheme();
@@ -76,15 +113,19 @@ export function PhoneFrameShell({ children }: Props) {
   }
 
   return (
-    <View style={styles.desktopOuter}>
-      <LinearGradient
-        colors={['#0c0c14', '#12121c', '#07070d', '#0a0a12']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.ambientGlow} />
-      <View style={styles.ambientGlowSecondary} />
+    <View style={[styles.desktopOuter, IS_WEB ? styles.desktopOuterWeb : null]}>
+      {!IS_WEB ? (
+        <>
+          <LinearGradient
+            colors={['#0c0c14', '#12121c', '#07070d', '#0a0a12']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.ambientGlow} />
+          <View style={styles.ambientGlowSecondary} />
+        </>
+      ) : null}
 
       <View style={styles.phoneAssembly}>
         <SideButton style={styles.buttonMute} />
@@ -94,31 +135,21 @@ export function PhoneFrameShell({ children }: Props) {
 
         <View style={styles.phoneShadowLayer} />
 
-        <LinearGradient
-          colors={['#6b6b72', '#d4d4da', '#98989e', '#5a5a60', '#b0b0b8', '#727278']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.titaniumChassis}
-        >
-          <View style={styles.titaniumHighlight} />
-          <View style={styles.bezelRing}>
-            <View style={[styles.screenClip, { backgroundColor: 'transparent' }]}>
-              <AppBackdrop />
-              <DynamicIsland />
-              <ScrollView
-                style={[styles.screenScroll, styles.screenScrollTransparent]}
-                contentContainerStyle={styles.screenScrollContent}
-                showsVerticalScrollIndicator
-                nestedScrollEnabled
-                keyboardShouldPersistTaps="handled"
-                {...(Platform.OS === 'web' ? { className: 'phone-screen-scroll' as never } : {})}
-              >
-                <View style={styles.screenContent}>{children}</View>
-              </ScrollView>
-              <HomeIndicator dark={isDark} />
-            </View>
+        {IS_WEB ? (
+          <View style={[styles.titaniumChassis, styles.titaniumChassisWeb]}>
+            <ScreenBody isDark={isDark}>{children}</ScreenBody>
           </View>
-        </LinearGradient>
+        ) : (
+          <LinearGradient
+            colors={['#6b6b72', '#d4d4da', '#98989e', '#5a5a60', '#b0b0b8', '#727278']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.titaniumChassis}
+          >
+            <View style={styles.titaniumHighlight} />
+            <ScreenBody isDark={isDark}>{children}</ScreenBody>
+          </LinearGradient>
+        )}
       </View>
     </View>
   );
@@ -145,12 +176,14 @@ const styles = StyleSheet.create({
     paddingVertical: 28,
     paddingHorizontal: 32,
   },
+  desktopOuterWeb: {
+    backgroundColor: DESKTOP_BG,
+  },
   ambientGlow: {
     position: 'absolute',
     width: 520,
     height: 520,
     borderRadius: 260,
-    // Sem CSS filter:blur — caríssimo no Chromium em desktop.
     backgroundColor: 'rgba(99, 102, 241, 0.07)',
     top: '50%',
     left: '50%',
@@ -182,8 +215,7 @@ const styles = StyleSheet.create({
     borderRadius: OUTER_RADIUS + 4,
     ...Platform.select({
       web: {
-        boxShadow:
-          '0 0 0 1px rgba(255,255,255,0.06), 0 32px 80px rgba(0,0,0,0.65), 0 8px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.15)',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.55), 0 8px 20px rgba(0,0,0,0.35)',
       } as object,
       default: { elevation: 32 },
     }),
@@ -196,11 +228,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...Platform.select({
       web: {
-        boxShadow:
-          'inset 0 2px 4px rgba(255,255,255,0.35), inset 0 -2px 6px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.2)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2)',
       } as object,
       default: {},
     }),
+  },
+  titaniumChassisWeb: {
+    backgroundColor: '#8a8a90',
   },
   titaniumHighlight: {
     position: 'absolute',
@@ -260,6 +294,15 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  dynamicIslandPillWeb: {
+    width: 126,
+    height: 37,
+    borderRadius: 20,
+    backgroundColor: '#0a0a0c',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingRight: 14,
+  },
   cameraLens: {
     width: 12,
     height: 12,
@@ -297,6 +340,9 @@ const styles = StyleSheet.create({
       web: { boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 6px rgba(0,0,0,0.4)' } as object,
       default: {},
     }),
+  },
+  sideButtonWeb: {
+    backgroundColor: '#7a7a80',
   },
   buttonMute: {
     left: -4,

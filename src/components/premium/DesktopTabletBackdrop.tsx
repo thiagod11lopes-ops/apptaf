@@ -1,12 +1,18 @@
 import React from 'react';
 import { View, Image, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { IS_WEB } from '../../utils/webVisualPerf';
 
 const corridaBg = require('../../../Corrida.png');
 const natacaoBg = require('../../../Natacao.png');
 
-/** Fundo desktop atrás da moldura do tablet — Corrida + Natação em tela cheia. */
+/** Fundo desktop atrás da moldura do tablet — Corrida + Natação (nativo) ou cor sólida (web). */
 export function DesktopTabletBackdrop() {
+  // Web: sem 2 imagens full-bleed + gradients (decode/paint caro no desktop).
+  if (IS_WEB) {
+    return <View style={[styles.root, styles.webSolid]} pointerEvents="none" />;
+  }
+
   return (
     <View style={styles.root} pointerEvents="none">
       <View style={styles.halfLeft}>
@@ -36,6 +42,9 @@ const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
+    backgroundColor: '#07070d',
+  },
+  webSolid: {
     backgroundColor: '#07070d',
   },
   halfLeft: {

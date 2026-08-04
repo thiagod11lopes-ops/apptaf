@@ -4,8 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getMobileAppBackdrop } from './mobileAppTheme';
 import { LogombWatermark } from './LogombWatermark';
+import { IS_WEB } from '../../utils/webVisualPerf';
 
-/** Gradiente suave + Logomb opaca — única imagem no fundo de todo o sistema. */
+/** Gradiente suave + Logomb — na web: cor sólida (sem gradient/watermark). */
 export function AppBackdrop() {
   const { theme } = useTheme();
   const [layout, setLayout] = useState({ width: 0, height: 0 });
@@ -17,9 +18,11 @@ export function AppBackdrop() {
     }
   }, []);
 
-  // Web: marca d'água menor (menos decode/reflow); nativo mantém o visual amplo.
-  const logoMultiplier = Platform.OS === 'web' ? 1 : 2;
-  const logoOpacity = Platform.OS === 'web' ? (theme.isDark ? 0.12 : 0.1) : undefined;
+  // Web: um fill sólido — evita LinearGradient + PNG gigante em toda navegação.
+  if (IS_WEB) {
+    const solid = theme.isDark ? '#0b1224' : '#eef2ff';
+    return <View style={[styles.root, { backgroundColor: solid }]} pointerEvents="none" />;
+  }
 
   return (
     <View style={styles.root} pointerEvents="none" onLayout={onLayout}>
@@ -32,8 +35,7 @@ export function AppBackdrop() {
         <LogombWatermark
           containerWidth={layout.width}
           containerHeight={layout.height}
-          sizeMultiplier={logoMultiplier}
-          opacity={logoOpacity}
+          sizeMultiplier={2}
         />
       ) : null}
     </View>

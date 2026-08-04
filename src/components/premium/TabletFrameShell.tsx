@@ -6,6 +6,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { AppBackdrop } from '../mobile/AppBackdrop';
 import { DesktopTabletBackdrop } from './DesktopTabletBackdrop';
 import { APP_MODAL_HOST_ID } from './AppModal';
+import { IS_WEB } from '../../utils/webVisualPerf';
 
 type Props = {
   children: React.ReactNode;
@@ -52,26 +53,38 @@ export function TabletFrameShell({ children }: Props) {
       <View style={[styles.tabletAssembly, frameSize]}>
         <View style={styles.tabletShadowLayer} />
 
-        <LinearGradient
-          colors={['#5a5a60', '#c8c8ce', '#8e8e94', '#4a4a50', '#a8a8ae', '#6e6e74']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.tabletChassis}
-        >
-          <View style={styles.chassisHighlight} />
-          <View style={styles.bezelRing}>
-            <View style={[styles.screenClip, { backgroundColor: 'transparent' }]}>
-              <AppBackdrop />
-              <TabletCamera />
-              <View
-                style={styles.screenContent}
-                {...(Platform.OS === 'web' ? { nativeID: APP_MODAL_HOST_ID, id: APP_MODAL_HOST_ID } : {})}
-              >
-                {children}
+        {IS_WEB ? (
+          <View style={[styles.tabletChassis, styles.tabletChassisWeb]}>
+            <View style={styles.bezelRing}>
+              <View style={[styles.screenClip, { backgroundColor: 'transparent' }]}>
+                <AppBackdrop />
+                <TabletCamera />
+                <View
+                  style={styles.screenContent}
+                  {...{ nativeID: APP_MODAL_HOST_ID, id: APP_MODAL_HOST_ID }}
+                >
+                  {children}
+                </View>
               </View>
             </View>
           </View>
-        </LinearGradient>
+        ) : (
+          <LinearGradient
+            colors={['#5a5a60', '#c8c8ce', '#8e8e94', '#4a4a50', '#a8a8ae', '#6e6e74']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.tabletChassis}
+          >
+            <View style={styles.chassisHighlight} />
+            <View style={styles.bezelRing}>
+              <View style={[styles.screenClip, { backgroundColor: 'transparent' }]}>
+                <AppBackdrop />
+                <TabletCamera />
+                <View style={styles.screenContent}>{children}</View>
+              </View>
+            </View>
+          </LinearGradient>
+        )}
       </View>
     </View>
   );
@@ -110,8 +123,7 @@ const styles = StyleSheet.create({
     borderRadius: OUTER_RADIUS + 6,
     ...Platform.select({
       web: {
-        boxShadow:
-          '0 0 0 1px rgba(255,255,255,0.05), 0 40px 100px rgba(0,0,0,0.62), 0 12px 32px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.12)',
+        boxShadow: '0 28px 72px rgba(0,0,0,0.5)',
       } as object,
       default: { elevation: 28 },
     }),
@@ -125,11 +137,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...Platform.select({
       web: {
-        boxShadow:
-          'inset 0 2px 5px rgba(255,255,255,0.32), inset 0 -3px 8px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.18)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2)',
       } as object,
       default: {},
     }),
+  },
+  tabletChassisWeb: {
+    backgroundColor: '#8a8a90',
   },
   chassisHighlight: {
     position: 'absolute',

@@ -57,12 +57,16 @@ export function AplicarTafTabHeader({
           >
             {title}
           </Text>
-          <LinearGradient
-            colors={[theme.primary, '#6366f1']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.headerTitleRule}
-          />
+          {Platform.OS === 'web' ? (
+            <View style={[styles.headerTitleRule, { backgroundColor: theme.primary }]} />
+          ) : (
+            <LinearGradient
+              colors={[theme.primary, '#6366f1']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.headerTitleRule}
+            />
+          )}
           {subtitle ? (
             <Text
               style={[styles.headerSubtitle, styles.headerSubtitleCentered, { color: theme.textSecondary }]}
@@ -315,22 +319,41 @@ export function AplicarTafPrimaryButton({
         Platform.OS === 'web' ? ({ boxShadow: '0 0 32px rgba(56,189,248,0.18)' } as object) : null,
       ]}
     >
-      <LinearGradient
-        colors={
-          disabled
-            ? theme.isDark
-              ? ['#334155', '#1e293b']
-              : ['#cbd5e1', '#94a3b8']
-            : [theme.primary, '#6366f1']
-        }
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.btnPrimary}
-      >
-        <Text style={[styles.btnPrimaryText, { color: theme.tokens.textOnPrimary }]}>
-          {loading ? '…' : label}
-        </Text>
-      </LinearGradient>
+      {Platform.OS === 'web' ? (
+        <View
+          style={[
+            styles.btnPrimary,
+            {
+              backgroundColor: disabled
+                ? theme.isDark
+                  ? '#334155'
+                  : '#94a3b8'
+                : theme.primary,
+            },
+          ]}
+        >
+          <Text style={[styles.btnPrimaryText, { color: theme.tokens.textOnPrimary }]}>
+            {loading ? '…' : label}
+          </Text>
+        </View>
+      ) : (
+        <LinearGradient
+          colors={
+            disabled
+              ? theme.isDark
+                ? ['#334155', '#1e293b']
+                : ['#cbd5e1', '#94a3b8']
+              : [theme.primary, '#6366f1']
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.btnPrimary}
+        >
+          <Text style={[styles.btnPrimaryText, { color: theme.tokens.textOnPrimary }]}>
+            {loading ? '…' : label}
+          </Text>
+        </LinearGradient>
+      )}
     </TouchableOpacity>
   );
 }

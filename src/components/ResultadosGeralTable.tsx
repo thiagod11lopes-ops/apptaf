@@ -127,6 +127,7 @@ type ResultadoRowProps = {
   primary: string;
   loss: string;
   glassBorder: string;
+  glassBg: string;
   onEditar?: (item: ResultadoGeralItem) => void;
   onExcluir?: (item: ResultadoGeralItem) => void;
   onVerHistorico?: (item: ResultadoGeralItem) => void;
@@ -140,15 +141,15 @@ const ResultadoGeralRow = memo(function ResultadoGeralRow({
   primary,
   loss,
   glassBorder,
+  glassBg,
   onEditar,
   onExcluir,
   onVerHistorico,
 }: ResultadoRowProps) {
   const nomeComPosto = formatNomeComPostoParts(item.postoGrad, item.nome);
 
-  return (
-    <View style={styles.itemPress}>
-      <TafGlassPanel style={styles.modernRow}>
+  const body = (
+    <>
         <View style={styles.modernRowHeader}>
           <View style={styles.modernRowHeaderText}>
             <SearchHighlightText
@@ -252,7 +253,24 @@ const ResultadoGeralRow = memo(function ResultadoGeralRow({
             buscaLower={buscaLower}
           />
         </View>
-      </TafGlassPanel>
+    </>
+  );
+
+  return (
+    <View style={styles.itemPress}>
+      {Platform.OS === 'web' ? (
+        <View
+          style={[
+            styles.modernRow,
+            styles.modernRowWeb,
+            { backgroundColor: glassBg, borderColor: glassBorder },
+          ]}
+        >
+          {body}
+        </View>
+      ) : (
+        <TafGlassPanel style={styles.modernRow}>{body}</TafGlassPanel>
+      )}
     </View>
   );
 });
@@ -290,6 +308,7 @@ export function ResultadosGeralTable({
         primary={theme.primary}
         loss={theme.loss}
         glassBorder={glass.border}
+        glassBg={glass.bg}
         onEditar={onEditar}
         onExcluir={onExcluir}
         onVerHistorico={onVerHistorico}
@@ -298,6 +317,7 @@ export function ResultadosGeralTable({
     [
       buscaLower,
       glass.border,
+      glass.bg,
       onEditar,
       onExcluir,
       onVerHistorico,
@@ -359,6 +379,10 @@ const styles = StyleSheet.create({
     ...tableFullWidthStyle,
     padding: 14,
     gap: 0,
+  },
+  modernRowWeb: {
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderRadius: 18,
   },
   modernRowHeader: {
     flexDirection: 'row',

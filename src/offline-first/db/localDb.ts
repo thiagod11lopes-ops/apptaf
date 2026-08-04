@@ -194,16 +194,17 @@ export async function listCadastrosForDisplay(ownerUid: string | null): Promise<
   return dedupeCadastrosByNipNewest(merged) as CadastroRecord[];
 }
 
-/** Lista sessões para exibição — une todos os owners locais do aparelho. */
+/** Lista sessões para exibição — owners da sessão atual (sem varrer o Dexie inteiro). */
 export async function listSessoesForDisplay(ownerUid: string | null): Promise<SessaoRecord[]> {
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
+  const cachedOwner = getCachedDataOwnerUid();
   const loginUid = getCachedLoginUid();
-  const indexedOwners = await listOwnerUidsInTable('sessoes');
-  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid, ...indexedOwners);
+  // Etapa 10: mesma política dos cadastros — sem listOwnerUidsInTable.
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, cachedOwner, loginUid);
   const batches = await Promise.all(sources.map((uid) => listSessoes(uid)));
-  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
+  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? cachedOwner ?? primary);
   return mergeRecordsById(mergeTarget, batches).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
 }
 
@@ -342,9 +343,45 @@ export async function listAplicadoresForSync(
 export async function listSessoes(ownerUid: string, includeDeleted = false): Promise<SessaoRecord[]> {
   const db = getTafDatabase();
   if (!db) return [];
-  const rows = await db.sessoes.where('ownerUid').equals(ownerUid).toArray();
-  const filtered = includeDeleted ? rows : rows.filter((r) => !r.deleted);
-  return filtered.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+  if (includeDeleted) {
+    const rows = await db.sessoes.where('ownerUid').equals(ownerUid).toArray();
+    return rows.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+  }
+  // Índice composto [ownerUid+deleted] — só sessões ativas.
+  try {
+    const rows = await db.sessoes.where('[ownerUid+deleted]').equals([ownerUid, false]).toArray();
+    return rows.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+  } catch {
+    const rows = await db.sessoes.where('ownerUid').equals(ownerUid).toArray();
+    return rows.filter((r) => !r.deleted).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+  }
+}
+
+/** Soft-deletes por owners da sessão (Histórico / Home) — sem full table scan. */
+export async function listDeletedSessoesForDisplay(
+  ownerUid: string | null,
+): Promise<SessaoRecord[]> {
+  const db = getTafDatabase();
+  if (!db) return [];
+  const { readAppMetaCache } = await import('./appMeta');
+  const primary = resolveDisplayOwnerUid(ownerUid);
+  const persisted = readAppMetaCache('session:dataOwnerUid');
+  const cachedOwner = getCachedDataOwnerUid();
+  const loginUid = getCachedLoginUid();
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, cachedOwner, loginUid);
+
+  const batches = await Promise.all(
+    sources.map(async (uid) => {
+      try {
+        return await db.sessoes.where('[ownerUid+deleted]').equals([uid, true]).toArray();
+      } catch {
+        const rows = await db.sessoes.where('ownerUid').equals(uid).toArray();
+        return rows.filter((r) => r.deleted === true);
+      }
+    }),
+  );
+  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? cachedOwner ?? primary);
+  return mergeRecordsById(mergeTarget, batches);
 }
 
 export async function getCadastroById(ownerUid: string, id: string): Promise<CadastroRecord | null> {

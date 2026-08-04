@@ -11,6 +11,7 @@ import {
   listSessoes,
   listSessoesForDisplay,
   listSessoesForSync,
+  listDeletedSessoesForDisplay,
   resolveOwnerUid,
   saveCadastro,
   saveAplicador,
@@ -74,8 +75,8 @@ export class DataStore {
   async getDeletedSessoes(ownerUid: string | null): Promise<SessaoAplicacaoTaf[]> {
     const db = getTafDatabase();
     if (db) {
-      // Todos os owners do aparelho — evita falhar o Histórico se a sessão mudou de UID.
-      const rows = await db.sessoes.filter((r) => r.deleted === true).toArray();
+      // Etapa 10: só owners da sessão — sem full table scan.
+      const rows = await listDeletedSessoesForDisplay(ownerUid);
       return rows.map(stripMeta);
     }
     const rows = await listSessoesForSync(resolveOwnerUid(ownerUid), true);

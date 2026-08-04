@@ -4,6 +4,7 @@ import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import {
   listCadastrosForDisplay,
   listSessoesForDisplay,
+  listDeletedSessoesForDisplay,
 } from '../offline-first/db/localDb';
 import {
   calcularResumoInicioTafFromHistorico,
@@ -76,11 +77,15 @@ export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHi
   if (!db) return RESUMO_VAZIO;
 
   try {
-    const [cadRows, sessRows, allSessoes] = await Promise.all([
-      listCadastrosForDisplay(null),
-      listSessoesForDisplay(null),
-      db.sessoes.toArray(),
-    ]);
+    const ownerUid = getCachedDataOwnerUid();
+    const [cadRows, sessRows, deletedRows, nipsRestritos, nipsFatoresPreenchidos] =
+      await Promise.all([
+        listCadastrosForDisplay(null),
+        listSessoesForDisplay(null),
+        listDeletedSessoesForDisplay(null),
+        getNipsRestritosAtivos(),
+        getNipsComFatoresRiscoPreenchidos(ownerUid),
+      ]);
 
     const cadastros = cadRows
       .filter((row) => row.deleted !== true && !isDemoCadastroId(row.id))
@@ -90,15 +95,9 @@ export async function loadResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHi
       .filter((row) => row.deleted !== true && !isDemoSessaoId(row.id))
       .map((row) => stripSessao(row as unknown as Record<string, unknown>));
 
-    const sessoesExcluidas = allSessoes
-      .filter((row) => row.deleted === true && !isDemoSessaoId(row.id))
+    const sessoesExcluidas = deletedRows
+      .filter((row) => !isDemoSessaoId(row.id))
       .map((row) => stripSessao(row as unknown as Record<string, unknown>));
-
-    const ownerUid = getCachedDataOwnerUid();
-    const [nipsRestritos, nipsFatoresPreenchidos] = await Promise.all([
-      getNipsRestritosAtivos(),
-      getNipsComFatoresRiscoPreenchidos(ownerUid),
-    ]);
 
     return calcularResumoInicioTafFromHistorico(
       sessoes,

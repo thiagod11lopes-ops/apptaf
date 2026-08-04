@@ -35,6 +35,11 @@ export type TrialTableAction =
       value: boolean;
       /** Tempo do cronômetro no momento da confirmação (exibido na prova ativa). */
       elapsedMs?: number | null;
+    }
+  | {
+      type: 'setTempoParticipante';
+      participante: number;
+      elapsedMs: number | null;
     };
 
 export const initialTrialTableState: TrialTableState = {
@@ -243,6 +248,15 @@ export function aplicarTafTrialReducer(
         chegadaNatacao: nextChegada,
         checksVoltas: nextChecks,
       };
+    }
+
+    case 'setTempoParticipante': {
+      const { participante, elapsedMs } = action;
+      const nextTempos = [...state.temposMilitaresMs];
+      while (nextTempos.length <= participante) nextTempos.push(null);
+      nextTempos[participante] =
+        elapsedMs != null && Number.isFinite(elapsedMs) && elapsedMs >= 0 ? elapsedMs : null;
+      return { ...state, temposMilitaresMs: nextTempos };
     }
 
     default:

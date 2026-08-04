@@ -490,7 +490,9 @@ export default function AplicarTAFScreen() {
    * no instante do clique (elapsed do cronômetro). Corrida: só após última volta.
    */
   const mostrarColunaTempo =
-    tipoProva === 'natacao' || tipoProva === 'abdominal_prancha'
+    tipoProva === 'natacao' ||
+    tipoProva === 'abdominal_prancha' ||
+    tipoProva === 'permanencia'
       ? true
       : mostrarColunaTempoCorrida ||
         (tipoProva === 'corrida' && desistenciaParticipantes.some(Boolean));
@@ -708,7 +710,7 @@ export default function AplicarTAFScreen() {
   }, [corridaEtapa, tipoProva, nParticipantesConfirmado]);
 
   useEffect(() => {
-    if (corridaEtapa !== 'tabela_corrida') return;
+    if (corridaEtapa !== 'tabela_corrida' && corridaEtapa !== 'tabela_permanencia') return;
     dispatchTrial({ type: 'resizeTempos', p: nParticipantesConfirmado });
   }, [corridaEtapa, nParticipantesConfirmado]);
 
@@ -2320,6 +2322,16 @@ export default function AplicarTAFScreen() {
       Array.from({ length: nParticipantesConfirmado }, () => null),
     );
     resetCronometroCorrida();
+    dispatchTrial({
+      type: 'hydrate',
+      state: {
+        checksVoltas: [],
+        chegadaNatacao: [],
+        temposMilitaresMs: Array.from({ length: nParticipantesConfirmado }, () => null),
+        desistenciaParticipantes: [],
+        desistenciaVoltasParticipantes: [],
+      },
+    });
     setCorridaEtapa('tabela_permanencia');
   }, [nParticipantesConfirmado, resetCronometroCorrida]);
 
@@ -2354,13 +2366,32 @@ export default function AplicarTAFScreen() {
   const togglePermanenciaResultado = useCallback(
     (index: number, opcao: 'aprovado' | 'reprovado') => {
       setErroPermanencia('');
+      const atual = resultadoPermanenciaLinhas[index] ?? null;
+      const clearing = atual === opcao;
+      const nextOp: ResultadoPermanenciaOpcao = clearing ? null : opcao;
+
       setResultadoPermanenciaLinhas((prev) => {
         const next = [...prev];
-        next[index] = prev[index] === opcao ? null : opcao;
+        while (next.length <= index) next.push(null);
+        next[index] = nextOp;
         return next;
       });
+
+      // Aprovado → 10:00 fixos; reprovado → tempo atual do cronômetro; desmarcar → limpa.
+      const tempoMs =
+        nextOp == null
+          ? null
+          : nextOp === 'aprovado'
+            ? PERMANENCIA_DURACAO_MS
+            : (getElapsedRaceMs() ?? 0);
+
+      dispatchTrial({
+        type: 'setTempoParticipante',
+        participante: index,
+        elapsedMs: tempoMs,
+      });
     },
-    [],
+    [resultadoPermanenciaLinhas, getElapsedRaceMs],
   );
 
   const onCadastrarPermanencia = useCallback(async () => {
@@ -2375,11 +2406,6 @@ export default function AplicarTAFScreen() {
     setErroPermanencia('');
     aplicandoResultadoLockRef.current = true;
     setSalvandoResultadosCorrida(true);
-    const tempoMs =
-      tempoParadoMsRef.current ??
-      getElapsedRaceMs() ??
-      PERMANENCIA_DURACAO_MS;
-    const tempoStr = formatMsByModality('corrida', tempoMs);
 
     try {
       let cadastrosInicial: CadastroItemPersist[] = [];
@@ -2394,6 +2420,14 @@ export default function AplicarTAFScreen() {
       let ok = 0;
       const naoEncontrados: string[] = [];
 
+      const tempoMsLinha = (i: number, resultado: 'aprovado' | 'reprovado'): number => {
+        const gravado = temposMilitaresMs[i];
+        if (gravado != null && Number.isFinite(gravado) && gravado >= 0) return gravado;
+        return resultado === 'aprovado'
+          ? PERMANENCIA_DURACAO_MS
+          : (tempoParadoMsRef.current ?? getElapsedRaceMs() ?? 0);
+      };
+
       for (let i = 0; i < nParticipantesConfirmado; i += 1) {
         const nip = nipsParticipantes[i] ?? '';
         let busca = buscarCadastroPorNomeOuNip(listaAtual, nip);
@@ -2406,6 +2440,8 @@ export default function AplicarTAFScreen() {
           continue;
         }
         const resultado = resultadoPermanenciaLinhas[i]!;
+        const tempoMs = tempoMsLinha(i, resultado);
+        const tempoStr = formatMsByModality('corrida', tempoMs);
         const atualizado: CadastroItemPersist = {
           ...busca.cadastro,
           resultadoPermanencia: resultado,
@@ -2427,6 +2463,7 @@ export default function AplicarTAFScreen() {
           const fb = nipFeedbackLinhas[i];
           const nip = nipsParticipantes[i] ?? '';
           const resultado = resultadoPermanenciaLinhas[i]!;
+          const tempoMs = tempoMsLinha(i, resultado);
           resultadosPerm.push({
             corredor: i + 1,
             nome:
@@ -2465,11 +2502,13 @@ export default function AplicarTAFScreen() {
     }
   }, [
     resultadoPermanenciaLinhas,
+    temposMilitaresMs,
     nParticipantesConfirmado,
     nipsParticipantes,
     nipFeedbackLinhas,
     salvandoResultadosCorrida,
     abrirFluxoRubricaCandidatos,
+    getElapsedRaceMs,
   ]);
   const voltarDeTabelaParaNips = useCallback(() => {
     resetCronometroCorrida();
@@ -2792,6 +2831,16 @@ export default function AplicarTAFScreen() {
           setModalPermanenciaFinalizadaVisible(false);
           setErroPermanencia('');
           setResultadoPermanenciaLinhas(Array.from({ length: n }, () => null));
+          dispatchTrial({
+            type: 'hydrate',
+            state: {
+              checksVoltas: [],
+              chegadaNatacao: [],
+              temposMilitaresMs: Array.from({ length: n }, () => null),
+              desistenciaParticipantes: [],
+              desistenciaVoltasParticipantes: [],
+            },
+          });
           setCorridaEtapa('tabela_permanencia');
         } else if (isProvaComRepeticoes(tipo)) {
           setRepeticoesParticipantes(Array.from({ length: n }, () => ''));

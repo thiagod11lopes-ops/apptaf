@@ -40,7 +40,7 @@ export function BackupTafCsvBlock() {
     try {
       const result = await exportarBackupTafCsv();
       setExportMsg(
-        `${result.mensagem} (${result.filename} + ${result.filenameOds} + ${result.filenamePdf}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões de TAF (backup completo v2 + planilha ODS + PDF).`,
+        `${result.mensagem} (${result.filename}${result.pdfGerado ? ` + ${result.filenamePdf}` : ''}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões de TAF (backup CSV + PDF de Resultados do histórico).`,
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao gerar backup CSV.';
@@ -58,7 +58,7 @@ export function BackupTafCsvBlock() {
     try {
       const result = await exportarBackupTafCsvNaPasta();
       setExportMsg(
-        `${result.mensagem} (${result.filename} + ${result.filenameOds} + ${result.filenamePdf}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões.`,
+        `${result.mensagem} (${result.filename}${result.pdfGerado ? ` + ${result.filenamePdf}` : ''}): ${result.cadastros.toLocaleString('pt-BR')} cadastros e ${result.sessoes.toLocaleString('pt-BR')} sessões.`,
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao salvar backup CSV na pasta.';
@@ -210,9 +210,11 @@ export function BackupTafCsvBlock() {
 
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
         Exporta e restaura cadastros, resultados, aplicadores, pré-cadastros, e-mails autorizados, fila de
-        sync e metadados em um único arquivo CSV. Ao carregar, o sistema usa a mesma regra do disquete: em
-        conflito pelo mesmo registro, prevalece o updatedAt mais recente (o aparelho não perde edições mais
-        novas). “Backup em CSV” salva na pasta Downloads; “Salvar backup na pasta…” escolhe outra pasta.
+        sync e metadados em um único arquivo CSV, e baixa também o PDF de Resultados do histórico (mesmo
+        formato de “Gerar Resultados do dia”, com assinaturas quando existirem). Ao carregar, o sistema usa a
+        mesma regra do disquete: em conflito pelo mesmo registro, prevalece o updatedAt mais recente (o
+        aparelho não perde edições mais novas). “Backup em CSV” salva na pasta Downloads; “Salvar backup na
+        pasta…” escolhe outra pasta.
         {isAuthenticated ? ' Com login ativo, os dados são gravados na nuvem.' : ''}
         {' '}
         Se um backup antigo (Firebase) não mostrar cadastros, carregue o CSV de novo após atualizar o app — a sessão

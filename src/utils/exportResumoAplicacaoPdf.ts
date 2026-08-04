@@ -31,11 +31,122 @@ import {
   SalvamentoCanceladoError,
 } from './salvarArquivoNaPasta';
 import { formatBrDateKey, formatBrTimeKey } from './backupNaming';
+import { agruparSessoesHistoricoPorTeste } from './agruparSessoesHistoricoPorTeste';
 import {
   gerarResumoAplicacaoPdfBlobWeb,
   gerarResumosAplicacaoPdfBlobWeb,
   type ResumoAplicacaoPdfBloco,
 } from './gerarResumoAplicacaoPdfWeb';
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const normalized = base64.replace(/[\r\n\s]/g, '');
+  const atobFn =
+    typeof globalThis.atob === 'function'
+      ? globalThis.atob.bind(globalThis)
+      : null;
+  if (!atobFn) {
+    throw new Error('Decodificação Base64 indisponível neste ambiente.');
+  }
+  const binary = atobFn(normalized);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+/**
+ * Sessões do Histórico consolidadas (1 bloco por aplicação),
+ * incluindo aplicações sem assinatura do aplicador.
+ */
+export function sessoesHistoricoParaPdfBackup(
+  sessoes: SessaoAplicacaoTaf[],
+): SessaoAplicacaoTaf[] {
+  return agruparSessoesHistoricoPorTeste(sessoes);
+}
+
+/** Nome: Resultados_historico_TAF_DD-MM-AAAA_HHhMMmSS.pdf */
+export function nomeArquivoPdfResultadosHistorico(
+  momento: Date = new Date(),
+): string {
+  return sanitizarNomeArquivo(
+    `Resultados_historico_TAF_${formatBrDateKey(momento)}_${formatBrTimeKey(momento)}`,
+    '.pdf',
+  );
+}
+
+/**
+ * Bytes do PDF no formato “Gerar Resultados do dia”, com todo o histórico.
+ * Retorna `null` se não houver resultados (assinatura não é exigida).
+ */
+export async function buildResumosHistoricoPdfBytes(
+  sessoes: SessaoAplicacaoTaf[],
+): Promise<Uint8Array | null> {
+  const agrupadas = sessoesHistoricoParaPdfBackup(sessoes);
+  const ordenadas = [...agrupadas].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+  const blocos = montarBlocosResumoPdfDasSessoes(ordenadas);
+  if (blocos.length === 0) return null;
+
+  if (Platform.OS === 'web') {
+    const blob = await gerarResumosAplicacaoPdfBlobWeb(blocos);
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  const html = buildResumosAplicacaoDiaHtml(blocos, 'Resultados do histórico — TAF');
+  const { uri } = await Print.printToFileAsync({
+    html,
+    width: PDF_A4_LANDSCAPE_WIDTH,
+    height: PDF_A4_LANDSCAPE_HEIGHT,
+  });
+  const FileSystem = await import('expo-file-system/legacy');
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return base64ToUint8Array(base64);
+}
+
+/**
+ * PDF do histórico completo (mesmo layout do dia), com assinaturas quando existirem.
+ */
+export async function exportResumosHistoricoCompletoPdf(
+  sessoes: SessaoAplicacaoTaf[],
+): Promise<string> {
+  const agrupadas = sessoesHistoricoParaPdfBackup(sessoes);
+  const ordenadas = [...agrupadas].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+  const blocos = montarBlocosResumoPdfDasSessoes(ordenadas);
+  if (blocos.length === 0) {
+    throw new Error('Não há resultados no histórico para exportar.');
+  }
+
+  const filename = nomeArquivoPdfResultadosHistorico();
+
+  if (Platform.OS === 'web') {
+    const blob = await gerarResumosAplicacaoPdfBlobWeb(blocos);
+    const resultado = await entregarPdfBlobWeb(blob, filename);
+    if (!resultado.ok) {
+      throw new SalvamentoCanceladoError();
+    }
+    return mensagemSucessoSalvarNaPasta(resultado);
+  }
+
+  const html = buildResumosAplicacaoDiaHtml(blocos, 'Resultados do histórico — TAF');
+  const { uri } = await Print.printToFileAsync({
+    html,
+    width: PDF_A4_LANDSCAPE_WIDTH,
+    height: PDF_A4_LANDSCAPE_HEIGHT,
+  });
+
+  const resultado = await baixarArquivoParaDownloads({
+    sourceUri: uri,
+    filename,
+    mimeType: 'application/pdf',
+    uti: 'com.adobe.pdf',
+    dialogTitle: 'Salvar PDF do histórico em Downloads',
+  });
+
+  if (!resultado.ok) {
+    throw new SalvamentoCanceladoError();
+  }
+  return mensagemSucessoSalvarNaPasta(resultado);
+}
 /** Estima quantas folhas A4 paisagem serão necessárias para o resumo da aplicação. */
 export function estimarFolhasA4PdfResumoAplicacao(
   quantidadeLinhas: number,

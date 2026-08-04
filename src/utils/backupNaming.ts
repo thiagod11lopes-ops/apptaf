@@ -45,3 +45,8 @@ export function buildBackupPlanilhaOdsFilename(date = new Date()): string {
 export function buildBackupPlanilhaPdfFilename(date = new Date()): string {
   return `Planilha PDF (${formatBrDateKey(date)}).pdf`;
 }
+
+/** PDF de Resultados do histórico (backup) — ex.: Resultados_historico_TAF_03-07-2026_21h05m32.pdf */
+export function buildBackupResultadosHistoricoPdfFilename(date = new Date()): string {
+  return `Resultados_historico_TAF_${formatBrDateKey(date)}_${formatBrTimeKey(date)}.pdf`;
+}

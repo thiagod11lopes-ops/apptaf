@@ -30,11 +30,11 @@ import {
   type SystemBackupPayload,
 } from './gatherSystemBackupData';
 import { csvRow, parseCsvRecords, recordsToObjects } from './csvText';
-import { buildBackupApptafFilename, buildBackupPlanilhaOdsFilename, buildBackupPlanilhaPdfFilename } from './backupNaming';
-import { buildBackupOdsBytes, ODS_MIME_TYPE } from './backupTafOds';
-import { buildBackupPlanilhaPdfBytes, PLANILHA_PDF_MIME_TYPE } from './backupTafPlanilhaPdf';
+import { buildBackupApptafFilename, buildBackupResultadosHistoricoPdfFilename } from './backupNaming';
+import { buildResumosHistoricoPdfBytes } from './exportResumoAplicacaoPdf';
 
 const BACKUP_VERSION = '2';
+const RESULTADOS_PDF_MIME = 'application/pdf';
 
 /** Metadados de sessão/dispositivo — restaurar quebraria o vínculo com a conta atual. */
 const SKIP_APP_META_EXACT = new Set([
@@ -715,74 +715,56 @@ function backupFilename(): string {
   return buildBackupApptafFilename();
 }
 
-function planilhaOdsFilename(): string {
-  return buildBackupPlanilhaOdsFilename();
-}
-
-function planilhaPdfFilename(): string {
-  return buildBackupPlanilhaPdfFilename();
+function resultadosHistoricoPdfFilename(): string {
+  return buildBackupResultadosHistoricoPdfFilename();
 }
 
 function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function downloadBackupOdsFile(
-  cadastros: CadastroItemPersist[],
-  filename = planilhaOdsFilename(),
-  sessoes: SessaoAplicacaoTaf[] = [],
-): Promise<void> {
+/**
+ * Baixa o PDF de Resultados do histórico (layout “Gerar Resultados do dia”).
+ * Se não houver resultados, não baixa PDF (CSV segue independente).
+ * Assinatura do aplicador não é exigida.
+ */
+export async function downloadBackupResultadosHistoricoPdfFile(
+  sessoes: SessaoAplicacaoTaf[],
+  filename = resultadosHistoricoPdfFilename(),
+): Promise<boolean> {
+  const bytes = await buildResumosHistoricoPdfBytes(sessoes);
+  if (!bytes) return false;
   const { baixarBinarioParaDownloads } = await import('./salvarArquivoNaPasta');
-  const bytes = buildBackupOdsBytes(cadastros, sessoes);
   const resultado = await baixarBinarioParaDownloads({
     bytes,
     filename,
-    mimeType: ODS_MIME_TYPE,
-    uti: 'org.oasis-open.opendocument.spreadsheet',
-    dialogTitle: 'Salvar planilha TAF (ODS) em Downloads',
-    extensaoPadrao: '.ods',
-  });
-  if (!resultado.ok) {
-    throw new Error('Seleção de pasta cancelada.');
-  }
-}
-
-export async function downloadBackupPlanilhaPdfFile(
-  cadastros: CadastroItemPersist[],
-  filename = planilhaPdfFilename(),
-  sessoes: SessaoAplicacaoTaf[] = [],
-): Promise<void> {
-  const { baixarBinarioParaDownloads } = await import('./salvarArquivoNaPasta');
-  const bytes = await buildBackupPlanilhaPdfBytes(cadastros, sessoes);
-  const resultado = await baixarBinarioParaDownloads({
-    bytes,
-    filename,
-    mimeType: PLANILHA_PDF_MIME_TYPE,
+    mimeType: RESULTADOS_PDF_MIME,
     uti: 'com.adobe.pdf',
-    dialogTitle: 'Salvar planilha TAF (PDF) em Downloads',
+    dialogTitle: 'Salvar PDF Resultados do histórico em Downloads',
     extensaoPadrao: '.pdf',
   });
   if (!resultado.ok) {
     throw new Error('Seleção de pasta cancelada.');
   }
+  return true;
 }
 
-/** Baixa CSV, planilha ODS e PDF da planilha (três arquivos). */
+/** Baixa CSV + PDF de Resultados do histórico (dois arquivos). */
 export async function downloadBackupCsvEOds(
   csvContent: string,
   csvFilename: string,
-  cadastros: CadastroItemPersist[],
-  odsFilename = planilhaOdsFilename(),
+  _cadastros: CadastroItemPersist[],
+  _odsFilename?: string,
   sessoes: SessaoAplicacaoTaf[] = [],
-  pdfFilename = planilhaPdfFilename(),
+  pdfFilename = resultadosHistoricoPdfFilename(),
 ): Promise<void> {
   await downloadBackupCsvFile(csvContent, csvFilename);
-  // Navegadores costumam bloquear downloads seguintes se forem imediatos.
   await delayMs(450);
-  await downloadBackupOdsFile(cadastros, odsFilename, sessoes);
-  await delayMs(450);
-  await downloadBackupPlanilhaPdfFile(cadastros, pdfFilename, sessoes);
+  await downloadBackupResultadosHistoricoPdfFile(sessoes, pdfFilename);
 }
+
+/** @deprecated Use downloadBackupCsvEOds (agora CSV + PDF histórico). */
+export const downloadBackupCsvEPdf = downloadBackupCsvEOds;
 
 export async function downloadBackupCsvFile(content: string, filename: string): Promise<void> {
   const { baixarTextoParaDownloads } = await import('./salvarArquivoNaPasta');
@@ -802,8 +784,8 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   cadastros: number;
   sessoes: number;
   filename: string;
-  filenameOds: string;
   filenamePdf: string;
+  pdfGerado: boolean;
   mensagem: string;
 }> {
   const {
@@ -814,8 +796,7 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   const payload = await gatherSystemBackupData();
   const content = buildBackupCsvContent(payload);
   const filename = backupFilename();
-  const filenameOds = planilhaOdsFilename();
-  const filenamePdf = planilhaPdfFilename();
+  const filenamePdf = resultadosHistoricoPdfFilename();
   const resultado = await salvarConteudoTextoNaPastaEscolhida({
     content,
     filename,
@@ -826,37 +807,31 @@ export async function exportarBackupTafCsvNaPasta(): Promise<{
   if (!resultado.ok) {
     throw new Error('Seleção de pasta cancelada.');
   }
-  const odsBytes = buildBackupOdsBytes(payload.cadastros, payload.sessoes);
-  const odsResult = await salvarBinarioNaPastaEscolhida({
-    bytes: odsBytes,
-    filename: filenameOds,
-    mimeType: ODS_MIME_TYPE,
-    uti: 'org.oasis-open.opendocument.spreadsheet',
-    dialogTitle: 'Salvar planilha TAF (ODS) na pasta',
-    extensaoPadrao: '.ods',
-  });
-  if (!odsResult.ok) {
-    throw new Error('Seleção de pasta cancelada.');
-  }
-  const pdfBytes = await buildBackupPlanilhaPdfBytes(payload.cadastros, payload.sessoes);
-  const pdfResult = await salvarBinarioNaPastaEscolhida({
-    bytes: pdfBytes,
-    filename: filenamePdf,
-    mimeType: PLANILHA_PDF_MIME_TYPE,
-    uti: 'com.adobe.pdf',
-    dialogTitle: 'Salvar planilha TAF (PDF) na pasta',
-    extensaoPadrao: '.pdf',
-  });
-  if (!pdfResult.ok) {
-    throw new Error('Seleção de pasta cancelada.');
+  const pdfBytes = await buildResumosHistoricoPdfBytes(payload.sessoes);
+  let pdfGerado = false;
+  if (pdfBytes) {
+    const pdfResult = await salvarBinarioNaPastaEscolhida({
+      bytes: pdfBytes,
+      filename: filenamePdf,
+      mimeType: RESULTADOS_PDF_MIME,
+      uti: 'com.adobe.pdf',
+      dialogTitle: 'Salvar PDF Resultados do histórico na pasta',
+      extensaoPadrao: '.pdf',
+    });
+    if (!pdfResult.ok) {
+      throw new Error('Seleção de pasta cancelada.');
+    }
+    pdfGerado = true;
   }
   return {
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
     filename,
-    filenameOds,
     filenamePdf,
-    mensagem: `${mensagemSucessoSalvarNaPasta(resultado)} Também salva a planilha ODS e o PDF.`,
+    pdfGerado,
+    mensagem: pdfGerado
+      ? `${mensagemSucessoSalvarNaPasta(resultado)} Também salvou o PDF de Resultados do histórico.`
+      : `${mensagemSucessoSalvarNaPasta(resultado)} Sem resultados no histórico para gerar PDF.`,
   };
 }
 
@@ -864,8 +839,8 @@ export async function exportarBackupTafCsv(): Promise<{
   cadastros: number;
   sessoes: number;
   filename: string;
-  filenameOds: string;
   filenamePdf: string;
+  pdfGerado: boolean;
   mensagem: string;
 }> {
   const { mensagemSucessoSalvarNaPasta, baixarTextoParaDownloads } = await import(
@@ -874,8 +849,7 @@ export async function exportarBackupTafCsv(): Promise<{
   const payload = await gatherSystemBackupData();
   const content = buildBackupCsvContent(payload);
   const filename = backupFilename();
-  const filenameOds = planilhaOdsFilename();
-  const filenamePdf = planilhaPdfFilename();
+  const filenamePdf = resultadosHistoricoPdfFilename();
   const resultado = await baixarTextoParaDownloads({
     content,
     filename,
@@ -887,16 +861,19 @@ export async function exportarBackupTafCsv(): Promise<{
     throw new Error('Seleção de pasta cancelada.');
   }
   await delayMs(450);
-  await downloadBackupOdsFile(payload.cadastros, filenameOds, payload.sessoes);
-  await delayMs(450);
-  await downloadBackupPlanilhaPdfFile(payload.cadastros, filenamePdf, payload.sessoes);
+  const pdfGerado = await downloadBackupResultadosHistoricoPdfFile(
+    payload.sessoes,
+    filenamePdf,
+  );
   return {
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
     filename,
-    filenameOds,
     filenamePdf,
-    mensagem: `${mensagemSucessoSalvarNaPasta(resultado)} Também baixou a planilha ODS e o PDF.`,
+    pdfGerado,
+    mensagem: pdfGerado
+      ? `${mensagemSucessoSalvarNaPasta(resultado)} Também baixou o PDF de Resultados do histórico.`
+      : `${mensagemSucessoSalvarNaPasta(resultado)} Sem resultados no histórico para gerar PDF.`,
   };
 }
 

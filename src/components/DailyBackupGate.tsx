@@ -570,7 +570,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
       return 'Baixe o arquivo para liberar o uso do AppTAF hoje.';
     }
     if (phase === 'done') return 'Seus dados foram salvos. Você já pode continuar.';
-    if (phase === 'backing_up') return 'Coletando e gerando CSV, planilha e PDF…';
+    if (phase === 'backing_up') return 'Coletando e gerando CSV e PDF…';
     return 'O AppTAF só é liberado após o backup diário de todos os dados.';
   }, [phase, backupNetOnline, cloudSyncedForBackup]);
 
@@ -785,8 +785,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
                     </Text>
                     {prepared ? (
                       <Text style={[ts.caption, styles.filename, { color: theme.textMuted }]}>
-                        Arquivos: {prepared.filename} + {prepared.filenameOds} +{' '}
-                        {prepared.filenamePdf}
+                        Arquivos: {prepared.filename} + {prepared.filenamePdf}
                       </Text>
                     ) : null}
                   </View>
@@ -868,7 +867,7 @@ export function DailyBackupGate({ children, enabled = true }: Props) {
                     >
                       <Download size={18} color="#FFFFFF" strokeWidth={2.4} />
                       <Text style={styles.btnPrimaryText}>
-                        Baixar CSV + planilha + PDF e continuar
+                        Baixar CSV + PDF e continuar
                       </Text>
                     </LinearGradient>
                   </PressableScale>

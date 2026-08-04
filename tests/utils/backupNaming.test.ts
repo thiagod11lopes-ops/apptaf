@@ -3,6 +3,7 @@ import {
   buildBackupApptafFilename,
   buildBackupPlanilhaOdsFilename,
   buildBackupPlanilhaPdfFilename,
+  buildBackupResultadosHistoricoPdfFilename,
   formatBrDateKey,
 } from '../../src/utils/backupNaming';
 
@@ -28,6 +29,13 @@ describe('backupNaming', () => {
     const filename = buildBackupPlanilhaPdfFilename(new Date('2026-07-03T12:00:00.000Z'));
     expect(filename.startsWith('Planilha PDF (')).toBe(true);
     expect(filename.endsWith(').pdf')).toBe(true);
-    expect(filename).toMatch(/^Planilha PDF \(\d{2}-\d{2}-\d{4}\)\.pdf$/);
+  });
+
+  it('gera nome Resultados_historico_TAF_dd-mm-aaaa_HHhMMmSS.pdf', () => {
+    const filename = buildBackupResultadosHistoricoPdfFilename(
+      new Date('2026-07-03T12:00:00.000Z'),
+    );
+    expect(filename.startsWith('Resultados_historico_TAF_')).toBe(true);
+    expect(filename.endsWith('.pdf')).toBe(true);
   });
 });

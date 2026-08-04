@@ -5,14 +5,12 @@ import {
 import { gatherSystemBackupData } from '../utils/gatherSystemBackupData';
 import {
   buildBackupApptafFilename,
-  buildBackupPlanilhaOdsFilename,
-  buildBackupPlanilhaPdfFilename,
+  buildBackupResultadosHistoricoPdfFilename,
   formatBrDateKey,
 } from '../utils/backupNaming';
 import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
 import { createLocalBackup } from '../offline-first/sync/localBackup';
-import type { CadastroItemPersist } from './cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from './resultadosAplicadosIndexedDb';
 
 export const DAILY_BACKUP_META_KEY = 'backup:lastDailyDateBr';
@@ -27,11 +25,8 @@ export type DailyBackupProgress = {
 export type DailyBackupPrepared = {
   content: string;
   filename: string;
-  filenameOds: string;
   filenamePdf: string;
-  /** Cadastros usados na planilha ODS/PDF. */
-  cadastrosData: CadastroItemPersist[];
-  /** Sessões para rúbricas do Histórico na planilha ODS/PDF. */
+  /** Sessões para o PDF de Resultados do histórico. */
   sessoesData: SessaoAplicacaoTaf[];
   cadastros: number;
   sessoes: number;
@@ -99,11 +94,10 @@ export async function prepareDailySystemBackup(
   report(55, 'Gerando arquivo CSV…');
   const content = buildBackupCsvContent(payload);
   const filename = buildBackupApptafFilename();
-  const filenameOds = buildBackupPlanilhaOdsFilename();
-  const filenamePdf = buildBackupPlanilhaPdfFilename();
+  const filenamePdf = buildBackupResultadosHistoricoPdfFilename();
   await yieldToUi();
 
-  report(72, 'Gerando planilha ODS e PDF…');
+  report(72, 'Preparando PDF de Resultados do histórico…');
   await yieldToUi();
 
   report(84, 'Salvando snapshot local…');
@@ -113,16 +107,14 @@ export async function prepareDailySystemBackup(
       await createLocalBackup(uid);
     }
   } catch {
-    // Backup CSV/ODS/PDF principal continua mesmo se o snapshot local falhar.
+    // Backup CSV/PDF principal continua mesmo se o snapshot local falhar.
   }
 
   report(95, 'Backup pronto para download');
   return {
     content,
     filename,
-    filenameOds,
     filenamePdf,
-    cadastrosData: payload.cadastros,
     sessoesData: payload.sessoes,
     cadastros: payload.cadastros.length,
     sessoes: payload.sessoes.length,
@@ -135,8 +127,8 @@ export async function downloadPreparedDailyBackup(prepared: DailyBackupPrepared)
   await downloadBackupCsvEOds(
     prepared.content,
     prepared.filename,
-    prepared.cadastrosData,
-    prepared.filenameOds,
+    [],
+    undefined,
     prepared.sessoesData,
     prepared.filenamePdf,
   );
@@ -147,6 +139,6 @@ export async function runDailySystemBackup(
 ): Promise<DailyBackupPrepared> {
   const prepared = await prepareDailySystemBackup(onProgress);
   await downloadPreparedDailyBackup(prepared);
-  onProgress?.({ percent: 100, label: 'Backup concluído (CSV + ODS + PDF)' });
+  onProgress?.({ percent: 100, label: 'Backup concluído (CSV + PDF)' });
   return prepared;
 }

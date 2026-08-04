@@ -13,7 +13,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { useAuth } from '../contexts/AuthContext';
-import { X } from 'lucide-react-native';
+import { X, Check } from 'lucide-react-native';
 import { CadastroPlanilhaBlock } from '../components/CadastroPlanilhaBlock';
 import { CarregarPlanilhaCadastro } from '../components/CarregarPlanilhaCadastro';
 import { LabelNip } from '../components/LabelNip';
@@ -47,6 +47,8 @@ type CadastroItem = {
   sexo?: 'M' | 'F';
   oficial?: string;
   praca?: string;
+  /** Carreira | RM2 — exclusivo. */
+  vinculo?: 'carreira' | 'rm2';
   tempoCorrida?: string;
   tempoNatacao?: string;
   notaCorrida?: string;
@@ -102,6 +104,7 @@ export default function CadastroScreenModern() {
   const [nome, setNome] = useState<string>('');
   const [dataNascimento, setDataNascimento] = useState<string>('');
   const [sexo, setSexo] = useState<'M' | 'F'>('M');
+  const [vinculo, setVinculo] = useState<'carreira' | 'rm2' | null>(null);
   const [cadastros, setCadastros] = useState<CadastroItem[]>(
     () => (peekCadastrosListCache() as CadastroItem[] | null) ?? [],
   );
@@ -220,6 +223,7 @@ export default function CadastroScreenModern() {
       categoria,
       oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
       praca: categoria === 'Praças' ? pracaSelecionada : undefined,
+      vinculo: vinculo ?? undefined,
     };
 
     const novoCadastro: CadastroItem = isEdicao && anterior
@@ -270,6 +274,10 @@ export default function CadastroScreenModern() {
             : undefined,
         };
 
+    if (!vinculo) {
+      delete novoCadastro.vinculo;
+    }
+
     setCadastros((prev) => {
       if (editandoId) return prev.map((c) => (c.id === id ? novoCadastro : c));
       return [...prev, novoCadastro];
@@ -282,6 +290,7 @@ export default function CadastroScreenModern() {
     setNome('');
     setDataNascimento('');
     setSexo('M');
+    setVinculo(null);
     setOficialSelecionado('');
     setPracaSelecionada('');
     setCategoria('');
@@ -316,6 +325,7 @@ export default function CadastroScreenModern() {
     setNome(item.nome || '');
     setDataNascimento(item.dataNascimento || '');
     setSexo(item.sexo === 'F' ? 'F' : 'M');
+    setVinculo(item.vinculo === 'rm2' || item.vinculo === 'carreira' ? item.vinculo : null);
   }
 
   async function handleConfirmarExcluir() {
@@ -547,30 +557,81 @@ export default function CadastroScreenModern() {
                   </View>
                 </View>
 
-                <TextInput
-                  value={nip}
-                  onChangeText={(t) => setNip(formatNipInput(t))}
-                  placeholder=""
-                  placeholderTextColor={theme.textMuted}
-                  style={[
-                    styles.input,
-                    {
-                      borderColor: inputBorderColor,
-                      backgroundColor: inputBgColor,
-                      color: inputTextColor,
-                      fontFamily: regularFont,
-                    },
-                  ]}
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  name="nip"
-                  textContentType="none"
-                  keyboardType="numeric"
-                  maxLength={10}
-                  inputMode="numeric"
-                />
+                <View style={styles.nipRow}>
+                  <TextInput
+                    value={nip}
+                    onChangeText={(t) => setNip(formatNipInput(t))}
+                    placeholder=""
+                    placeholderTextColor={theme.textMuted}
+                    style={[
+                      styles.input,
+                      styles.nipInput,
+                      {
+                        borderColor: inputBorderColor,
+                        backgroundColor: inputBgColor,
+                        color: inputTextColor,
+                        fontFamily: regularFont,
+                      },
+                    ]}
+                    autoCorrect={false}
+                    spellCheck={false}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    name="nip"
+                    textContentType="none"
+                    keyboardType="numeric"
+                    maxLength={10}
+                    inputMode="numeric"
+                  />
+                  <View style={styles.vinculoCol}>
+                    {(
+                      [
+                        { id: 'carreira' as const, label: 'Carreira' },
+                        { id: 'rm2' as const, label: 'RM2' },
+                      ] as const
+                    ).map((opt) => {
+                      const active = vinculo === opt.id;
+                      return (
+                        <TouchableOpacity
+                          key={opt.id}
+                          onPress={() => setVinculo(active ? null : opt.id)}
+                          style={styles.vinculoOpt}
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked: active }}
+                          accessibilityLabel={opt.label}
+                        >
+                          <View
+                            style={[
+                              styles.vinculoCheck,
+                              {
+                                borderColor: active ? theme.primary : theme.border,
+                                backgroundColor: active
+                                  ? theme.primary
+                                  : theme.isDark
+                                    ? 'rgba(2,6,23,0.35)'
+                                    : '#fff',
+                              },
+                            ]}
+                          >
+                            {active ? <Check size={12} color="#fff" strokeWidth={3} /> : null}
+                          </View>
+                          <Text
+                            style={[
+                              ts.caption,
+                              {
+                                color: active ? theme.primary : unselectedTextColor,
+                                fontWeight: '800',
+                                fontSize: 12,
+                              },
+                            ]}
+                          >
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
               </View>
 
               <View style={styles.section}>
@@ -943,6 +1004,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}),
+  },
+  nipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  nipInput: {
+    flex: 1,
+    minWidth: 0,
+  },
+  vinculoCol: {
+    gap: 8,
+    justifyContent: 'center',
+  },
+  vinculoOpt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  vinculoCheck: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   btnRow: { marginTop: 8 },
   btn: {

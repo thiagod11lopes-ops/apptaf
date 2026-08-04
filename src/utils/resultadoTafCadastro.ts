@@ -180,10 +180,16 @@ export function listarResultadosGeral(cadastros: CadastroItemPersist[]): Resulta
 }
 
 export function postoGradFromCadastro(
-  c: Pick<CadastroItemPersist, 'categoria' | 'oficial' | 'praca'>,
+  c: Pick<CadastroItemPersist, 'categoria' | 'oficial' | 'praca' | 'vinculo'>,
 ): string {
-  if (c.categoria === 'Oficiais') return (c.oficial || '').trim() || '—';
-  return (c.praca || '').trim() || '—';
+  const base =
+    c.categoria === 'Oficiais'
+      ? (c.oficial || '').trim() || '—'
+      : (c.praca || '').trim() || '—';
+  if (c.vinculo !== 'rm2') return base;
+  if (!base || base === '—') return 'RM2';
+  if (/(^|\s)RM2$/i.test(base)) return base;
+  return `${base} RM2`;
 }
 
 export function postoGradFromLinhaId(

@@ -8,6 +8,11 @@ export type CadastroItemPersist = {
   sexo?: 'M' | 'F';
   oficial?: string;
   praca?: string;
+  /**
+   * Vínculo militar (formulário Realizar Cadastro) — exclusivo.
+   * `rm2` → o sistema exibe "RM2" à direita do posto/graduação.
+   */
+  vinculo?: 'carreira' | 'rm2';
   /** Tempos TAF (Registrador de TAF), preenchidos quando houver registro */
   tempoCorrida?: string;
   tempoNatacao?: string;

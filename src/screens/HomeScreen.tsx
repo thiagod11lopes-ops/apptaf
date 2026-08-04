@@ -9,6 +9,7 @@ import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
 import { loadResumoInicioFromIndexedDb } from '../utils/homeResumoIndexedDb';
+import { runAfterFirstPaint } from '../utils/runAfterFirstPaint';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 import { TafGlassPanel } from '../components/mobile/TafTabChrome';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
@@ -50,6 +51,9 @@ export default function HomeScreen() {
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const [emailFixoPrefixo, setEmailFixoPrefixo] = useState<string | null>(null);
+  /** Etapa 4: só calcula cards após o 1º paint (UI monta com zeros). */
+  const cardsPaintReadyRef = useRef(false);
+  const [cardsPaintReady, setCardsPaintReady] = useState(false);
 
   const pctConcluidos = useMemo(() => {
     const total = resumo.totalCadastrados;
@@ -133,13 +137,15 @@ export default function HomeScreen() {
 
   /** Cards = espelho local do banco na nuvem (atualizado automaticamente online). */
   const recarregarResumo = useCallback(async () => {
+    // Antes do 1º paint: não bloqueia a UI com IndexedDB + cálculo dos cards.
+    if (!cardsPaintReadyRef.current) return;
     try {
       const next = await loadResumoInicioFromIndexedDb();
       setResumo(next);
     } catch (error) {
       console.warn('[home] falha ao recalcular cards:', error);
     }
-    if (isAuthenticated && dataOwnerUid) {
+    if (isAuthenticated && dataOwnerUid && isCloudLinkEnabled()) {
       try {
         const code = await ensureDatabaseBankCode(dataOwnerUid);
         setBankCode(code);
@@ -149,10 +155,24 @@ export default function HomeScreen() {
     }
   }, [isAuthenticated, dataOwnerUid]);
 
+  useEffect(() => {
+    return runAfterFirstPaint(() => {
+      cardsPaintReadyRef.current = true;
+      setCardsPaintReady(true);
+    });
+  }, []);
+
   useAuthDataReload(recarregarResumo);
+
+  // Primeiro carregamento só depois do paint (independente do foco/sync).
+  useEffect(() => {
+    if (!cardsPaintReady) return;
+    void recarregarResumo();
+  }, [cardsPaintReady, recarregarResumo]);
 
   // Após sync automático (sucesso, já atualizado ou erro), atualiza os cards.
   useEffect(() => {
+    if (!cardsPaintReady) return;
     const phase = syncUi.phase;
     if (
       phase === 'success' ||
@@ -162,7 +182,7 @@ export default function HomeScreen() {
     ) {
       void recarregarResumo();
     }
-  }, [syncUi.phase, recarregarResumo]);
+  }, [cardsPaintReady, syncUi.phase, recarregarResumo]);
 
   return (
     <MobileScreenScaffold scroll={false} style={styles.page} contentContainerStyle={styles.pageContent}>

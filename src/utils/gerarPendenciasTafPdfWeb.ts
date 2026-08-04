@@ -28,12 +28,11 @@ export async function gerarPendenciasTafPdfBlobWeb(
 
   type Col = { title: string; w: number; get: (r: PendenciaTafItem) => string };
   const cols: Col[] = [
-    { title: 'NIP', w: usableW * 0.14, get: (r) => r.nip || '—' },
-    { title: 'Nome', w: usableW * 0.32, get: (r) => r.nome || '—' },
+    { title: 'NIP', w: usableW * 0.16, get: (r) => r.nip || '—' },
+    { title: 'Nome', w: usableW * 0.36, get: (r) => r.nome || '—' },
     { title: 'P/G', w: usableW * 0.1, get: (r) => r.postoGrad || '—' },
-    { title: 'Categoria', w: usableW * 0.12, get: (r) => r.categoria || '—' },
-    { title: 'Situacao', w: usableW * 0.12, get: (r) => r.situacao },
-    { title: 'Pendencias', w: usableW * 0.2, get: (r) => r.faltam.join(', ') || '—' },
+    { title: 'Categoria', w: usableW * 0.14, get: (r) => r.categoria || '—' },
+    { title: 'Pendencias', w: usableW * 0.24, get: (r) => r.faltam.join(', ') || '—' },
   ];
   const sumW = cols.reduce((a, c) => a + c.w, 0);
   cols.forEach((c) => {

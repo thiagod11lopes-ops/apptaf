@@ -60,15 +60,6 @@ const PENDENCIAS_EXTRA_STYLES = `
   }
   .mono { font-family: ui-monospace, monospace; font-weight: 700; }
   .falta { color: #dc2626; font-weight: 700; font-size: 10px; }
-  .badge {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: 800;
-  }
-  .badge-warn { background: #fef3c7; color: #92400e; }
-  .badge-muted { background: #f1f5f9; color: #64748b; }
   .kpi-row {
     display: flex;
     gap: 10px;
@@ -111,7 +102,6 @@ export function buildPendenciasTafHtml(
         <td class="col-nome"><strong>${escapeHtmlPdf(r.nome)}</strong></td>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td>${escapeHtmlPdf(r.categoria)}</td>
-        <td><span class="badge badge-${r.situacao === 'Sem teste' ? 'muted' : 'warn'}">${escapeHtmlPdf(r.situacao)}</span></td>
         <td class="falta">${escapeHtmlPdf(r.faltam.join(', ') || '—')}</td>
       </tr>`,
   );
@@ -128,7 +118,6 @@ export function buildPendenciasTafHtml(
           <th class="col-nome">Nome</th>
           <th>P/G</th>
           <th>Categoria</th>
-          <th>Situação</th>
           <th>Pendências</th>
         </tr>`;
 
@@ -136,7 +125,7 @@ export function buildPendenciasTafHtml(
     tableClass: 'pendencias-taf',
     theadHtml,
     rowHtml: rows,
-    emptyColspan: 6,
+    emptyColspan: 5,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
   });

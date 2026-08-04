@@ -7,7 +7,10 @@ import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
-import { loadResumoInicioFromIndexedDb } from '../utils/homeResumoIndexedDb';
+import {
+  loadResumoInicioFromIndexedDb,
+  peekHomeResumoCache,
+} from '../utils/homeResumoIndexedDb';
 import { runAfterFirstPaint } from '../utils/runAfterFirstPaint';
 import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold';
 import { TafGlassPanel } from '../components/mobile/TafTabChrome';
@@ -62,7 +65,10 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const { isNarrowPhone } = useAplicarTafLayout();
   const { user, authReady, isAuthenticated, dataOwnerUid } = useAuth();
-  const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(RESUMO_INICIAL);
+  /** Etapa 13: hidrata com cache em memória se houver (troca de aba sem re-scan Dexie). */
+  const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(
+    () => peekHomeResumoCache() ?? RESUMO_INICIAL,
+  );
   const progressAnim = useRef(new Animated.Value(0)).current;
   const [emailFixoPrefixo, setEmailFixoPrefixo] = useState<string | null>(null);
   /** Etapa 4: só calcula cards após o 1º paint (UI monta com zeros). */
@@ -149,7 +155,7 @@ export default function HomeScreen() {
     };
   }, [authReady, isAuthenticated, dataOwnerUid, user?.uid]);
 
-  /** Cards = espelho local (Dexie). Debounce evita recalcular a cada foco/sync/notify. */
+  /** Cards = espelho local (Dexie) com cache em memória. Debounce evita tempestade. */
   const resumoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumoInFlightRef = useRef(false);
   const resumoPendingRef = useRef(false);
@@ -165,6 +171,7 @@ export default function HomeScreen() {
       do {
         resumoPendingRef.current = false;
         try {
+          // Cache hit: resolve sem I/O. Miss / invalidação: recalcula IndexedDB.
           const next = await loadResumoInicioFromIndexedDb();
           setResumo((prev) => (resumoInicioEquals(prev, next) ? prev : next));
         } catch (error) {

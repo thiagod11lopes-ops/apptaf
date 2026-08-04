@@ -1281,15 +1281,18 @@ export const syncManager = {
     // Crash recovery da fila (7.4) — processing órfão volta a pending.
     await syncQueue.recoverStaleProcessing(dataOwnerUid);
     await syncEngine.preparePendingOwner(dataOwnerUid);
-    try {
-      await applyTeamWipeIfNeeded(dataOwnerUid, getCachedLoginUid());
-    } catch (error) {
-      await syncLogger.warn(
-        'sync',
-        `applyTeamWipeIfNeeded (bind): ${error instanceof Error ? error.message : String(error)}`,
-      );
+    // Wipe remoto + compact: só com BNC ligado (rede + Dexie pesado).
+    if (isCloudLinkEnabled()) {
+      try {
+        await applyTeamWipeIfNeeded(dataOwnerUid, getCachedLoginUid());
+      } catch (error) {
+        await syncLogger.warn(
+          'sync',
+          `applyTeamWipeIfNeeded (bind): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      await compactCadastrosIfNeeded(dataOwnerUid);
     }
-    await compactCadastrosIfNeeded(dataOwnerUid);
     await loadLastSyncFromAudit();
     await refreshPendingSummary();
     if (syncAuthAvailable) {

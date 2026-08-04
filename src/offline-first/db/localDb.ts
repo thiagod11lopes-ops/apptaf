@@ -114,8 +114,16 @@ export async function importAplicadorRecord(record: AplicadorRecord): Promise<vo
 export async function listCadastros(ownerUid: string, includeDeleted = false): Promise<CadastroRecord[]> {
   const db = getTafDatabase();
   if (!db) return [];
-  const rows = await db.cadastros.where('ownerUid').equals(ownerUid).toArray();
-  return includeDeleted ? rows : rows.filter((r) => !r.deleted);
+  if (includeDeleted) {
+    return db.cadastros.where('ownerUid').equals(ownerUid).toArray();
+  }
+  // Índice composto [ownerUid+deleted] — só ativos (deleted=false).
+  try {
+    return await db.cadastros.where('[ownerUid+deleted]').equals([ownerUid, false]).toArray();
+  } catch {
+    const rows = await db.cadastros.where('ownerUid').equals(ownerUid).toArray();
+    return rows.filter((r) => !r.deleted);
+  }
 }
 
 export async function listAplicadores(ownerUid: string, includeDeleted = false): Promise<AplicadorRecord[]> {
@@ -170,16 +178,18 @@ function resolveDisplayOwnerUid(ownerUid: string | null): string {
   return ANONYMOUS_OWNER;
 }
 
-/** Lista cadastros para exibição — une todos os owners locais do aparelho (CSV/sessão). */
+/** Lista cadastros para exibição — owners da sessão atual (sem varrer o Dexie inteiro). */
 export async function listCadastrosForDisplay(ownerUid: string | null): Promise<CadastroRecord[]> {
   const { readAppMetaCache } = await import('./appMeta');
   const primary = resolveDisplayOwnerUid(ownerUid);
   const persisted = readAppMetaCache('session:dataOwnerUid');
+  const cachedOwner = getCachedDataOwnerUid();
   const loginUid = getCachedLoginUid();
-  const indexedOwners = await listOwnerUidsInTable('cadastros');
-  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, loginUid, ...indexedOwners);
+  // Etapa 9: não chamar listOwnerUidsInTable (único-scan + N queries por owner legado).
+  // Mesma política dos aplicadores: só banco da sessão / chefe / anônimo.
+  const sources = uniqueOwnerSources(primary, ANONYMOUS_OWNER, persisted, cachedOwner, loginUid);
   const batches = await Promise.all(sources.map((uid) => listCadastros(uid)));
-  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? primary);
+  const mergeTarget = primary !== ANONYMOUS_OWNER ? primary : (persisted ?? cachedOwner ?? primary);
   const merged = mergeRecordsById(mergeTarget, batches);
   return dedupeCadastrosByNipNewest(merged) as CadastroRecord[];
 }

@@ -13,6 +13,7 @@ import { syncEngine, notifyDataChanged } from './SyncEngine';
 import { isUnsyncedLocalStatus } from './syncStatus';
 import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
 import { forceNextFullRemoteFetch } from './syncWatermark';
+import { isCloudLinkEnabled } from './cloudLinkPreference';
 
 const TEAM_WIPE_ACK_PREFIX = 'teamWipeAck:';
 
@@ -98,6 +99,9 @@ export async function applyTeamWipeIfNeeded(
   dataOwnerUid: string,
   loginUid: string | null,
 ): Promise<boolean> {
+  // Sem BNC: não consulta marcador remoto nem apaga local.
+  if (!isCloudLinkEnabled()) return false;
+
   const marker = await getTeamWipeMarker(dataOwnerUid);
   if (!marker) return false;
   const remoteWipedAt = Number(marker.wipedAt) || 0;

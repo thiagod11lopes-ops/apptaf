@@ -36,7 +36,7 @@ export type EditarDadosMilitarPayload = {
   praca?: string;
   dataNascimento: string;
   sexo: 'M' | 'F';
-  vinculo?: VinculoMilitar;
+  vinculo: VinculoMilitar;
 };
 
 type Props = {
@@ -47,7 +47,7 @@ type Props = {
   postoGrad?: string;
   dataNascimento: string;
   sexo?: 'M' | 'F';
-  /** Se já definido no cadastro, o checklist não é exibido. */
+  /** Valor atual no cadastro (Carreira / RM2). */
   vinculo?: VinculoMilitar | null;
   onClose: () => void;
   onSalvar: (dados: EditarDadosMilitarPayload) => Promise<void>;
@@ -78,9 +78,6 @@ export function EditarIdadeGeneroMilitarModal({
   );
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
-
-  const precisaVinculo =
-    vinculoInicial !== 'carreira' && vinculoInicial !== 'rm2';
 
   useEffect(() => {
     if (!visible) return;
@@ -127,7 +124,7 @@ export function EditarIdadeGeneroMilitarModal({
       setErro(categoria === 'Oficiais' ? 'Selecione o posto.' : 'Selecione a graduação.');
       return;
     }
-    if (precisaVinculo && vinculo !== 'carreira' && vinculo !== 'rm2') {
+    if (vinculo !== 'carreira' && vinculo !== 'rm2') {
       setErro('Selecione Carreira ou RM2.');
       return;
     }
@@ -141,7 +138,7 @@ export function EditarIdadeGeneroMilitarModal({
         praca: categoria === 'Praças' ? posto : undefined,
         dataNascimento: data,
         sexo,
-        ...(vinculo === 'carreira' || vinculo === 'rm2' ? { vinculo } : {}),
+        vinculo,
       });
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível salvar.');
@@ -243,7 +240,7 @@ export function EditarIdadeGeneroMilitarModal({
         />
 
         <Text style={[styles.label, { color: theme.textMuted }]}>Data de nascimento</Text>
-        <View style={styles.dnRow}>
+          <View style={styles.dnRow}>
           <View style={styles.dnInput}>
             <AplicarTafInput
               value={dataNascimento}
@@ -255,9 +252,7 @@ export function EditarIdadeGeneroMilitarModal({
               accessibilityLabel="Data de nascimento"
             />
           </View>
-          {precisaVinculo ? (
-            <VinculoCarreiraRm2Checks value={vinculo} onChange={setVinculo} />
-          ) : null}
+          <VinculoCarreiraRm2Checks value={vinculo} onChange={setVinculo} />
         </View>
         <Text style={[styles.idadeHint, { color: theme.textSecondary }]}>
           {idade != null ? `Idade: ${idade} anos` : 'Informe a data para calcular a idade'}

@@ -2152,9 +2152,7 @@ export default function AplicarTAFScreen() {
         praca: dados.categoria === 'Praças' ? dados.praca : undefined,
         dataNascimento: dados.dataNascimento,
         sexo: dados.sexo,
-        ...(dados.vinculo === 'carreira' || dados.vinculo === 'rm2'
-          ? { vinculo: dados.vinculo }
-          : {}),
+        vinculo: dados.vinculo,
       };
       await addCadastro(atualizado);
       definirNipOk(index, atualizado);

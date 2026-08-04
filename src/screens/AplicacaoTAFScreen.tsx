@@ -236,7 +236,7 @@ export default function AplicacaoTAFScreen() {
       praca?: string;
       dataNascimento: string;
       sexo: 'M' | 'F';
-      vinculo?: 'carreira' | 'rm2';
+      vinculo: 'carreira' | 'rm2';
     }) => {
       if (!cadastro) return;
       const atualizado: CadastroItemPersist = {
@@ -247,9 +247,7 @@ export default function AplicacaoTAFScreen() {
         categoria: dados.categoria,
         oficial: dados.categoria === 'Oficiais' ? dados.oficial : undefined,
         praca: dados.categoria === 'Praças' ? dados.praca : undefined,
-        ...(dados.vinculo === 'carreira' || dados.vinculo === 'rm2'
-          ? { vinculo: dados.vinculo }
-          : {}),
+        vinculo: dados.vinculo,
       };
       await addCadastro(atualizado);
       aplicarCadastroEncontrado(atualizado);

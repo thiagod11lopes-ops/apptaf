@@ -675,6 +675,23 @@ export default function AplicarTAFScreen() {
     stopwatch.parar();
   }, [todosIntegrantesComTempoRegistrado, cronometroEstado, stopwatch.parar]);
 
+  /**
+   * Se o aplicador desmarca o último checklist após “Aplicar Resultado”,
+   * o cronômetro volta pausado (e piscando) no instante em que tinha parado.
+   */
+  const tinhaTodosComTempoRef = useRef(false);
+  useEffect(() => {
+    const tinhaTodos = tinhaTodosComTempoRef.current;
+    tinhaTodosComTempoRef.current = todosIntegrantesComTempoRegistrado;
+    if (!tinhaTodos || todosIntegrantesComTempoRegistrado) return;
+    if (cronometroEstado !== 'finalizado') return;
+    stopwatch.reativarComoPausado();
+  }, [
+    todosIntegrantesComTempoRegistrado,
+    cronometroEstado,
+    stopwatch.reativarComoPausado,
+  ]);
+
   useEffect(() => {
     if (corridaEtapa !== 'tabela_corrida' || !isProvaComVoltas(tipoProva)) return;
     dispatchTrial({

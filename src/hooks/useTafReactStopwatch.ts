@@ -128,6 +128,26 @@ export function useTafReactStopwatch({ getMaxMs, onMaxReached }: Options = {}) {
     return true;
   }, [estado, totalMilliseconds, pause, aplicarTextoPausado, syncPausado]);
 
+  /**
+   * Após encerrar por conclusão de todos (Aplicar Resultado), se o aplicador
+   * desmarcar o último checklist o cronômetro volta pausado no instante final.
+   */
+  const reativarComoPausado = useCallback((): boolean => {
+    if (estado !== 'finalizado') return false;
+    const ms =
+      tempoParadoMsRef.current ??
+      parseFormatoElapsedParaMs(pausadoTextoRef.current.trim()) ??
+      totalMilliseconds;
+    if (!Number.isFinite(ms) || ms < 0) return false;
+    pause();
+    maxReachedRef.current = false;
+    tempoParadoMsRef.current = null;
+    reset(stopwatchOffsetFromElapsedMs(ms), false);
+    syncPausado(ms);
+    setEstado('pausado');
+    return true;
+  }, [estado, totalMilliseconds, pause, reset, syncPausado]);
+
   /** Força encerramento no limite (permanência). */
   const finalizarNoMs = useCallback(
     (ms: number) => {
@@ -209,6 +229,7 @@ export function useTafReactStopwatch({ getMaxMs, onMaxReached }: Options = {}) {
     pausar,
     continuar,
     parar,
+    reativarComoPausado,
     finalizarNoMs,
     getElapsedMs,
     onPausadoTextoChange,

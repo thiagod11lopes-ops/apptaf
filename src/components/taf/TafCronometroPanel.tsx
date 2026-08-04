@@ -189,17 +189,14 @@ export function TafCronometroPanel({
   );
 
   const rodando = estado === 'rodando';
-  const toggleLabel = rodando ? 'Pausar' : 'Iniciar';
+  const pausado = estado === 'pausado';
+  const toggleLabel = rodando ? 'Pausar' : pausado ? 'Continuar' : 'Iniciar';
   const toggleA11y = rodando
     ? 'Pausar cronômetro'
-    : estado === 'pausado'
+    : pausado
       ? 'Retomar cronômetro'
       : `Iniciar ${tituloProva}`;
-  const onTogglePress = rodando
-    ? onPausar
-    : estado === 'pausado'
-      ? onContinuar
-      : onIniciar;
+  const onTogglePress = rodando ? onPausar : pausado ? onContinuar : onIniciar;
   const toggleColors: [string, string, string] = rodando
     ? ['#f59e0b', '#f97316', '#ef4444']
     : ['#22d3ee', '#10b981', '#059669'];
@@ -248,7 +245,13 @@ export function TafCronometroPanel({
           )}
         </View>
         <Text style={compact ? styles.toggleLabelCompact : styles.toggleLabel}>
-          {compact ? toggleLabel : rodando ? 'Pausar' : `Iniciar ${tituloProva}`}
+          {compact
+            ? toggleLabel
+            : rodando
+              ? 'Pausar'
+              : pausado
+                ? 'Continuar'
+                : `Iniciar ${tituloProva}`}
         </Text>
       </LinearGradient>
     </PressableScale>

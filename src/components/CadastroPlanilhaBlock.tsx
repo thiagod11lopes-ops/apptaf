@@ -1,5 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState, memo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Platform,
+  FlatList,
+  type ListRenderItem,
+} from 'react-native';
 import { Pencil, Trash2, Search, ListFilter, ShieldAlert } from 'lucide-react-native';
 import { CorrigirNipCadastroModal } from './CorrigirNipCadastroModal';
 import { FatoresRiscoCadastroModal } from './FatoresRiscoCadastroModal';
@@ -65,6 +74,169 @@ function permanenciaLabel(c: CadastroItemPersist): string {
 /** Gênero na planilha (M → Masculino, F → Feminino). */
 function generoPlanilhaLabel(c: CadastroItemPersist): string {
   return c.sexo === 'F' ? 'Feminino' : 'Masculino';
+}
+
+/** Altura máx. da lista virtualizada (scroll interno — evita montar todas as linhas). */
+const PLANILHA_LIST_MAX_HEIGHT = Platform.OS === 'web' ? 640 : 520;
+const PLANILHA_ROW_GAP = 10;
+/** Estimativa p/ windowing (linha de card moderna + gap). */
+const PLANILHA_ROW_ESTIMATED = 208;
+
+type HighlightFn = (
+  text: string,
+  queryLower: string,
+  cellStyle?: object,
+  numberOfLines?: number,
+) => React.ReactNode;
+
+type ModernCadastroRowProps = {
+  item: CadastroItemPersist;
+  buscaLower: string;
+  glassBorder: string;
+  rowBg: string;
+  primary: string;
+  accentMuted: string;
+  textColor: string;
+  textMuted: string;
+  loss: string;
+  isDark: boolean;
+  showActions: boolean;
+  highlightText: HighlightFn;
+  renderPostoGradCell: (c: CadastroItemPersist, textStyle: object) => React.ReactNode;
+  onEdit?: (item: CadastroItemPersist) => void;
+  onRequestDelete?: (item: CadastroItemPersist) => void;
+  onAbrirFatores: (c: CadastroItemPersist) => void | Promise<void>;
+  fatoresPreenchidos: boolean;
+};
+
+const ModernCadastroRow = memo(function ModernCadastroRow({
+  item: c,
+  buscaLower,
+  glassBorder,
+  rowBg,
+  primary,
+  accentMuted,
+  textColor,
+  textMuted,
+  loss,
+  isDark,
+  showActions,
+  highlightText,
+  renderPostoGradCell,
+  onEdit,
+  onRequestDelete,
+  onAbrirFatores,
+  fatoresPreenchidos,
+}: ModernCadastroRowProps) {
+  return (
+    <View
+      style={[
+        styles.modernRow,
+        {
+          borderColor: glassBorder,
+          backgroundColor: rowBg,
+        },
+      ]}
+    >
+      <View style={styles.modernRowHeader}>
+        <View style={styles.modernRowHeaderText}>
+          {highlightText(formatNomeComPosto(c), buscaLower, styles.modernName, 2)}
+          <View style={styles.modernChipRow}>
+            <View
+              style={[
+                styles.modernChip,
+                { borderColor: primary, backgroundColor: accentMuted },
+              ]}
+            >
+              <Text style={[styles.modernChipText, { color: primary }]}>{c.categoria}</Text>
+            </View>
+            <View style={[styles.modernChip, { borderColor: glassBorder }]}>
+              {renderPostoGradCell(c, [styles.modernChipText, { color: textColor }])}
+            </View>
+          </View>
+        </View>
+        {showActions && onEdit && onRequestDelete ? (
+          <View style={styles.modernActions}>
+            <TouchableOpacity
+              accessibilityLabel="Editar cadastro"
+              onPress={() => onEdit(c)}
+              style={[styles.modernIconBtn, { borderColor: glassBorder }]}
+            >
+              <Pencil size={17} color={primary} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityLabel="Excluir cadastro"
+              onPress={() => onRequestDelete(c)}
+              style={[styles.modernIconBtn, styles.modernIconBtnDanger]}
+            >
+              <Trash2 size={17} color={loss} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </View>
+      <View style={[styles.modernDivider, { backgroundColor: glassBorder }]} />
+      <View style={styles.modernMetaGrid}>
+        <View style={styles.modernMetaItem}>
+          <LabelNip color={textMuted} fontSize={9} fontWeight="800" />
+          {highlightText(c.nip || '-', buscaLower, styles.modernMetaValue, 1)}
+        </View>
+        <View style={styles.modernMetaItem}>
+          <Text style={[styles.modernMetaLabel, { color: textMuted }]}>IDADE</Text>
+          {highlightText(
+            idadeDisplayFromDataNascimento(c.dataNascimento),
+            buscaLower,
+            styles.modernMetaValue,
+            1,
+          )}
+        </View>
+        <View style={styles.modernMetaItem}>
+          <Text style={[styles.modernMetaLabel, { color: textMuted }]}>GÊNERO</Text>
+          {highlightText(generoPlanilhaLabel(c), buscaLower, styles.modernMetaValue, 1)}
+        </View>
+      </View>
+      <TouchableOpacity
+        accessibilityLabel="Fatores de Risco"
+        accessibilityRole="button"
+        activeOpacity={0.88}
+        onPress={() => onAbrirFatores(c)}
+        style={[
+          styles.fatoresBtn,
+          {
+            borderColor: fatoresPreenchidos
+              ? isDark
+                ? 'rgba(234,88,12,0.45)'
+                : 'rgba(234,88,12,0.35)'
+              : glassBorder,
+            backgroundColor: fatoresPreenchidos
+              ? isDark
+                ? 'rgba(234,88,12,0.14)'
+                : 'rgba(255,247,237,0.95)'
+              : isDark
+                ? 'rgba(139,92,246,0.12)'
+                : 'rgba(237,233,254,0.85)',
+          },
+        ]}
+      >
+        <ShieldAlert
+          size={16}
+          color={fatoresPreenchidos ? '#ea580c' : '#8b5cf6'}
+          strokeWidth={2.4}
+        />
+        <Text
+          style={[
+            styles.fatoresBtnText,
+            { color: fatoresPreenchidos ? '#ea580c' : '#8b5cf6' },
+          ]}
+        >
+          Fatores de Risco
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+});
+
+function ModernRowSeparator() {
+  return <View style={styles.modernRowSep} />;
 }
 
 export type CadastroPlanilhaVariant = 'cadastro' | 'aplicacaoTaf';
@@ -428,6 +600,65 @@ export function CadastroPlanilhaBlock({
       ? ([styles.tableCol, styles.tableColDivider, { borderLeftColor: ui.colDivider }] as const)
       : styles.tableCol;
 
+  const modernRowBg = theme.isDark ? 'rgba(2,6,23,0.42)' : 'rgba(255,255,255,0.55)';
+
+  const renderModernCadastroItem: ListRenderItem<CadastroItemPersist> = useCallback(
+    ({ item: c }) => {
+      const nipKey = nipDigitos(c.nip);
+      const fatoresPreenchidos = Boolean(nipKey && fatoresPorNip[nipKey]);
+      return (
+        <ModernCadastroRow
+          item={c}
+          buscaLower={buscaLower}
+          glassBorder={glass.border}
+          rowBg={modernRowBg}
+          primary={theme.primary}
+          accentMuted={theme.accentMuted}
+          textColor={ui.text}
+          textMuted={theme.textMuted}
+          loss={theme.loss}
+          isDark={theme.isDark}
+          showActions={showActions}
+          highlightText={highlightText}
+          renderPostoGradCell={renderPostoGradCell}
+          onEdit={onEdit}
+          onRequestDelete={onRequestDelete}
+          onAbrirFatores={abrirFatoresRiscoCadastro}
+          fatoresPreenchidos={fatoresPreenchidos}
+        />
+      );
+    },
+    [
+      abrirFatoresRiscoCadastro,
+      buscaLower,
+      fatoresPorNip,
+      glass.border,
+      highlightText,
+      modernRowBg,
+      onEdit,
+      onRequestDelete,
+      renderPostoGradCell,
+      showActions,
+      theme.accentMuted,
+      theme.isDark,
+      theme.loss,
+      theme.primary,
+      theme.textMuted,
+      ui.text,
+    ],
+  );
+
+  const modernListKeyExtractor = useCallback((item: CadastroItemPersist) => item.id, []);
+
+  const modernListGetItemLayout = useCallback(
+    (_: ArrayLike<CadastroItemPersist> | null | undefined, index: number) => ({
+      length: PLANILHA_ROW_ESTIMATED + PLANILHA_ROW_GAP,
+      offset: (PLANILHA_ROW_ESTIMATED + PLANILHA_ROW_GAP) * index,
+      index,
+    }),
+    [],
+  );
+
   const planilhaBody = (
     <>
       {cadastros.length === 0 ? (
@@ -610,125 +841,23 @@ export function CadastroPlanilhaBlock({
           ) : isAplicacaoTaf ? (
             <ResultadosGeralTable data={registrosTafCards} buscaLower={buscaLower} />
           ) : useModernCadastro ? (
-            <View style={styles.modernList}>
-              {cadastrosFiltradosComBusca.map((c) => (
-                <View
-                  key={c.id}
-                  style={[
-                    styles.modernRow,
-                    {
-                      borderColor: glass.border,
-                      backgroundColor: theme.isDark ? 'rgba(2,6,23,0.42)' : 'rgba(255,255,255,0.55)',
-                    },
-                  ]}
-                >
-                  <View style={styles.modernRowHeader}>
-                    <View style={styles.modernRowHeaderText}>
-                      {highlightText(formatNomeComPosto(c), buscaLower, styles.modernName, 2)}
-                      <View style={styles.modernChipRow}>
-                        <View
-                          style={[
-                            styles.modernChip,
-                            { borderColor: theme.primary, backgroundColor: theme.accentMuted },
-                          ]}
-                        >
-                          <Text style={[styles.modernChipText, { color: theme.primary }]}>
-                            {c.categoria}
-                          </Text>
-                        </View>
-                        <View style={[styles.modernChip, { borderColor: glass.border }]}>
-                          {renderPostoGradCell(c, [styles.modernChipText, { color: ui.text }])}
-                        </View>
-                      </View>
-                    </View>
-                    {showActions && onEdit && onRequestDelete ? (
-                      <View style={styles.modernActions}>
-                        <TouchableOpacity
-                          accessibilityLabel="Editar cadastro"
-                          onPress={() => onEdit(c)}
-                          style={[styles.modernIconBtn, { borderColor: glass.border }]}
-                        >
-                          <Pencil size={17} color={theme.primary} strokeWidth={2.5} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          accessibilityLabel="Excluir cadastro"
-                          onPress={() => onRequestDelete(c)}
-                          style={[styles.modernIconBtn, styles.modernIconBtnDanger]}
-                        >
-                          <Trash2 size={17} color={theme.loss} strokeWidth={2.5} />
-                        </TouchableOpacity>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={[styles.modernDivider, { backgroundColor: glass.border }]} />
-                  <View style={styles.modernMetaGrid}>
-                    <View style={styles.modernMetaItem}>
-                      <LabelNip color={theme.textMuted} fontSize={9} fontWeight="800" />
-                      {highlightText(c.nip || '-', buscaLower, styles.modernMetaValue, 1)}
-                    </View>
-                    <View style={styles.modernMetaItem}>
-                      <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>IDADE</Text>
-                      {highlightText(
-                        idadeDisplayFromDataNascimento(c.dataNascimento),
-                        buscaLower,
-                        styles.modernMetaValue,
-                        1,
-                      )}
-                    </View>
-                    <View style={styles.modernMetaItem}>
-                      <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>GÊNERO</Text>
-                      {highlightText(generoPlanilhaLabel(c), buscaLower, styles.modernMetaValue, 1)}
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    accessibilityLabel="Fatores de Risco"
-                    accessibilityRole="button"
-                    activeOpacity={0.88}
-                    onPress={() => void abrirFatoresRiscoCadastro(c)}
-                    style={[
-                      styles.fatoresBtn,
-                      {
-                        borderColor: nipDigitos(c.nip) && fatoresPorNip[nipDigitos(c.nip)]
-                          ? theme.isDark
-                            ? 'rgba(234,88,12,0.45)'
-                            : 'rgba(234,88,12,0.35)'
-                          : glass.border,
-                        backgroundColor: nipDigitos(c.nip) && fatoresPorNip[nipDigitos(c.nip)]
-                          ? theme.isDark
-                            ? 'rgba(234,88,12,0.14)'
-                            : 'rgba(255,247,237,0.95)'
-                          : theme.isDark
-                            ? 'rgba(139,92,246,0.12)'
-                            : 'rgba(237,233,254,0.85)',
-                      },
-                    ]}
-                  >
-                    <ShieldAlert
-                      size={16}
-                      color={
-                        nipDigitos(c.nip) && fatoresPorNip[nipDigitos(c.nip)]
-                          ? '#ea580c'
-                          : '#8b5cf6'
-                      }
-                      strokeWidth={2.4}
-                    />
-                    <Text
-                      style={[
-                        styles.fatoresBtnText,
-                        {
-                          color:
-                            nipDigitos(c.nip) && fatoresPorNip[nipDigitos(c.nip)]
-                              ? '#ea580c'
-                              : '#8b5cf6',
-                        },
-                      ]}
-                    >
-                      Fatores de Risco
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
+            <FlatList
+              data={cadastrosFiltradosComBusca}
+              keyExtractor={modernListKeyExtractor}
+              renderItem={renderModernCadastroItem}
+              style={[styles.modernList, { maxHeight: PLANILHA_LIST_MAX_HEIGHT }]}
+              contentContainerStyle={styles.modernListContent}
+              ItemSeparatorComponent={ModernRowSeparator}
+              getItemLayout={modernListGetItemLayout}
+              initialNumToRender={12}
+              maxToRenderPerBatch={10}
+              updateCellsBatchingPeriod={50}
+              windowSize={7}
+              removeClippedSubviews={Platform.OS !== 'web'}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+            />
           ) : (
             <View>
               <View
@@ -993,7 +1122,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
-  modernList: { gap: 10 },
+  modernList: {
+    maxHeight: PLANILHA_LIST_MAX_HEIGHT,
+  },
+  modernListContent: {
+    paddingBottom: 4,
+  },
+  modernRowSep: {
+    height: PLANILHA_ROW_GAP,
+  },
   modernRow: {
     borderWidth: 1,
     borderRadius: PREMIUM.radiusLg,

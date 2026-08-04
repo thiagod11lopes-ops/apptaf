@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  FlatList,
+  type ListRenderItem,
 } from 'react-native';
 import { Search, Download, Trash2, Pencil } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -64,6 +66,15 @@ import type { ConfirmacaoGerarResultadosPdfInfo } from './sismav/ConfirmacaoGera
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
+
+/** Lista virtualizada de cards na consulta de resultados. */
+const CONSULTA_LIST_MAX_HEIGHT = Platform.OS === 'web' ? 720 : 560;
+const CONSULTA_ROW_GAP = 12;
+const CONSULTA_ROW_ESTIMATED = 420;
+
+function ConsultaRowSeparator() {
+  return <View style={{ height: CONSULTA_ROW_GAP }} />;
+}
 
 function situacaoStyle(situacao: string, theme: { gain: string; loss: string; textMuted: string }) {
   if (situacao === 'Aprovado') return { color: theme.gain, fontWeight: '700' as const };
@@ -511,6 +522,176 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {},
   ];
 
+  const cadastrosById = useMemo(() => {
+    const map = new Map<string, CadastroItemPersist>();
+    for (const c of todosCadastros) map.set(c.id, c);
+    return map;
+  }, [todosCadastros]);
+
+  const renderConsultaItem: ListRenderItem<ResultadoTafLinha> = useCallback(
+    ({ item: r }) => {
+      const porId = cadastrosById.get(r.id);
+      const porNip = buscarCadastroPorNomeOuNip(todosCadastros, r.nip);
+      const cadastro = porId ?? (porNip.kind === 'found' ? porNip.cadastro : undefined);
+      const podeExcluirCorrida =
+        (cadastro ? temAvaliacaoCorrida(cadastro) : false) || r.notaCorrida !== '—';
+      const podeExcluirCaminhada =
+        (cadastro ? temAvaliacaoCaminhada(cadastro) : false) || r.notaCaminhada !== '—';
+      const podeExcluirNatacao =
+        (cadastro ? temAvaliacaoNatacao(cadastro) : false) || r.notaNatacao !== '—';
+      const podeExcluirPermanencia =
+        (cadastro ? temAvaliacaoPermanencia(cadastro) : false) ||
+        (r.situacaoPermanencia !== '—' && r.situacaoPermanencia !== '');
+
+      const nomeComPosto = formatNomeComPostoParts(r.postoGrad, r.nome);
+
+      const abrirExclusao = (modalidade: ModalidadeResultadoTaf) => {
+        setConfirmarExclusao({
+          cadastroId: cadastro?.id ?? r.id,
+          nome: nomeComPosto,
+          nip: r.nip,
+          modalidade,
+        });
+      };
+
+      return (
+        <Card elevated style={styles.resultCard}>
+          <View style={styles.resultCardHeader}>
+            <View style={styles.resultCardTitulo}>
+              <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
+              <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{r.nip}</Text>
+              <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
+              <Text style={[ts.h2, { color: ui.text, fontSize: 18 }]}>{nomeComPosto}</Text>
+            </View>
+            {cadastro ? (
+              <PressableScale
+                onPress={() => setCadastroEmEdicao(cadastro)}
+                style={[styles.editBtn, { borderColor: theme.border }]}
+                accessibilityLabel={`Editar resultados de ${nomeComPosto}`}
+              >
+                <Pencil size={18} color={theme.primary} strokeWidth={2.2} />
+              </PressableScale>
+            ) : null}
+          </View>
+
+          <ProvaComColunaRubrica
+            titulo="Corrida"
+            rubricaSvg={r.rubricaCorridaSvg}
+            dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'corrida')}
+            onPressRubrica={() => abrirEdicaoRubrica(r, 'corrida')}
+            headerRight={
+              podeExcluirCorrida ? (
+                <PressableScale
+                  onPress={() => abrirExclusao('corrida')}
+                  style={[styles.trashBtn, { borderColor: theme.border }]}
+                  accessibilityLabel="Excluir resultado de corrida"
+                >
+                  <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                </PressableScale>
+              ) : null
+            }
+          >
+            <View style={styles.provaRow}>
+              <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+              <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCorrida}</Text>
+            </View>
+            <Text style={[ts.caption, situacaoStyle(r.situacaoCorrida, theme)]}>
+              {r.situacaoCorrida}
+            </Text>
+          </ProvaComColunaRubrica>
+
+          <ProvaComColunaRubrica
+            titulo="Caminhada"
+            rubricaSvg={r.rubricaCaminhadaSvg}
+            dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'caminhada')}
+            onPressRubrica={() => abrirEdicaoRubrica(r, 'caminhada')}
+            headerRight={
+              podeExcluirCaminhada ? (
+                <PressableScale
+                  onPress={() => abrirExclusao('caminhada')}
+                  style={[styles.trashBtn, { borderColor: theme.border }]}
+                  accessibilityLabel="Excluir resultado de caminhada"
+                >
+                  <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                </PressableScale>
+              ) : null
+            }
+          >
+            <View style={styles.provaRow}>
+              <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+              <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCaminhada}</Text>
+            </View>
+            <Text style={[ts.caption, situacaoStyle(r.situacaoCaminhada, theme)]}>
+              {r.situacaoCaminhada}
+            </Text>
+          </ProvaComColunaRubrica>
+
+          <ProvaComColunaRubrica
+            titulo="Natação"
+            rubricaSvg={r.rubricaNatacaoSvg}
+            onPressRubrica={() => abrirEdicaoRubrica(r, 'natacao')}
+            headerRight={
+              podeExcluirNatacao ? (
+                <PressableScale
+                  onPress={() => abrirExclusao('natacao')}
+                  style={[styles.trashBtn, { borderColor: theme.border }]}
+                  accessibilityLabel="Excluir resultado de natação"
+                >
+                  <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                </PressableScale>
+              ) : null
+            }
+          >
+            <View style={styles.provaRow}>
+              <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
+              <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaNatacao}</Text>
+            </View>
+            <Text style={[ts.caption, situacaoStyle(r.situacaoNatacao, theme)]}>
+              {r.situacaoNatacao}
+            </Text>
+          </ProvaComColunaRubrica>
+
+          <ProvaComColunaRubrica
+            titulo="Permanência"
+            rubricaSvg={r.rubricaPermanenciaSvg}
+            onPressRubrica={() => abrirEdicaoRubrica(r, 'permanencia')}
+            headerRight={
+              podeExcluirPermanencia ? (
+                <PressableScale
+                  onPress={() => abrirExclusao('permanencia')}
+                  style={[styles.trashBtn, { borderColor: theme.border }]}
+                  accessibilityLabel="Excluir resultado de permanência"
+                >
+                  <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
+                </PressableScale>
+              ) : null
+            }
+          >
+            <View style={styles.provaRow}>
+              <Text style={[ts.caption, { color: theme.textMuted }]}>Tempo: </Text>
+              <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.permanenciaTempo}</Text>
+            </View>
+            <Text style={[ts.caption, situacaoStyle(r.situacaoPermanencia, theme)]}>
+              {r.situacaoPermanencia}
+            </Text>
+          </ProvaComColunaRubrica>
+        </Card>
+      );
+    },
+    [abrirEdicaoRubrica, cadastrosById, theme, todosCadastros, ts, ui.text],
+  );
+
+  const consultaKeyExtractor = useCallback((item: ResultadoTafLinha) => item.id, []);
+
+  const consultaGetItemLayout = useCallback(
+    (_: ArrayLike<ResultadoTafLinha> | null | undefined, index: number) => ({
+      length: CONSULTA_ROW_ESTIMATED + CONSULTA_ROW_GAP,
+      offset: (CONSULTA_ROW_ESTIMATED + CONSULTA_ROW_GAP) * index,
+      index,
+    }),
+    [],
+  );
+
   return (
     <View style={styles.wrap}>
       <Text style={[ts.bodySecondary, styles.intro, { color: theme.textSecondary }]}>
@@ -595,156 +776,25 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
         </View>
       ) : null}
 
-      {linhas.map((r) => {
-        const porId = todosCadastros.find((c) => c.id === r.id);
-        const porNip = buscarCadastroPorNomeOuNip(todosCadastros, r.nip);
-        const cadastro = porId ?? (porNip.kind === 'found' ? porNip.cadastro : undefined);
-        // Exibe lixeira se houver resultado no cadastro OU na linha (histórico / lançamento manual).
-        const podeExcluirCorrida =
-          (cadastro ? temAvaliacaoCorrida(cadastro) : false) || r.notaCorrida !== '—';
-        const podeExcluirCaminhada =
-          (cadastro ? temAvaliacaoCaminhada(cadastro) : false) || r.notaCaminhada !== '—';
-        const podeExcluirNatacao =
-          (cadastro ? temAvaliacaoNatacao(cadastro) : false) || r.notaNatacao !== '—';
-        const podeExcluirPermanencia =
-          (cadastro ? temAvaliacaoPermanencia(cadastro) : false) ||
-          (r.situacaoPermanencia !== '—' && r.situacaoPermanencia !== '');
-
-        const nomeComPosto = formatNomeComPostoParts(r.postoGrad, r.nome);
-
-        const abrirExclusao = (modalidade: ModalidadeResultadoTaf) => {
-          setConfirmarExclusao({
-            cadastroId: cadastro?.id ?? r.id,
-            nome: nomeComPosto,
-            nip: r.nip,
-            modalidade,
-          });
-        };
-
-        return (
-          <Card key={r.id} elevated style={styles.resultCard}>
-            <View style={styles.resultCardHeader}>
-              <View style={styles.resultCardTitulo}>
-                <Text style={[ts.label, { color: theme.primary }]}>NIP</Text>
-                <Text style={[ts.body, { color: ui.text, marginBottom: 4 }]}>{r.nip}</Text>
-                <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
-                <Text style={[ts.h2, { color: ui.text, fontSize: 18 }]}>{nomeComPosto}</Text>
-              </View>
-              {cadastro ? (
-                <PressableScale
-                  onPress={() => setCadastroEmEdicao(cadastro)}
-                  style={[styles.editBtn, { borderColor: theme.border }]}
-                  accessibilityLabel={`Editar resultados de ${nomeComPosto}`}
-                >
-                  <Pencil size={18} color={theme.primary} strokeWidth={2.2} />
-                </PressableScale>
-              ) : null}
-            </View>
-
-            <ProvaComColunaRubrica
-              titulo="Corrida"
-              rubricaSvg={r.rubricaCorridaSvg}
-              dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'corrida')}
-              onPressRubrica={() => abrirEdicaoRubrica(r, 'corrida')}
-              headerRight={
-                podeExcluirCorrida ? (
-                  <PressableScale
-                    onPress={() => abrirExclusao('corrida')}
-                    style={[styles.trashBtn, { borderColor: theme.border }]}
-                    accessibilityLabel="Excluir resultado de corrida"
-                  >
-                    <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
-                  </PressableScale>
-                ) : null
-              }
-            >
-              <View style={styles.provaRow}>
-                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
-                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCorrida}</Text>
-              </View>
-              <Text style={[ts.caption, situacaoStyle(r.situacaoCorrida, theme)]}>
-                {r.situacaoCorrida}
-              </Text>
-            </ProvaComColunaRubrica>
-
-            <ProvaComColunaRubrica
-              titulo="Caminhada"
-              rubricaSvg={r.rubricaCaminhadaSvg}
-              dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'caminhada')}
-              onPressRubrica={() => abrirEdicaoRubrica(r, 'caminhada')}
-              headerRight={
-                podeExcluirCaminhada ? (
-                  <PressableScale
-                    onPress={() => abrirExclusao('caminhada')}
-                    style={[styles.trashBtn, { borderColor: theme.border }]}
-                    accessibilityLabel="Excluir resultado de caminhada"
-                  >
-                    <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
-                  </PressableScale>
-                ) : null
-              }
-            >
-              <View style={styles.provaRow}>
-                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
-                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaCaminhada}</Text>
-              </View>
-              <Text style={[ts.caption, situacaoStyle(r.situacaoCaminhada, theme)]}>
-                {r.situacaoCaminhada}
-              </Text>
-            </ProvaComColunaRubrica>
-
-            <ProvaComColunaRubrica
-              titulo="Natação"
-              rubricaSvg={r.rubricaNatacaoSvg}
-              onPressRubrica={() => abrirEdicaoRubrica(r, 'natacao')}
-              headerRight={
-                podeExcluirNatacao ? (
-                  <PressableScale
-                    onPress={() => abrirExclusao('natacao')}
-                    style={[styles.trashBtn, { borderColor: theme.border }]}
-                    accessibilityLabel="Excluir resultado de natação"
-                  >
-                    <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
-                  </PressableScale>
-                ) : null
-              }
-            >
-              <View style={styles.provaRow}>
-                <Text style={[ts.caption, { color: theme.textMuted }]}>Nota: </Text>
-                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.notaNatacao}</Text>
-              </View>
-              <Text style={[ts.caption, situacaoStyle(r.situacaoNatacao, theme)]}>
-                {r.situacaoNatacao}
-              </Text>
-            </ProvaComColunaRubrica>
-
-            <ProvaComColunaRubrica
-              titulo="Permanência"
-              rubricaSvg={r.rubricaPermanenciaSvg}
-              onPressRubrica={() => abrirEdicaoRubrica(r, 'permanencia')}
-              headerRight={
-                podeExcluirPermanencia ? (
-                  <PressableScale
-                    onPress={() => abrirExclusao('permanencia')}
-                    style={[styles.trashBtn, { borderColor: theme.border }]}
-                    accessibilityLabel="Excluir resultado de permanência"
-                  >
-                    <Trash2 size={16} color={theme.loss} strokeWidth={2.2} />
-                  </PressableScale>
-                ) : null
-              }
-            >
-              <View style={styles.provaRow}>
-                <Text style={[ts.caption, { color: theme.textMuted }]}>Tempo: </Text>
-                <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>{r.permanenciaTempo}</Text>
-              </View>
-              <Text style={[ts.caption, situacaoStyle(r.situacaoPermanencia, theme)]}>
-                {r.situacaoPermanencia}
-              </Text>
-            </ProvaComColunaRubrica>
-          </Card>
-        );
-      })}
+      {linhas.length > 0 ? (
+        <FlatList
+          data={linhas}
+          keyExtractor={consultaKeyExtractor}
+          renderItem={renderConsultaItem}
+          style={[styles.consultaList, { maxHeight: CONSULTA_LIST_MAX_HEIGHT }]}
+          contentContainerStyle={styles.consultaListContent}
+          ItemSeparatorComponent={ConsultaRowSeparator}
+          getItemLayout={consultaGetItemLayout}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={50}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator
+        />
+      ) : null}
 
       <EditarResultadoTafModal
         visible={!!cadastroEmEdicao}
@@ -807,6 +857,13 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
 const styles = StyleSheet.create({
   wrap: tableFullWidthStyle,
   intro: { marginBottom: 14, lineHeight: 20 },
+  consultaList: {
+    maxHeight: CONSULTA_LIST_MAX_HEIGHT,
+    marginTop: 4,
+  },
+  consultaListContent: {
+    paddingBottom: 4,
+  },
   formCard: { padding: 16, marginBottom: 14 },
   field: { marginBottom: 14 },
   labelGap: { marginBottom: 8 },
@@ -850,7 +907,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 22,
   },
-  resultCard: { padding: 16, marginBottom: 12 },
+  resultCard: { padding: 16 },
   resultCardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',

@@ -1,5 +1,13 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useCallback, useMemo, memo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  FlatList,
+  type ListRenderItem,
+} from 'react-native';
 import { History, Pencil, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { SearchHighlightText } from './SearchHighlightText';
@@ -12,6 +20,12 @@ import { getUiColors } from '../theme/uiColors';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from './mobile/TafTabChrome';
 import { formatNomeComPostoParts } from '../utils/formatNomeComPosto';
+
+/** Altura máx. da lista virtualizada (scroll interno). */
+const RESULTADOS_LIST_MAX_HEIGHT = Platform.OS === 'web' ? 640 : 520;
+const RESULTADOS_ROW_GAP = 12;
+/** Card de resultado é alto (4 modalidades) — estimativa para windowing. */
+const RESULTADOS_ROW_ESTIMATED = 320;
 
 function situacaoCor(situacao: string, theme: { gain: string; loss: string; textMuted: string }) {
   if (situacao === 'Aprovado') return theme.gain;
@@ -38,7 +52,6 @@ function StatusChip({ status }: { status: 'Completo' | 'Parcial' }) {
     </View>
   );
 }
-
 
 function ModalityBlock({
   label,
@@ -106,6 +119,148 @@ function ModalityBlock({
   );
 }
 
+type ResultadoRowProps = {
+  item: ResultadoGeralItem;
+  buscaLower: string;
+  textColor: string;
+  textMuted: string;
+  primary: string;
+  loss: string;
+  glassBorder: string;
+  onEditar?: (item: ResultadoGeralItem) => void;
+  onExcluir?: (item: ResultadoGeralItem) => void;
+  onVerHistorico?: (item: ResultadoGeralItem) => void;
+};
+
+const ResultadoGeralRow = memo(function ResultadoGeralRow({
+  item,
+  buscaLower,
+  textColor,
+  textMuted,
+  primary,
+  loss,
+  glassBorder,
+  onEditar,
+  onExcluir,
+  onVerHistorico,
+}: ResultadoRowProps) {
+  const nomeComPosto = formatNomeComPostoParts(item.postoGrad, item.nome);
+
+  return (
+    <View style={styles.itemPress}>
+      <TafGlassPanel style={styles.modernRow}>
+        <View style={styles.modernRowHeader}>
+          <View style={styles.modernRowHeaderText}>
+            <SearchHighlightText
+              text={nomeComPosto}
+              queryLower={buscaLower}
+              style={[styles.modernName, { color: textColor }]}
+              numberOfLines={2}
+            />
+            <View style={styles.modernChipRow}>
+              <View style={[styles.modernChip, { borderColor: glassBorder }]}>
+                <SearchHighlightText
+                  text={item.postoGrad}
+                  queryLower={buscaLower}
+                  style={[styles.modernChipText, { color: textColor }]}
+                  numberOfLines={1}
+                />
+              </View>
+              <StatusChip status={item.statusTaf} />
+            </View>
+          </View>
+          {onVerHistorico || onEditar || onExcluir ? (
+            <View style={styles.modernActions}>
+              {onVerHistorico ? (
+                <TouchableOpacity
+                  accessibilityLabel={`Ver histórico de ${nomeComPosto}`}
+                  onPress={() => onVerHistorico(item)}
+                  style={[styles.modernIconBtn, { borderColor: glassBorder }]}
+                >
+                  <History size={17} color={primary} strokeWidth={2.5} />
+                </TouchableOpacity>
+              ) : null}
+              {onEditar ? (
+                <TouchableOpacity
+                  accessibilityLabel={`Editar resultados de ${nomeComPosto}`}
+                  onPress={() => onEditar(item)}
+                  style={[styles.modernIconBtn, { borderColor: glassBorder }]}
+                >
+                  <Pencil size={17} color={primary} strokeWidth={2.5} />
+                </TouchableOpacity>
+              ) : null}
+              {onExcluir ? (
+                <TouchableOpacity
+                  accessibilityLabel={`Excluir resultados de ${nomeComPosto}`}
+                  onPress={() => onExcluir(item)}
+                  style={[styles.modernIconBtn, styles.modernIconBtnDanger]}
+                >
+                  <Trash2 size={17} color={loss} strokeWidth={2.5} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+
+        <View style={[styles.modernDivider, { backgroundColor: glassBorder }]} />
+
+        <View style={styles.modernMetaGrid}>
+          <View style={styles.modernMetaItem}>
+            <LabelNip color={textMuted} fontSize={9} fontWeight="800" />
+            <SearchHighlightText
+              text={item.nip}
+              queryLower={buscaLower}
+              style={[styles.modernMetaValue, { color: textColor }]}
+              numberOfLines={1}
+            />
+          </View>
+          <View style={styles.modernMetaItem}>
+            <Text style={[styles.modernMetaLabel, { color: textMuted }]}>STATUS TAF</Text>
+            <Text style={[styles.modernMetaValue, { color: textColor }]}>{item.statusTaf}</Text>
+          </View>
+        </View>
+
+        <View
+          style={[styles.modernDivider, styles.modernDividerLight, { backgroundColor: glassBorder }]}
+        />
+
+        <View style={styles.modalityGrid}>
+          <ModalityBlock
+            label="CORRIDA"
+            nota={item.notaCorrida}
+            situacao={item.situacaoCorrida}
+            buscaLower={buscaLower}
+            dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'corrida')}
+          />
+          <ModalityBlock
+            label="CAMINHADA"
+            nota={item.notaCaminhada}
+            situacao={item.situacaoCaminhada}
+            buscaLower={buscaLower}
+            dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'caminhada')}
+          />
+          <ModalityBlock
+            label="NATAÇÃO"
+            nota={item.notaNatacao}
+            situacao={item.situacaoNatacao}
+            buscaLower={buscaLower}
+          />
+          <ModalityBlock
+            label="PERMANÊNCIA"
+            nota={item.permanenciaTempo}
+            situacao={item.situacaoPermanencia}
+            buscaLower={buscaLower}
+          />
+        </View>
+      </TafGlassPanel>
+    </View>
+  );
+});
+
+function ResultadoRowSeparator() {
+  return <View style={styles.rowSep} />;
+}
+
 type Props = {
   data: ResultadoGeralItem[];
   buscaLower: string;
@@ -125,127 +280,81 @@ export function ResultadosGeralTable({
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const glass = getAplicarTafGlass(theme);
 
+  const renderItem: ListRenderItem<ResultadoGeralItem> = useCallback(
+    ({ item }) => (
+      <ResultadoGeralRow
+        item={item}
+        buscaLower={buscaLower}
+        textColor={ui.text}
+        textMuted={theme.textMuted}
+        primary={theme.primary}
+        loss={theme.loss}
+        glassBorder={glass.border}
+        onEditar={onEditar}
+        onExcluir={onExcluir}
+        onVerHistorico={onVerHistorico}
+      />
+    ),
+    [
+      buscaLower,
+      glass.border,
+      onEditar,
+      onExcluir,
+      onVerHistorico,
+      theme.loss,
+      theme.primary,
+      theme.textMuted,
+      ui.text,
+    ],
+  );
+
+  const keyExtractor = useCallback((item: ResultadoGeralItem) => item.id, []);
+
+  const getItemLayout = useCallback(
+    (_: ArrayLike<ResultadoGeralItem> | null | undefined, index: number) => ({
+      length: RESULTADOS_ROW_ESTIMATED + RESULTADOS_ROW_GAP,
+      offset: (RESULTADOS_ROW_ESTIMATED + RESULTADOS_ROW_GAP) * index,
+      index,
+    }),
+    [],
+  );
+
+  if (data.length === 0) {
+    return <View style={styles.modernList} />;
+  }
+
   return (
-    <View style={styles.modernList}>
-      {data.map((item) => {
-        const nomeComPosto = formatNomeComPostoParts(item.postoGrad, item.nome);
-        return (
-        <View key={item.id} style={styles.itemPress}>
-          <TafGlassPanel style={styles.modernRow}>
-          <View style={styles.modernRowHeader}>
-            <View style={styles.modernRowHeaderText}>
-              <SearchHighlightText
-                text={nomeComPosto}
-                queryLower={buscaLower}
-                style={[styles.modernName, { color: ui.text }]}
-                numberOfLines={2}
-              />
-              <View style={styles.modernChipRow}>
-                <View style={[styles.modernChip, { borderColor: glass.border }]}>
-                  <SearchHighlightText
-                    text={item.postoGrad}
-                    queryLower={buscaLower}
-                    style={[styles.modernChipText, { color: ui.text }]}
-                    numberOfLines={1}
-                  />
-                </View>
-                <StatusChip status={item.statusTaf} />
-              </View>
-            </View>
-            {(onVerHistorico || onEditar || onExcluir) ? (
-              <View style={styles.modernActions}>
-                {onVerHistorico ? (
-                  <TouchableOpacity
-                    accessibilityLabel={`Ver histórico de ${nomeComPosto}`}
-                    onPress={() => onVerHistorico(item)}
-                    style={[styles.modernIconBtn, { borderColor: glass.border }]}
-                  >
-                    <History size={17} color={theme.primary} strokeWidth={2.5} />
-                  </TouchableOpacity>
-                ) : null}
-                {onEditar ? (
-                  <TouchableOpacity
-                    accessibilityLabel={`Editar resultados de ${nomeComPosto}`}
-                    onPress={() => onEditar(item)}
-                    style={[styles.modernIconBtn, { borderColor: glass.border }]}
-                  >
-                    <Pencil size={17} color={theme.primary} strokeWidth={2.5} />
-                  </TouchableOpacity>
-                ) : null}
-                {onExcluir ? (
-                  <TouchableOpacity
-                    accessibilityLabel={`Excluir resultados de ${nomeComPosto}`}
-                    onPress={() => onExcluir(item)}
-                    style={[styles.modernIconBtn, styles.modernIconBtnDanger]}
-                  >
-                    <Trash2 size={17} color={theme.loss} strokeWidth={2.5} />
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-
-          <View style={[styles.modernDivider, { backgroundColor: glass.border }]} />
-
-          <View style={styles.modernMetaGrid}>
-            <View style={styles.modernMetaItem}>
-              <LabelNip color={theme.textMuted} fontSize={9} fontWeight="800" />
-              <SearchHighlightText
-                text={item.nip}
-                queryLower={buscaLower}
-                style={[styles.modernMetaValue, { color: ui.text }]}
-                numberOfLines={1}
-              />
-            </View>
-            <View style={styles.modernMetaItem}>
-              <Text style={[styles.modernMetaLabel, { color: theme.textMuted }]}>STATUS TAF</Text>
-              <Text style={[styles.modernMetaValue, { color: ui.text }]}>{item.statusTaf}</Text>
-            </View>
-          </View>
-
-          <View style={[styles.modernDivider, styles.modernDividerLight, { backgroundColor: glass.border }]} />
-
-          <View style={styles.modalityGrid}>
-            <ModalityBlock
-              label="CORRIDA"
-              nota={item.notaCorrida}
-              situacao={item.situacaoCorrida}
-              buscaLower={buscaLower}
-              dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'corrida')}
-            />
-            <ModalityBlock
-              label="CAMINHADA"
-              nota={item.notaCaminhada}
-              situacao={item.situacaoCaminhada}
-              buscaLower={buscaLower}
-              dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'caminhada')}
-            />
-            <ModalityBlock
-              label="NATAÇÃO"
-              nota={item.notaNatacao}
-              situacao={item.situacaoNatacao}
-              buscaLower={buscaLower}
-            />
-            <ModalityBlock
-              label="PERMANÊNCIA"
-              nota={item.permanenciaTempo}
-              situacao={item.situacaoPermanencia}
-              buscaLower={buscaLower}
-            />
-          </View>
-          </TafGlassPanel>
-        </View>
-        );
-      })}
-    </View>
+    <FlatList
+      data={data}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      style={[styles.modernList, { maxHeight: RESULTADOS_LIST_MAX_HEIGHT }]}
+      contentContainerStyle={styles.listContent}
+      ItemSeparatorComponent={ResultadoRowSeparator}
+      getItemLayout={getItemLayout}
+      initialNumToRender={8}
+      maxToRenderPerBatch={8}
+      updateCellsBatchingPeriod={50}
+      windowSize={7}
+      removeClippedSubviews={Platform.OS !== 'web'}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  modernList: {},
-  itemPress: {
-    marginBottom: 12,
+  modernList: {
+    maxHeight: RESULTADOS_LIST_MAX_HEIGHT,
   },
+  listContent: {
+    paddingBottom: 4,
+  },
+  rowSep: {
+    height: RESULTADOS_ROW_GAP,
+  },
+  itemPress: {},
   modernRow: {
     ...tableFullWidthStyle,
     padding: 14,

@@ -9,6 +9,15 @@ export const RUBRICA_COR_TRACO = '#111827';
 export function normalizarRubricaSvgDataUrl(svgUri?: string | null): string | undefined {
   const raw = svgUri?.trim();
   if (!raw) return undefined;
+  // WebP/PNG/JPEG já persistidos — sem alteração.
+  if (
+    raw.startsWith('data:image/png') ||
+    raw.startsWith('data:image/webp') ||
+    raw.startsWith('data:image/jpeg') ||
+    raw.startsWith('data:image/jpg')
+  ) {
+    return raw;
+  }
   if (!raw.startsWith('data:image/svg')) return raw;
 
   const match = raw.match(/^data:image\/svg\+xml(;utf8)?,/i);
@@ -41,10 +50,11 @@ export function normalizarRubricaSvgDataUrl(svgUri?: string | null): string | un
   return `${prefix}${encodeURIComponent(svg)}`;
 }
 
-/** Traços um pouco mais grossos para leitura da rúbrica reduzida no PDF. */
+/** Traços um pouco mais grossos para leitura da rúbrica reduzida no PDF (SVG legado). */
 export function rubricaSvgParaPdf(svgUri?: string | null): string | undefined {
   const base = normalizarRubricaSvgDataUrl(svgUri);
-  if (!base?.startsWith('data:image/svg')) return base;
+  if (!base) return undefined;
+  if (!base.startsWith('data:image/svg')) return base;
 
   const match = base.match(/^data:image\/svg\+xml(;utf8)?,/i);
   const prefix = match?.[0] ?? 'data:image/svg+xml;utf8,';

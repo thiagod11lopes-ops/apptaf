@@ -53,7 +53,9 @@ export async function getCadastrosFirestoreSince(
 }
 
 async function persistCadastro(uid: string, item: CadastroItemPersist): Promise<void> {
-  const stamped = stampCadastro(item, item.updatedAt);
+  const { rasterizarRubricasNoCadastro } = await import('../../utils/rubricaRasterPersist');
+  const { cadastro: itemRaster } = rasterizarRubricasNoCadastro(item);
+  const stamped = stampCadastro(itemRaster, itemRaster.updatedAt);
   const rubricas = extractCadastroRubricas(stamped);
   const light = toCadastroLight(stamped);
   await upsertOwnerDoc(TABLE, uid, stamped.id, { ...light, updatedAt: stamped.updatedAt }, stamped.updatedAt ?? Date.now());

@@ -3,10 +3,16 @@ import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { postoGradExibicaoAssinatura } from '../types/aplicadorAssinatura';
 import { tituloTipoProva, type TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import { RUBRICA_PDF_ALTURA, RUBRICA_PDF_LARGURA } from './rubricaConstants';
-import { rubricaSvgParaPdf } from './rubricaSvgNormalize';
+import {
+  decodeSvgDataUrl,
+  renderRubricaSvgToPngDataUrl,
+  rubricaDataUrlPdfFormat,
+} from './rubricaRasterPersist';
 import { pdfTextoParaJsPdf } from './pdfLayout';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 import { formatTempoColunaResultado } from './formatTempoColunaResultado';
+
+export { decodeSvgDataUrl, renderRubricaSvgToPngDataUrl } from './rubricaRasterPersist';
 
 function tituloProva(resultados: ResultadoCorridaItem[]): string {
   const prova = resultados.find((r) => r.prova)?.prova ?? 'corrida';
@@ -32,33 +38,6 @@ function papelLinha(r: ResultadoCorridaItem): string {
   return `${label} ${r.corredor}`;
 }
 
-/** Decodifica data-URL SVG (utf8 ou base64) para string SVG. */
-export function decodeSvgDataUrl(svgUri: string): string | null {
-  const normalized = rubricaSvgParaPdf(svgUri) ?? svgUri.trim();
-  if (!normalized.startsWith('data:image/svg')) return null;
-
-  const comma = normalized.indexOf(',');
-  if (comma < 0) return null;
-  const meta = normalized.slice(0, comma);
-  const data = normalized.slice(comma + 1);
-
-  try {
-    if (/;base64/i.test(meta)) {
-      const binary = atob(data);
-      // UTF-8 safe decode
-      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-      return new TextDecoder('utf-8').decode(bytes);
-    }
-    return decodeURIComponent(data);
-  } catch {
-    try {
-      return decodeURIComponent(data);
-    } catch {
-      return null;
-    }
-  }
-}
-
 function extrairPathsDoSvg(svg: string): { paths: string[]; vbW: number; vbH: number } {
   const vbMatch = svg.match(/viewBox=["']0\s+0\s+([\d.]+)\s+([\d.]+)["']/i);
   const wMatch = svg.match(/\bwidth=["']([\d.]+)["']/i);
@@ -77,97 +56,6 @@ function extrairPathsDoSvg(svg: string): { paths: string[]; vbW: number; vbH: nu
     vbW: Number.isFinite(vbW) && vbW > 0 ? vbW : 420,
     vbH: Number.isFinite(vbH) && vbH > 0 ? vbH : 180,
   };
-}
-
-/** Desenha path SVG simples (M/L) no canvas — compatível com rúbricas TAF. */
-function strokePathManual(ctx: CanvasRenderingContext2D, d: string): void {
-  const tokens = d.match(/[MLml]|-?\d*\.?\d+(?:e[-+]?\d+)?/g);
-  if (!tokens || tokens.length === 0) return;
-
-  ctx.beginPath();
-  let cmd = 'M';
-  let i = 0;
-  let started = false;
-  while (i < tokens.length) {
-    const t = tokens[i]!;
-    if (t === 'M' || t === 'L' || t === 'm' || t === 'l') {
-      cmd = t;
-      i += 1;
-      continue;
-    }
-    const x = parseFloat(tokens[i]!);
-    const y = parseFloat(tokens[i + 1] ?? '');
-    if (!Number.isFinite(x) || !Number.isFinite(y)) break;
-    i += 2;
-    if (cmd === 'M' || cmd === 'm') {
-      ctx.moveTo(x, y);
-      started = true;
-    } else if (started) {
-      ctx.lineTo(x, y);
-    } else {
-      ctx.moveTo(x, y);
-      started = true;
-    }
-  }
-  ctx.stroke();
-}
-
-/**
- * Rasteriza a rúbrica SVG → PNG sem usar Image() (quebra no Safari/iPhone).
- * Desenha os `<path d="...">` direto no canvas.
- */
-export function renderRubricaSvgToPngDataUrl(
-  svgUri: string | undefined | null,
-  widthPx: number,
-  heightPx: number,
-): string | null {
-  if (typeof document === 'undefined') return null;
-  if (!svgUri?.trim()) return null;
-
-  const svg = decodeSvgDataUrl(svgUri);
-  if (!svg) return null;
-
-  const { paths, vbW, vbH } = extrairPathsDoSvg(svg);
-  if (paths.length === 0) return null;
-
-  const scale = 2;
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(widthPx * scale));
-  canvas.height = Math.max(1, Math.round(heightPx * scale));
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  const sx = canvas.width / vbW;
-  const sy = canvas.height / vbH;
-  ctx.save();
-  ctx.scale(sx, sy);
-  ctx.strokeStyle = '#111827';
-  ctx.lineWidth = Math.max(2.5, 3.5);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  for (const d of paths) {
-    try {
-      if (typeof Path2D !== 'undefined') {
-        const p = new Path2D(d);
-        ctx.stroke(p);
-      } else {
-        strokePathManual(ctx, d);
-      }
-    } catch {
-      strokePathManual(ctx, d);
-    }
-  }
-  ctx.restore();
-
-  try {
-    return canvas.toDataURL('image/png');
-  } catch {
-    return null;
-  }
 }
 
 /** Traços para desenhar direto no jsPDF (fallback sem PNG). */
@@ -406,7 +294,8 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
           let ok = false;
           if (png) {
             try {
-              doc.addImage(png, 'PNG', ix, iy, drawW, drawH);
+              const fmt = rubricaDataUrlPdfFormat(png) ?? 'PNG';
+              doc.addImage(png, fmt, ix, iy, drawW, drawH);
               ok = true;
             } catch {
               ok = false;
@@ -454,7 +343,8 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
         let ok = false;
         if (aplicadorPng) {
           try {
-            doc.addImage(aplicadorPng, 'PNG', ix, rubricaTop, aw, ah);
+            const fmt = rubricaDataUrlPdfFormat(aplicadorPng) ?? 'PNG';
+            doc.addImage(aplicadorPng, fmt, ix, rubricaTop, aw, ah);
             ok = true;
           } catch {
             ok = false;

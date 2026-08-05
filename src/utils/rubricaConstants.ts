@@ -2,6 +2,11 @@
 export const RUBRICA_NATIVA_LARGURA = 420;
 export const RUBRICA_NATIVA_ALTURA = 180;
 
+/** Resolução persistida (WebP/PNG) — menor que a captura, suficiente para PDF. */
+export const RUBRICA_RASTER_LARGURA = 280;
+export const RUBRICA_RASTER_ALTURA = 120;
+export const RUBRICA_WEBP_QUALITY = 0.72;
+
 /** Exibição no PDF — compacta (≈21% da captura nativa; metade do tamanho anterior). */
 export const RUBRICA_PDF_LARGURA = 90;
 export const RUBRICA_PDF_ALTURA = 39;

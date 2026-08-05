@@ -590,7 +590,8 @@ export async function saveCadastro(
   ownerUid: string,
   userId: string | null,
 ): Promise<CadastroRecord> {
-  let payload = item;
+  const { rasterizarRubricasNoCadastro } = await import('../../utils/rubricaRasterPersist');
+  let payload = rasterizarRubricasNoCadastro(item).cadastro;
   let existing = await getCadastroRaw(payload.id);
   if (existing?.deleted) existing = undefined;
 
@@ -661,17 +662,19 @@ export async function saveCadastrosBatch(
     }
   }
 
+  const { rasterizarRubricasNoCadastro } = await import('../../utils/rubricaRasterPersist');
   for (const item of items) {
-    const nipKey = nipChaveCadastro(item.nip);
+    const itemRaster = rasterizarRubricasNoCadastro(item).cadastro;
+    const nipKey = nipChaveCadastro(itemRaster.nip);
     const existingByNip = nipKey ? porNip.get(nipKey) : undefined;
-    const existingById = await db.cadastros.get(existingByNip?.id ?? item.id);
+    const existingById = await db.cadastros.get(existingByNip?.id ?? itemRaster.id);
     const existing =
       existingById && existingById.ownerUid === ownerUid && !existingById.deleted
         ? existingById
         : existingByNip && existingByNip.ownerUid === ownerUid && !existingByNip.deleted
           ? existingByNip
           : undefined;
-    const payload = existing ? { ...item, id: existing.id } : item;
+    const payload = existing ? { ...itemRaster, id: existing.id } : itemRaster;
     const operation = existing ? 'UPDATE' : 'CREATE';
     const record = await toCadastroRecord(
       existing ? { ...existing, ...payload } : payload,
@@ -740,7 +743,10 @@ export async function saveAplicador(
   if (isAuthorizedMemberSession()) {
     throw new Error('Cadastro de aplicador disponível apenas para o e-mail chefe.');
   }
-  let payload = item;
+  const { rubricaParaPersistencia } = await import('../../utils/rubricaRasterPersist');
+  let payload = item.rubricaSvg
+    ? { ...item, rubricaSvg: rubricaParaPersistencia(item.rubricaSvg) ?? item.rubricaSvg }
+    : item;
   let existing = await getAplicadorRaw(payload.id);
   if (existing?.deleted) existing = undefined;
 
@@ -822,7 +828,8 @@ export async function replaceAplicadorRubricaSvg(
   ownerUid: string,
   userId: string | null,
 ): Promise<AplicadorRecord | null> {
-  const svg = rubricaSvg.trim();
+  const { rubricaParaPersistencia } = await import('../../utils/rubricaRasterPersist');
+  const svg = rubricaParaPersistencia(rubricaSvg)?.trim() ?? '';
   if (!svg) return null;
 
   const existing = await getAplicadorRaw(id);
@@ -863,7 +870,8 @@ export async function updateAplicadorRubricaSvgIfEmpty(
   ownerUid: string,
   userId: string | null,
 ): Promise<AplicadorRecord | null> {
-  const svg = rubricaSvg.trim();
+  const { rubricaParaPersistencia } = await import('../../utils/rubricaRasterPersist');
+  const svg = rubricaParaPersistencia(rubricaSvg)?.trim() ?? '';
   if (!svg) return null;
 
   const existing = await getAplicadorRaw(id);
@@ -971,11 +979,13 @@ export async function saveSessao(
   ownerUid: string,
   userId: string | null,
 ): Promise<SessaoRecord> {
-  const existing = await getSessaoRaw(item.id);
+  const { rasterizarRubricasNaSessao } = await import('../../utils/rubricaRasterPersist');
+  const { sessao: itemRaster } = rasterizarRubricasNaSessao(item);
+  const existing = await getSessaoRaw(itemRaster.id);
   const operation =
     existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
   const record = await toSessaoRecord(
-    existing && existing.ownerUid === ownerUid ? { ...existing, ...item } : item,
+    existing && existing.ownerUid === ownerUid ? { ...existing, ...itemRaster } : itemRaster,
     ownerUid,
     userId,
     operation,

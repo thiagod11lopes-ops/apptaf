@@ -36,6 +36,9 @@ export async function getAplicadoresFirestoreSince(
 export async function addAplicadorFirestore(uid: string, item: AplicadorItemPersist): Promise<void> {
   const docId = item.id || `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const payload = toAplicadorCloudPayload(item);
+  const { rubricaParaPersistencia } = await import('../../utils/rubricaRasterPersist');
+  const rubricaRaw = payload.rubricaSvg?.trim();
+  const rubricaSvg = rubricaRaw ? (rubricaParaPersistencia(rubricaRaw) ?? rubricaRaw) : null;
   const syncVersion =
     typeof (payload as { syncVersion?: number }).syncVersion === 'number'
       ? (payload as { syncVersion: number }).syncVersion
@@ -56,7 +59,7 @@ export async function addAplicadorFirestore(uid: string, item: AplicadorItemPers
       praca: payload.praca,
       senhaHash: payload.senhaHash,
       // null remove rúbrica na nuvem quando o chefe exclui pelo card.
-      rubricaSvg: payload.rubricaSvg?.trim() ? payload.rubricaSvg : null,
+      rubricaSvg,
       updatedAt: payload.updatedAt ?? Date.now(),
       ...(syncVersion != null ? { syncVersion, version: syncVersion } : {}),
     },

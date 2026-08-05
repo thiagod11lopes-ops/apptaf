@@ -462,6 +462,24 @@ function registrarRubrica(
   svgDataUrl: string | undefined,
 ): string | undefined {
   if (!svgDataUrl) return undefined;
+  const raw = svgDataUrl.trim();
+
+  // WebP/PNG/JPEG persistidos
+  const raster = /^data:image\/(png|webp|jpeg|jpg);base64,(.+)$/i.exec(raw);
+  if (raster?.[1] && raster[2]) {
+    try {
+      if (typeof atob !== 'function') return undefined;
+      const binary = atob(raster[2]);
+      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+      const ext = raster[1].toLowerCase() === 'jpg' ? 'jpeg' : raster[1].toLowerCase();
+      const name = `${prefix}_${index}.${ext}`;
+      pictures.push({ path: `media/${name}`, data: bytes });
+      return name;
+    } catch {
+      return undefined;
+    }
+  }
+
   const xml = svgDataUrlParaXml(svgDataUrl);
   if (!xml) return undefined;
   const name = `${prefix}_${index}.svg`;

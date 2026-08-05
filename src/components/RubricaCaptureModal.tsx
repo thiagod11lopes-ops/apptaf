@@ -12,6 +12,7 @@ import {
   buildStrokePath,
   type RubricaStroke,
 } from '../utils/rubricaSvgBuilder';
+import { rubricaParaPersistencia } from '../utils/rubricaRasterPersist';
 import { RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
@@ -92,7 +93,7 @@ export function RubricaCaptureModal({
     ];
     if (todos.length === 0) return;
     const svg = buildRubricaSvgDataUrl(todos, canvasWidth, RUBRICA_NATIVA_ALTURA);
-    onConfirm(svg);
+    onConfirm(rubricaParaPersistencia(svg) ?? svg);
   }, [strokes, strokeAtual, canvasWidth, onConfirm]);
 
   if (!visible || !participante) return null;

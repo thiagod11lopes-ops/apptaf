@@ -37,7 +37,9 @@ export async function getAllSessoesFirestore(uid: string): Promise<SessaoAplicac
 }
 
 async function persistSessao(uid: string, sessao: SessaoAplicacaoTaf): Promise<void> {
-  const stamped = stampSessao(sessao, sessao.updatedAt);
+  const { rasterizarRubricasNaSessao } = await import('../../utils/rubricaRasterPersist');
+  const { sessao: sessaoRaster } = rasterizarRubricasNaSessao(sessao);
+  const stamped = stampSessao(sessaoRaster, sessaoRaster.updatedAt);
   const rubricas = extractSessaoRubricas(stamped);
   const light = toSessaoLight(stamped);
   const syncVersion =

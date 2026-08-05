@@ -14,10 +14,14 @@ const PDF_TABELA_TH_PAD_V = 3;
 const PDF_COL_RUBRICA_LINE_HEIGHT = 0.94;
 const PDF_COL_RUBRICA_MAX_EXTRA = 4;
 
-/** HTML da coluna Rúbrica para PDF — compacto, traço reforçado para boa leitura. */
+/** HTML da coluna Rúbrica para PDF — compacto; aceita SVG legado ou WebP/PNG. */
 export function celulaRubricaHtml(svgUri?: string | null): string {
+  const raw = svgUri?.trim() ?? '';
+  if (raw.startsWith('data:image/png') || raw.startsWith('data:image/webp') || raw.startsWith('data:image/jpeg')) {
+    return `<img src="${raw}" alt="Rúbrica" class="rubrica-img" width="${RUBRICA_PDF_LARGURA}" height="${RUBRICA_PDF_ALTURA}"/>`;
+  }
   const svg = rubricaSvgParaPdf(svgUri) ?? '';
-  if (svg.startsWith('data:image/svg')) {
+  if (svg.startsWith('data:image/')) {
     return `<img src="${svg}" alt="Rúbrica" class="rubrica-img" width="${RUBRICA_PDF_LARGURA}" height="${RUBRICA_PDF_ALTURA}"/>`;
   }
   return '<span class="rubrica-vazio">—</span>';

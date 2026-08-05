@@ -7,6 +7,7 @@ import {
 } from '../services/resultadosAplicadosIndexedDb';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { nipDigitos } from './nipFormat';
+import { rubricaParaPersistencia } from './rubricaRasterPersist';
 
 function patchRubricaPorProva(
   prova: ResultadoCorridaItem['prova'],
@@ -33,7 +34,7 @@ export function aplicarRubricasEmCadastros(
   if (resultados.length === 0) return cadastros;
   const lista = [...cadastros];
   for (const r of resultados) {
-    const svg = r.rubricaCandidatoSvg?.trim();
+    const svg = rubricaParaPersistencia(r.rubricaCandidatoSvg)?.trim();
     if (!svg) continue;
     let busca = buscarCadastroPorNomeOuNip(lista, r.nip);
     if (busca.kind !== 'found' && r.nome.trim()) {
@@ -61,7 +62,7 @@ export async function persistirRubricasNoCadastro(
   let ok = 0;
 
   for (const r of resultados) {
-    const svg = r.rubricaCandidatoSvg?.trim();
+    const svg = rubricaParaPersistencia(r.rubricaCandidatoSvg)?.trim();
     if (!svg) continue;
 
     let busca = buscarCadastroPorNomeOuNip(lista, r.nip);
@@ -100,7 +101,7 @@ export async function persistirRubricaModalidadeParticipante(
   modalidade: TipoProvaAplicada,
   svg: string,
 ): Promise<{ cadastroOk: boolean; sessoesAtualizadas: number }> {
-  const svgTrim = svg.trim();
+  const svgTrim = rubricaParaPersistencia(svg)?.trim() ?? '';
   if (!svgTrim) return { cadastroOk: false, sessoesAtualizadas: 0 };
 
   const cadastroOk =

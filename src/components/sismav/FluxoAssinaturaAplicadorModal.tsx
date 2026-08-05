@@ -28,6 +28,7 @@ import {
   buildStrokePath,
   type RubricaStroke,
 } from '../../utils/rubricaSvgBuilder';
+import { rubricaParaPersistencia } from '../../utils/rubricaRasterPersist';
 import { RUBRICA_COR_TRACO } from '../../utils/rubricaSvgNormalize';
 import { compareByNomePtBr } from '../../utils/compareNomePtBr';
 import { formatNomeComPosto } from '../../utils/formatNomeComPosto';
@@ -174,7 +175,8 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
       ...(rubricaStrokeAtual.length > 0 ? [rubricaStrokeAtual] : []),
     ];
     if (todos.length === 0) return null;
-    return buildRubricaSvgDataUrl(todos, canvasWidth, RUBRICA_NATIVA_ALTURA);
+    const svg = buildRubricaSvgDataUrl(todos, canvasWidth, RUBRICA_NATIVA_ALTURA);
+    return rubricaParaPersistencia(svg) ?? svg;
   }, [canvasWidth, rubricaStrokeAtual, rubricaStrokes]);
 
   const concluirAssinatura = useCallback(() => {

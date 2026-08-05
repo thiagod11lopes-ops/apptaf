@@ -11,6 +11,7 @@ import {
   desenharRubricaJsPdf,
   renderRubricaSvgToPngDataUrl,
 } from './gerarResumoAplicacaoPdfWeb';
+import { rubricaDataUrlPdfFormat } from './rubricaRasterPersist';
 import { pdfTextoParaJsPdf } from './pdfLayout';
 
 const pdfTexto = pdfTextoParaJsPdf;
@@ -64,7 +65,8 @@ function desenharAssinaturaAplicador(
     const ih = 22;
     if (png) {
       try {
-        doc.addImage(png, 'PNG', cx - iw / 2, baseY - 4, iw, ih);
+        const fmt = rubricaDataUrlPdfFormat(png) ?? 'PNG';
+        doc.addImage(png, fmt, cx - iw / 2, baseY - 4, iw, ih);
       } catch {
         desenharRubricaJsPdf(doc, svg, cx - iw / 2, baseY - 4, iw, ih);
       }
@@ -263,7 +265,8 @@ export async function gerarResultadosTafPdfBlobWeb(
         const by = y + (rowH - rubH) / 2;
         if (png) {
           try {
-            doc.addImage(png, 'PNG', bx, by, rubW, rubH);
+            const fmt = rubricaDataUrlPdfFormat(png) ?? 'PNG';
+            doc.addImage(png, fmt, bx, by, rubW, rubH);
           } catch {
             desenharRubricaJsPdf(doc, svg, bx, by, rubW, rubH);
           }

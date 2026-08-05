@@ -113,6 +113,7 @@ import {
   RUBRICA_COR_FUNDO,
   RUBRICA_COR_TRACO,
 } from '../utils/rubricaSvgNormalize';
+import { rubricaParaPersistencia } from '../utils/rubricaRasterPersist';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
   buscarRegistroModalidadeExistente,
@@ -1635,13 +1636,14 @@ export default function AplicarTAFScreen() {
       ...(rubricaStrokeAtual.length > 0 ? [rubricaStrokeAtual] : []),
     ];
     if (strokesProntos.length === 0) return null;
-    return buildRubricaSvgDataUrl(
+    const svg = buildRubricaSvgDataUrl(
       strokesProntos,
       rubricaCanvasWidth,
       RUBRICA_NATIVA_ALTURA,
       RUBRICA_COR_TRACO,
       RUBRICA_COR_FUNDO,
     );
+    return rubricaParaPersistencia(svg) ?? svg;
   }, [rubricaCanvasWidth, rubricaStrokeAtual, rubricaStrokes]);
 
   const aplicarSvgNoIndiceRubrica = useCallback(

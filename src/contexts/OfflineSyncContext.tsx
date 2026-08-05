@@ -92,6 +92,14 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       const ownerUid = dataOwnerUid ?? getCachedDataOwnerUid();
       if (ownerUid) {
         await syncManager.bindSession(ownerUid);
+        try {
+          const { migrateRubricasSvgParaRaster } = await import(
+            '../utils/migrateRubricasParaRaster'
+          );
+          await migrateRubricasSvgParaRaster(ownerUid);
+        } catch (error) {
+          console.warn('[rubricas] migração SVG→WebP/PNG falhou:', error);
+        }
         // Só sincroniza se a chave da nuvem estiver ligada (padrão: desligada).
         if (hasFirebaseUser && isAuthenticated && isCloudLinkEnabled()) {
           await syncManager.refreshCloudDiff();

@@ -238,17 +238,31 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
         ) : null}
 
         {showUpToDate ? (
-          <Text style={[styles.successTitle, { color: theme.gain }]}>
-            ✅ Seu banco de dados já está atualizado.
-          </Text>
+          <View style={styles.resultBlock}>
+            <Text style={[styles.successTitle, { color: theme.gain }]}>
+              ✅ Seu banco de dados já está atualizado.
+            </Text>
+            {syncUi.lastSync && (syncUi.lastSync.ignored ?? 0) > 0 ? (
+              <Text style={[ts.caption, { color: theme.textSecondary }]}>
+                ⊘ {syncUi.lastSync.ignored} já alinhados · nenhuma transferência necessária
+              </Text>
+            ) : (
+              <Text style={[ts.caption, { color: theme.textSecondary }]}>
+                Nenhuma transferência necessária
+              </Text>
+            )}
+          </View>
         ) : null}
 
         {showSuccess && syncUi.lastSync ? (
           <View style={styles.resultBlock}>
             <Text style={[styles.successTitle, { color: theme.gain }]}>✅ Sincronização concluída</Text>
             <Text style={[ts.caption, { color: theme.textSecondary }]}>
-              ⬇ {syncUi.lastSync.downloads} recebidos · ⬆ {syncUi.lastSync.uploads} enviados ·{' '}
-              {formatDurationSeconds(syncUi.lastSync.durationMs)} ·{' '}
+              ⬇ {syncUi.lastSync.downloads} recebidos · ⬆ {syncUi.lastSync.uploads} enviados
+              {(syncUi.lastSync.ignored ?? 0) > 0
+                ? ` · ⊘ ${syncUi.lastSync.ignored} já alinhados`
+                : ''}{' '}
+              · {formatDurationSeconds(syncUi.lastSync.durationMs)} ·{' '}
               {formatRecordsPerSecond(syncUi.lastSync.avgRecordsPerSecond)}
             </Text>
           </View>

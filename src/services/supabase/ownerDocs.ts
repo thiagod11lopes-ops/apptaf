@@ -80,6 +80,48 @@ export async function getOwnerDoc(
   }
 }
 
+/** PostgREST: lotes de `.in('id', …)` — evita full scan de tabelas grandes (rúbricas). */
+const OWNER_DOCS_BY_ID_CHUNK = 80;
+
+/**
+ * Lê vários docs por id (mesmo owner). Nunca lista a tabela inteira.
+ * Ids ausentes simplesmente não aparecem no mapa.
+ */
+export async function getOwnerDocsByIds(
+  table: string,
+  ownerUid: string,
+  ids: string[],
+): Promise<Map<string, CloudDocRow>> {
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  const out = new Map<string, CloudDocRow>();
+  if (unique.length === 0) return out;
+
+  const sb = requireSupabase();
+  for (let i = 0; i < unique.length; i += OWNER_DOCS_BY_ID_CHUNK) {
+    const chunk = unique.slice(i, i + OWNER_DOCS_BY_ID_CHUNK);
+    const { data, error } = await sb
+      .from(table)
+      .select(selectColumns(table))
+      .eq('owner_uid', ownerUid)
+      .in('id', chunk);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as CloudDocRow[];
+    try {
+      const mapped = await mapDecryptedRows(rows);
+      for (const row of mapped) {
+        out.set(row.id, row);
+      }
+    } catch {
+      // Chunk ilegível: tenta um a um para não perder os legíveis.
+      for (const id of chunk) {
+        const one = await getOwnerDoc(table, ownerUid, id);
+        if (one) out.set(id, one);
+      }
+    }
+  }
+  return out;
+}
+
 export const E2E_KEY_MISMATCH_CODE = 'E2E_KEY_MISMATCH';
 export const E2E_KEY_MISMATCH_MESSAGE =
   'A chave de criptografia deste aparelho não abre os dados da nuvem (BNC). Saia da conta e entre novamente com e-mail e senha neste aparelho para alinhar a chave do banco.';

@@ -1,4 +1,11 @@
-import { deleteOwnerDoc, getOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
+import {
+  deleteOwnerDoc,
+  getOwnerDoc,
+  getOwnerDocsByIds,
+  listOwnerDocs,
+  rowToDoc,
+  upsertOwnerDoc,
+} from './ownerDocs';
 import type { CadastroRubricas } from '../../utils/cadastroLight';
 
 export type CadastroRubricasPayload = CadastroRubricas;
@@ -45,28 +52,17 @@ export async function getAllCadastroRubricasFirestoreMap(
 }
 
 /**
- * Baixa rubricas para os ids pedidos.
- * Muitos ids → 1 full fetch. Poucos → get por id (sem N×full-table).
+ * Baixa rúbricas só dos ids pedidos (lotes `.in`) — nunca full-scan da tabela.
  */
 export async function fetchCadastroRubricasForIds(
   uid: string,
   ids: string[],
 ): Promise<Map<string, CadastroRubricas>> {
   if (ids.length === 0) return new Map();
-  if (ids.length <= 8) {
-    const pairs = await Promise.all(
-      ids.map(async (id) => {
-        const rub = await getCadastroRubricasCloud(uid, id);
-        return rub ? ([id, rub] as const) : null;
-      }),
-    );
-    return new Map(pairs.filter((p): p is [string, CadastroRubricas] => p != null));
+  const rows = await getOwnerDocsByIds(TABLE, uid, ids);
+  const map = new Map<string, CadastroRubricas>();
+  for (const [id, row] of rows) {
+    map.set(id, rowToDoc<CadastroRubricasPayload & { id: string }>(row));
   }
-  const all = await getAllCadastroRubricasCloud(uid);
-  const picked = new Map<string, CadastroRubricas>();
-  for (const id of ids) {
-    const rub = all.get(id);
-    if (rub) picked.set(id, rub);
-  }
-  return picked;
+  return map;
 }

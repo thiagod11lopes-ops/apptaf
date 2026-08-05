@@ -36,7 +36,13 @@ import {
 } from './syncUiState';
 import { estimateSyncQueueCounts } from './lastWriteWinsSync';
 import { invalidateRemoteSnapshotCache } from './remoteSnapshotCache';
-import { markFullFetchDone, setRemoteSyncWatermark, forceNextFullRemoteFetch } from './syncWatermark';
+import {
+  markFullFetchDone,
+  setRemoteSyncWatermark,
+  forceNextFullRemoteFetch,
+  getRemoteSyncWatermark,
+  isFullFetchDue,
+} from './syncWatermark';
 import { commitAllCollectionCheckpoints } from './syncCheckpoint';
 import { syncQueue } from './SyncQueue';
 import { peekRemoteSnapshotCache } from './remoteSnapshotCache';
@@ -571,6 +577,37 @@ async function runCloudAuthoritativeMirror(options?: {
 
       if (!isCloudLinkEnabled()) {
         return { ok: false, error: 'cloud_link_off' };
+      }
+
+      // Seguro: se já há watermark, full fetch não está vencido e não há pendências
+      // planejadas, pula o espelho completo (evita reprocessar 3–4k registros).
+      // Full fetch periódico (24h) e qualquer pendência real ainda forçam sync.
+      await refreshPendingSummary();
+      const watermark = await getRemoteSyncWatermark(uid);
+      const fullDue = await isFullFetchDue(uid);
+      if (
+        watermark != null &&
+        watermark > 0 &&
+        !fullDue &&
+        pendingSummary.total <= 0
+      ) {
+        try {
+          const estimate = await estimateSyncQueueCounts(uid, false);
+          if (estimate.pendingUploads <= 0 && estimate.pendingDownloads <= 0) {
+            cloudMirrorDoneOwner = uid;
+            await syncLogger.info('sync', 'Espelho pulado: banco já alinhado (incremental)', {
+              ownerUid: uid,
+            });
+            return { ok: true };
+          }
+        } catch (error) {
+          await syncLogger.warn(
+            'sync',
+            `Estimativa pré-espelho falhou (seguindo full): ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
       }
 
       await forceNextFullRemoteFetch(uid);
@@ -1351,12 +1388,36 @@ export const syncManager = {
         // ignore
       }
     }
-    cloudMirrorDoneOwner = null;
     await refreshPendingSummary();
+    const uidForMirror = (uid ?? '').trim();
+    let resetMirror = true;
+    if (uidForMirror) {
+      try {
+        const watermark = await getRemoteSyncWatermark(uidForMirror);
+        const fullDue = await isFullFetchDue(uidForMirror);
+        // Mantém espelho se já alinhado nesta sessão e full fetch não venceu.
+        if (
+          cloudMirrorDoneOwner === uidForMirror &&
+          watermark != null &&
+          watermark > 0 &&
+          !fullDue &&
+          pendingSummary.total <= 0
+        ) {
+          resetMirror = false;
+        }
+      } catch {
+        resetMirror = true;
+      }
+    }
+    if (resetMirror) {
+      cloudMirrorDoneOwner = null;
+    }
     await refreshCloudQueueEstimate(true);
     notifyListeners();
     this.scheduleBackgroundSync(AUTO_SYNC_RECONNECT_MS);
-    void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
+    if (resetMirror || cloudMirrorDoneOwner !== uidForMirror) {
+      void this.awaitCloudAuthoritativeMirror({ timeoutMs: 180_000, silent: true });
+    }
   },
 
   /**

@@ -1,4 +1,11 @@
-import { deleteOwnerDoc, getOwnerDoc, listOwnerDocs, rowToDoc, upsertOwnerDoc } from './ownerDocs';
+import {
+  deleteOwnerDoc,
+  getOwnerDoc,
+  getOwnerDocsByIds,
+  listOwnerDocs,
+  rowToDoc,
+  upsertOwnerDoc,
+} from './ownerDocs';
 import type { SessaoResultadoRubrica } from '../../utils/sessaoLight';
 
 export type SessaoRubricasPayload = {
@@ -61,25 +68,19 @@ export async function getAllSessaoRubricasFirestoreMap(
   return getAllSessaoRubricasCloud(uid);
 }
 
+/**
+ * Baixa rúbricas só dos ids pedidos (lotes `.in`) — nunca full-scan da tabela.
+ */
 export async function fetchSessaoRubricasForIds(
   uid: string,
   ids: string[],
 ): Promise<Map<string, SessaoRubricasDoc>> {
   if (ids.length === 0) return new Map();
-  if (ids.length <= 8) {
-    const pairs = await Promise.all(
-      ids.map(async (id) => {
-        const rub = await getSessaoRubricasCloud(uid, id);
-        return rub ? ([id, rub] as const) : null;
-      }),
-    );
-    return new Map(pairs.filter((p): p is [string, SessaoRubricasDoc] => p != null));
+  const rows = await getOwnerDocsByIds(TABLE, uid, ids);
+  const map = new Map<string, SessaoRubricasDoc>();
+  for (const [id, row] of rows) {
+    const doc = rowToDoc<SessaoRubricasPayload & { id: string }>(row);
+    map.set(id, normalizePayload(doc));
   }
-  const all = await getAllSessaoRubricasCloud(uid);
-  const picked = new Map<string, SessaoRubricasDoc>();
-  for (const id of ids) {
-    const rub = all.get(id);
-    if (rub) picked.set(id, rub);
-  }
-  return picked;
+  return map;
 }

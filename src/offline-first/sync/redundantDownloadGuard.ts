@@ -1,4 +1,3 @@
-import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
 import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import { fetchCadastroRubricasForIds } from '../../services/firebase/cadastroRubricasFirestore';
@@ -117,11 +116,13 @@ export function fullBusinessContentEqualForDownload(
  * (remoto ?? local). O resultado só é idêntico ao local se cada rubrica remota
  * presente for igual à local.
  */
+/** Compara imagens remotas com a side table local (não com o doc principal). */
 export function cadastroRubricasMatchLocal(
-  local: CadastroItemPersist,
+  localRubricas: CadastroRubricas | null | undefined,
   remoteRubricas: CadastroRubricas | undefined,
 ): boolean {
   if (!remoteRubricas) return true;
+  const local = localRubricas ?? {};
   for (const key of CADASTRO_RUBRICA_KEYS) {
     const remoteSvg = remoteRubricas[key];
     if (remoteSvg != null && remoteSvg !== local[key]) return false;
@@ -130,21 +131,36 @@ export function cadastroRubricasMatchLocal(
 }
 
 /**
- * O download de sessão aplica rubricas remotas por chave nip:prova. O resultado
- * só é idêntico ao local se toda rubrica remota aplicável for igual à local.
+ * Compara rúbricas remotas com a side table local (resultados + aplicador).
  */
 export function sessaoRubricasMatchLocal(
-  local: SessaoAplicacaoTaf,
+  localDoc:
+    | {
+        resultados?: Array<{ nip: string; prova?: string; rubricaCandidatoSvg?: string }>;
+        aplicadorRubricaSvg?: string;
+      }
+    | null
+    | undefined,
   remoteDoc: SessaoRubricasDoc | undefined,
+  tipoProvaFallback?: string,
 ): boolean {
-  if (!remoteDoc?.resultados?.length) return true;
-  const remoteByKey = new Map<string, string>(
-    remoteDoc.resultados.map((r) => [`${r.nip}:${r.prova}`, r.rubricaCandidatoSvg]),
+  if (!remoteDoc) return true;
+  if (!remoteDoc.resultados?.length && !remoteDoc.aplicadorRubricaSvg) return true;
+  const localByKey = new Map(
+    (localDoc?.resultados ?? []).map((r) => [
+      `${r.nip}:${r.prova ?? tipoProvaFallback ?? ''}`,
+      r.rubricaCandidatoSvg,
+    ]),
   );
-  for (const r of local.resultados ?? []) {
-    const prova = r.prova ?? local.tipoProva;
-    const remoteSvg = remoteByKey.get(`${r.nip}:${prova}`);
-    if (remoteSvg && remoteSvg !== r.rubricaCandidatoSvg) return false;
+  for (const r of remoteDoc.resultados ?? []) {
+    const localSvg = localByKey.get(`${r.nip}:${r.prova}`);
+    if (r.rubricaCandidatoSvg && r.rubricaCandidatoSvg !== localSvg) return false;
+  }
+  if (
+    remoteDoc.aplicadorRubricaSvg &&
+    remoteDoc.aplicadorRubricaSvg !== localDoc?.aplicadorRubricaSvg
+  ) {
+    return false;
   }
   return true;
 }
@@ -242,6 +258,11 @@ export async function alignRedundantDownloads<T extends RedundantDownloadItem>(
     rubricsAvailable = false;
   }
 
+  const { getCadastroRubricasLocalByIds, getSessaoRubricasLocal } = await import(
+    '../db/localDbRubricas'
+  );
+  const localCadastroRubricas = await getCadastroRubricasLocalByIds(cadastroIds);
+
   const alignedIds = new Set<string>();
   for (const item of candidates) {
     const local = item.local as SyncRecord;
@@ -249,12 +270,24 @@ export async function alignRedundantDownloads<T extends RedundantDownloadItem>(
 
     if (item.collection === 'cadastros' && isActive) {
       if (!rubricsAvailable) continue;
-      if (!cadastroRubricasMatchLocal(local as CadastroItemPersist, cadastroRubricas.get(item.id))) {
+      if (
+        !cadastroRubricasMatchLocal(
+          localCadastroRubricas.get(item.id),
+          cadastroRubricas.get(item.id),
+        )
+      ) {
         continue;
       }
     } else if (item.collection === 'sessoes' && isActive) {
       if (!rubricsAvailable) continue;
-      if (!sessaoRubricasMatchLocal(local as SessaoAplicacaoTaf, sessaoRubricas.get(item.id))) {
+      const localSide = await getSessaoRubricasLocal(item.id);
+      if (
+        !sessaoRubricasMatchLocal(
+          localSide,
+          sessaoRubricas.get(item.id),
+          (local as SessaoAplicacaoTaf).tipoProva,
+        )
+      ) {
         continue;
       }
     }

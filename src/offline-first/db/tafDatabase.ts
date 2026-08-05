@@ -11,8 +11,30 @@ import type {
   PreCadastroRecord,
 } from '../types';
 import type { LocalAuthorizedEmail } from '../repositories/AuthorizedEmailRepository';
-
 export type MetaEntry = { key: string; value: string };
+
+/** Side-table rows (imagens de rúbrica fora do documento principal). */
+export type CadastroRubricasTableRow = {
+  id: string;
+  ownerUid: string;
+  updatedAt: number;
+  rubricaCorridaSvg?: string;
+  rubricaNatacaoSvg?: string;
+  rubricaCaminhadaSvg?: string;
+  rubricaPermanenciaSvg?: string;
+};
+
+export type SessaoRubricasTableRow = {
+  id: string;
+  ownerUid: string;
+  updatedAt: number;
+  resultados: Array<{
+    nip: string;
+    prova: string;
+    rubricaCandidatoSvg: string;
+  }>;
+  aplicadorRubricaSvg?: string;
+};
 
 export class TafDatabase extends Dexie {
   cadastros!: Table<CadastroRecord, string>;
@@ -25,6 +47,8 @@ export class TafDatabase extends Dexie {
   localBackups!: Table<LocalBackupSnapshot, number>;
   authorizedEmails!: Table<LocalAuthorizedEmail, string>;
   preCadastros!: Table<PreCadastroRecord, string>;
+  cadastroRubricas!: Table<CadastroRubricasTableRow, string>;
+  sessaoRubricas!: Table<SessaoRubricasTableRow, string>;
   meta!: Table<MetaEntry, string>;
 
   constructor() {
@@ -57,6 +81,10 @@ export class TafDatabase extends Dexie {
     this.version(7).stores({
       preCadastros:
         'id, ownerUid, criadoEm, updatedAt, syncStatus, deleted, [ownerUid+deleted], [ownerUid+syncStatus]',
+    });
+    this.version(8).stores({
+      cadastroRubricas: 'id, ownerUid, [ownerUid+id]',
+      sessaoRubricas: 'id, ownerUid, [ownerUid+id]',
     });
   }
 }

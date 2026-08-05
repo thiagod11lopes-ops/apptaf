@@ -1,6 +1,11 @@
 import type { SessaoAplicacaoTaf } from '../resultadosAplicadosIndexedDb';
 import { tombstoneToCloudDoc, type TombstonePayload } from '../../offline-first/sync/tombstone';
-import { extractSessaoRubricas, toSessaoFromFirestoreDoc, toSessaoLight } from '../../utils/sessaoLight';
+import {
+  extractSessaoAplicadorRubrica,
+  extractSessaoRubricas,
+  toSessaoFromFirestoreDoc,
+  toSessaoLight,
+} from '../../utils/sessaoLight';
 import { stampSessao } from '../offline/recordTimestamps';
 import { deleteOwnerDoc, listOwnerDocs, listOwnerDocsSince, rowToDoc, upsertOwnerDoc } from './ownerDocs';
 import { deleteSessaoRubricasCloud, setSessaoRubricasCloud } from './sessaoRubricasCloud';
@@ -38,9 +43,12 @@ export async function getAllSessoesFirestore(uid: string): Promise<SessaoAplicac
 
 async function persistSessao(uid: string, sessao: SessaoAplicacaoTaf): Promise<void> {
   const { rasterizarRubricasNaSessao } = await import('../../utils/rubricaRasterPersist');
-  const { sessao: sessaoRaster } = rasterizarRubricasNaSessao(sessao);
+  const { hydrateSessaoComRubricas } = await import('../../utils/hydrateRubricas');
+  const hydrated = await hydrateSessaoComRubricas(sessao);
+  const { sessao: sessaoRaster } = rasterizarRubricasNaSessao(hydrated);
   const stamped = stampSessao(sessaoRaster, sessaoRaster.updatedAt);
   const rubricas = extractSessaoRubricas(stamped);
+  const aplicadorRubricaSvg = extractSessaoAplicadorRubrica(stamped);
   const light = toSessaoLight(stamped);
   const syncVersion =
     typeof (stamped as { syncVersion?: number }).syncVersion === 'number'
@@ -59,8 +67,11 @@ async function persistSessao(uid: string, sessao: SessaoAplicacaoTaf): Promise<v
     } as Record<string, unknown>,
     stamped.updatedAt ?? Date.now(),
   );
-  if (rubricas.length > 0) {
-    await setSessaoRubricasCloud(uid, sessao.id, { resultados: rubricas });
+  if (rubricas.length > 0 || aplicadorRubricaSvg) {
+    await setSessaoRubricasCloud(uid, sessao.id, {
+      resultados: rubricas,
+      ...(aplicadorRubricaSvg ? { aplicadorRubricaSvg } : {}),
+    });
   } else {
     await deleteSessaoRubricasCloud(uid, sessao.id);
   }

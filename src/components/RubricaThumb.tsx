@@ -2,6 +2,11 @@ import React from 'react';
 import { View, Image, Text, StyleSheet, useWindowDimensions, Platform } from 'react-native';
 import { RUBRICA_NATIVA_ALTURA, RUBRICA_NATIVA_LARGURA } from '../utils/rubricaConstants';
 import { normalizarRubricaSvgDataUrl } from '../utils/rubricaSvgNormalize';
+import {
+  isRubricaImagemDataUrl,
+  RUBRICADO_DIGITALMENTE,
+  temRubricaPresente,
+} from '../utils/rubricaPresence';
 
 export { RUBRICA_NATIVA_ALTURA, RUBRICA_NATIVA_LARGURA } from '../utils/rubricaConstants';
 
@@ -11,16 +16,34 @@ type Props = {
   maxWidth?: number;
   /** Altura máxima; padrão = resolução nativa da captura. */
   maxHeight?: number;
+  /**
+   * true (padrão): nunca mostra a imagem na UI — só "Rubricado Digitalmente".
+   * false: permite renderizar a imagem (uso interno / PDF preview excepcional).
+   */
+  somenteTexto?: boolean;
 };
 
-/** Exibe só a imagem da rúbrica, sem borda nem fundo, na maior definição possível. */
+/** Exibe marcador de rúbrica na UI (imagem só no PDF). */
 export function RubricaCell({
   svgUri,
   maxWidth = RUBRICA_NATIVA_LARGURA,
   maxHeight = RUBRICA_NATIVA_ALTURA,
+  somenteTexto = true,
 }: Props) {
   const { width: screenW } = useWindowDimensions();
   const colMax = Math.min(maxWidth, Math.max(120, Math.min(maxWidth, screenW * 0.42)));
+
+  if (!temRubricaPresente(svgUri)) {
+    return <Text style={styles.vazio}>—</Text>;
+  }
+
+  if (somenteTexto || !isRubricaImagemDataUrl(svgUri)) {
+    return (
+      <Text style={styles.marcado} accessibilityLabel={RUBRICADO_DIGITALMENTE}>
+        {RUBRICADO_DIGITALMENTE}
+      </Text>
+    );
+  }
 
   const uri = normalizarRubricaSvgDataUrl(svgUri);
   if (!uri) {
@@ -31,8 +54,6 @@ export function RubricaCell({
   const imgW = colMax;
   const imgH = Math.max(1, Math.round(colMax * ratio));
 
-  // RN Web Image frequentemente falha com data:image/svg+xml — usar <img> nativo.
-  // pointerEvents none: o clique deve chegar ao Pressable pai (editar rúbrica).
   if (Platform.OS === 'web') {
     return (
       <View style={[styles.cell, { width: imgW, height: imgH }]} pointerEvents="none">
@@ -81,5 +102,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94a3b8',
     textAlign: 'center',
+  },
+  marcado: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: 4,
   },
 });

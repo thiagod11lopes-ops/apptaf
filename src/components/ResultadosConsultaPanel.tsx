@@ -249,11 +249,8 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     });
     const comResultado = cadastrados.filter((c) => cadastroComResultadoNorma(c, normaTaf));
 
-    const [rubSessoes, rubCadastros] = await Promise.all([
-      carregarRubricasDasSessoesPorNip(),
-      carregarRubricasCadastrosPorIds(comResultado.map((c) => c.id)),
-    ]);
-    setRubricasSessoes(rubSessoes);
+    // UI: só marcadores nos cadastros/sessões (sem carregar imagens).
+    setRubricasSessoes(new Map());
 
     setBuscou(true);
     const sessoes = sessoesHistorico.length
@@ -261,7 +258,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       : agruparSessoesHistoricoPorTeste(
           unificarSessoesComCadastroRegistrador(await getAllSessoesAplicacao(), lista),
         );
-    setLinhas(linhasComRubricasMescladas(comResultado, rubSessoes, rubCadastros, sessoes));
+    setLinhas(linhasComRubricasMescladas(comResultado, new Map(), new Map(), sessoes));
 
     if (cadastrados.length === 0) {
       setMensagemBusca('Dados não Encontrados no Sistema');
@@ -279,8 +276,9 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       ? sessoesRaw
       : agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoesRaw, lista));
     const baseLinhas = listarResultadosCompletosFromHistorico(sessoes, lista);
+    // PDF: carrega imagens só neste momento.
     const [rubSessoes, rubCadastros] = await Promise.all([
-      rubricasSessoes.size > 0 ? Promise.resolve(rubricasSessoes) : carregarRubricasDasSessoesPorNip(),
+      carregarRubricasDasSessoesPorNip(),
       carregarRubricasCadastrosPorIds(baseLinhas.map((l) => l.id)),
     ]);
     const linhasCompletas = linhasCompletasHistoricoComRubricas(
@@ -408,14 +406,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
           setMensagemBusca('Militar Cadastrado não realizou TAF');
           return prev.filter((l) => l.id !== atualizado.id);
         }
-        const key = nipDigitos(atualizado.nip);
-        const rubCadastro: RubricasPorNip = {
-          corrida: atualizado.rubricaCorridaSvg,
-          natacao: atualizado.rubricaNatacaoSvg,
-          permanencia: atualizado.rubricaPermanenciaSvg,
-        };
-        const rub = mesclarRubricas(rubCadastro, key ? rubricasSessoes.get(key) : undefined);
-        const linha = mesclarRubricasNaLinha(cadastroParaLinhaResultado(atualizado), rub);
+        const linha = cadastroParaLinhaResultado(atualizado);
         return prev.map((l) => (l.id === atualizado.id ? linha : l));
       });
       setConfirmarExclusao(null);
@@ -424,7 +415,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     } finally {
       setExcluindo(false);
     }
-  }, [confirmarExclusao, todosCadastros, rubricasSessoes, carregarBase]);
+  }, [confirmarExclusao, todosCadastros, carregarBase]);
 
   const aoSalvarEdicao = useCallback(
     async (atualizado: CadastroItemPersist) => {
@@ -437,19 +428,8 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
         agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoes, novaBase)),
       );
 
-      const key = nipDigitos(atualizado.nip);
-      const [rubSessoes, rubCadastros] = await Promise.all([
-        carregarRubricasDasSessoesPorNip(),
-        carregarRubricasCadastrosPorIds([atualizado.id]),
-      ]);
-      setRubricasSessoes(rubSessoes);
-
       if (cadastroComAlgumResultadoTaf(atualizado)) {
-        const rub = mesclarRubricas(
-          rubCadastros.get(atualizado.id) ?? {},
-          key ? rubSessoes.get(key) : undefined,
-        );
-        const linha = mesclarRubricasNaLinha(cadastroParaLinhaResultado(atualizado), rub);
+        const linha = cadastroParaLinhaResultado(atualizado);
         setLinhas((prev) => prev.map((l) => (l.id === atualizado.id ? linha : l)));
         setMensagemBusca(null);
       } else {
@@ -502,25 +482,25 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
           return;
         }
 
+        const { RUBRICADO_DIGITALMENTE } = await import('../utils/rubricaPresence');
         const patchLinha = (l: ResultadoTafLinha): ResultadoTafLinha => {
           if (l.id !== rubricaEdicao.linhaId) return l;
           switch (rubricaEdicao.modalidade) {
             case 'caminhada':
-              return { ...l, rubricaCaminhadaSvg: svg };
+              return { ...l, rubricaCaminhadaSvg: RUBRICADO_DIGITALMENTE };
             case 'natacao':
-              return { ...l, rubricaNatacaoSvg: svg };
+              return { ...l, rubricaNatacaoSvg: RUBRICADO_DIGITALMENTE };
             case 'permanencia':
-              return { ...l, rubricaPermanenciaSvg: svg };
+              return { ...l, rubricaPermanenciaSvg: RUBRICADO_DIGITALMENTE };
             default:
-              return { ...l, rubricaCorridaSvg: svg };
+              return { ...l, rubricaCorridaSvg: RUBRICADO_DIGITALMENTE };
           }
         };
         setLinhas((prev) => prev.map(patchLinha));
 
         const lista = await getAllCadastros();
         setTodosCadastros(lista);
-        const rubSessoes = await carregarRubricasDasSessoesPorNip();
-        setRubricasSessoes(rubSessoes);
+        setRubricasSessoes(new Map());
         const sessoes = await getAllSessoesAplicacao();
         setSessoesHistorico(
           agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoes, lista)),

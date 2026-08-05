@@ -100,6 +100,14 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           console.warn('[rubricas] migração SVG→WebP/PNG falhou:', error);
         }
+        try {
+          const { migrateRubricasParaSideTables } = await import(
+            '../utils/migrateRubricasParaSideTables'
+          );
+          await migrateRubricasParaSideTables(ownerUid);
+        } catch (error) {
+          console.warn('[rubricas] migração para side tables falhou:', error);
+        }
         // Só sincroniza se a chave da nuvem estiver ligada (padrão: desligada).
         if (hasFirebaseUser && isAuthenticated && isCloudLinkEnabled()) {
           await syncManager.refreshCloudDiff();

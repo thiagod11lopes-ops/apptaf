@@ -127,6 +127,13 @@ function rubricaSvgParticipante(
   return c.rubricaCorridaSvg;
 }
 
+function temRubricaUi(uri?: string | null): boolean {
+  const raw = uri?.trim() ?? '';
+  if (!raw) return false;
+  if (raw === 'Rubricado Digitalmente') return true;
+  return raw.startsWith('data:image/');
+}
+
 export function HistoricoCalendarioTaf({
   sessoes,
   cadastros,
@@ -205,7 +212,9 @@ export function HistoricoCalendarioTaf({
     setGerandoPdf(true);
     onAviso?.(null);
     try {
-      const msg = await exportResumosSessoesDiaPdf(sessoesDoDia, dataBrSelecionada);
+      const { hydrateSessoesComRubricas } = await import('../../utils/hydrateRubricas');
+      const sessoesComRubricas = await hydrateSessoesComRubricas(sessoesDoDia);
+      const msg = await exportResumosSessoesDiaPdf(sessoesComRubricas, dataBrSelecionada);
       onAviso?.(msg);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao gerar PDF do dia.';
@@ -557,7 +566,7 @@ export function HistoricoCalendarioTaf({
               {sessao.resultados.map((r) => {
                 const modalidade = modalidadeExcluivel(sessao.tipoProva);
                 const svgRubrica = rubricaSvgParticipante(sessao.tipoProva, r, cadastros);
-                const temRubrica = !!svgRubrica?.trim();
+                const temRubrica = temRubricaUi(svgRubrica);
                 return (
                   <View
                     key={`${sessao.id}-${r.corredor}`}

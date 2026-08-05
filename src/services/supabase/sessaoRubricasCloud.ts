@@ -3,18 +3,28 @@ import type { SessaoResultadoRubrica } from '../../utils/sessaoLight';
 
 export type SessaoRubricasPayload = {
   resultados: SessaoResultadoRubrica[];
+  aplicadorRubricaSvg?: string;
 };
 
 export type SessaoRubricasDoc = SessaoRubricasPayload;
 
 const TABLE = 'sessao_rubricas';
 
+function normalizePayload(doc: Partial<SessaoRubricasPayload>): SessaoRubricasPayload {
+  return {
+    resultados: Array.isArray(doc.resultados) ? doc.resultados : [],
+    ...(doc.aplicadorRubricaSvg?.trim()
+      ? { aplicadorRubricaSvg: doc.aplicadorRubricaSvg.trim() }
+      : {}),
+  };
+}
+
 export async function setSessaoRubricasCloud(
   uid: string,
   id: string,
   payload: SessaoRubricasPayload,
 ): Promise<void> {
-  if (payload.resultados.length === 0) return;
+  if (payload.resultados.length === 0 && !payload.aplicadorRubricaSvg?.trim()) return;
   await upsertOwnerDoc(TABLE, uid, id, payload as unknown as Record<string, unknown>, Date.now());
 }
 
@@ -29,7 +39,7 @@ export async function getAllSessaoRubricasCloud(
   const map = new Map<string, SessaoRubricasPayload>();
   for (const row of rows) {
     const doc = rowToDoc<SessaoRubricasPayload & { id: string }>(row);
-    map.set(row.id, { resultados: Array.isArray(doc.resultados) ? doc.resultados : [] });
+    map.set(row.id, normalizePayload(doc));
   }
   return map;
 }
@@ -42,7 +52,7 @@ export async function getSessaoRubricasCloud(
   const row = await getOwnerDoc(TABLE, uid, id);
   if (!row) return null;
   const doc = rowToDoc<SessaoRubricasPayload & { id: string }>(row);
-  return { resultados: Array.isArray(doc.resultados) ? doc.resultados : [] };
+  return normalizePayload(doc);
 }
 
 export async function getAllSessaoRubricasFirestoreMap(

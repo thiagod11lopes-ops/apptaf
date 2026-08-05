@@ -591,6 +591,16 @@ export async function saveCadastro(
   userId: string | null,
 ): Promise<CadastroRecord> {
   const { rasterizarRubricasNoCadastro } = await import('../../utils/rubricaRasterPersist');
+  const {
+    extractCadastroRubricas,
+    hasCadastroRubricas,
+    toCadastroLightFromRubricas,
+  } = await import('../../utils/cadastroLight');
+  const {
+    getCadastroRubricasLocal,
+    putCadastroRubricasLocal,
+  } = await import('./localDbRubricas');
+
   let payload = rasterizarRubricasNoCadastro(item).cadastro;
   let existing = await getCadastroRaw(payload.id);
   if (existing?.deleted) existing = undefined;
@@ -600,6 +610,14 @@ export async function saveCadastro(
     existing = byNip;
     payload = { ...payload, id: byNip.id };
   }
+
+  const extracted = extractCadastroRubricas(payload);
+  const previous = await getCadastroRubricasLocal(payload.id);
+  const rubricas = hasCadastroRubricas(extracted)
+    ? extracted
+    : (previous ?? extracted);
+  await putCadastroRubricasLocal(ownerUid, payload.id, rubricas);
+  payload = toCadastroLightFromRubricas(payload, rubricas);
 
   const operation = existing ? 'UPDATE' : 'CREATE';
   const record = await toCadastroRecord(
@@ -980,12 +998,33 @@ export async function saveSessao(
   userId: string | null,
 ): Promise<SessaoRecord> {
   const { rasterizarRubricasNaSessao } = await import('../../utils/rubricaRasterPersist');
+  const {
+    extractSessaoAplicadorRubrica,
+    extractSessaoRubricas,
+    toSessaoLightComMarcadores,
+  } = await import('../../utils/sessaoLight');
+  const { getSessaoRubricasLocal, putSessaoRubricasLocal } = await import('./localDbRubricas');
+
   const { sessao: itemRaster } = rasterizarRubricasNaSessao(item);
-  const existing = await getSessaoRaw(itemRaster.id);
+  const extracted = extractSessaoRubricas(itemRaster);
+  const aplicadorExtracted = extractSessaoAplicadorRubrica(itemRaster);
+  const previous = await getSessaoRubricasLocal(itemRaster.id);
+  const resultados = extracted.length > 0 ? extracted : (previous?.resultados ?? []);
+  const aplicadorRubricaSvg = aplicadorExtracted ?? previous?.aplicadorRubricaSvg;
+  await putSessaoRubricasLocal(ownerUid, itemRaster.id, {
+    resultados,
+    aplicadorRubricaSvg,
+  });
+  const itemLight = toSessaoLightComMarcadores(itemRaster, {
+    resultados,
+    aplicadorRubricaSvg,
+  });
+
+  const existing = await getSessaoRaw(itemLight.id);
   const operation =
     existing && existing.ownerUid === ownerUid && !existing.deleted ? 'UPDATE' : 'CREATE';
   const record = await toSessaoRecord(
-    existing && existing.ownerUid === ownerUid ? { ...existing, ...itemRaster } : itemRaster,
+    existing && existing.ownerUid === ownerUid ? { ...existing, ...itemLight } : itemLight,
     ownerUid,
     userId,
     operation,
@@ -1015,6 +1054,8 @@ export async function softDeleteSessao(
   if (!existing || existing.ownerUid !== ownerUid || existing.deleted) return;
   const record = bumpRecordMeta(existing, await getDeviceId(), userId, 'DELETE');
   await putSessaoRecord(record);
+  const { deleteSessaoRubricasLocal } = await import('./localDbRubricas');
+  await deleteSessaoRubricasLocal(id);
   await enqueueIfAllowed({
     operationType: 'DELETE',
     collection: 'sessoes',

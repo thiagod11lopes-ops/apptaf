@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native
 import { PenLine } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { RubricaCell } from './RubricaThumb';
+import { temRubricaPresente } from '../utils/rubricaPresence';
 
 type Props = {
   titulo: string;
@@ -29,7 +30,7 @@ export function ProvaComColunaRubrica({
 }: Props) {
   const { theme, isDark } = useTheme();
   const onRubrica = onPressRubrica ?? onDuploCliqueRubrica;
-  const temRubrica = !!(rubricaSvg && String(rubricaSvg).trim());
+  const temRubrica = temRubricaPresente(rubricaSvg);
 
   const handlePress = useCallback(() => {
     onRubrica?.();
@@ -37,7 +38,7 @@ export function ProvaComColunaRubrica({
 
   const rubricaArea = temRubrica ? (
     <View style={styles.rubricaHit} pointerEvents="box-none">
-      <RubricaCell svgUri={rubricaSvg} />
+      <RubricaCell svgUri={rubricaSvg} somenteTexto />
       {onRubrica ? (
         <Text style={[styles.rubricaHint, { color: theme.textMuted }]} pointerEvents="none">
           Toque para alterar

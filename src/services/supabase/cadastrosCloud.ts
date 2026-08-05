@@ -54,7 +54,9 @@ export async function getCadastrosFirestoreSince(
 
 async function persistCadastro(uid: string, item: CadastroItemPersist): Promise<void> {
   const { rasterizarRubricasNoCadastro } = await import('../../utils/rubricaRasterPersist');
-  const { cadastro: itemRaster } = rasterizarRubricasNoCadastro(item);
+  const { hydrateCadastroComRubricas } = await import('../../utils/hydrateRubricas');
+  const hydrated = await hydrateCadastroComRubricas(item);
+  const { cadastro: itemRaster } = rasterizarRubricasNoCadastro(hydrated);
   const stamped = stampCadastro(itemRaster, itemRaster.updatedAt);
   const rubricas = extractCadastroRubricas(stamped);
   const light = toCadastroLight(stamped);

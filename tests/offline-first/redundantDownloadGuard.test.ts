@@ -86,30 +86,24 @@ describe('redundantDownloadGuard — não baixar o que já existe localmente', (
   });
 
   it('rubricas remotas iguais ou ausentes casam com o local; diferentes não', () => {
-    const local = cadastroLocal('rdg-rub', { rubricaCorridaSvg: 'svg-A' });
-    expect(cadastroRubricasMatchLocal(local, undefined)).toBe(true);
-    expect(cadastroRubricasMatchLocal(local, { rubricaCorridaSvg: 'svg-A' })).toBe(true);
-    expect(cadastroRubricasMatchLocal(local, { rubricaCorridaSvg: 'svg-B' })).toBe(false);
+    const localSide = { rubricaCorridaSvg: 'svg-A' };
+    expect(cadastroRubricasMatchLocal(localSide, undefined)).toBe(true);
+    expect(cadastroRubricasMatchLocal(localSide, { rubricaCorridaSvg: 'svg-A' })).toBe(true);
+    expect(cadastroRubricasMatchLocal(localSide, { rubricaCorridaSvg: 'svg-B' })).toBe(false);
   });
 
   it('rubricas de sessão: remota divergente para o mesmo nip:prova mantém o download', () => {
-    const sessao = {
-      id: 's1',
-      criadoEm: '',
-      dataAplicacao: '01/01/2026',
-      tipoProva: 'corrida' as const,
-      resultados: [
-        { corredor: 1, nip: '111', nome: 'A', tempoMs: 1, prova: 'corrida' as const, rubricaCandidatoSvg: 'svg-A' },
-      ],
+    const localSide = {
+      resultados: [{ nip: '111', prova: 'corrida', rubricaCandidatoSvg: 'svg-A' }],
     };
-    expect(sessaoRubricasMatchLocal(sessao, undefined)).toBe(true);
+    expect(sessaoRubricasMatchLocal(localSide, undefined)).toBe(true);
     expect(
-      sessaoRubricasMatchLocal(sessao, {
+      sessaoRubricasMatchLocal(localSide, {
         resultados: [{ nip: '111', prova: 'corrida', rubricaCandidatoSvg: 'svg-A' }],
       }),
     ).toBe(true);
     expect(
-      sessaoRubricasMatchLocal(sessao, {
+      sessaoRubricasMatchLocal(localSide, {
         resultados: [{ nip: '111', prova: 'corrida', rubricaCandidatoSvg: 'svg-B' }],
       }),
     ).toBe(false);

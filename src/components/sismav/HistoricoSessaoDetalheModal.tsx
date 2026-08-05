@@ -391,14 +391,20 @@ export function HistoricoSessaoDetalheModal({
     setGerandoPdf(true);
     setFeedbackPdf(null);
     try {
+      const { hydrateSessaoComRubricas } = await import('../../utils/hydrateRubricas');
+      const sessaoHydrated = await hydrateSessaoComRubricas(sessao);
+      const byNip = new Map(
+        sessaoHydrated.resultados.map((r) => [r.nip, r.rubricaCandidatoSvg] as const),
+      );
       const resultados = linhas.map((r) => ({
         ...r,
         prova: r.prova ?? sessao.tipoProva,
+        rubricaCandidatoSvg: byNip.get(r.nip) ?? r.rubricaCandidatoSvg,
       }));
       const msg = await exportResumoAplicacaoPdf(
         resultados,
         tituloTipoProva(sessao.tipoProva),
-        sessao.aplicadorAssinatura,
+        sessaoHydrated.aplicadorAssinatura ?? sessao.aplicadorAssinatura,
       );
       setFeedbackPdf({
         tipo: 'ok',

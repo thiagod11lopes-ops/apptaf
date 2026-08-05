@@ -18,10 +18,9 @@ import {
   addPreCadastroFirestore,
   deletePreCadastroFirestore,
 } from './firebase/FirebaseGateway';
-import { mergeCadastroRubricas } from '../../utils/cadastroLight';
 import { getCadastroRubricasFirestore } from '../../services/firebase/cadastroRubricasFirestore';
 import { getSessaoRubricasFirestore } from '../../services/firebase/sessaoRubricasFirestore';
-import { normalizeSessaoShape, type SessaoResultadoRubrica } from '../../utils/sessaoLight';
+import type { SessaoResultadoRubrica } from '../../utils/sessaoLight';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import {
   isAuthorizedMemberSession,
@@ -243,22 +242,27 @@ function buildRemoteMapForLww<TRemote extends { id: string }>(
   return mergeRemoteMapWithTombstones(remoteMap, tombstones, ownerUid);
 }
 
-function applySessaoRubricasFromRemote(
+/** Grava imagens na side table local e devolve sessão só com marcadores. */
+async function applySessaoRubricasSideLocal(
+  ownerUid: string,
   sessao: SessaoAplicacaoTaf,
-  rubDoc: { resultados: SessaoResultadoRubrica[] },
-): SessaoAplicacaoTaf {
-  const byKey = new Map(
-    rubDoc.resultados.map((r) => [`${r.nip}:${r.prova}`, r.rubricaCandidatoSvg] as const),
+  rubDoc: {
+    resultados: SessaoResultadoRubrica[];
+    aplicadorRubricaSvg?: string;
+  } | null,
+): Promise<SessaoAplicacaoTaf> {
+  const { putSessaoRubricasLocal } = await import('../db/localDbRubricas');
+  const { toSessaoLightComMarcadores, extractSessaoAplicadorRubrica } = await import(
+    '../../utils/sessaoLight'
   );
-  const normalized = normalizeSessaoShape(sessao);
-  return {
-    ...normalized,
-    resultados: normalized.resultados.map((r) => {
-      const prova = r.prova ?? normalized.tipoProva;
-      const svg = byKey.get(`${r.nip}:${prova}`);
-      return svg ? { ...r, rubricaCandidatoSvg: svg } : r;
-    }),
-  };
+  const aplicadorFromLight = extractSessaoAplicadorRubrica(sessao);
+  const resultados = rubDoc?.resultados ?? [];
+  const aplicadorRubricaSvg = rubDoc?.aplicadorRubricaSvg ?? aplicadorFromLight;
+  await putSessaoRubricasLocal(ownerUid, sessao.id, {
+    resultados,
+    aplicadorRubricaSvg,
+  });
+  return toSessaoLightComMarcadores(sessao, { resultados, aplicadorRubricaSvg });
 }
 
 function countIds(local: SyncRecord[], remote: { id: string }[]): number {
@@ -773,20 +777,26 @@ async function downloadRecord(
 
   let payload: SyncRecord = remote;
   if (collection === 'cadastros' && remote.deleted !== true) {
-    // Com cache pré-carregado: ausência = sem rubrica (NÃO refetch da tabela inteira).
+    // Imagens na side table local; documento principal só com marcador.
     const rubricas = rubricCaches
       ? (rubricCaches.cadastros.get(remote.id) ?? null)
       : await getCadastroRubricasFirestore(ownerUid, remote.id);
-    if (rubricas) {
-      payload = mergeCadastroRubricas(payload as CadastroRecord, rubricas) as SyncRecord;
-    }
+    const { putCadastroRubricasLocal } = await import('../db/localDbRubricas');
+    const { toCadastroLightFromRubricas, extractCadastroRubricas } = await import(
+      '../../utils/cadastroLight'
+    );
+    const fromRemote = rubricas ?? extractCadastroRubricas(payload as CadastroRecord);
+    await putCadastroRubricasLocal(ownerUid, remote.id, fromRemote);
+    payload = toCadastroLightFromRubricas(payload as CadastroRecord, fromRemote) as SyncRecord;
   } else if (collection === 'sessoes' && remote.deleted !== true) {
     const rubDoc = rubricCaches
       ? (rubricCaches.sessoes.get(remote.id) ?? null)
       : await getSessaoRubricasFirestore(ownerUid, remote.id);
-    if (rubDoc) {
-      payload = applySessaoRubricasFromRemote(payload as SessaoRecord, rubDoc) as SyncRecord;
-    }
+    payload = (await applySessaoRubricasSideLocal(
+      ownerUid,
+      payload as SessaoRecord,
+      rubDoc,
+    )) as SyncRecord;
   } else if (collection === 'aplicadores' && remote.deleted !== true) {
     const existing = await getAplicadorRaw(remote.id);
     const business = mergeAplicadorAfterRemoteDownload(

@@ -3,21 +3,27 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { RubricaCell } from './RubricaThumb';
 import { postoGradExibicaoAssinatura, type AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
+import { temRubricaPresente } from '../utils/rubricaPresence';
 
 type Props = {
   assinatura: AplicadorAssinaturaResumo;
 };
 
-/** Assinatura do aplicador: rúbrica (se houver), linha e identificação. */
+/** Assinatura do aplicador: marcador de rúbrica (imagem só no PDF), linha e identificação. */
 export function AplicadorAssinaturaBloco({ assinatura }: Props) {
   const { theme } = useTheme();
   const postoGrad = postoGradExibicaoAssinatura(assinatura);
 
   return (
     <View style={styles.wrap}>
-      {assinatura.rubricaSvg ? (
+      {temRubricaPresente(assinatura.rubricaSvg) ? (
         <View style={styles.rubricaWrap}>
-          <RubricaCell svgUri={assinatura.rubricaSvg} maxWidth={320} maxHeight={140} />
+          <RubricaCell
+            svgUri={assinatura.rubricaSvg}
+            maxWidth={320}
+            maxHeight={140}
+            somenteTexto
+          />
         </View>
       ) : null}
       <View style={[styles.linha, { backgroundColor: theme.border }]} />

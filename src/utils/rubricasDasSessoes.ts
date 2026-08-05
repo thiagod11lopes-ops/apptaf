@@ -1,5 +1,7 @@
 import { nipDigitos } from './nipFormat';
-import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import { listSessaoRubricasLocal } from '../offline-first/db/localDbRubricas';
+import { getCachedDataOwnerUid } from '../services/firebase/authUid';
+import { isRubricaImagemDataUrl } from './rubricaPresence';
 
 export type RubricasPorNip = {
   corrida?: string;
@@ -8,18 +10,20 @@ export type RubricasPorNip = {
   permanencia?: string;
 };
 
-/** Rúbricas das sessões — somente IndexedDB (offline-first). */
+/** Rúbricas das sessões — side table local (imagens reais para PDF). */
 export async function carregarRubricasDasSessoesPorNip(): Promise<Map<string, RubricasPorNip>> {
   const map = new Map<string, RubricasPorNip>();
-  const sessoes = await getAllSessoesAplicacao();
+  const ownerUid = getCachedDataOwnerUid();
+  if (!ownerUid) return map;
 
-  for (const sessao of sessoes) {
-    for (const r of sessao.resultados ?? []) {
+  const rows = await listSessaoRubricasLocal(ownerUid);
+  for (const row of rows) {
+    for (const r of row.resultados ?? []) {
       const svg = r.rubricaCandidatoSvg?.trim();
-      if (!svg) continue;
+      if (!isRubricaImagemDataUrl(svg)) continue;
       const key = nipDigitos(r.nip);
       if (!key) continue;
-      const prova = r.prova ?? sessao.tipoProva;
+      const prova = r.prova;
       const atual = map.get(key) ?? {};
       if (prova === 'natacao') atual.natacao = svg;
       else if (prova === 'permanencia') atual.permanencia = svg;
@@ -38,11 +42,12 @@ export function rubricasDoCadastro(c: {
   rubricaNatacaoSvg?: string;
   rubricaPermanenciaSvg?: string;
 }): RubricasPorNip {
+  const pick = (v?: string) => (isRubricaImagemDataUrl(v) ? v : undefined);
   return {
-    corrida: c.rubricaCorridaSvg,
-    caminhada: c.rubricaCaminhadaSvg,
-    natacao: c.rubricaNatacaoSvg,
-    permanencia: c.rubricaPermanenciaSvg,
+    corrida: pick(c.rubricaCorridaSvg),
+    caminhada: pick(c.rubricaCaminhadaSvg),
+    natacao: pick(c.rubricaNatacaoSvg),
+    permanencia: pick(c.rubricaPermanenciaSvg),
   };
 }
 

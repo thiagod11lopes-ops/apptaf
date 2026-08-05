@@ -183,9 +183,65 @@ export function renderRubricaSvgToPngDataUrl(
   heightPx: number,
 ): string | null {
   if (isRubricaRasterDataUrl(svgUri)) {
-    return svgUri!.trim();
+    const raw = svgUri!.trim();
+    // PNG síncrono; WebP/JPEG ficam para rubricaParaPdfEmbedDataUrl (async).
+    if (raw.startsWith('data:image/png')) return raw;
+    return raw;
   }
   return renderRubricaSvgToRasterDataUrl(svgUri, widthPx, heightPx, 'image/png');
+}
+
+/** Converte WebP/JPEG → PNG via Image+canvas (jsPDF embute WEBP de forma inconsistente). */
+export function rasterDataUrlToPngDataUrlAsync(
+  dataUrl: string,
+  widthPx: number,
+  heightPx: number,
+): Promise<string | null> {
+  const raw = dataUrl.trim();
+  if (!raw || typeof document === 'undefined') return Promise.resolve(null);
+  if (raw.startsWith('data:image/png')) return Promise.resolve(raw);
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(widthPx));
+        canvas.height = Math.max(1, Math.round(heightPx));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.fillStyle = RUBRICA_COR_FUNDO;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = raw;
+  });
+}
+
+/** Data-URL pronto para doc.addImage — preferencialmente PNG. */
+export async function rubricaParaPdfEmbedDataUrl(
+  uri: string | undefined | null,
+  widthPx: number,
+  heightPx: number,
+): Promise<string | null> {
+  const raw = uri?.trim();
+  if (!raw) return null;
+  if (raw.startsWith('data:image/png')) return raw;
+  if (isRubricaSvgDataUrl(raw)) {
+    return renderRubricaSvgToRasterDataUrl(raw, widthPx, heightPx, 'image/png');
+  }
+  if (isRubricaRasterDataUrl(raw)) {
+    return (await rasterDataUrlToPngDataUrlAsync(raw, widthPx, heightPx)) ?? raw;
+  }
+  return null;
 }
 
 /**

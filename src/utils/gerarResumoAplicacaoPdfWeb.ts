@@ -6,8 +6,9 @@ import { RUBRICA_PDF_ALTURA, RUBRICA_PDF_LARGURA } from './rubricaConstants';
 import {
   decodeSvgDataUrl,
   renderRubricaSvgToPngDataUrl,
-  rubricaDataUrlPdfFormat,
+  rubricaParaPdfEmbedDataUrl,
 } from './rubricaRasterPersist';
+import { isRubricaImagemDataUrl } from './rubricaPresence';
 import { pdfTextoParaJsPdf } from './pdfLayout';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 import { formatTempoColunaResultado } from './formatTempoColunaResultado';
@@ -182,7 +183,7 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
 
   type Col = { title: string; w: number; kind: 'text' | 'rubrica'; get?: (r: ResultadoCorridaItem) => string };
 
-  const desenharBloco = (
+  const desenharBloco = async (
     resultados: ResultadoCorridaItem[],
     aplicadorAssinatura: AplicadorAssinaturaResumo | undefined,
     precisaNovaFolha: boolean,
@@ -195,15 +196,21 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
     const rubricaSvgByIndex = new Map<number, string>();
     for (let index = 0; index < resultados.length; index += 1) {
       const svg = resultados[index]?.rubricaCandidatoSvg?.trim();
-      if (!svg) continue;
+      if (!svg || !isRubricaImagemDataUrl(svg)) continue;
       rubricaSvgByIndex.set(index, svg);
-      const png = renderRubricaSvgToPngDataUrl(svg, RUBRICA_PDF_LARGURA, RUBRICA_PDF_ALTURA);
+      const png = await rubricaParaPdfEmbedDataUrl(svg, RUBRICA_PDF_LARGURA, RUBRICA_PDF_ALTURA);
       if (png) rubricaPngByIndex.set(index, png);
     }
 
-    const aplicadorSvg = aplicadorAssinatura?.rubricaSvg?.trim();
+    const aplicadorSvg = isRubricaImagemDataUrl(aplicadorAssinatura?.rubricaSvg)
+      ? aplicadorAssinatura!.rubricaSvg!.trim()
+      : undefined;
     const aplicadorPng = aplicadorSvg
-      ? renderRubricaSvgToPngDataUrl(aplicadorSvg, RUBRICA_PDF_LARGURA * 1.4, RUBRICA_PDF_ALTURA * 1.4)
+      ? await rubricaParaPdfEmbedDataUrl(
+          aplicadorSvg,
+          RUBRICA_PDF_LARGURA * 1.4,
+          RUBRICA_PDF_ALTURA * 1.4,
+        )
       : null;
 
     const temAlgumaRubrica = rubricaSvgByIndex.size > 0 || Boolean(aplicadorSvg);
@@ -294,8 +301,7 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
           let ok = false;
           if (png) {
             try {
-              const fmt = rubricaDataUrlPdfFormat(png) ?? 'PNG';
-              doc.addImage(png, fmt, ix, iy, drawW, drawH);
+              doc.addImage(png, 'PNG', ix, iy, drawW, drawH);
               ok = true;
             } catch {
               ok = false;
@@ -343,8 +349,7 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
         let ok = false;
         if (aplicadorPng) {
           try {
-            const fmt = rubricaDataUrlPdfFormat(aplicadorPng) ?? 'PNG';
-            doc.addImage(aplicadorPng, fmt, ix, rubricaTop, aw, ah);
+            doc.addImage(aplicadorPng, 'PNG', ix, rubricaTop, aw, ah);
             ok = true;
           } catch {
             ok = false;
@@ -398,7 +403,7 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
 
   for (let i = 0; i < validos.length; i += 1) {
     const bloco = validos[i]!;
-    desenharBloco(bloco.resultados, bloco.aplicadorAssinatura, i > 0);
+    await desenharBloco(bloco.resultados, bloco.aplicadorAssinatura, i > 0);
   }
 
   return doc.output('blob');

@@ -251,18 +251,39 @@ async function applySessaoRubricasSideLocal(
     aplicadorRubricaSvg?: string;
   } | null,
 ): Promise<SessaoAplicacaoTaf> {
-  const { putSessaoRubricasLocal } = await import('../db/localDbRubricas');
-  const { toSessaoLightComMarcadores, extractSessaoAplicadorRubrica } = await import(
-    '../../utils/sessaoLight'
+  const { getSessaoRubricasLocal, putSessaoRubricasLocal } = await import('../db/localDbRubricas');
+  const {
+    toSessaoLightComMarcadores,
+    extractSessaoAplicadorRubrica,
+    extractSessaoRubricas,
+  } = await import('../../utils/sessaoLight');
+  const { mergeSessaoResultadoRubricas, pickAplicadorRubricaSvg } = await import(
+    '../../utils/mergeSessaoRubricas'
   );
-  const aplicadorFromLight = extractSessaoAplicadorRubrica(sessao);
-  const resultados = rubDoc?.resultados ?? [];
-  const aplicadorRubricaSvg = rubDoc?.aplicadorRubricaSvg ?? aplicadorFromLight;
-  await putSessaoRubricasLocal(ownerUid, sessao.id, {
+
+  const previous = await getSessaoRubricasLocal(sessao.id);
+  const fromSessao = extractSessaoRubricas(sessao);
+  const fromCloud = rubDoc?.resultados ?? [];
+  // Cloud > embutido na sessão > side table local (nunca zerar com pacote vazio).
+  const resultados = mergeSessaoResultadoRubricas(
+    previous?.resultados,
+    mergeSessaoResultadoRubricas(fromSessao, fromCloud),
+  );
+  const aplicadorRubricaSvg = pickAplicadorRubricaSvg(
+    rubDoc?.aplicadorRubricaSvg,
+    extractSessaoAplicadorRubrica(sessao),
+    previous?.aplicadorRubricaSvg,
+  );
+  if (resultados.length > 0 || aplicadorRubricaSvg) {
+    await putSessaoRubricasLocal(ownerUid, sessao.id, {
+      resultados,
+      aplicadorRubricaSvg,
+    });
+  }
+  return toSessaoLightComMarcadores(sessao, {
     resultados,
     aplicadorRubricaSvg,
   });
-  return toSessaoLightComMarcadores(sessao, { resultados, aplicadorRubricaSvg });
 }
 
 function countIds(local: SyncRecord[], remote: { id: string }[]): number {

@@ -7,12 +7,10 @@ import {
   valoresCorridaCaminhadaParaPdf,
 } from './corridaCaminhadaExcludente';
 import { RUBRICA_PDF_ALTURA, RUBRICA_PDF_LARGURA } from './rubricaConstants';
-import {
-  desenharRubricaJsPdf,
-  renderRubricaSvgToPngDataUrl,
-} from './gerarResumoAplicacaoPdfWeb';
-import { rubricaDataUrlPdfFormat } from './rubricaRasterPersist';
+import { desenharRubricaJsPdf } from './gerarResumoAplicacaoPdfWeb';
+import { rubricaParaPdfEmbedDataUrl } from './rubricaRasterPersist';
 import { pdfTextoParaJsPdf } from './pdfLayout';
+import { isRubricaImagemDataUrl } from './rubricaPresence';
 
 const pdfTexto = pdfTextoParaJsPdf;
 
@@ -65,8 +63,7 @@ function desenharAssinaturaAplicador(
     const ih = 22;
     if (png) {
       try {
-        const fmt = rubricaDataUrlPdfFormat(png) ?? 'PNG';
-        doc.addImage(png, fmt, cx - iw / 2, baseY - 4, iw, ih);
+        doc.addImage(png, 'PNG', cx - iw / 2, baseY - 4, iw, ih);
       } catch {
         desenharRubricaJsPdf(doc, svg, cx - iw / 2, baseY - 4, iw, ih);
       }
@@ -191,12 +188,30 @@ export async function gerarResultadosTafPdfBlobWeb(
   const totalRegistros = todasLinhas.length;
 
   const pngCache = new Map<string, string | null>();
+  const uris = new Set<string>();
+  for (const b of blocos) {
+    const apl = b.aplicadorAssinatura?.rubricaSvg?.trim();
+    if (apl && isRubricaImagemDataUrl(apl)) uris.add(apl);
+    for (const linha of b.linhas) {
+      for (const u of [
+        linha.rubricaCorridaSvg,
+        linha.rubricaCaminhadaSvg,
+        linha.rubricaNatacaoSvg,
+        linha.rubricaPermanenciaSvg,
+      ]) {
+        const t = u?.trim();
+        if (t && isRubricaImagemDataUrl(t)) uris.add(t);
+      }
+    }
+  }
+  await Promise.all(
+    [...uris].map(async (uri) => {
+      pngCache.set(uri, await rubricaParaPdfEmbedDataUrl(uri, RUBRICA_PDF_LARGURA, RUBRICA_PDF_ALTURA));
+    }),
+  );
   const pngOf = (svg?: string) => {
     const key = svg?.trim() || '';
     if (!key) return null;
-    if (!pngCache.has(key)) {
-      pngCache.set(key, renderRubricaSvgToPngDataUrl(key, RUBRICA_PDF_LARGURA, RUBRICA_PDF_ALTURA));
-    }
     return pngCache.get(key) ?? null;
   };
 
@@ -265,8 +280,7 @@ export async function gerarResultadosTafPdfBlobWeb(
         const by = y + (rowH - rubH) / 2;
         if (png) {
           try {
-            const fmt = rubricaDataUrlPdfFormat(png) ?? 'PNG';
-            doc.addImage(png, fmt, bx, by, rubW, rubH);
+            doc.addImage(png, 'PNG', bx, by, rubW, rubH);
           } catch {
             desenharRubricaJsPdf(doc, svg, bx, by, rubW, rubH);
           }

@@ -1,6 +1,7 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import type { FirestoreTombstoneFields } from '../offline-first/sync/tombstone';
+import { nipDigitos } from './nipFormat';
 import {
   isRubricaImagemDataUrl,
   paraMarcadorRubrica,
@@ -73,12 +74,14 @@ export function toSessaoLightComMarcadores(
   } | null,
 ): SessaoAplicacaoTaf {
   const light = toSessaoLight(sessao);
-  const byKey = new Map(
-    (rubDoc?.resultados ?? []).map((r) => [`${r.nip}:${r.prova}`, r.rubricaCandidatoSvg] as const),
-  );
+  const byKey = new Map<string, string>();
+  for (const r of rubDoc?.resultados ?? []) {
+    const key = `${nipDigitos(r.nip)}:${r.prova}`;
+    if (nipDigitos(r.nip)) byKey.set(key, r.rubricaCandidatoSvg);
+  }
   const resultados = light.resultados.map((r) => {
     const prova = r.prova ?? light.tipoProva;
-    const img = byKey.get(`${r.nip}:${prova}`);
+    const img = byKey.get(`${nipDigitos(r.nip)}:${prova}`);
     const marked =
       paraMarcadorRubrica(img) ??
       (temRubricaPresente(r.rubricaCandidatoSvg) ? r.rubricaCandidatoSvg : undefined);

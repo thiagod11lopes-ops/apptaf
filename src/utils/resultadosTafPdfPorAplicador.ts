@@ -9,6 +9,7 @@ import {
 } from './resultadoTafCadastro';
 import type { RubricasPorNip } from './rubricasDasSessoes';
 import { compareNomePtBr } from './compareNomePtBr';
+import { isRubricaImagemDataUrl } from './rubricaPresence';
 
 const SEM_APLICADOR_KEY = '__sem_aplicador__';
 
@@ -58,7 +59,12 @@ export function agruparSessoesPorAplicador(
       continue;
     }
     atual.sessoes.push(sessao);
-    if (!atual.assinatura?.rubricaSvg?.trim() && assinatura?.rubricaSvg?.trim()) {
+    if (
+      assinatura?.nome?.trim() &&
+      (!atual.assinatura ||
+        (!isRubricaImagemDataUrl(atual.assinatura.rubricaSvg) &&
+          isRubricaImagemDataUrl(assinatura.rubricaSvg)))
+    ) {
       atual.assinatura = assinatura;
     } else if (!atual.assinatura && assinatura?.nome?.trim()) {
       atual.assinatura = assinatura;

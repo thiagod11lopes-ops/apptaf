@@ -128,8 +128,10 @@ export function ResultadosGeralPanel({
       const { montarBlocosResultadosTafPorAplicador } = await import(
         '../utils/resultadosTafPdfPorAplicador'
       );
+      const { hydrateSessoesComRubricas } = await import('../utils/hydrateRubricas');
+      const sessoesHydrated = await hydrateSessoesComRubricas(sessoes);
       const blocos = montarBlocosResultadosTafPorAplicador({
-        sessoes,
+        sessoes: sessoesHydrated,
         cadastros,
         rubricasSessoes: rubSessoes,
         somenteSessoesInformadas: false,

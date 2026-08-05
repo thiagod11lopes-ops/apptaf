@@ -1009,12 +1009,23 @@ export async function saveSessao(
   const extracted = extractSessaoRubricas(itemRaster);
   const aplicadorExtracted = extractSessaoAplicadorRubrica(itemRaster);
   const previous = await getSessaoRubricasLocal(itemRaster.id);
-  const resultados = extracted.length > 0 ? extracted : (previous?.resultados ?? []);
-  const aplicadorRubricaSvg = aplicadorExtracted ?? previous?.aplicadorRubricaSvg;
-  await putSessaoRubricasLocal(ownerUid, itemRaster.id, {
-    resultados,
-    aplicadorRubricaSvg,
-  });
+  const { mergeSessaoResultadoRubricas, pickAplicadorRubricaSvg } = await import(
+    '../../utils/mergeSessaoRubricas'
+  );
+  const resultados =
+    extracted.length > 0
+      ? mergeSessaoResultadoRubricas(previous?.resultados, extracted)
+      : (previous?.resultados ?? []);
+  const aplicadorRubricaSvg = pickAplicadorRubricaSvg(
+    aplicadorExtracted,
+    previous?.aplicadorRubricaSvg,
+  );
+  if (resultados.length > 0 || aplicadorRubricaSvg) {
+    await putSessaoRubricasLocal(ownerUid, itemRaster.id, {
+      resultados,
+      aplicadorRubricaSvg,
+    });
+  }
   const itemLight = toSessaoLightComMarcadores(itemRaster, {
     resultados,
     aplicadorRubricaSvg,

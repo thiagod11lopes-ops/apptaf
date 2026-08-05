@@ -1,11 +1,13 @@
 import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import {
+  getAplicadorRaw,
   listCadastros,
   listSessoes,
   putCadastroRecord,
   putSessaoRecord,
 } from '../offline-first/db/localDb';
 import {
+  getSessaoRubricasLocal,
   putCadastroRubricasLocal,
   putSessaoRubricasLocal,
 } from '../offline-first/db/localDbRubricas';
@@ -14,15 +16,17 @@ import {
   hasCadastroRubricas,
   toCadastroLightFromRubricas,
 } from './cadastroLight';
+import { mergeSessaoResultadoRubricas, pickAplicadorRubricaSvg } from './mergeSessaoRubricas';
 import {
   extractSessaoAplicadorRubrica,
   extractSessaoRubricas,
   toSessaoLightComMarcadores,
 } from './sessaoLight';
-import { isRubricaImagemDataUrl } from './rubricaPresence';
+import { isRubricaImagemDataUrl, temRubricaPresente } from './rubricaPresence';
 
 function metaKey(ownerUid: string): string {
-  return `rubricas_side_v1:${ownerUid}`;
+  // v2: não apaga side table; recupera aplicador do cadastro de aplicadores.
+  return `rubricas_side_v2:${ownerUid}`;
 }
 
 /**
@@ -43,13 +47,38 @@ export async function migrateRubricasParaSideTables(
   const sessList = await listSessoes(uid, true);
   for (const sessao of sessList) {
     if (sessao.deleted) continue;
-    const resultados = extractSessaoRubricas(sessao);
-    const aplicadorRubricaSvg = extractSessaoAplicadorRubrica(sessao);
+    const previous = await getSessaoRubricasLocal(sessao.id);
+    const fromSessao = extractSessaoRubricas(sessao);
+    const resultados = mergeSessaoResultadoRubricas(previous?.resultados, fromSessao);
+
+    let aplicadorRubricaSvg = pickAplicadorRubricaSvg(
+      extractSessaoAplicadorRubrica(sessao),
+      previous?.aplicadorRubricaSvg,
+    );
+    const assinatura = sessao.aplicadorAssinatura;
+    if (
+      !aplicadorRubricaSvg &&
+      assinatura &&
+      temRubricaPresente(assinatura.rubricaSvg) &&
+      assinatura.aplicadorId?.trim()
+    ) {
+      try {
+        const apl = await getAplicadorRaw(assinatura.aplicadorId.trim());
+        if (isRubricaImagemDataUrl(apl?.rubricaSvg)) {
+          aplicadorRubricaSvg = apl!.rubricaSvg!.trim();
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
     const needsRewrite =
       resultados.length > 0 ||
       Boolean(aplicadorRubricaSvg) ||
       sessao.resultados.some((r) => isRubricaImagemDataUrl(r.rubricaCandidatoSvg)) ||
-      isRubricaImagemDataUrl(sessao.aplicadorAssinatura?.rubricaSvg);
+      isRubricaImagemDataUrl(sessao.aplicadorAssinatura?.rubricaSvg) ||
+      Boolean(previous);
+
     if (!needsRewrite) continue;
 
     if (resultados.length > 0 || aplicadorRubricaSvg) {

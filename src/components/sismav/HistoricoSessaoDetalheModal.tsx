@@ -393,13 +393,16 @@ export function HistoricoSessaoDetalheModal({
     try {
       const { hydrateSessaoComRubricas } = await import('../../utils/hydrateRubricas');
       const sessaoHydrated = await hydrateSessaoComRubricas(sessao);
-      const byNip = new Map(
-        sessaoHydrated.resultados.map((r) => [r.nip, r.rubricaCandidatoSvg] as const),
-      );
+      const byNip = new Map<string, string>();
+      for (const r of sessaoHydrated.resultados) {
+        const key = nipDigitos(r.nip);
+        if (key && r.rubricaCandidatoSvg?.trim()) byNip.set(key, r.rubricaCandidatoSvg.trim());
+      }
       const resultados = linhas.map((r) => ({
         ...r,
         prova: r.prova ?? sessao.tipoProva,
-        rubricaCandidatoSvg: byNip.get(r.nip) ?? r.rubricaCandidatoSvg,
+        rubricaCandidatoSvg:
+          byNip.get(nipDigitos(r.nip)) ?? r.rubricaCandidatoSvg,
       }));
       const msg = await exportResumoAplicacaoPdf(
         resultados,

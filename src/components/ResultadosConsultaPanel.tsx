@@ -315,12 +315,14 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     const { montarBlocosResultadosTafPorAplicador } = await import(
       '../utils/resultadosTafPdfPorAplicador'
     );
+    const { hydrateSessoesComRubricas } = await import('../utils/hydrateRubricas');
+    const sessoesHydrated = await hydrateSessoesComRubricas(sessoes);
     const idsCompletos = new Set(filtroLinhas.map((l) => l.id));
     const nipsCompletos = new Set(
       filtroLinhas.map((l) => nipDigitos(l.nip)).filter((d) => d.length >= 8),
     );
     const blocos = montarBlocosResultadosTafPorAplicador({
-      sessoes,
+      sessoes: sessoesHydrated,
       cadastros: lista,
       rubricasSessoes: rubSessoes,
       somenteSessoesInformadas: false,

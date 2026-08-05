@@ -87,14 +87,17 @@ export async function putSessaoRubricasLocal(
 ): Promise<void> {
   const db = getTafDatabase();
   if (!db) return;
-  const resultados = (payload.resultados ?? []).filter((r) =>
+  const previous = await db.sessaoRubricas.get(id);
+  const incoming = (payload.resultados ?? []).filter((r) =>
     isRubricaImagemDataUrl(r.rubricaCandidatoSvg),
   );
-  const aplicador = isRubricaImagemDataUrl(payload.aplicadorRubricaSvg)
+  // Payload vazio não apaga side table (download light sem pacote de rúbricas).
+  const resultados = incoming.length > 0 ? incoming : (previous?.resultados ?? []);
+  const aplicadorIncoming = isRubricaImagemDataUrl(payload.aplicadorRubricaSvg)
     ? payload.aplicadorRubricaSvg!.trim()
     : undefined;
+  const aplicador = aplicadorIncoming ?? previous?.aplicadorRubricaSvg;
   if (resultados.length === 0 && !aplicador) {
-    await db.sessaoRubricas.delete(id);
     return;
   }
   const row: SessaoRubricasRecord = {

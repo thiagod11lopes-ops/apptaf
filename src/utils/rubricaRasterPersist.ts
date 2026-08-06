@@ -132,7 +132,7 @@ export function renderRubricaSvgToRasterDataUrl(
   const { paths, vbW, vbH } = extrairPathsDoSvg(svg);
   if (paths.length === 0) return null;
 
-  const scale = 2;
+  const scale = 1;
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(widthPx * scale));
   canvas.height = Math.max(1, Math.round(heightPx * scale));
@@ -292,6 +292,8 @@ export async function rubricaParaPersistenciaAsync(
       requestAnimationFrame(() => resolve());
     });
   }
+  // Segundo yield: deixa o paint do próximo militar ocorrer antes de toDataURL.
+  await yieldToUi();
   return rubricaParaPersistencia(raw);
 }
 

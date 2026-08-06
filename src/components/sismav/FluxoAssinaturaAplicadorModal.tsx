@@ -116,11 +116,22 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
       if (!cancelled) setAplicadores([...lista].sort(compareByNomePtBr));
     };
     setCarregandoAplicadores(true);
+    // Local primeiro — modal do chefe não espera a rede.
+    void getAllAplicadores({ includeDemo })
+      .then((lista) => {
+        applyLista(lista);
+        if (!cancelled) setCarregandoAplicadores(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          applyLista([]);
+          setCarregandoAplicadores(false);
+        }
+      });
     void ensureAplicadoresFromCloud({ includeDemo })
       .then(applyLista)
-      .catch(() => applyLista([]))
-      .finally(() => {
-        if (!cancelled) setCarregandoAplicadores(false);
+      .catch(() => {
+        /* mantém lista local */
       });
     const debounce = createTrailingDebounce(400);
     const unsub = subscribeDataChanged(

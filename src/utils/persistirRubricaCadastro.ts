@@ -1,5 +1,6 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import { peekCadastrosListCache } from '../services/cadastrosListCache';
 import {
   getAllSessoesAplicacao,
   updateSessaoAplicacao,
@@ -8,6 +9,7 @@ import {
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { nipDigitos } from './nipFormat';
 import {
+  isRubricaRasterDataUrl,
   rubricaParaPersistencia,
   rubricaParaPersistenciaAsync,
 } from './rubricaRasterPersist';
@@ -60,12 +62,18 @@ export async function persistirRubricasNoCadastro(
 ): Promise<number> {
   if (resultados.length === 0) return 0;
 
-  const cadastros = await getAllCadastros();
+  const peeked = peekCadastrosListCache();
+  const cadastros = peeked ?? (await getAllCadastros());
   const lista: CadastroItemPersist[] = [...cadastros];
   let ok = 0;
 
   for (const r of resultados) {
-    const svg = (await rubricaParaPersistenciaAsync(r.rubricaCandidatoSvg))?.trim();
+    const bruto = (r.rubricaCandidatoSvg || '').trim();
+    if (!bruto) continue;
+    // Já rasterizada no caller: não redesenha no canvas.
+    const svg = isRubricaRasterDataUrl(bruto)
+      ? bruto
+      : (await rubricaParaPersistenciaAsync(bruto))?.trim();
     if (!svg) continue;
 
     let busca = buscarCadastroPorNomeOuNip(lista, r.nip);

@@ -99,7 +99,12 @@ import {
 } from '../components/taf/TafProvaTempoModal';
 import { RubricaCell } from '../components/RubricaThumb';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
-import { addSessaoAplicacao, getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import {
+  addSessaoAplicacao,
+  getAllSessoesAplicacao,
+  getSessaoAplicacaoById,
+  updateSessaoAplicacao,
+} from '../services/resultadosAplicadosIndexedDb';
 import {
   clearProvaAtivaSession,
   loadProvaAtivaSession,
@@ -107,7 +112,7 @@ import {
   saveProvaAtivaSession,
   type ProvaAtivaSessionV1,
 } from '../services/provaAtivaSessionStorage';
-import { aplicarRubricasEmCadastros } from '../utils/persistirRubricaCadastro';
+import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
 import {
   normalizarRubricaSvgDataUrl,
   RUBRICA_COR_FUNDO,
@@ -412,11 +417,13 @@ export default function AplicarTAFScreen() {
   /** Pré-cadastro que originou a prova ativa (excluído após lançamento confirmado). */
   const preCadastroOrigemIdRef = useRef<string | null>(null);
   /**
-   * Gravação adiada: nada é lançado no sistema (nem notas no cadastro, nem a sessão)
-   * até o aplicador confirmar a rúbrica. Estes buffers guardam o que será gravado.
+   * Buffers do lançamento em curso. Ao aplicar o resultado, cadastros/sessão já são
+   * gravados; os buffers e `sessaoAplicacaoIdRef` servem para rúbricas incrementais
+   * e restauração da prova ativa.
    */
   const pendingCadastrosRef = useRef<CadastroItemPersist[]>([]);
   const pendingCleanupsRef = useRef<Array<() => Promise<void>>>([]);
+  const sessaoAplicacaoIdRef = useRef<string | null>(null);
   /** Lista espelhada em estado para o modal de rúbrica re-renderizar ao mudar o participante. */
   const [listaResultadosRubricaNatacao, setListaResultadosRubricaNatacao] = useState<
     ResultadoCorridaItem[] | null
@@ -777,6 +784,7 @@ export default function AplicarTAFScreen() {
     pendingCadastrosRef.current = [];
     pendingCleanupsRef.current = [];
     resultadosPosMilitaresRef.current = null;
+    sessaoAplicacaoIdRef.current = null;
   }, []);
 
   const montarSnapshotProvaAtiva = useCallback((): ProvaAtivaSessionV1 | null => {
@@ -796,17 +804,20 @@ export default function AplicarTAFScreen() {
       listaResultadosRubricaNatacao ??
       resultadosPosMilitaresRef.current ??
       pendingResultadosNavRef.current;
+    const sessaoAplicacaoId = sessaoAplicacaoIdRef.current ?? undefined;
     if (fluxoAplicadorVisible && resultadosPendentes) {
       finalizacao = {
         fase: 'aplicador',
         resultados: resultadosPendentes.map((r) => ({ ...r })),
         pendingCadastros: pendingCadastrosRef.current.map((c) => ({ ...c })),
+        sessaoAplicacaoId,
       };
     } else if (modalRubricaNatacaoVisible && resultadosPendentes) {
       finalizacao = {
         fase: 'rubrica_candidatos',
         resultados: resultadosPendentes.map((r) => ({ ...r })),
         pendingCadastros: pendingCadastrosRef.current.map((c) => ({ ...c })),
+        sessaoAplicacaoId,
         indiceRubrica: indiceRubricaNatacao,
         listaResultadosRubrica: (listaResultadosRubricaNatacao ?? resultadosPendentes).map(
           (r) => ({ ...r }),
@@ -817,6 +828,7 @@ export default function AplicarTAFScreen() {
         fase: 'tempo_registrado',
         resultados: resultadosPendentes.map((r) => ({ ...r })),
         pendingCadastros: pendingCadastrosRef.current.map((c) => ({ ...c })),
+        sessaoAplicacaoId,
       };
     }
 
@@ -925,6 +937,7 @@ export default function AplicarTAFScreen() {
       if (fin) {
         pendingCadastrosRef.current = fin.pendingCadastros.map((c) => ({ ...c }));
         pendingCleanupsRef.current = [];
+        sessaoAplicacaoIdRef.current = fin.sessaoAplicacaoId?.trim() || null;
         const resultados = fin.resultados.map((r) => ({ ...r }));
         resultadosPosMilitaresRef.current = resultados;
         pendingResultadosNavRef.current = resultados;
@@ -1098,15 +1111,11 @@ export default function AplicarTAFScreen() {
   );
 
   /**
-   * Grava DE FATO no sistema tudo que estava pendente (notas no cadastro, limpezas de
-   * histórico e a sessão) — somente após o aplicador confirmar a rúbrica.
+   * Grava cadastros + sessão no ato do “Aplicar Resultado” (ainda sem rúbricas).
    * No Modo Teste: só a sessão (demo-sess-*), sem alterar cadastros reais.
    */
-  const commitAplicacao = useCallback(
-    async (
-      resultados: ResultadoCorridaItem[],
-      assinatura: AplicadorAssinaturaResumo,
-    ): Promise<void> => {
+  const persistirLancamentoAplicacao = useCallback(
+    async (resultados: ResultadoCorridaItem[]): Promise<string | undefined> => {
       const emDemonstracao = isModoDemonstracaoAtivo();
 
       if (!emDemonstracao) {
@@ -1128,9 +1137,60 @@ export default function AplicarTAFScreen() {
         pendingCadastrosRef.current = [];
       }
 
-      await gravarSessaoAplicacao(resultados, assinatura);
+      const id = await gravarSessaoAplicacao(resultados);
+      sessaoAplicacaoIdRef.current = id ?? null;
+      return id;
     },
     [gravarSessaoAplicacao],
+  );
+
+  /** Atualiza a sessão já lançada (rúbricas dos militares e/ou assinatura do aplicador). */
+  const atualizarSessaoEmAndamento = useCallback(
+    async (
+      resultados: ResultadoCorridaItem[],
+      assinatura?: AplicadorAssinaturaResumo,
+    ): Promise<void> => {
+      const id = sessaoAplicacaoIdRef.current;
+      if (!id) return;
+      const sessao = await getSessaoAplicacaoById(id);
+      if (!sessao) return;
+      await updateSessaoAplicacao({
+        ...sessao,
+        resultados,
+        ...(assinatura ? { aplicadorAssinatura: assinatura } : {}),
+      });
+    },
+    [],
+  );
+
+  const finalizarFluxoAposSalvo = useCallback(
+    async (
+      resultados: ResultadoCorridaItem[] | null,
+      assinatura?: AplicadorAssinaturaResumo,
+    ) => {
+      const preCadastroId = preCadastroOrigemIdRef.current;
+      preCadastroOrigemIdRef.current = null;
+      if (preCadastroId) {
+        try {
+          await removePreCadastroTaf(preCadastroId);
+          const lista = await getAllPreCadastrosTaf();
+          setListaPreCadastros(lista);
+        } catch {
+          // Lançamento já concluído; falha ao limpar pré-cadastro não bloqueia o fluxo.
+        }
+      }
+      limparBufferAplicacao();
+      limparSessaoProvaAtiva();
+      setFluxoAplicadorVisible(false);
+      if (resultados) {
+        navigation.navigate('CadastrarResultados', {
+          resultados,
+          ...(assinatura ? { aplicadorAssinatura: assinatura } : {}),
+          returnTo: 'AplicarTAF',
+        });
+      }
+    },
+    [navigation, limparBufferAplicacao, limparSessaoProvaAtiva],
   );
 
   const iniciarFinalizacaoComAssinaturaAplicador = useCallback(
@@ -1146,59 +1206,24 @@ export default function AplicarTAFScreen() {
       const res = resultadosPosMilitaresRef.current;
       try {
         if (res) {
-          await commitAplicacao(res, assinatura);
+          await atualizarSessaoEmAndamento(res, assinatura);
         }
       } catch {
         Alert.alert(
-          'Erro ao lançar',
-          'Não foi possível lançar os resultados no sistema. Tente novamente.',
+          'Erro ao salvar assinatura',
+          'Os resultados já estão salvos, mas não foi possível anexar a rúbrica do aplicador. Tente novamente.',
         );
         return;
       }
-      const preCadastroId = preCadastroOrigemIdRef.current;
-      preCadastroOrigemIdRef.current = null;
-      if (preCadastroId) {
-        try {
-          await removePreCadastroTaf(preCadastroId);
-          const lista = await getAllPreCadastrosTaf();
-          setListaPreCadastros(lista);
-        } catch {
-          // Lançamento já concluído; falha ao limpar pré-cadastro não bloqueia o fluxo.
-        }
-      }
-      limparBufferAplicacao();
-      limparSessaoProvaAtiva();
-      setFluxoAplicadorVisible(false);
-      if (res) {
-        navigation.navigate('CadastrarResultados', {
-          resultados: res,
-          aplicadorAssinatura: assinatura,
-          returnTo: 'AplicarTAF',
-        });
-      }
+      await finalizarFluxoAposSalvo(res, assinatura);
     },
-    [navigation, commitAplicacao, limparBufferAplicacao, limparSessaoProvaAtiva],
+    [atualizarSessaoEmAndamento, finalizarFluxoAposSalvo],
   );
 
   const onCancelarAssinaturaAplicador = useCallback(() => {
-    Alert.alert(
-      'Descartar aplicação?',
-      'Enquanto o aplicador não confirmar a rúbrica, nada é lançado no sistema. Deseja descartar esta aplicação?',
-      [
-        { text: 'Voltar', style: 'cancel' },
-        {
-          text: 'Descartar',
-          style: 'destructive',
-          onPress: () => {
-            preCadastroOrigemIdRef.current = null;
-            limparBufferAplicacao();
-            limparSessaoProvaAtiva();
-            setFluxoAplicadorVisible(false);
-          },
-        },
-      ],
-    );
-  }, [limparBufferAplicacao, limparSessaoProvaAtiva]);
+    const res = resultadosPosMilitaresRef.current;
+    void finalizarFluxoAposSalvo(res);
+  }, [finalizarFluxoAposSalvo]);
 
   /**
    * Abre o modal de rúbrica do candidato sem sair da etapa `tabela_*`.
@@ -1243,6 +1268,10 @@ export default function AplicarTAFScreen() {
   );
 
   const cancelarFluxoRubricaCandidatos = useCallback(() => {
+    const res =
+      listaResultadosRubricaNatacao ??
+      pendingResultadosNavRef.current ??
+      resultadosPosMilitaresRef.current;
     setModalRubricaNatacaoVisible(false);
     setIndiceRubricaNatacao(0);
     setListaResultadosRubricaNatacao(null);
@@ -1251,11 +1280,14 @@ export default function AplicarTAFScreen() {
     setRubricaStrokes([]);
     setRubricaStrokeAtual([]);
     setModalParcialAviso(null);
-    pendingResultadosNavRef.current = null;
-    pendingCadastrosRef.current = [];
-    pendingCleanupsRef.current = [];
+    pendingResultadosNavRef.current = res;
     aplicandoResultadoLockRef.current = false;
-  }, []);
+    setCorridaEtapa('nips');
+    // Resultados já foram lançados; seguir para o aplicador (opcional) com o que houver.
+    if (res && res.length > 0) {
+      iniciarFinalizacaoComAssinaturaAplicador(res);
+    }
+  }, [iniciarFinalizacaoComAssinaturaAplicador, listaResultadosRubricaNatacao]);
 
   const onCadastrarResultados = useCallback(async () => {
     if (aplicandoResultadoLockRef.current || salvandoResultadosCorrida) return;
@@ -1351,7 +1383,6 @@ export default function AplicarTAFScreen() {
     }
 
     try {
-      // Gravação adiada: monta o que será lançado, mas só grava após o aplicador confirmar.
       const bufferCadastros: CadastroItemPersist[] = [];
       const bufferCleanups: Array<() => Promise<void>> = [];
       const listaAtual: CadastroItemPersist[] = [...listaBusca];
@@ -1395,29 +1426,30 @@ export default function AplicarTAFScreen() {
       pendingCleanupsRef.current = bufferCleanups;
       pendingResultadosNavRef.current = resultados;
 
+      await persistirLancamentoAplicacao(resultados);
+
       let abriuRubrica = false;
-      if (ok > 0) {
-        const avisoParcial =
-          naoEncontrados.length > 0
-            ? `Registro parcial: não foi possível localizar no cadastro: ${naoEncontrados.slice(0, 5).join(', ')}${naoEncontrados.length > 5 ? '…' : ''}.`
-            : null;
-        const usaRubrica =
-          prova === 'natacao' ||
-          prova === 'corrida' ||
-          prova === 'caminhada' ||
-          prova === 'abdominal_prancha';
-        if (usaRubrica && resultados.length > 0) {
-          abriuRubrica = true;
-          abrirFluxoRubricaCandidatos(resultados, avisoParcial);
-        } else {
-          setModalParcialAviso(avisoParcial);
-          setCorridaEtapa('nips');
-          setModalTempoRegistradoVisible(true);
-        }
+      const avisoParcial =
+        naoEncontrados.length > 0
+          ? `Registro parcial: não foi possível localizar no cadastro: ${naoEncontrados.slice(0, 5).join(', ')}${naoEncontrados.length > 5 ? '…' : ''}.`
+          : null;
+      const usaRubrica =
+        prova === 'natacao' ||
+        prova === 'corrida' ||
+        prova === 'caminhada' ||
+        prova === 'abdominal_prancha';
+
+      if (ok > 0 && usaRubrica && resultados.length > 0) {
+        abriuRubrica = true;
+        abrirFluxoRubricaCandidatos(resultados, avisoParcial);
+      } else if (ok > 0) {
+        setModalParcialAviso(avisoParcial);
+        setCorridaEtapa('nips');
+        setModalTempoRegistradoVisible(true);
       } else {
         Alert.alert(
-          'Nenhum registro',
-          `Não foi possível localizar no cadastro: ${naoEncontrados.slice(0, 5).join(', ')}${naoEncontrados.length > 5 ? '…' : ''}.`,
+          'Resultado salvo parcialmente',
+          `A sessão foi gravada, mas não foi possível localizar no cadastro: ${naoEncontrados.slice(0, 5).join(', ')}${naoEncontrados.length > 5 ? '…' : ''}.`,
           [
             {
               text: 'OK',
@@ -1427,7 +1459,6 @@ export default function AplicarTAFScreen() {
             },
           ],
         );
-        pendingResultadosNavRef.current = null;
       }
       if (!abriuRubrica) {
         setSalvandoResultadosCorrida(false);
@@ -1435,17 +1466,10 @@ export default function AplicarTAFScreen() {
       }
     } catch {
       pendingResultadosNavRef.current = null;
+      limparBufferAplicacao();
       Alert.alert(
         'Erro',
         'Não foi possível gravar os tempos. Verifique se o cadastro está disponível (IndexedDB no navegador).',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              void iniciarFinalizacaoComAssinaturaAplicador(resultados);
-            },
-          },
-        ],
       );
       setSalvandoResultadosCorrida(false);
       aplicandoResultadoLockRef.current = false;
@@ -1461,6 +1485,8 @@ export default function AplicarTAFScreen() {
     iniciarFinalizacaoComAssinaturaAplicador,
     modoTafNaval,
     abrirFluxoRubricaCandidatos,
+    persistirLancamentoAplicacao,
+    limparBufferAplicacao,
   ]);
   const onCadastrarRepeticoes = useCallback(async () => {
     if (aplicandoResultadoLockRef.current || salvandoResultadosCorrida) return;
@@ -1511,7 +1537,6 @@ export default function AplicarTAFScreen() {
     }
 
     try {
-      // Gravação adiada: monta o que será lançado, mas só grava após o aplicador confirmar.
       const bufferCadastros: CadastroItemPersist[] = [];
       const listaAtual = [...cadastrosInicial];
       let ok = 0;
@@ -1541,6 +1566,8 @@ export default function AplicarTAFScreen() {
       pendingCleanupsRef.current = [];
       pendingResultadosNavRef.current = resultados;
 
+      await persistirLancamentoAplicacao(resultados);
+
       if (ok > 0) {
         const avisoParcial =
           naoEncontrados.length > 0
@@ -1551,8 +1578,8 @@ export default function AplicarTAFScreen() {
         setModalTempoRegistradoVisible(true);
       } else {
         Alert.alert(
-          'Nenhum registro',
-          `Não foi possível localizar no cadastro: ${naoEncontrados.slice(0, 5).join(', ')}${naoEncontrados.length > 5 ? '…' : ''}.`,
+          'Resultado salvo parcialmente',
+          `A sessão foi gravada, mas não foi possível localizar no cadastro: ${naoEncontrados.slice(0, 5).join(', ')}${naoEncontrados.length > 5 ? '…' : ''}.`,
           [
             {
               text: 'OK',
@@ -1562,10 +1589,10 @@ export default function AplicarTAFScreen() {
             },
           ],
         );
-        pendingResultadosNavRef.current = null;
       }
     } catch {
       pendingResultadosNavRef.current = null;
+      limparBufferAplicacao();
       Alert.alert('Erro', 'Não foi possível gravar as repetições. Tente novamente.');
     } finally {
       setSalvandoResultadosCorrida(false);
@@ -1579,6 +1606,8 @@ export default function AplicarTAFScreen() {
     salvandoResultadosCorrida,
     tipoProva,
     iniciarFinalizacaoComAssinaturaAplicador,
+    persistirLancamentoAplicacao,
+    limparBufferAplicacao,
   ]);
   const fecharModalTempoRegistrado = useCallback(() => {
     const avisoParcial = modalParcialAviso;
@@ -1674,14 +1703,26 @@ export default function AplicarTAFScreen() {
       if (!res || novoIndex < 0 || novoIndex >= res.length) return;
       if (novoIndex === indiceRubricaNatacao) return;
       const svgNovo = buildSvgRubricaAtual();
+      let atualizados = res;
       if (svgNovo) {
-        aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res);
+        atualizados = aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res);
+        const item = atualizados[indiceRubricaNatacao];
+        void (async () => {
+          if (!item?.rubricaCandidatoSvg?.trim()) return;
+          if (!isModoDemonstracaoAtivo()) {
+            await persistirRubricasNoCadastro([item]);
+          }
+          await atualizarSessaoEmAndamento(atualizados);
+        })().catch(() => {
+          // Resultado já está salvo; falha na rúbrica não bloqueia o fluxo.
+        });
       }
       setIndiceRubricaNatacao(novoIndex);
       setErroRubricaNatacao('');
     },
     [
       aplicarSvgNoIndiceRubrica,
+      atualizarSessaoEmAndamento,
       buildSvgRubricaAtual,
       indiceRubricaNatacao,
       listaResultadosRubricaNatacao,
@@ -1719,6 +1760,20 @@ export default function AplicarTAFScreen() {
     const atualizados = svgNovo
       ? aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res)
       : res;
+    const itemConfirmado = atualizados[indiceRubricaNatacao];
+
+    const persistirRubricaAtual = async () => {
+      if (!itemConfirmado?.rubricaCandidatoSvg?.trim()) return;
+      if (!isModoDemonstracaoAtivo()) {
+        await persistirRubricasNoCadastro([itemConfirmado]);
+      }
+      await atualizarSessaoEmAndamento(atualizados);
+    };
+
+    void persistirRubricaAtual().catch(() => {
+      // Resultado já está salvo; falha na rúbrica não bloqueia o fluxo.
+    });
+
     const proximo = indiceRubricaNatacao + 1;
     if (proximo < atualizados.length) {
       setIndiceRubricaNatacao(proximo);
@@ -1742,17 +1797,12 @@ export default function AplicarTAFScreen() {
     if (modalParcialAviso) {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
-    // Mescla a rúbrica do candidato no buffer (ainda sem gravar);
-    // a gravação real ocorre só após o aplicador confirmar a rúbrica.
-    pendingCadastrosRef.current = aplicarRubricasEmCadastros(
-      pendingCadastrosRef.current,
-      atualizados,
-    );
     iniciarFinalizacaoComAssinaturaAplicador(atualizados);
     pendingResultadosNavRef.current = null;
     setModalParcialAviso(null);
   }, [
     aplicarSvgNoIndiceRubrica,
+    atualizarSessaoEmAndamento,
     buildSvgRubricaAtual,
     indiceRubricaNatacao,
     iniciarFinalizacaoComAssinaturaAplicador,
@@ -2473,7 +2523,6 @@ export default function AplicarTAFScreen() {
       } catch {
         cadastrosInicial = [];
       }
-      // Gravação adiada: monta o que será lançado, mas só grava após o aplicador confirmar.
       const bufferCadastros: CadastroItemPersist[] = [];
       const listaAtual = [...cadastrosInicial];
       let ok = 0;
@@ -2486,6 +2535,26 @@ export default function AplicarTAFScreen() {
           ? PERMANENCIA_DURACAO_MS
           : (tempoParadoMsRef.current ?? getElapsedRaceMs() ?? 0);
       };
+
+      const resultadosPerm: ResultadoCorridaItem[] = [];
+      for (let i = 0; i < nParticipantesConfirmado; i += 1) {
+        const fb = nipFeedbackLinhas[i];
+        const nip = nipsParticipantes[i] ?? '';
+        const resultado = resultadoPermanenciaLinhas[i]!;
+        const tempoMs = tempoMsLinha(i, resultado);
+        resultadosPerm.push({
+          corredor: i + 1,
+          nome:
+            fb?.tipo === 'ok'
+              ? (fb.nomeMilitar || '').trim() || `Militar ${i + 1}`
+              : `Militar ${i + 1}`,
+          nip,
+          tempoMs,
+          prova: 'permanencia',
+          notaTexto: resultado === 'aprovado' ? 'Aprovado' : 'REPROVADO',
+          reprovacaoTexto: resultado === 'reprovado' ? 'Reprovado' : undefined,
+        });
+      }
 
       for (let i = 0; i < nParticipantesConfirmado; i += 1) {
         const nip = nipsParticipantes[i] ?? '';
@@ -2515,29 +2584,11 @@ export default function AplicarTAFScreen() {
 
       pendingCadastrosRef.current = bufferCadastros;
       pendingCleanupsRef.current = [];
+      pendingResultadosNavRef.current = resultadosPerm;
+
+      await persistirLancamentoAplicacao(resultadosPerm);
 
       if (ok > 0) {
-        const resultadosPerm: ResultadoCorridaItem[] = [];
-        for (let i = 0; i < nParticipantesConfirmado; i += 1) {
-          const fb = nipFeedbackLinhas[i];
-          const nip = nipsParticipantes[i] ?? '';
-          const resultado = resultadoPermanenciaLinhas[i]!;
-          const tempoMs = tempoMsLinha(i, resultado);
-          resultadosPerm.push({
-            corredor: i + 1,
-            nome:
-              fb?.tipo === 'ok'
-                ? (fb.nomeMilitar || '').trim() || `Militar ${i + 1}`
-                : `Militar ${i + 1}`,
-            nip,
-            tempoMs,
-            prova: 'permanencia',
-            notaTexto: resultado === 'aprovado' ? 'Aprovado' : 'REPROVADO',
-            reprovacaoTexto: resultado === 'reprovado' ? 'Reprovado' : undefined,
-          });
-        }
-        pendingResultadosNavRef.current = resultadosPerm;
-
         const aviso =
           naoEncontrados.length > 0
             ? `Registro parcial: não localizado no cadastro: ${naoEncontrados.slice(0, 3).join(', ')}${naoEncontrados.length > 3 ? '…' : ''}.`
@@ -2545,16 +2596,25 @@ export default function AplicarTAFScreen() {
         abrirFluxoRubricaCandidatos(resultadosPerm, aviso);
       } else {
         Alert.alert(
-          'Nenhum registro salvo',
-          'Não foi possível localizar os militares no cadastro.',
+          'Resultado salvo parcialmente',
+          'A sessão foi gravada, mas não foi possível localizar os militares no cadastro.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                void iniciarFinalizacaoComAssinaturaAplicador(resultadosPerm);
+              },
+            },
+          ],
         );
         setSalvandoResultadosCorrida(false);
         aplicandoResultadoLockRef.current = false;
       }
     } catch {
+      limparBufferAplicacao();
       Alert.alert(
         'Erro',
-        'Não foi possível preparar os resultados da permanência. Tente novamente.',
+        'Não foi possível gravar os resultados da permanência. Tente novamente.',
       );
       setSalvandoResultadosCorrida(false);
       aplicandoResultadoLockRef.current = false;
@@ -2567,6 +2627,9 @@ export default function AplicarTAFScreen() {
     nipFeedbackLinhas,
     salvandoResultadosCorrida,
     abrirFluxoRubricaCandidatos,
+    persistirLancamentoAplicacao,
+    limparBufferAplicacao,
+    iniciarFinalizacaoComAssinaturaAplicador,
     getElapsedRaceMs,
   ]);
   const voltarDeTabelaParaNips = useCallback(() => {
@@ -3253,7 +3316,7 @@ export default function AplicarTAFScreen() {
               style={styles.modalFuturisticStripe}
             />
             <Text style={styles.modalTempoMensagemCadastro}>
-              Resultado registrado. Confirme a assinatura do aplicador para concluir o teste.
+              Resultado já salvo. Você pode confirmar a assinatura do aplicador (opcional).
             </Text>
             {modalParcialAviso ? (
               <Text style={styles.modalTempoParcialCadastro}>{modalParcialAviso}</Text>

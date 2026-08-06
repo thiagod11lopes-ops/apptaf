@@ -8,7 +8,7 @@ import type { ResultadoPermanenciaOpcao } from '../components/PermanenciaTafPane
 
 export const PROVA_ATIVA_SESSION_META_KEY = 'provaAtiva:session';
 
-/** Sessão local de prova ainda não lançada pela rúbrica do aplicador. */
+/** Continuação local após o lançamento (rúbricas / aplicador opcional). */
 export type ProvaAtivaFinalizacaoFase =
   | 'rubrica_candidatos'
   | 'aplicador'
@@ -53,6 +53,8 @@ export type ProvaAtivaSessionV1 = {
     fase: ProvaAtivaFinalizacaoFase;
     resultados: ResultadoCorridaItem[];
     pendingCadastros: CadastroItemPersist[];
+    /** Sessão já gravada no histórico ao aplicar o resultado. */
+    sessaoAplicacaoId?: string;
     indiceRubrica?: number;
     listaResultadosRubrica?: ResultadoCorridaItem[];
   };

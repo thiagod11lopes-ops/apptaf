@@ -25,7 +25,7 @@ function patchRubricaPorProva(
 
 /**
  * Aplica as rúbricas SVG dos candidatos sobre uma lista de cadastros EM MEMÓRIA,
- * sem persistir. Usado quando a gravação é adiada até a confirmação do aplicador.
+ * sem persistir (útil para mesclar antes de um upsert).
  */
 export function aplicarRubricasEmCadastros(
   cadastros: CadastroItemPersist[],

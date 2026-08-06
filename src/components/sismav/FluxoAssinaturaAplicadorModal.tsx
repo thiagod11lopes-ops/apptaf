@@ -239,7 +239,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
             <AssinaturaFuturistaHeader
               kicker="APLICADOR"
               title="Assinatura do aplicador"
-              subtitle="Selecione o aplicador e desenhe a rúbrica desta aplicação. A rúbrica não fica salva para a próxima prova."
+              subtitle="Resultados já salvos. Selecione o aplicador e desenhe a rúbrica (opcional). Ela não fica salva para a próxima prova."
               accent="violet"
             />
 
@@ -338,7 +338,7 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
 
             <AssinaturaFuturistaBtnRow>
               {onCancelar ? (
-                <AssinaturaFuturistaBtnGhost label="Cancelar" onPress={onCancelar} flex />
+                <AssinaturaFuturistaBtnGhost label="Concluir sem assinatura" onPress={onCancelar} flex />
               ) : null}
               <AssinaturaFuturistaBtnGhost label="Limpar" onPress={limparRubrica} flex />
               <AssinaturaFuturistaBtnPrimary

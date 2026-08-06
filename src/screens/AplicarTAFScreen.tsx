@@ -113,6 +113,12 @@ import {
   type ProvaAtivaSessionV1,
 } from '../services/provaAtivaSessionStorage';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
+import {
+  isRubricaRasterDataUrl,
+  isRubricaSvgDataUrl,
+  rubricaParaPersistenciaAsync,
+} from '../utils/rubricaRasterPersist';
+import { yieldToUi } from '../utils/yieldToUi';
 import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
@@ -294,7 +300,7 @@ export default function AplicarTAFScreen() {
   const [modalTempoRegistradoVisible, setModalTempoRegistradoVisible] = useState(false);
   const [modalParcialAviso, setModalParcialAviso] = useState<string | null>(null);
   const pendingResultadosNavRef = useRef<ResultadoCorridaItem[] | null>(null);
-  /** Fila serial: grava SVG bruto um militar por vez (sem canvas no “Próximo”). */
+  /** Fila serial: SVG no Próximo; raster em lote ao abrir o aplicador. */
   const rubricaPersistChainRef = useRef(Promise.resolve());
   const rubricaPersistGeracaoRef = useRef(0);
   const resultadosPosMilitaresRef = useRef<ResultadoCorridaItem[] | null>(null);
@@ -1089,17 +1095,74 @@ export default function AplicarTAFScreen() {
     [navigation, limparBufferAplicacao, limparSessaoProvaAtiva],
   );
 
+  const enqueueRasterLoteRubricasCandidatos = useCallback(() => {
+    const geracao = rubricaPersistGeracaoRef.current;
+    rubricaPersistChainRef.current = rubricaPersistChainRef.current
+      .then(async () => {
+        if (rubricaPersistGeracaoRef.current !== geracao) return;
+
+        const base =
+          pendingResultadosNavRef.current ?? resultadosPosMilitaresRef.current;
+        if (!base?.length) return;
+
+        let lista = base.map((r) => ({ ...r }));
+        let mudou = false;
+        const atualizadosParaCadastro: ResultadoCorridaItem[] = [];
+
+        for (let i = 0; i < lista.length; i++) {
+          if (rubricaPersistGeracaoRef.current !== geracao) return;
+          const item = lista[i];
+          if (!item) continue;
+          const bruto = (item.rubricaCandidatoSvg || '').trim();
+          if (!bruto || isRubricaRasterDataUrl(bruto) || !isRubricaSvgDataUrl(bruto)) {
+            continue;
+          }
+
+          const raster = (await rubricaParaPersistenciaAsync(bruto))?.trim();
+          if (!raster) continue;
+
+          if (raster !== bruto) {
+            lista[i] = {
+              ...item,
+              rubricaCandidato: 'Rúbrica capturada',
+              rubricaCandidatoSvg: raster,
+            };
+            mudou = true;
+            atualizadosParaCadastro.push(lista[i]!);
+          }
+          await yieldToUi();
+        }
+
+        if (rubricaPersistGeracaoRef.current !== geracao) return;
+        if (!mudou) return;
+
+        pendingResultadosNavRef.current = lista;
+        resultadosPosMilitaresRef.current = lista;
+
+        if (!isModoDemonstracaoAtivo() && atualizadosParaCadastro.length > 0) {
+          // Já rasterizado: persistirRubricasNoCadastro não redesenha no canvas.
+          await persistirRubricasNoCadastro(atualizadosParaCadastro);
+        }
+      })
+      .catch(() => {
+        // SVG já está salvo; falha no lote WebP não bloqueia o fluxo do chefe.
+      });
+  }, []);
+
   const iniciarFinalizacaoComAssinaturaAplicador = useCallback(
     (resultados: ResultadoCorridaItem[]) => {
       resultadosPosMilitaresRef.current = resultados;
+      pendingResultadosNavRef.current = resultados;
       setFluxoAplicadorVisible(true);
+      // Raster em lote enquanto o chefe assina — não bloqueia a abertura do modal.
+      enqueueRasterLoteRubricasCandidatos();
     },
-    [],
+    [enqueueRasterLoteRubricasCandidatos],
   );
 
   const onConcluirAssinaturaAplicador = useCallback(
     async (assinatura: AplicadorAssinaturaResumo) => {
-      // Espera a fila de SVG dos candidatos (já em background) antes de anexar o chefe.
+      // Espera SVG + lote WebP dos candidatos antes de anexar o chefe na sessão.
       await rubricaPersistChainRef.current.catch(() => undefined);
       const res =
         pendingResultadosNavRef.current ?? resultadosPosMilitaresRef.current;
@@ -1711,7 +1774,7 @@ export default function AplicarTAFScreen() {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
     pendingResultadosNavRef.current = atualizados;
-    // Abre o chefe no próximo frame — não aguarda a gravação SVG dos candidatos.
+    // Abre o chefe no próximo frame — raster em lote roda em background ao abrir.
     InteractionManager.runAfterInteractions(() => {
       requestAnimationFrame(() => {
         iniciarFinalizacaoComAssinaturaAplicador(atualizados);

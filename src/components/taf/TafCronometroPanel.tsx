@@ -355,7 +355,7 @@ export function TafCronometroPanel({
           </Text>
         </LinearGradient>
       </PressableScale>
-      {printButton}
+      {pausado ? printButton : null}
     </View>
   );
 

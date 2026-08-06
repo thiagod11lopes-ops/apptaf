@@ -300,7 +300,7 @@ export default function AplicarTAFScreen() {
   const [modalTempoRegistradoVisible, setModalTempoRegistradoVisible] = useState(false);
   const [modalParcialAviso, setModalParcialAviso] = useState<string | null>(null);
   const pendingResultadosNavRef = useRef<ResultadoCorridaItem[] | null>(null);
-  /** Fila serial: SVG no Próximo; raster em lote ao abrir o aplicador. */
+  /** Fila serial: SVG no Próximo; WebP em lote em background (não bloqueia abrir/concluir chefe). */
   const rubricaPersistChainRef = useRef(Promise.resolve());
   const rubricaPersistGeracaoRef = useRef(0);
   const resultadosPosMilitaresRef = useRef<ResultadoCorridaItem[] | null>(null);
@@ -1095,59 +1095,103 @@ export default function AplicarTAFScreen() {
     [navigation, limparBufferAplicacao, limparSessaoProvaAtiva],
   );
 
-  const enqueueRasterLoteRubricasCandidatos = useCallback(() => {
-    const geracao = rubricaPersistGeracaoRef.current;
-    rubricaPersistChainRef.current = rubricaPersistChainRef.current
-      .then(async () => {
-        if (rubricaPersistGeracaoRef.current !== geracao) return;
+  const enqueueRasterLoteRubricasCandidatos = useCallback(
+    (resultadosSnap?: ResultadoCorridaItem[]) => {
+      const geracao = rubricaPersistGeracaoRef.current;
+      const baseSnapshot = (
+        resultadosSnap ??
+        pendingResultadosNavRef.current ??
+        resultadosPosMilitaresRef.current
+      )?.map((r) => ({ ...r }));
+      const sessaoIdSnapshot = sessaoAplicacaoIdRef.current;
 
-        const base =
-          pendingResultadosNavRef.current ?? resultadosPosMilitaresRef.current;
-        if (!base?.length) return;
-
-        let lista = base.map((r) => ({ ...r }));
-        let mudou = false;
-        const atualizadosParaCadastro: ResultadoCorridaItem[] = [];
-
-        for (let i = 0; i < lista.length; i++) {
+      rubricaPersistChainRef.current = rubricaPersistChainRef.current
+        .then(async () => {
           if (rubricaPersistGeracaoRef.current !== geracao) return;
-          const item = lista[i];
-          if (!item) continue;
-          const bruto = (item.rubricaCandidatoSvg || '').trim();
-          if (!bruto || isRubricaRasterDataUrl(bruto) || !isRubricaSvgDataUrl(bruto)) {
-            continue;
+
+          const base =
+            pendingResultadosNavRef.current ??
+            resultadosPosMilitaresRef.current ??
+            baseSnapshot;
+          if (!base?.length) return;
+
+          let lista = base.map((r) => ({ ...r }));
+          let mudou = false;
+          const atualizadosParaCadastro: ResultadoCorridaItem[] = [];
+
+          for (let i = 0; i < lista.length; i++) {
+            if (rubricaPersistGeracaoRef.current !== geracao) return;
+            const item = lista[i];
+            if (!item) continue;
+            const bruto = (item.rubricaCandidatoSvg || '').trim();
+            if (!bruto || isRubricaRasterDataUrl(bruto) || !isRubricaSvgDataUrl(bruto)) {
+              continue;
+            }
+
+            const raster = (await rubricaParaPersistenciaAsync(bruto))?.trim();
+            if (!raster) continue;
+
+            if (raster !== bruto) {
+              lista[i] = {
+                ...item,
+                rubricaCandidato: 'Rúbrica capturada',
+                rubricaCandidatoSvg: raster,
+              };
+              mudou = true;
+              atualizadosParaCadastro.push(lista[i]!);
+            }
+            await yieldToUi();
           }
 
-          const raster = (await rubricaParaPersistenciaAsync(bruto))?.trim();
-          if (!raster) continue;
+          if (rubricaPersistGeracaoRef.current !== geracao) return;
+          if (!mudou) return;
 
-          if (raster !== bruto) {
-            lista[i] = {
-              ...item,
-              rubricaCandidato: 'Rúbrica capturada',
-              rubricaCandidatoSvg: raster,
-            };
-            mudou = true;
-            atualizadosParaCadastro.push(lista[i]!);
+          if (pendingResultadosNavRef.current) {
+            pendingResultadosNavRef.current = lista;
           }
-          await yieldToUi();
-        }
+          if (resultadosPosMilitaresRef.current) {
+            resultadosPosMilitaresRef.current = lista;
+          }
 
-        if (rubricaPersistGeracaoRef.current !== geracao) return;
-        if (!mudou) return;
+          if (!isModoDemonstracaoAtivo() && atualizadosParaCadastro.length > 0) {
+            // Já rasterizado: persistirRubricasNoCadastro não redesenha no canvas.
+            await persistirRubricasNoCadastro(atualizadosParaCadastro);
+          }
 
-        pendingResultadosNavRef.current = lista;
-        resultadosPosMilitaresRef.current = lista;
-
-        if (!isModoDemonstracaoAtivo() && atualizadosParaCadastro.length > 0) {
-          // Já rasterizado: persistirRubricasNoCadastro não redesenha no canvas.
-          await persistirRubricasNoCadastro(atualizadosParaCadastro);
-        }
-      })
-      .catch(() => {
-        // SVG já está salvo; falha no lote WebP não bloqueia o fluxo do chefe.
-      });
-  }, []);
+          // Se o chefe já concluiu (sessão liberada na UI), ainda troca SVG→WebP na sessão.
+          const sessaoId = sessaoAplicacaoIdRef.current ?? sessaoIdSnapshot;
+          if (sessaoId) {
+            try {
+              const sessao = await getSessaoAplicacaoById(sessaoId);
+              if (sessao) {
+                const rasterPorNip = new Map(
+                  lista.map((r) => [(r.nip || '').replace(/\D/g, ''), r] as const),
+                );
+                const resultados = sessao.resultados.map((r) => {
+                  const chave = (r.nip || '').replace(/\D/g, '');
+                  const upd = chave ? rasterPorNip.get(chave) : undefined;
+                  const raster = (upd?.rubricaCandidatoSvg || '').trim();
+                  if (!raster || !isRubricaRasterDataUrl(raster)) return r;
+                  return {
+                    ...r,
+                    rubricaCandidato: 'Rúbrica capturada',
+                    rubricaCandidatoSvg: raster,
+                  };
+                });
+                // Reusa `sessao` (inclui assinatura do aplicador se já gravada).
+                await updateSessaoAplicacao({ ...sessao, resultados });
+              }
+            } catch {
+              // Cadastro já tem WebP; falha ao espelhar na sessão não bloqueia.
+            }
+          }
+        })
+        .catch(() => {
+          // SVG já está salvo; falha no lote WebP não bloqueia o fluxo do chefe.
+        });
+    },
+    [],
+  );
 
   const iniciarFinalizacaoComAssinaturaAplicador = useCallback(
     (resultados: ResultadoCorridaItem[]) => {
@@ -1155,15 +1199,14 @@ export default function AplicarTAFScreen() {
       pendingResultadosNavRef.current = resultados;
       setFluxoAplicadorVisible(true);
       // Raster em lote enquanto o chefe assina — não bloqueia a abertura do modal.
-      enqueueRasterLoteRubricasCandidatos();
+      enqueueRasterLoteRubricasCandidatos(resultados);
     },
     [enqueueRasterLoteRubricasCandidatos],
   );
 
   const onConcluirAssinaturaAplicador = useCallback(
     async (assinatura: AplicadorAssinaturaResumo) => {
-      // Espera SVG + lote WebP dos candidatos antes de anexar o chefe na sessão.
-      await rubricaPersistChainRef.current.catch(() => undefined);
+      // Não espera SVG/WebP: UI libera na hora; lote segue em background.
       const res =
         pendingResultadosNavRef.current ?? resultadosPosMilitaresRef.current;
       try {
@@ -1177,7 +1220,7 @@ export default function AplicarTAFScreen() {
         );
         return;
       }
-      pendingResultadosNavRef.current = null;
+      // Mantém snapshot nos refs só se o lote ainda precisar; finalizar limpa buffers.
       await finalizarFluxoAposSalvo(res, assinatura);
     },
     [atualizarSessaoEmAndamento, finalizarFluxoAposSalvo],

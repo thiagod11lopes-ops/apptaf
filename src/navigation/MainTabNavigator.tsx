@@ -10,18 +10,15 @@ import EstatisticasScreen from '../screens/EstatisticasScreen';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 /**
- * Abas principais sempre montadas (lazy: false) — troca de aba sem remount/re-scan.
- * A barra visual continua sendo GlassBottomBar / Sidebar (tabBar oculto).
+ * Abas principais. Lazy padrão (só monta ao visitar) — evita empilhar telas
+ * uma sobre a outra no web/PWA. A barra visual continua em GlassBottomBar / Sidebar.
  */
 export function MainTabNavigator() {
   return (
     <Tab.Navigator
       tabBar={() => null}
-      detachInactiveScreens={false}
       screenOptions={{
         headerShown: false,
-        lazy: false,
-        freezeOnBlur: false,
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />

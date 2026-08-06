@@ -56,9 +56,18 @@ export function aplicarRubricasEmCadastros(
   return lista;
 }
 
+export type PersistirRubricasOpcoes = {
+  /**
+   * Grava o data-URL como veio (SVG bruto), sem canvas/WebP.
+   * Use no “Próximo” do fluxo de candidatos para não engasgar.
+   */
+  manterSvgBruto?: boolean;
+};
+
 /** Grava rúbricas SVG no cadastro conforme a prova de cada resultado. */
 export async function persistirRubricasNoCadastro(
   resultados: ResultadoCorridaItem[],
+  opcoes?: PersistirRubricasOpcoes,
 ): Promise<number> {
   if (resultados.length === 0) return 0;
 
@@ -66,12 +75,13 @@ export async function persistirRubricasNoCadastro(
   const cadastros = peeked ?? (await getAllCadastros());
   const lista: CadastroItemPersist[] = [...cadastros];
   let ok = 0;
+  const manterSvgBruto = opcoes?.manterSvgBruto === true;
 
   for (const r of resultados) {
     const bruto = (r.rubricaCandidatoSvg || '').trim();
     if (!bruto) continue;
-    // Já rasterizada no caller: não redesenha no canvas.
-    const svg = isRubricaRasterDataUrl(bruto)
+    // Já rasterizada no caller, ou gravando SVG bruto no fluxo “Próximo”.
+    const svg = manterSvgBruto || isRubricaRasterDataUrl(bruto)
       ? bruto
       : (await rubricaParaPersistenciaAsync(bruto))?.trim();
     if (!svg) continue;

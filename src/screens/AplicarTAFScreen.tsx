@@ -113,7 +113,6 @@ import {
   type ProvaAtivaSessionV1,
 } from '../services/provaAtivaSessionStorage';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
-import { rubricaParaPersistenciaAsync } from '../utils/rubricaRasterPersist';
 import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
@@ -295,7 +294,7 @@ export default function AplicarTAFScreen() {
   const [modalTempoRegistradoVisible, setModalTempoRegistradoVisible] = useState(false);
   const [modalParcialAviso, setModalParcialAviso] = useState<string | null>(null);
   const pendingResultadosNavRef = useRef<ResultadoCorridaItem[] | null>(null);
-  /** Fila serial: raster + IDB um militar por vez (sem travar Próximo/Finalizar). */
+  /** Fila serial: grava SVG bruto um militar por vez (sem canvas no “Próximo”). */
   const rubricaPersistChainRef = useRef(Promise.resolve());
   const rubricaPersistGeracaoRef = useRef(0);
   const resultadosPosMilitaresRef = useRef<ResultadoCorridaItem[] | null>(null);
@@ -1100,7 +1099,7 @@ export default function AplicarTAFScreen() {
 
   const onConcluirAssinaturaAplicador = useCallback(
     async (assinatura: AplicadorAssinaturaResumo) => {
-      // Espera a fila de rúbricas dos candidatos (já em background) antes de anexar o chefe.
+      // Espera a fila de SVG dos candidatos (já em background) antes de anexar o chefe.
       await rubricaPersistChainRef.current.catch(() => undefined);
       const res =
         pendingResultadosNavRef.current ?? resultadosPosMilitaresRef.current;
@@ -1577,7 +1576,7 @@ export default function AplicarTAFScreen() {
   }, [getTodosStrokesRubrica, rubricaCanvasWidth]);
 
   /**
-   * Rasteriza e grava em fila — sem setState de WebP e sem regravar a sessão a cada militar.
+   * Grava só o SVG bruto em fila (sem canvas/WebP neste clique).
    * O avançar para o próximo candidato (ou chefe) não espera esta fila.
    */
   const enqueuePersistRubricaCandidato = useCallback((index: number, svgBruto: string) => {
@@ -1588,24 +1587,21 @@ export default function AplicarTAFScreen() {
       .then(async () => {
         if (rubricaPersistGeracaoRef.current !== geracao) return;
 
-        const raster = (await rubricaParaPersistenciaAsync(svg))?.trim() || svg;
-        if (rubricaPersistGeracaoRef.current !== geracao) return;
-
         const baseAtual = pendingResultadosNavRef.current;
         if (!baseAtual?.[index]) return;
 
-        const listaRaster = baseAtual.map((item, idx) =>
+        const listaSvg = baseAtual.map((item, idx) =>
           idx === index
-            ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: raster }
+            ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: svg }
             : item,
         );
-        pendingResultadosNavRef.current = listaRaster;
-        resultadosPosMilitaresRef.current = listaRaster;
+        pendingResultadosNavRef.current = listaSvg;
+        resultadosPosMilitaresRef.current = listaSvg;
 
         if (!isModoDemonstracaoAtivo()) {
-          const itemRaster = listaRaster[index];
-          if (itemRaster?.rubricaCandidatoSvg?.trim()) {
-            await persistirRubricasNoCadastro([itemRaster]);
+          const itemSvg = listaSvg[index];
+          if (itemSvg?.rubricaCandidatoSvg?.trim()) {
+            await persistirRubricasNoCadastro([itemSvg], { manterSvgBruto: true });
           }
         }
       })
@@ -1715,7 +1711,7 @@ export default function AplicarTAFScreen() {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
     pendingResultadosNavRef.current = atualizados;
-    // Abre o chefe no próximo frame — não aguarda raster/IDB dos candidatos.
+    // Abre o chefe no próximo frame — não aguarda a gravação SVG dos candidatos.
     InteractionManager.runAfterInteractions(() => {
       requestAnimationFrame(() => {
         iniciarFinalizacaoComAssinaturaAplicador(atualizados);

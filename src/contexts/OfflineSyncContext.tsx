@@ -30,6 +30,33 @@ import {
   setCloudLinkEnabled,
   subscribeCloudLink,
 } from '../offline-first/sync/cloudLinkPreference';
+import { readAppMetaCache } from '../offline-first/db/appMeta';
+import { runWhenIdle } from '../utils/yieldToUi';
+
+/** Metas de migração já gravadas — evita agendar trabalho pesado. */
+function rubricasMigrationsAlreadyDone(ownerUid: string): boolean {
+  return (
+    readAppMetaCache(`rubricas_raster_v1:${ownerUid}`) === '1' &&
+    readAppMetaCache(`rubricas_side_v2:${ownerUid}`) === '1'
+  );
+}
+
+async function runRubricasMigrations(ownerUid: string): Promise<void> {
+  try {
+    const { migrateRubricasSvgParaRaster } = await import('../utils/migrateRubricasParaRaster');
+    await migrateRubricasSvgParaRaster(ownerUid);
+  } catch (error) {
+    console.warn('[rubricas] migração SVG→WebP/PNG falhou:', error);
+  }
+  try {
+    const { migrateRubricasParaSideTables } = await import(
+      '../utils/migrateRubricasParaSideTables'
+    );
+    await migrateRubricasParaSideTables(ownerUid);
+  } catch (error) {
+    console.warn('[rubricas] migração para side tables falhou:', error);
+  }
+}
 
 type OfflineSyncContextType = {
   connectivity: ConnectivityState;
@@ -84,41 +111,45 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authReady || !firebaseEnabled) return;
 
+    let cancelIdleMigrations: (() => void) | null = null;
+    let cancelled = false;
+
     void (async () => {
       await hydrateAppStorageFromIndexedDb();
+      if (cancelled) return;
+
       const hasFirebaseUser = Boolean(getFirebaseAuth()?.currentUser);
       syncManager.setAuthAvailable(isAuthenticated && hasFirebaseUser);
 
       const ownerUid = dataOwnerUid ?? getCachedDataOwnerUid();
       if (ownerUid) {
         await syncManager.bindSession(ownerUid);
-        try {
-          const { migrateRubricasSvgParaRaster } = await import(
-            '../utils/migrateRubricasParaRaster'
-          );
-          await migrateRubricasSvgParaRaster(ownerUid);
-        } catch (error) {
-          console.warn('[rubricas] migração SVG→WebP/PNG falhou:', error);
-        }
-        try {
-          const { migrateRubricasParaSideTables } = await import(
-            '../utils/migrateRubricasParaSideTables'
-          );
-          await migrateRubricasParaSideTables(ownerUid);
-        } catch (error) {
-          console.warn('[rubricas] migração para side tables falhou:', error);
-        }
-        // Só sincroniza se a chave da nuvem estiver ligada (padrão: desligada).
+        if (cancelled) return;
+
+        // Sync/pending na hora — migrações pesadas não bloqueiam o primeiro paint.
         if (hasFirebaseUser && isAuthenticated && isCloudLinkEnabled()) {
           await syncManager.refreshCloudDiff();
+          if (cancelled) return;
           syncManager.scheduleBackgroundSync(2_500);
         } else {
           await syncManager.refreshPending();
         }
+
+        if (cancelled || rubricasMigrationsAlreadyDone(ownerUid)) return;
+        cancelIdleMigrations = runWhenIdle(() => {
+          if (cancelled) return;
+          void runRubricasMigrations(ownerUid);
+        }, 2_500);
       } else {
         await syncManager.refreshPending();
       }
     })();
+
+    return () => {
+      cancelled = true;
+      cancelIdleMigrations?.();
+      cancelIdleMigrations = null;
+    };
   }, [authReady, firebaseEnabled, isAuthenticated, user?.uid, dataOwnerUid]);
 
   // Religa/desliga sync e comparação periódica quando o usuário mexer na chave da nuvem.

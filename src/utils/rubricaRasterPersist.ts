@@ -1,89 +1,17 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
-import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO, normalizarRubricaSvgDataUrl } from './rubricaSvgNormalize';
+import { RUBRICA_COR_FUNDO } from './rubricaSvgNormalize';
 import {
   RUBRICA_RASTER_ALTURA,
   RUBRICA_RASTER_LARGURA,
   RUBRICA_WEBP_QUALITY,
 } from './rubricaConstants';
+import {
+  decodeSvgDataUrl,
+  desenharRubricaSvgNoContexto,
+} from './rubricaRasterCore';
 
-/** Decodifica data-URL SVG (utf8 ou base64) para string SVG. */
-export function decodeSvgDataUrl(svgUri: string): string | null {
-  const normalized = normalizarRubricaSvgDataUrl(svgUri) ?? svgUri.trim();
-  if (!normalized.startsWith('data:image/svg')) return null;
-
-  const comma = normalized.indexOf(',');
-  if (comma < 0) return null;
-  const meta = normalized.slice(0, comma);
-  const data = normalized.slice(comma + 1);
-
-  try {
-    if (/;base64/i.test(meta)) {
-      const binary = atob(data);
-      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-      return new TextDecoder('utf-8').decode(bytes);
-    }
-    return decodeURIComponent(data);
-  } catch {
-    try {
-      return decodeURIComponent(data);
-    } catch {
-      return null;
-    }
-  }
-}
-
-function extrairPathsDoSvg(svg: string): { paths: string[]; vbW: number; vbH: number } {
-  const vbMatch = svg.match(/viewBox=["']0\s+0\s+([\d.]+)\s+([\d.]+)["']/i);
-  const wMatch = svg.match(/\bwidth=["']([\d.]+)["']/i);
-  const hMatch = svg.match(/\bheight=["']([\d.]+)["']/i);
-  const vbW = vbMatch ? parseFloat(vbMatch[1]!) : parseFloat(wMatch?.[1] ?? '420');
-  const vbH = vbMatch ? parseFloat(vbMatch[2]!) : parseFloat(hMatch?.[1] ?? '180');
-
-  const paths: string[] = [];
-  const re = /<path\b[^>]*\bd=["']([^"']+)["'][^>]*>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(svg)) !== null) {
-    if (m[1]?.trim()) paths.push(m[1].trim());
-  }
-  return {
-    paths,
-    vbW: Number.isFinite(vbW) && vbW > 0 ? vbW : 420,
-    vbH: Number.isFinite(vbH) && vbH > 0 ? vbH : 180,
-  };
-}
-
-function strokePathManual(ctx: CanvasRenderingContext2D, d: string): void {
-  const tokens = d.match(/[MLml]|-?\d*\.?\d+(?:e[-+]?\d+)?/g);
-  if (!tokens || tokens.length === 0) return;
-
-  ctx.beginPath();
-  let cmd = 'M';
-  let i = 0;
-  let started = false;
-  while (i < tokens.length) {
-    const t = tokens[i]!;
-    if (t === 'M' || t === 'L' || t === 'm' || t === 'l') {
-      cmd = t;
-      i += 1;
-      continue;
-    }
-    const x = parseFloat(tokens[i]!);
-    const y = parseFloat(tokens[i + 1] ?? '');
-    if (!Number.isFinite(x) || !Number.isFinite(y)) break;
-    i += 2;
-    if (cmd === 'M' || cmd === 'm') {
-      ctx.moveTo(x, y);
-      started = true;
-    } else if (started) {
-      ctx.lineTo(x, y);
-    } else {
-      ctx.moveTo(x, y);
-      started = true;
-    }
-  }
-  ctx.stroke();
-}
+export { decodeSvgDataUrl } from './rubricaRasterCore';
 
 export function isRubricaSvgDataUrl(uri?: string | null): boolean {
   return Boolean(uri?.trim().startsWith('data:image/svg'));
@@ -129,40 +57,15 @@ export function renderRubricaSvgToRasterDataUrl(
   const svg = decodeSvgDataUrl(svgUri);
   if (!svg) return null;
 
-  const { paths, vbW, vbH } = extrairPathsDoSvg(svg);
-  if (paths.length === 0) return null;
-
-  const scale = 1;
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(widthPx * scale));
-  canvas.height = Math.max(1, Math.round(heightPx * scale));
+  canvas.width = Math.max(1, Math.round(widthPx));
+  canvas.height = Math.max(1, Math.round(heightPx));
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
-  ctx.fillStyle = RUBRICA_COR_FUNDO;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  const sx = canvas.width / vbW;
-  const sy = canvas.height / vbH;
-  ctx.save();
-  ctx.scale(sx, sy);
-  ctx.strokeStyle = RUBRICA_COR_TRACO;
-  ctx.lineWidth = Math.max(2.5, 3.5);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  for (const d of paths) {
-    try {
-      if (typeof Path2D !== 'undefined') {
-        ctx.stroke(new Path2D(d));
-      } else {
-        strokePathManual(ctx, d);
-      }
-    } catch {
-      strokePathManual(ctx, d);
-    }
+  if (!desenharRubricaSvgNoContexto(ctx, canvas.width, canvas.height, { svgMarkup: svg })) {
+    return null;
   }
-  ctx.restore();
 
   try {
     if (mime === 'image/webp') {
@@ -265,17 +168,19 @@ export function rubricaParaPersistencia(uri?: string | null): string | undefined
   if (webp?.startsWith('data:image/webp') || webp?.startsWith('data:image/png')) {
     return webp;
   }
-  return renderRubricaSvgToRasterDataUrl(
-    raw,
-    RUBRICA_RASTER_LARGURA,
-    RUBRICA_RASTER_ALTURA,
-    'image/png',
-  ) ?? raw;
+  return (
+    renderRubricaSvgToRasterDataUrl(
+      raw,
+      RUBRICA_RASTER_LARGURA,
+      RUBRICA_RASTER_ALTURA,
+      'image/png',
+    ) ?? raw
+  );
 }
 
 /**
- * Mesma conversão de `rubricaParaPersistencia`, mas cede a UI antes do canvas/`toDataURL`.
- * Use no fluxo “Próximo militar” para não travar o paint.
+ * Mesma conversão de `rubricaParaPersistencia`, preferindo Worker/OffscreenCanvas.
+ * Fallback no thread principal com yields para não travar o paint.
  */
 export async function rubricaParaPersistenciaAsync(
   uri?: string | null,
@@ -285,6 +190,21 @@ export async function rubricaParaPersistenciaAsync(
   if (isRubricaRasterDataUrl(raw)) return raw;
   if (!isRubricaSvgDataUrl(raw)) return raw;
 
+  try {
+    const { rubricaRasterViaWorker } = await import('./rubricaRasterWorkerClient');
+    const viaWorker = await rubricaRasterViaWorker(raw, {
+      widthPx: RUBRICA_RASTER_LARGURA,
+      heightPx: RUBRICA_RASTER_ALTURA,
+      mime: 'image/webp',
+      quality: RUBRICA_WEBP_QUALITY,
+    });
+    if (viaWorker?.startsWith('data:image/webp') || viaWorker?.startsWith('data:image/png')) {
+      return viaWorker;
+    }
+  } catch {
+    // Worker indisponível — segue no UI thread.
+  }
+
   const { yieldToUi } = await import('./yieldToUi');
   await yieldToUi();
   if (typeof requestAnimationFrame === 'function') {
@@ -292,7 +212,6 @@ export async function rubricaParaPersistenciaAsync(
       requestAnimationFrame(() => resolve());
     });
   }
-  // Segundo yield: deixa o paint do próximo militar ocorrer antes de toDataURL.
   await yieldToUi();
   return rubricaParaPersistencia(raw);
 }

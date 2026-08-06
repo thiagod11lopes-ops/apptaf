@@ -404,6 +404,7 @@ export default function AplicarTAFScreen() {
   const suppressPersistProvaRef = useRef(false);
   const provaAtivaRestauradaRef = useRef(false);
   const nipsScrollRef = useRef<ScrollView>(null);
+  const nipsFimAnchorRef = useRef<View>(null);
   const scrollNipsAposAddRef = useRef(false);
 
   /** Após “Aplicar Resultado”: tempos gravados no cadastro. */
@@ -1913,23 +1914,44 @@ export default function AplicarTAFScreen() {
     setNipFeedbackLinhas((prev) => [...prev, null]);
   }, [modoPreCadastro, tipoProva, nipsParticipantes.length]);
 
+  const rolarParaNovoNip = useCallback(() => {
+    nipsScrollRef.current?.scrollToEnd({ animated: true });
+    // PWA/standalone: ScrollView do RN-web às vezes não move; scrollIntoView no âncora é confiável.
+    if (Platform.OS === 'web') {
+      const el = nipsFimAnchorRef.current as unknown as {
+        scrollIntoView?: (opts?: ScrollIntoViewOptions) => void;
+      } | null;
+      el?.scrollIntoView?.({ behavior: 'smooth', block: 'end' });
+    }
+  }, []);
+
   useLayoutEffect(() => {
     if (!scrollNipsAposAddRef.current) return;
     if (corridaEtapa !== 'nips') {
       scrollNipsAposAddRef.current = false;
       return;
     }
-    scrollNipsAposAddRef.current = false;
-    // Mantém o botão "Adicionar" e a lista de NIPs na área visível da página.
-    const scroll = () => nipsScrollRef.current?.scrollToEnd({ animated: true });
+
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
     const raf = requestAnimationFrame(() => {
       InteractionManager.runAfterInteractions(() => {
-        scroll();
-        setTimeout(scroll, Platform.OS === 'web' ? 80 : 40);
+        rolarParaNovoNip();
+        // Layout do novo campo no PWA costuma atrasar mais que no Chrome desktop.
+        for (const ms of [50, 160, 320]) {
+          timers.push(setTimeout(rolarParaNovoNip, ms));
+        }
+        timers.push(
+          setTimeout(() => {
+            scrollNipsAposAddRef.current = false;
+          }, 400),
+        );
       });
     });
-    return () => cancelAnimationFrame(raf);
-  }, [nipsParticipantes.length, corridaEtapa]);
+    return () => {
+      cancelAnimationFrame(raf);
+      timers.forEach(clearTimeout);
+    };
+  }, [nipsParticipantes.length, corridaEtapa, rolarParaNovoNip]);
 
   const removerParticipanteNip = useCallback((index: number) => {
     setErroParticipantes('');
@@ -3522,6 +3544,11 @@ export default function AplicarTAFScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         scrollEnabled={!modalRubricaNatacaoVisible && !fluxoAplicadorVisible}
+        onContentSizeChange={() => {
+          if (scrollNipsAposAddRef.current && corridaEtapa === 'nips') {
+            rolarParaNovoNip();
+          }
+        }}
       >
         <View style={styles.centerWrap}>
           {!mostrarProvas && !mostrarListaPreCadastro && !mostrarFatoresRisco && !mostrarRestritos ? (
@@ -3697,6 +3724,7 @@ export default function AplicarTAFScreen() {
             />
 
             {erroParticipantes ? <Text style={styles.erroText}>{erroParticipantes}</Text> : null}
+            <View ref={nipsFimAnchorRef} collapsable={false} style={styles.nipsFimAnchor} />
             <AplicarTafPrimaryButton
               label="Adicionar Participante"
               variant="outline"
@@ -3876,6 +3904,7 @@ function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColo
   safe: { flex: 1, position: 'relative' as const },
   keyboardRoot: { flex: 1 },
   scrollContentCadastro: { paddingVertical: 12 },
+  nipsFimAnchor: { height: 1, width: '100%' },
   centerWrap: { flex: 1, alignItems: 'stretch' as const, maxWidth: 720, alignSelf: 'center', width: '100%' },
   section: { width: '100%' },
   identTopRow: {

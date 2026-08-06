@@ -18,6 +18,7 @@ import { PREMIUM } from '../../theme/premium';
 import { getAplicarTafBackdrop, getAplicarTafGlass } from './aplicar/aplicarTafTheme';
 import { useAplicarTafLayout } from './aplicar/useAplicarTafLayout';
 import { LogombWatermark } from '../mobile/LogombWatermark';
+import { formatNipInput } from '../../utils/nipFormat';
 
 export type TafProvaRepeticoesModalProps = {
   visible: boolean;
@@ -25,6 +26,7 @@ export type TafProvaRepeticoesModalProps = {
   tituloProva: string;
   nParticipantes: number;
   nomesParticipantes: string[];
+  nipsParticipantes?: string[];
   participantesComFatorRisco?: boolean[];
   onPressNomeParticipante?: (index: number) => void;
   valores: string[];
@@ -43,6 +45,7 @@ export function TafProvaRepeticoesModal({
   tituloProva,
   nParticipantes,
   nomesParticipantes,
+  nipsParticipantes = [],
   participantesComFatorRisco = [],
   onPressNomeParticipante,
   valores,
@@ -88,6 +91,7 @@ export function TafProvaRepeticoesModal({
               >
               {rows.map((index) => {
                 const nome = nomesParticipantes[index] ?? `Militar ${index + 1}`;
+                const nipExibicao = formatNipInput(nipsParticipantes[index] ?? '') || '—';
                 const temFatorRisco = participantesComFatorRisco[index] === true;
                 const nota = getNota(index);
                 const reprov = isNotaReprovado(index);
@@ -119,6 +123,13 @@ export function TafProvaRepeticoesModal({
                           numberOfLines={1}
                         >
                           {nome}
+                        </Text>
+                        <Text
+                          style={[styles.rowNip, { color: theme.textMuted }]}
+                          numberOfLines={1}
+                          accessibilityLabel={`NIP ${nipExibicao}`}
+                        >
+                          {nipExibicao}
                         </Text>
                       </View>
                       <View style={styles.rowFields}>
@@ -250,7 +261,7 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     justifyContent: 'center',
   },
-  rowHead: { flexDirection: 'row', alignItems: 'center', gap: 0 },
+  rowHead: { flexDirection: 'column', alignItems: 'flex-start', gap: 2, minWidth: 0 },
   rowNumSide: {
     width: 32,
     alignSelf: 'stretch',
@@ -259,7 +270,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   rowNumSideText: { fontSize: 16, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  rowNome: { flex: 1, fontSize: 15, fontWeight: '800', lineHeight: 18 },
+  rowNome: { fontSize: 15, fontWeight: '800', lineHeight: 18, minWidth: 0 },
+  rowNip: {
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 13,
+    fontVariant: ['tabular-nums'],
+    minWidth: 0,
+  },
   rowFields: { flexDirection: 'row', gap: 12, alignItems: 'flex-end' },
   inputWrap: { flex: 1, gap: 4 },
   notaWrap: { minWidth: 72, gap: 4, alignItems: 'center' },

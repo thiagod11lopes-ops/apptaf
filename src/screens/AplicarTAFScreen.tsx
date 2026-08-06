@@ -3764,6 +3764,7 @@ export default function AplicarTAFScreen() {
         tituloProva={tituloProvaCurta}
         nParticipantes={nParticipantesConfirmado}
         nomesParticipantes={nomesParticipantesModal}
+        nipsParticipantes={nipsParticipantes}
         participantesComFatorRisco={participantesComFatorRiscoModal}
         onPressNomeParticipante={abrirModalFatoresRiscoParticipante}
         valores={repeticoesParticipantes}

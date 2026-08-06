@@ -45,6 +45,7 @@ function estimarLarguraNomePx(nome: string, fontSize: number): number {
 import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import { LogombWatermark } from '../mobile/LogombWatermark';
 import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
+import { formatNipInput } from '../../utils/nipFormat';
 
 export type TafProvaTempoModalProva = 'corrida' | 'caminhada' | 'natacao' | 'permanencia';
 
@@ -542,23 +543,27 @@ export function TafProvaTempoModal({
    */
   const identityColWidth = useMemo(() => {
     const fontSize = isNativeMobile ? 10 : 11;
+    const nipFontSize = isNativeMobile ? 9 : 10;
     const iconW = permiteDesistencia ? (isNativeMobile ? 28 : 26) : 0;
     const gapIcon = permiteDesistencia ? 8 : 0;
     const padDireita = 6;
-    let maxNome = estimarLarguraNomePx('—', fontSize);
+    let maxTexto = estimarLarguraNomePx('—', fontSize);
     for (let i = 0; i < nParticipantes; i += 1) {
-      maxNome = Math.max(
-        maxNome,
+      const nipFmt = formatNipInput(nipsParticipantes[i] ?? '') || '—';
+      maxTexto = Math.max(
+        maxTexto,
         estimarLarguraNomePx(nomesParticipantes[i] ?? '—', fontSize),
+        estimarLarguraNomePx(nipFmt, nipFontSize),
       );
     }
-    const natural = iconW + gapIcon + maxNome + padDireita;
+    const natural = iconW + gapIcon + maxTexto + padDireita;
     const minW = iconW + gapIcon + 40;
     const maxW = isNativeMobile ? 150 : 220;
     return Math.min(maxW, Math.max(minW, natural));
   }, [
     nParticipantes,
     nomesParticipantes,
+    nipsParticipantes,
     permiteDesistencia,
     isNativeMobile,
   ]);
@@ -580,6 +585,7 @@ export function TafProvaTempoModal({
     >
       {Array.from({ length: nParticipantes }, (_, index) => {
         const nome = nomesParticipantes[index] ?? '—';
+        const nipExibicao = formatNipInput(nipsParticipantes[index] ?? '') || '—';
         const temFatorRisco = participantesComFatorRisco[index] === true;
         const desistiu = permiteDesistencia && (desistenciaParticipantes[index] ?? false);
         const tempoMs = temposMilitaresMs[index];
@@ -679,26 +685,39 @@ export function TafProvaTempoModal({
                       onPress={() => onPressDesistencia(index)}
                     />
                   ) : null}
-                  <Text
-                    accessibilityRole={temFatorRisco ? 'button' : undefined}
-                    onPress={
-                      temFatorRisco && onPressNomeParticipante
-                        ? () => onPressNomeParticipante(index)
-                        : undefined
-                    }
-                    style={[
-                      styles.participantNome,
-                      styles.participantNomeAdaptive,
-                      isNativeMobile ? styles.participantNomeCompact : null,
-                      {
-                        color: desistiu ? theme.loss : temFatorRisco ? '#ea580c' : ui.text,
-                        textDecorationLine: temFatorRisco ? 'underline' : 'none',
-                      },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {nome}
-                  </Text>
+                  <View style={styles.identityTextCol}>
+                    <Text
+                      accessibilityRole={temFatorRisco ? 'button' : undefined}
+                      onPress={
+                        temFatorRisco && onPressNomeParticipante
+                          ? () => onPressNomeParticipante(index)
+                          : undefined
+                      }
+                      style={[
+                        styles.participantNome,
+                        styles.participantNomeAdaptive,
+                        isNativeMobile ? styles.participantNomeCompact : null,
+                        {
+                          color: desistiu ? theme.loss : temFatorRisco ? '#ea580c' : ui.text,
+                          textDecorationLine: temFatorRisco ? 'underline' : 'none',
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {nome}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.participantNip,
+                        isNativeMobile ? styles.participantNipCompact : null,
+                        { color: desistiu ? theme.loss : theme.textMuted },
+                      ]}
+                      numberOfLines={1}
+                      accessibilityLabel={`NIP ${nipExibicao}`}
+                    >
+                      {nipExibicao}
+                    </Text>
+                  </View>
                 </View>
 
                 <View
@@ -1071,12 +1090,30 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
   },
+  identityTextCol: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    justifyContent: 'center',
+    gap: 1,
+  },
   participantNomeAdaptive: {
     flexShrink: 1,
-    flexGrow: 1,
+    flexGrow: 0,
     flexBasis: 'auto',
     lineHeight: 13,
     minWidth: 0,
+  },
+  participantNip: {
+    fontSize: 10,
+    fontWeight: '600',
+    lineHeight: 12,
+    fontVariant: ['tabular-nums'],
+    minWidth: 0,
+  },
+  participantNipCompact: {
+    fontSize: 9,
+    lineHeight: 11,
   },
   rowDivider: {
     width: 1,

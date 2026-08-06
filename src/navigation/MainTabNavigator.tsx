@@ -12,9 +12,11 @@ import EstatisticasScreen from '../screens/EstatisticasScreen';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 /**
- * O bottom-tabs no web mantém abas visitadas com absoluteFill + zIndex -1.
- * Com fundo transparente do AppShell, as telas de baixo vazam por cima umas das outras.
- * Aqui a aba sem foco some de verdade (display:none / sem filhos).
+ * No web, react-native-screens fica desligado por padrão → abas inativas só
+ * recebem zIndex:-1 e vazam pelo fundo transparente. Este gate garante
+ * display:none + sem conteúdo quando a aba não está focada.
+ *
+ * Importante: `screenLayout` é prop do Navigator (não de screenOptions).
  */
 function TabSceneVisibilityGate({ children }: { children: React.ReactNode }) {
   const focused = useIsFocused();
@@ -26,7 +28,9 @@ function TabSceneVisibilityGate({ children }: { children: React.ReactNode }) {
         pointerEvents="none"
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        {...(Platform.OS === 'web' ? ({ inert: true } as object) : null)}
+        {...(Platform.OS === 'web'
+          ? ({ hidden: true, inert: true } as object)
+          : null)}
       />
     );
   }
@@ -42,13 +46,15 @@ export function MainTabNavigator() {
     <Tab.Navigator
       tabBar={() => null}
       detachInactiveScreens
+      screenLayout={({ children }) => (
+        <TabSceneVisibilityGate>{children}</TabSceneVisibilityGate>
+      )}
       screenOptions={{
         headerShown: false,
         lazy: true,
         freezeOnBlur: true,
-        screenLayout: ({ children }) => (
-          <TabSceneVisibilityGate>{children}</TabSceneVisibilityGate>
-        ),
+        // Reforço: cena inativa some mesmo se o Screen nativo falhar no web.
+        sceneStyle: Platform.OS === 'web' ? styles.sceneWeb : undefined,
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
@@ -63,12 +69,18 @@ export function MainTabNavigator() {
 const styles = StyleSheet.create({
   visibleScene: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   hiddenScene: {
-    ...StyleSheet.absoluteFillObject,
-    // web: some o nó da árvore visual; nativo: sem área/opacidade
-    ...(Platform.OS === 'web'
-      ? ({ display: 'none' } as object)
-      : { opacity: 0, overflow: 'hidden' }),
+    flex: 0,
+    height: 0,
+    width: 0,
+    overflow: 'hidden',
+    opacity: 0,
+    ...(Platform.OS === 'web' ? ({ display: 'none' } as object) : null),
+  },
+  sceneWeb: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
 });

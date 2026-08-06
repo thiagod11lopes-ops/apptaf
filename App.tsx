@@ -4,6 +4,7 @@ import { View, Platform, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { enableScreens } from 'react-native-screens';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { OfflineSyncProvider } from './src/contexts/OfflineSyncContext';
@@ -19,6 +20,15 @@ import { isAdminHistoricoAccess } from './src/utils/adminHistoricoAccess';
 import { useAppFonts } from './src/hooks/useAppFonts';
 import { PREMIUM } from './src/theme/premium';
 import { lockWebViewportZoom } from './src/utils/lockWebViewportZoom';
+
+/**
+ * No web o default de react-native-screens é OFF — as abas inativas ficam só com
+ * zIndex:-1 e aparecem umas sobre as outras (fundo transparente). Ligar screens
+ * ativa display:none nas cenas inativas (Screen.web.tsx).
+ */
+if (Platform.OS === 'web') {
+  enableScreens(true);
+}
 
 function AppRoot() {
   const { isDark, theme, themeMode } = useTheme();

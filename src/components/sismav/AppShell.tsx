@@ -4,11 +4,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { SidebarNav } from './SidebarNav';
-import type { RootStackParamList } from '../../navigation/types';
+import type { AppRouteName } from '../../navigation/types';
 
 type Props = {
   children: React.ReactNode;
-  activeRoute: keyof RootStackParamList;
+  activeRoute: AppRouteName;
   fullWidth?: boolean;
 };
 

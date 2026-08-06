@@ -1,3 +1,4 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 
 export type ResultadoCorridaItem = {
@@ -27,20 +28,40 @@ export type ResultadoCorridaItem = {
   voltasDesistencia?: number;
 };
 
-export type RootStackParamList = {
+/** Abas principais (keep-alive). */
+export type MainTabParamList = {
   Home: undefined;
-  Normas: undefined;
   Cadastro: { abrirPlanilhaIncompletos?: boolean } | undefined;
+  AplicarTAF: undefined;
+  Resultados: undefined;
+  Estatisticas: undefined;
+};
+
+export type RootStackParamList = {
+  MainTabs: NavigatorScreenParams<MainTabParamList>;
+  Normas: undefined;
   AplicacaoTAF: undefined;
   CadastroAplicador: undefined;
-  AplicarTAF: undefined;
-  Estatisticas: undefined;
-  Resultados: undefined;
   Configuracoes: undefined;
   Login: undefined;
   CadastrarResultados: {
     resultados: ResultadoCorridaItem[];
-    returnTo?: keyof RootStackParamList;
+    returnTo?: AppRouteName;
     aplicadorAssinatura?: AplicadorAssinaturaResumo;
   };
 };
+
+/** Rotas usadas pela chrome (barra/sidebar) e navigateTab. */
+export type AppRouteName = keyof MainTabParamList | keyof RootStackParamList;
+
+export const MAIN_TAB_ROUTES: ReadonlySet<keyof MainTabParamList> = new Set([
+  'Home',
+  'Cadastro',
+  'AplicarTAF',
+  'Resultados',
+  'Estatisticas',
+]);
+
+export function isMainTabRoute(name: string): name is keyof MainTabParamList {
+  return MAIN_TAB_ROUTES.has(name as keyof MainTabParamList);
+}

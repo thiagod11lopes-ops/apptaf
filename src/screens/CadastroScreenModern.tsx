@@ -34,7 +34,7 @@ import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold'
 import { TafGlassPanel } from '../components/mobile/TafTabChrome';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { useAplicarTafLayout } from '../components/taf/aplicar/useAplicarTafLayout';
-import type { RootStackParamList } from '../navigation/types';
+import type { MainTabParamList, RootStackParamList } from '../navigation/types';
 type Categoria = 'Oficiais' | 'Praças';
 
 type CadastroItem = {
@@ -90,8 +90,8 @@ export default function CadastroScreenModern() {
   const { theme, fontsLoaded } = useTheme();
   const { isNarrowPhone } = useAplicarTafLayout();
   const { isAuthorizedMember, isBoss } = useAuth();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Cadastro'>>();
-  const route = useRoute<RouteProp<RootStackParamList, 'Cadastro'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<MainTabParamList, 'Cadastro'>>();
   const ts = theme.textStyles;
   const regularFont = fontFamily('regular', fontsLoaded);
   const boldFont = fontFamily('bold', fontsLoaded);

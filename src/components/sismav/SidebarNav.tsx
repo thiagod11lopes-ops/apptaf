@@ -11,7 +11,7 @@ import {
   User,
   UserRoundCheck,
 } from 'lucide-react-native';
-import type { RootStackParamList } from '../../navigation/types';
+import type { AppRouteName } from '../../navigation/types';
 import { navigateTab } from '../../navigation/navigationRef';
 import { PressableScale } from '../premium/PressableScale';
 import { useAccountCloudLabel } from '../../hooks/useAccountCloudLabel';
@@ -31,7 +31,7 @@ const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
 ];
 
 type Props = {
-  activeRoute: keyof RootStackParamList;
+  activeRoute: AppRouteName;
 };
 
 export function SidebarNav({ activeRoute }: Props) {

@@ -1,14 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Platform, Image, TouchableOpacity, TextInput } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from '../components/Card';
 import { ChevronLeft } from 'lucide-react-native';
 import { LabelNip } from '../components/LabelNip';
+import { navigateTab } from '../navigation/navigationRef';
 
 export default function CadastroScreen() {
   const { theme } = useTheme();
-  const navigation = useNavigation();
   const [categoria, setCategoria] = useState<'Oficiais' | 'Praças' | ''>('');
   const [oficialSelecionado, setOficialSelecionado] = useState<string>('');
   const [nip, setNip] = useState<string>('');
@@ -48,7 +47,7 @@ export default function CadastroScreen() {
       <View style={styles.foreground}>
         <View style={styles.topBar}>
           <TouchableOpacity
-            onPress={() => navigation.navigate('Home' as never)}
+            onPress={() => navigateTab('Home')}
             style={styles.backBtn}
             accessibilityLabel="Voltar para Home"
           >

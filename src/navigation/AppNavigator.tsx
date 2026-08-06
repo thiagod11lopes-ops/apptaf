@@ -12,20 +12,17 @@ import { navigationRef, getCurrentRouteName, navigateTab } from './navigationRef
 import { AuthLoginRouteGate } from './AuthLoginRouteGate';
 import { hasPendingAuthCallback } from '../services/firebase/googleAuth';
 import { peekProvaAtivaSession } from '../services/provaAtivaSessionStorage';
-import type { RootStackParamList } from './types';
+import type { AppRouteName, RootStackParamList } from './types';
+import { isMainTabRoute } from './types';
+import { MainTabNavigator } from './MainTabNavigator';
 
 export type { ResultadoCorridaItem, RootStackParamList } from './types';
 
-import HomeScreen from '../screens/HomeScreen';
 import NormasScreen from '../screens/NormasScreen';
-import CadastroScreenModern from '../screens/CadastroScreenModern';
 import AplicacaoTAFScreen from '../screens/AplicacaoTAFScreen';
 import CadastroAplicadorScreen from '../screens/CadastroAplicadorScreen';
-import AplicarTAFScreen from '../screens/AplicarTAFScreen';
-import EstatisticasScreen from '../screens/EstatisticasScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
 import LoginScreen from '../screens/LoginScreen';
-import ResultadosScreen from '../screens/ResultadosScreen';
 import CadastrarResultadosScreen from '../screens/CadastrarResultadosScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -36,13 +33,9 @@ export default function AppNavigator() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { useSidebarShell } = useDeviceLayout();
-  const [activeRoute, setActiveRoute] = useState<keyof RootStackParamList>('Home');
+  const [activeRoute, setActiveRoute] = useState<AppRouteName>('Home');
   const topChromeExtra =
-    activeRoute === 'Home' ||
-    activeRoute === 'Cadastro' ||
-    activeRoute === 'AplicarTAF' ||
-    activeRoute === 'Resultados' ||
-    activeRoute === 'Estatisticas' ||
+    isMainTabRoute(activeRoute) ||
     activeRoute === 'Normas' ||
     activeRoute === 'AplicacaoTAF' ||
     activeRoute === 'CadastroAplicador'
@@ -82,6 +75,11 @@ export default function AppNavigator() {
     },
   };
 
+  const fullWidth =
+    activeRoute === 'Cadastro' ||
+    activeRoute === 'CadastroAplicador' ||
+    activeRoute === 'AplicarTAF';
+
   return (
     <NavigationContainer
       ref={navigationRef}
@@ -92,12 +90,9 @@ export default function AppNavigator() {
       <AuthLoginRouteGate />
       <View style={styles.shell}>
         <View style={styles.shellForeground}>
-        <AppShell
-          activeRoute={activeRoute}
-          fullWidth={activeRoute === 'Cadastro' || activeRoute === 'CadastroAplicador' || activeRoute === 'AplicarTAF'}
-        >
+        <AppShell activeRoute={activeRoute} fullWidth={fullWidth}>
           <Stack.Navigator
-            initialRouteName="Home"
+            initialRouteName="MainTabs"
             screenOptions={{
               headerShown: false,
               contentStyle: {
@@ -109,12 +104,10 @@ export default function AppNavigator() {
               animation: Platform.OS === 'web' ? 'fade' : 'slide_from_right',
             }}
           >
-          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="MainTabs" component={MainTabNavigator} />
           <Stack.Screen name="Normas" component={NormasScreen} />
-          <Stack.Screen name="Cadastro" component={CadastroScreenModern} />
           <Stack.Screen name="AplicacaoTAF" component={AplicacaoTAFScreen} />
           <Stack.Screen name="CadastroAplicador" component={CadastroAplicadorScreen} />
-          <Stack.Screen name="AplicarTAF" component={AplicarTAFScreen} />
           <Stack.Screen
             name="CadastrarResultados"
             component={CadastrarResultadosScreen}
@@ -122,8 +115,6 @@ export default function AppNavigator() {
               contentStyle: { flex: 1, paddingBottom: 0, backgroundColor: 'transparent' },
             }}
           />
-          <Stack.Screen name="Estatisticas" component={EstatisticasScreen} />
-          <Stack.Screen name="Resultados" component={ResultadosScreen} />
           <Stack.Screen
             name="Configuracoes"
             component={ConfiguracoesScreen}

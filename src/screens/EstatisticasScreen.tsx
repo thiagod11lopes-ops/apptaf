@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -38,15 +38,17 @@ function pctHint(val: number | null, suffix = '%'): string | undefined {
 export default function EstatisticasScreen() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
-  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ReturnType<typeof calcularEstatisticasTaf> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const hasLoadedOnceRef = useRef(false);
   const [tab, setTab] = useState<ViewTab>('geral');
 
   const carregar = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) setLoading(true);
     try {
       const [lista, sessoes] = await Promise.all([getAllCadastros(), getAllSessoesAplicacao()]);
       setStats(calcularEstatisticasTaf(lista, sessoes));
+      hasLoadedOnceRef.current = true;
     } finally {
       setLoading(false);
     }

@@ -16,6 +16,7 @@ import { Card } from '../components/Card';
 import { AplicadorAssinaturaBloco } from '../components/AplicadorAssinaturaBloco';
 import { SalvarPdfFeedbackModal } from '../components/sismav/SalvarPdfFeedbackModal';
 import type { RootStackParamList } from '../navigation/AppNavigator';
+import { navigateTab } from '../navigation/navigationRef';
 import {
   cabecalhoColunaProvaResultados,
   exportResumoAplicacaoPdf,
@@ -122,7 +123,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
         <View style={styles.centerWrap}>
           <View style={styles.headerRow}>
             <TouchableOpacity
-              onPress={() => navigation.navigate(returnTo)}
+              onPress={() => navigateTab(returnTo)}
               style={styles.backBtn}
               accessibilityLabel="Voltar"
             >

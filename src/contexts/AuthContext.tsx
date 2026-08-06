@@ -855,7 +855,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     confirmCloudDisplayReady();
     try {
       const { clearHomeResumoCache } = await import('../utils/homeResumoIndexedDb');
+      const { clearCadastrosListCache } = await import('../services/cadastrosListCache');
+      const { clearSessoesListCache } = await import('../services/sessoesListCache');
       clearHomeResumoCache();
+      clearCadastrosListCache();
+      clearSessoesListCache();
     } catch {
       /* ignore */
     }

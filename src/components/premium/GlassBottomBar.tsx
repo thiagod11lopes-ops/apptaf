@@ -8,7 +8,7 @@ import {
   BarChart3,
   ListChecks,
 } from 'lucide-react-native';
-import type { RootStackParamList } from '../../navigation/types';
+import type { AppRouteName } from '../../navigation/types';
 import { navigateTab } from '../../navigation/navigationRef';
 import { PressableScale } from './PressableScale';
 import { TabBarIcon } from './TabBarIcon';
@@ -27,10 +27,10 @@ const TABS: { id: TabId; label: string; icon: typeof Home }[] = [
   { id: 'Estatisticas', label: 'Estatísticas', icon: BarChart3 },
 ];
 
-const HIDDEN_ROUTES: (keyof RootStackParamList)[] = ['CadastrarResultados', 'Configuracoes', 'Login'];
+const HIDDEN_ROUTES: AppRouteName[] = ['CadastrarResultados', 'Configuracoes', 'Login', 'MainTabs'];
 
 type Props = {
-  activeRoute: keyof RootStackParamList;
+  activeRoute: AppRouteName;
 };
 
 export function GlassBottomBar({ activeRoute }: Props) {

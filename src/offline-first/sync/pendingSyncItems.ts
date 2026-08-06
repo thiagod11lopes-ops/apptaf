@@ -8,7 +8,14 @@ import type {
   SessaoRecord,
   SyncStatus,
 } from '../types';
-import { isUnsyncedLocalStatus } from './syncStatus';
+import {
+  LEGACY_PENDING,
+  STATUS_CONFLICT,
+  STATUS_DELETED,
+  STATUS_LOCAL,
+  STATUS_UPDATED,
+  isUnsyncedLocalStatus,
+} from './syncStatus';
 
 export type PendingSyncItem = {
   collection: CollectionName;
@@ -32,6 +39,15 @@ export type PendingSyncSummary = {
   authorizedEmails: number;
 };
 
+/** Status locais que precisam subir — evita full-scan de synced. */
+const UNSYNCED_STATUSES: readonly SyncStatus[] = [
+  STATUS_LOCAL,
+  STATUS_UPDATED,
+  STATUS_DELETED,
+  LEGACY_PENDING,
+  STATUS_CONFLICT,
+];
+
 function toPendingItem(
   collection: CollectionName,
   row: CadastroRecord | SessaoRecord | AplicadorRecord | PreCadastroRecord,
@@ -39,10 +55,10 @@ function toPendingItem(
   return {
     collection,
     id: row.id,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    version: row.version,
-    deviceId: row.deviceId,
+    createdAt: row.createdAt ?? 0,
+    updatedAt: row.updatedAt ?? 0,
+    version: row.version ?? 0,
+    deviceId: row.deviceId ?? '',
     syncStatus: row.syncStatus,
     record: row,
   };
@@ -52,6 +68,22 @@ function ownerUidsForQuery(ownerUid: string): string[] {
   if (!ownerUid.trim()) return [];
   if (ownerUid === ANONYMOUS_OWNER) return [ANONYMOUS_OWNER];
   return [ownerUid, ANONYMOUS_OWNER];
+}
+
+async function queryUnsyncedByOwnerStatus<T extends CadastroRecord | SessaoRecord | AplicadorRecord>(
+  table: {
+    where: (index: string) => {
+      equals: (key: [string, SyncStatus]) => { toArray: () => Promise<T[]> };
+    };
+  },
+  ownerUid: string,
+): Promise<T[]> {
+  const batches = await Promise.all(
+    UNSYNCED_STATUSES.map((status) =>
+      table.where('[ownerUid+syncStatus]').equals([ownerUid, status]).toArray(),
+    ),
+  );
+  return batches.flat();
 }
 
 /** Retorna registros locais ainda não sincronizados (local, updated, deleted, conflict, pending). */
@@ -75,30 +107,33 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
   let cadastros = 0;
   let sessoes = 0;
   let aplicadores = 0;
-  let pre_cadastros = 0;
+  const pre_cadastros = 0;
 
   for (const uid of owners) {
     const [cadRows, sessRows, appRows] = await Promise.all([
-      db.cadastros.where('ownerUid').equals(uid).toArray(),
-      db.sessoes.where('ownerUid').equals(uid).toArray(),
-      db.aplicadores.where('ownerUid').equals(uid).toArray(),
+      queryUnsyncedByOwnerStatus(db.cadastros, uid),
+      queryUnsyncedByOwnerStatus(db.sessoes, uid),
+      queryUnsyncedByOwnerStatus(db.aplicadores, uid),
     ]);
 
-    for (const row of cadRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
+    for (const row of cadRows) {
+      if (!isUnsyncedLocalStatus(row.syncStatus)) continue;
       const key = `cadastros:${row.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
       items.push(toPendingItem('cadastros', row));
       cadastros += 1;
     }
-    for (const row of sessRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
+    for (const row of sessRows) {
+      if (!isUnsyncedLocalStatus(row.syncStatus)) continue;
       const key = `sessoes:${row.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
       items.push(toPendingItem('sessoes', row));
       sessoes += 1;
     }
-    for (const row of appRows.filter((r) => isUnsyncedLocalStatus(r.syncStatus))) {
+    for (const row of appRows) {
+      if (!isUnsyncedLocalStatus(row.syncStatus)) continue;
       const key = `aplicadores:${row.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -109,14 +144,13 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
 
   items.sort((a, b) => a.updatedAt - b.updatedAt);
 
-  // E-mails autorizados pendentes contam como pendência de envio, mas não vão
-  // para items — são enviados por pushPendingAuthorizedEmails, não pela SyncQueue.
   let authorizedEmails = 0;
   for (const uid of owners) {
-    const emailRows = await db.authorizedEmails.where('ownerUid').equals(uid).toArray();
-    authorizedEmails += emailRows.filter(
-      (r) => r.syncStatus === 'local' || r.syncStatus === 'deleted',
-    ).length;
+    const [localEmails, deletedEmails] = await Promise.all([
+      db.authorizedEmails.where('[ownerUid+syncStatus]').equals([uid, 'local']).toArray(),
+      db.authorizedEmails.where('[ownerUid+syncStatus]').equals([uid, 'deleted']).toArray(),
+    ]);
+    authorizedEmails += localEmails.length + deletedEmails.length;
   }
 
   return {

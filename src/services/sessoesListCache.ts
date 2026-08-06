@@ -1,21 +1,20 @@
-import type { CadastroItemPersist } from './cadastrosIndexedDb';
+import type { SessaoAplicacaoTaf } from './resultadosAplicadosIndexedDb';
 import { getCachedDataOwnerUid } from './firebase/authUid';
 import { subscribeDataChanged } from '../offline-first/sync/SyncEngine';
-import { isDemoCadastroId } from '../utils/gatherSystemBackupData';
+import { isDemoSessaoId } from '../utils/gatherSystemBackupData';
 
-type CadastrosListCacheEntry = {
+type SessoesListCacheEntry = {
   ownerUid: string | null;
-  /** Lista completa (inclui demo). Filtro `includeDemo` aplica na leitura. */
-  items: CadastroItemPersist[];
+  items: SessaoAplicacaoTaf[];
   dirty: boolean;
 };
 
-let cache: CadastrosListCacheEntry | null = null;
+let cache: SessoesListCacheEntry | null = null;
 let cacheGeneration = 0;
 let inFlight: {
   ownerUid: string | null;
   generation: number;
-  promise: Promise<CadastroItemPersist[]>;
+  promise: Promise<SessaoAplicacaoTaf[]>;
 } | null = null;
 let invalidationSubscribed = false;
 
@@ -23,16 +22,15 @@ function ownerCacheKey(ownerUid: string | null): string | null {
   return ownerUid?.trim() ? ownerUid.trim() : getCachedDataOwnerUid();
 }
 
-function ensureCadastrosListInvalidation(): void {
+function ensureSessoesListInvalidation(): void {
   if (invalidationSubscribed) return;
   invalidationSubscribed = true;
   subscribeDataChanged(() => {
-    invalidateCadastrosListCache();
-  }, { scopes: ['cadastros'] });
+    invalidateSessoesListCache();
+  }, { scopes: ['sessoes'] });
 }
 
-/** Soft-invalidate — mantém lista stale para a UI. */
-export function invalidateCadastrosListCache(): void {
+export function invalidateSessoesListCache(): void {
   cacheGeneration += 1;
   inFlight = null;
   if (cache) {
@@ -40,49 +38,39 @@ export function invalidateCadastrosListCache(): void {
   }
 }
 
-export function clearCadastrosListCache(): void {
+export function clearSessoesListCache(): void {
   cache = null;
   cacheGeneration += 1;
   inFlight = null;
 }
 
-export function isCadastrosListCacheWarm(opts?: { includeDemo?: boolean }): boolean {
+export function isSessoesListCacheWarm(): boolean {
   const ownerUid = ownerCacheKey(null);
-  if (!cache || cache.ownerUid !== ownerUid || cache.dirty) return false;
-  void opts;
-  return true;
+  return Boolean(cache && cache.ownerUid === ownerUid && !cache.dirty);
 }
 
-/** Leitura síncrona — inclui dirty (stale-while-revalidate). */
-export function peekCadastrosListCache(opts?: {
+export function peekSessoesListCache(opts?: {
   includeDemo?: boolean;
-}): CadastroItemPersist[] | null {
+}): SessaoAplicacaoTaf[] | null {
   const ownerUid = ownerCacheKey(null);
   if (!cache || cache.ownerUid !== ownerUid) return null;
   const items = opts?.includeDemo
     ? cache.items
-    : cache.items.filter((c) => !isDemoCadastroId(c.id));
+    : cache.items.filter((s) => !isDemoSessaoId(s.id));
   return items.slice();
 }
 
-function filterByDemo(
-  items: CadastroItemPersist[],
-  includeDemo: boolean,
-): CadastroItemPersist[] {
+function filterByDemo(items: SessaoAplicacaoTaf[], includeDemo: boolean): SessaoAplicacaoTaf[] {
   if (includeDemo) return items.slice();
-  return items.filter((c) => !isDemoCadastroId(c.id));
+  return items.filter((s) => !isDemoSessaoId(s.id));
 }
 
-/**
- * Resolve lista com cache em memória por owner.
- * Cache quente: sem I/O. Dirty/miss: refetch (coalescido).
- */
-export async function getCadastrosListCached(
+export async function getSessoesListCached(
   ownerUid: string | null,
   opts: { includeDemo?: boolean } | undefined,
-  fetchAllIncludingDemo: (uid: string | null) => Promise<CadastroItemPersist[]>,
-): Promise<CadastroItemPersist[]> {
-  ensureCadastrosListInvalidation();
+  fetchAllIncludingDemo: (uid: string | null) => Promise<SessaoAplicacaoTaf[]>,
+): Promise<SessaoAplicacaoTaf[]> {
+  ensureSessoesListInvalidation();
 
   const includeDemo = opts?.includeDemo === true;
   const key = ownerCacheKey(ownerUid);
@@ -99,7 +87,7 @@ export async function getCadastrosListCached(
   const generation = cacheGeneration;
   const promise = fetchAllIncludingDemo(key).then((items) => {
     if (generation !== cacheGeneration) {
-      return getCadastrosListCached(ownerUid, { includeDemo: true }, fetchAllIncludingDemo);
+      return getSessoesListCached(ownerUid, { includeDemo: true }, fetchAllIncludingDemo);
     }
     cache = { ownerUid: key, items, dirty: false };
     if (inFlight?.promise === promise) inFlight = null;

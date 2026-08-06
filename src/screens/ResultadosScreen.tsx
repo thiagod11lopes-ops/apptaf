@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, type CompositeNavigationProp } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ChevronRight, Trash2, X, ArrowLeftRight } from 'lucide-react-native';
@@ -21,7 +22,7 @@ import { ResultadosConsultaPanel } from '../components/ResultadosConsultaPanel';
 import { ResultadosPendenciaParcialPanel } from '../components/ResultadosPendenciaParcialPanel';
 import { ResultadosConcluidoPanel } from '../components/ResultadosConcluidoPanel';
 import { ResultadosGeralPanel } from '../components/ResultadosGeralPanel';
-import type { RootStackParamList } from '../navigation/types';
+import type { MainTabParamList, RootStackParamList } from '../navigation/types';
 import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import {
   getAllSessoesAplicacao,
@@ -62,7 +63,10 @@ import { MobileScreenScaffold } from '../components/mobile/MobileScreenScaffold'
 import { TafCenteredTabHeader, TafGlassPanel } from '../components/mobile/TafTabChrome';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 
-type Nav = NativeStackNavigationProp<RootStackParamList, 'Resultados'>;
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Resultados'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 type AbaResultados =
   | 'historico'
   | 'consulta'
@@ -83,7 +87,9 @@ export default function ResultadosScreen() {
   const [historicoFiltroMilitar, setHistoricoFiltroMilitar] = useState<FiltroHistoricoMilitar | null>(
     null,
   );
-  const [carregando, setCarregando] = useState(true);
+  /** Só spinner no cold start — foco com dados já carregados não limpa a tela. */
+  const [carregando, setCarregando] = useState(() => sessoes.length === 0 && cadastros.length === 0);
+  const hasLoadedOnceRef = useRef(false);
   const [sessaoParaExcluir, setSessaoParaExcluir] = useState<SessaoHistoricoAgrupada | null>(null);
   const [sessaoDetalhe, setSessaoDetalhe] = useState<SessaoHistoricoAgrupada | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -91,7 +97,8 @@ export default function ResultadosScreen() {
   const ultimoToqueCardRef = useRef<{ id: string; at: number } | null>(null);
 
   const carregar = useCallback(() => {
-    setCarregando(true);
+    const cold = !hasLoadedOnceRef.current;
+    if (cold) setCarregando(true);
     Promise.all([
       getAllCadastros(),
       getAllSessoesAplicacao({ includeDemo: true }),
@@ -102,6 +109,7 @@ export default function ResultadosScreen() {
         setSessoes(
           unificarSessoesComCadastroRegistrador(sessoesLista, cadastrosLista, sessoesExcluidas),
         );
+        hasLoadedOnceRef.current = true;
       })
       .catch((error) => {
         console.warn('[historico] falha ao carregar sessões:', error);

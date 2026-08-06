@@ -1,26 +1,51 @@
-import { createNavigationContainerRef } from '@react-navigation/native';
-import type { RootStackParamList } from './types';
+import {
+  createNavigationContainerRef,
+  type NavigatorScreenParams,
+} from '@react-navigation/native';
+import {
+  isMainTabRoute,
+  type AppRouteName,
+  type MainTabParamList,
+  type RootStackParamList,
+} from './types';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
-export function navigateTab<Name extends keyof RootStackParamList>(
+export function navigateTab<Name extends AppRouteName>(
   name: Name,
-  params?: RootStackParamList[Name],
+  params?: Name extends keyof MainTabParamList
+    ? MainTabParamList[Name]
+    : Name extends keyof RootStackParamList
+      ? RootStackParamList[Name]
+      : never,
 ) {
   if (!navigationRef.isReady()) return;
+
+  if (isMainTabRoute(name)) {
+    const tabName = name as keyof MainTabParamList;
+    const tabParams = params as MainTabParamList[typeof tabName] | undefined;
+    const nested: NavigatorScreenParams<MainTabParamList> =
+      tabParams !== undefined
+        ? ({ screen: tabName, params: tabParams } as NavigatorScreenParams<MainTabParamList>)
+        : ({ screen: tabName } as NavigatorScreenParams<MainTabParamList>);
+    navigationRef.navigate('MainTabs', nested);
+    return;
+  }
+
   if (params !== undefined) {
     (
       navigationRef.navigate as (
-        n: Name,
-        p: RootStackParamList[Name],
+        n: Exclude<Name, keyof MainTabParamList>,
+        p: RootStackParamList[Exclude<Name, keyof MainTabParamList>],
       ) => void
-    )(name, params);
+    )(name as Exclude<Name, keyof MainTabParamList>, params as never);
   } else {
     navigationRef.navigate(name as never);
   }
 }
 
-export function getCurrentRouteName(): keyof RootStackParamList {
+/** Nome da rota folha (aba ou stack) — usado pela chrome. */
+export function getCurrentRouteName(): AppRouteName {
   const name = navigationRef.getCurrentRoute()?.name;
-  return (name ?? 'Home') as keyof RootStackParamList;
+  return (name ?? 'Home') as AppRouteName;
 }

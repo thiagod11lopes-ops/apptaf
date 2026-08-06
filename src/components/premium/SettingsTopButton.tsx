@@ -1,15 +1,15 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { RootStackParamList } from '../../navigation/types';
+import type { AppRouteName } from '../../navigation/types';
 import { TopActionIcons } from './TopActionIcons';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 
 type Props = {
-  activeRoute: keyof RootStackParamList;
+  activeRoute: AppRouteName;
 };
 
-const HIDE_ON: (keyof RootStackParamList)[] = [
+const HIDE_ON: AppRouteName[] = [
   'Home',
   'Cadastro',
   'AplicarTAF',
@@ -21,6 +21,7 @@ const HIDE_ON: (keyof RootStackParamList)[] = [
   'Configuracoes',
   'CadastrarResultados',
   'Login',
+  'MainTabs',
 ];
 
 export function SettingsTopButton({ activeRoute }: Props) {

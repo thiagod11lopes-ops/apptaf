@@ -14,7 +14,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOfflineSyncState } from '../../contexts/OfflineSyncContext';
 import { navigateTab } from '../../navigation/navigationRef';
-import type { RootStackParamList } from '../../navigation/types';
+import type { AppRouteName, RootStackParamList } from '../../navigation/types';
 import { useE2eEncryptionStatus } from '../../hooks/useE2eEncryptionStatus';
 import { ActionIconTooltip } from './ActionIconTooltip';
 import { PressableScale } from './PressableScale';
@@ -57,7 +57,7 @@ const TOP_LINKS: {
 ];
 
 type Props = {
-  activeRoute: keyof RootStackParamList;
+  activeRoute: AppRouteName;
   /** Layout da faixa abaixo do subtítulo na Home */
   inline?: boolean;
   /** Centraliza os ícones na faixa (Home). */

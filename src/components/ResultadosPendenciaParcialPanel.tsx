@@ -8,11 +8,10 @@ import {
   Alert,
   TouchableOpacity,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
-import { getAllCadastros } from '../services/cadastrosIndexedDb';
-import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import { montarListaPendencias, type PendenciaTafItem, filtrarPendenciasParciais, montarListaPendenciasTotais } from '../utils/pendenciasTafHistorico';
 import {
   CFN_CHIP_LABELS,
@@ -59,62 +58,54 @@ type Props = {
   normaTaf?: NormaTafVista;
   /** `parcial` = ao menos um teste; `total` = nenhum teste. */
   modo?: ModoPendenciaPainel;
+  cadastros: CadastroItemPersist[];
+  sessoes: SessaoAplicacaoTaf[];
+  carregandoDataset?: boolean;
 };
 
 export function ResultadosPendenciaParcialPanel({
   normaTaf = 'armada',
   modo = 'parcial',
+  cadastros,
+  sessoes,
+  carregandoDataset = false,
 }: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const t = theme.tokens;
 
-  const [lista, setLista] = useState<PendenciaTafItem[]>([]);
-  const [listaCfn, setListaCfn] = useState<PendenciaCfnItem[]>([]);
-  const [carregando, setCarregando] = useState(true);
   const [gerandoPdf, setGerandoPdf] = useState(false);
 
-  const carregar = useCallback(() => {
-    setCarregando(true);
-    Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
-      .then(([cadastros, sessoes]) => {
-        if (normaTaf === 'cfn') {
-          setListaCfn(
-            modo === 'total'
-              ? montarListaPendenciasTotaisCfn(sessoes, cadastros)
-              : filtrarPendenciasParciaisCfn(montarListaPendenciasCfn(sessoes, cadastros)),
-          );
-          setLista([]);
-          return;
-        }
-        if (modo === 'total') {
-          setLista(montarListaPendenciasTotais(sessoes, cadastros));
-          setListaCfn([]);
-          return;
-        }
-        const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
-          sessoes,
-          cadastros,
-          'armada',
-        );
-        setLista(filtrarPendenciasParciais(montarListaPendencias(sessoesNorma, cadastrosNorma)));
-        setListaCfn([]);
-      })
-      .catch(() => {
-        setLista([]);
-        setListaCfn([]);
-      })
-      .finally(() => setCarregando(false));
-  }, [normaTaf, modo]);
-
-  useFocusEffect(
-    useCallback(() => {
-      carregar();
-    }, [carregar]),
-  );
+  const { lista, listaCfn } = useMemo(() => {
+    if (normaTaf === 'cfn') {
+      return {
+        lista: [] as PendenciaTafItem[],
+        listaCfn:
+          modo === 'total'
+            ? montarListaPendenciasTotaisCfn(sessoes, cadastros)
+            : filtrarPendenciasParciaisCfn(montarListaPendenciasCfn(sessoes, cadastros)),
+      };
+    }
+    if (modo === 'total') {
+      return {
+        lista: montarListaPendenciasTotais(sessoes, cadastros),
+        listaCfn: [] as PendenciaCfnItem[],
+      };
+    }
+    const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
+      sessoes,
+      cadastros,
+      'armada',
+    );
+    return {
+      lista: filtrarPendenciasParciais(montarListaPendencias(sessoesNorma, cadastrosNorma)),
+      listaCfn: [] as PendenciaCfnItem[],
+    };
+  }, [normaTaf, modo, cadastros, sessoes]);
 
   const listaVisivel = normaTaf === 'cfn' ? listaCfn : lista;
+  const carregando = carregandoDataset && listaVisivel.length === 0;
 
   const gerarPdf = useCallback(async () => {
     if (normaTaf === 'cfn') {

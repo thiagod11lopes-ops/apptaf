@@ -8,12 +8,11 @@ import {
   Alert,
   TouchableOpacity,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CheckCircle2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { getAllCadastros } from '../services/cadastrosIndexedDb';
-import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import { montarListaConcluidos, type ConcluidoTafItem } from '../utils/pendenciasTafHistorico';
 import {
   CFN_CHIP_LABELS,
@@ -47,48 +46,44 @@ function ChipModalidade({ label, ok = true }: { label: string; ok?: boolean }) {
   );
 }
 
-export function ResultadosConcluidoPanel({ normaTaf = 'armada' }: { normaTaf?: NormaTafVista }) {
+export function ResultadosConcluidoPanel({
+  normaTaf = 'armada',
+  cadastros,
+  sessoes,
+  carregandoDataset = false,
+}: {
+  normaTaf?: NormaTafVista;
+  cadastros: CadastroItemPersist[];
+  sessoes: SessaoAplicacaoTaf[];
+  carregandoDataset?: boolean;
+}) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const t = theme.tokens;
 
-  const [lista, setLista] = useState<ConcluidoTafItem[]>([]);
-  const [listaCfn, setListaCfn] = useState<ConcluidoCfnItem[]>([]);
-  const [carregando, setCarregando] = useState(true);
   const [gerandoPdf, setGerandoPdf] = useState(false);
 
-  const carregar = useCallback(() => {
-    setCarregando(true);
-    Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
-      .then(([cadastros, sessoes]) => {
-        if (normaTaf === 'cfn') {
-          setListaCfn(montarListaConcluidosCfn(sessoes, cadastros));
-          setLista([]);
-          return;
-        }
-        const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
-          sessoes,
-          cadastros,
-          'armada',
-        );
-        setLista(montarListaConcluidos(sessoesNorma, cadastrosNorma));
-        setListaCfn([]);
-      })
-      .catch(() => {
-        setLista([]);
-        setListaCfn([]);
-      })
-      .finally(() => setCarregando(false));
-  }, [normaTaf]);
-
-  useFocusEffect(
-    useCallback(() => {
-      carregar();
-    }, [carregar]),
-  );
+  const { lista, listaCfn } = useMemo(() => {
+    if (normaTaf === 'cfn') {
+      return {
+        lista: [] as ConcluidoTafItem[],
+        listaCfn: montarListaConcluidosCfn(sessoes, cadastros),
+      };
+    }
+    const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
+      sessoes,
+      cadastros,
+      'armada',
+    );
+    return {
+      lista: montarListaConcluidos(sessoesNorma, cadastrosNorma),
+      listaCfn: [] as ConcluidoCfnItem[],
+    };
+  }, [normaTaf, cadastros, sessoes]);
 
   const listaVisivel = normaTaf === 'cfn' ? listaCfn : lista;
+  const carregando = carregandoDataset && listaVisivel.length === 0;
 
   const gerarPdf = useCallback(async () => {
     if (normaTaf === 'cfn') {

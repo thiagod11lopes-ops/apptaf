@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,16 +8,12 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Download } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { ResultadosGeralTable } from './ResultadosGeralTable';
-import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
-import {
-  getAllSessoesAplicacao,
-  type SessaoAplicacaoTaf,
-} from '../services/resultadosAplicadosIndexedDb';
+import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import { type ResultadoGeralItem } from '../utils/resultadoTafCadastro';
 import type { FiltroHistoricoMilitar } from '../utils/filtrarSessoesHistoricoMilitar';
 import { listarResultadosGeralFromHistorico } from '../utils/resultadoGeralHistorico';
@@ -63,9 +59,18 @@ function linhaCombinaBusca(item: ResultadoGeralItem, q: string, qDigits: string)
 export function ResultadosGeralPanel({
   normaTaf = 'armada',
   onVerHistoricoMilitar,
+  cadastros: cadastrosDataset,
+  sessoes: sessoesDataset,
+  onDatasetRefresh,
+  carregandoDataset = false,
 }: {
   normaTaf?: NormaTafVista;
   onVerHistoricoMilitar?: (filtro: FiltroHistoricoMilitar) => void;
+  /** Dataset SWR do ResultadosScreen — evita getAll* por painel. */
+  cadastros: CadastroItemPersist[];
+  sessoes: SessaoAplicacaoTaf[];
+  onDatasetRefresh?: () => void | Promise<void>;
+  carregandoDataset?: boolean;
 }) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
@@ -75,7 +80,6 @@ export function ResultadosGeralPanel({
   const [lista, setLista] = useState<ResultadoGeralItem[]>([]);
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
   const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>([]);
-  const [carregando, setCarregando] = useState(true);
   const [filtroBusca, setFiltroBusca] = useState('');
   const [cadastroEmEdicao, setCadastroEmEdicao] = useState<CadastroItemPersist | null>(null);
   const [militarParaExcluir, setMilitarParaExcluir] = useState<ResultadoGeralItem | null>(null);
@@ -83,41 +87,22 @@ export function ResultadosGeralPanel({
   const [salvandoCompleto, setSalvandoCompleto] = useState(false);
   const [avisoPdf, setAvisoPdf] = useState<string | null>(null);
 
-  const carregar = useCallback(() => {
-    setCarregando(true);
-    Promise.all([getAllCadastros(), getAllSessoesAplicacao()])
-      .then(([cadastrosLista, todasSessoes]) => {
-        const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
-          todasSessoes,
-          cadastrosLista,
-          normaTaf,
-        );
-        setCadastros(cadastrosNorma);
-        setSessoes(sessoesNorma);
-        setLista(listarResultadosGeralFromHistorico(sessoesNorma, cadastrosNorma));
-      })
-      .catch(() => {
-        setCadastros([]);
-        setSessoes([]);
-        setLista([]);
-      })
-      .finally(() => setCarregando(false));
-  }, [normaTaf]);
-
-  const recarregarLista = useCallback(async () => {
-    const [cadastrosLista, todasSessoes] = await Promise.all([
-      getAllCadastros(),
-      getAllSessoesAplicacao(),
-    ]);
+  useEffect(() => {
     const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
-      todasSessoes,
-      cadastrosLista,
+      sessoesDataset,
+      cadastrosDataset,
       normaTaf,
     );
     setCadastros(cadastrosNorma);
     setSessoes(sessoesNorma);
     setLista(listarResultadosGeralFromHistorico(sessoesNorma, cadastrosNorma));
-  }, [normaTaf]);
+  }, [cadastrosDataset, sessoesDataset, normaTaf]);
+
+  const carregando = carregandoDataset && lista.length === 0;
+
+  const recarregarLista = useCallback(async () => {
+    await onDatasetRefresh?.();
+  }, [onDatasetRefresh]);
 
   const salvarArquivoCompleto = useCallback(async () => {
     if (salvandoCompleto || lista.length === 0) return;
@@ -192,12 +177,6 @@ export function ResultadosGeralPanel({
       setExcluindo(false);
     }
   }, [militarParaExcluir, excluindo, cadastros, recarregarLista]);
-
-  useFocusEffect(
-    useCallback(() => {
-      carregar();
-    }, [carregar]),
-  );
 
   const buscaLower = useMemo(() => {
     const q = filtroBusca.trim().toLowerCase();

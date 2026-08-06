@@ -31,6 +31,9 @@ import {
   tituloTipoProva,
   type SessaoAplicacaoTaf,
 } from '../services/resultadosAplicadosIndexedDb';
+import { peekCadastrosListCache } from '../services/cadastrosListCache';
+import { peekSessoesListCache } from '../services/sessoesListCache';
+import { isDemoSessaoId } from '../utils/gatherSystemBackupData';
 import {
   deleteSessaoFromHistorico,
 } from '../services/deleteSessaoHistorico';
@@ -82,13 +85,27 @@ export default function ResultadosScreen() {
   const navigation = useNavigation<Nav>();
   const [aba, setAba] = useState<AbaResultados>('historico');
   const [normaVista, setNormaVista] = useState<NormaTafVista | null>(null);
-  const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>([]);
-  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
+  /** Sessões ativas (com demo) — fonte única SWR; histórico unifica a partir daqui. */
+  const [sessoesRaw, setSessoesRaw] = useState<SessaoAplicacaoTaf[]>(
+    () => peekSessoesListCache({ includeDemo: true }) ?? [],
+  );
+  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>(
+    () => peekCadastrosListCache() ?? [],
+  );
+  const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>(() => {
+    const cad = peekCadastrosListCache() ?? [];
+    const sess = peekSessoesListCache({ includeDemo: true }) ?? [];
+    return unificarSessoesComCadastroRegistrador(sess, cad, []);
+  });
   const [historicoFiltroMilitar, setHistoricoFiltroMilitar] = useState<FiltroHistoricoMilitar | null>(
     null,
   );
-  /** Só spinner no cold start — foco com dados já carregados não limpa a tela. */
-  const [carregando, setCarregando] = useState(() => sessoes.length === 0 && cadastros.length === 0);
+  /** Só spinner no cold start sem peek — foco com dados já carregados não limpa a tela. */
+  const [carregando, setCarregando] = useState(() => {
+    const cad = peekCadastrosListCache();
+    const sess = peekSessoesListCache({ includeDemo: true });
+    return (cad?.length ?? 0) === 0 && (sess?.length ?? 0) === 0;
+  });
   const hasLoadedOnceRef = useRef(false);
   const [sessaoParaExcluir, setSessaoParaExcluir] = useState<SessaoHistoricoAgrupada | null>(null);
   const [sessaoDetalhe, setSessaoDetalhe] = useState<SessaoHistoricoAgrupada | null>(null);
@@ -96,9 +113,27 @@ export default function ResultadosScreen() {
   const [erroExclusao, setErroExclusao] = useState<string | null>(null);
   const ultimoToqueCardRef = useRef<{ id: string; at: number } | null>(null);
 
+  /** Painéis (consulta/geral/…) usam sessões sem demo — alinhado ao getAll antigo. */
+  const sessoesParaPaineis = useMemo(
+    () => sessoesRaw.filter((s) => !isDemoSessaoId(s.id)),
+    [sessoesRaw],
+  );
+
   const carregar = useCallback(() => {
+    const peekedCad = peekCadastrosListCache();
+    const peekedSess = peekSessoesListCache({ includeDemo: true });
+    if (peekedCad) setCadastros(peekedCad);
+    if (peekedSess) {
+      setSessoesRaw(peekedSess);
+      if (peekedCad) {
+        setSessoes(unificarSessoesComCadastroRegistrador(peekedSess, peekedCad, []));
+      }
+    }
+
     const cold = !hasLoadedOnceRef.current;
-    if (cold) setCarregando(true);
+    const hasPeek = (peekedCad?.length ?? 0) > 0 || (peekedSess?.length ?? 0) > 0;
+    if (cold && !hasPeek) setCarregando(true);
+
     Promise.all([
       getAllCadastros(),
       getAllSessoesAplicacao({ includeDemo: true }),
@@ -106,6 +141,7 @@ export default function ResultadosScreen() {
     ])
       .then(([cadastrosLista, sessoesLista, sessoesExcluidas]) => {
         setCadastros(cadastrosLista);
+        setSessoesRaw(sessoesLista);
         setSessoes(
           unificarSessoesComCadastroRegistrador(sessoesLista, cadastrosLista, sessoesExcluidas),
         );
@@ -382,15 +418,44 @@ export default function ResultadosScreen() {
             })}
           </>
         ) : aba === 'consulta' ? (
-          <ResultadosConsultaPanel normaTaf={normaVista} />
+          <ResultadosConsultaPanel
+            normaTaf={normaVista}
+            cadastros={cadastros}
+            sessoes={sessoesParaPaineis}
+            onDatasetRefresh={carregar}
+          />
         ) : aba === 'geral' ? (
-          <ResultadosGeralPanel normaTaf={normaVista} onVerHistoricoMilitar={abrirHistoricoMilitar} />
+          <ResultadosGeralPanel
+            normaTaf={normaVista}
+            onVerHistoricoMilitar={abrirHistoricoMilitar}
+            cadastros={cadastros}
+            sessoes={sessoesParaPaineis}
+            onDatasetRefresh={carregar}
+            carregandoDataset={carregando}
+          />
         ) : aba === 'concluido' ? (
-          <ResultadosConcluidoPanel normaTaf={normaVista} />
+          <ResultadosConcluidoPanel
+            normaTaf={normaVista}
+            cadastros={cadastros}
+            sessoes={sessoesParaPaineis}
+            carregandoDataset={carregando}
+          />
         ) : aba === 'pendenciaTotal' ? (
-          <ResultadosPendenciaParcialPanel normaTaf={normaVista} modo="total" />
+          <ResultadosPendenciaParcialPanel
+            normaTaf={normaVista}
+            modo="total"
+            cadastros={cadastros}
+            sessoes={sessoesParaPaineis}
+            carregandoDataset={carregando}
+          />
         ) : (
-          <ResultadosPendenciaParcialPanel normaTaf={normaVista} modo="parcial" />
+          <ResultadosPendenciaParcialPanel
+            normaTaf={normaVista}
+            modo="parcial"
+            cadastros={cadastros}
+            sessoes={sessoesParaPaineis}
+            carregandoDataset={carregando}
+          />
         )}
           </>
         ) : (

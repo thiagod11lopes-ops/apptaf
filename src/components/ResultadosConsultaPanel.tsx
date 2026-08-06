@@ -1,5 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -20,8 +19,8 @@ import { ConfirmacaoExcluirResultadoModal } from './sismav/ConfirmacaoExcluirRes
 import { ConfirmacaoGerarResultadosPdfModal } from './sismav/ConfirmacaoGerarResultadosPdfModal';
 import { EditarResultadoTafModal } from './sismav/EditarResultadoTafModal';
 import { HistoricoCalendarioTaf } from './sismav/HistoricoCalendarioTaf';
-import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
-import { getAllSessoesAplicacao, type SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
+import { addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import { unificarSessoesComCadastroRegistrador } from '../utils/sessoesUnificadasResultados';
 import { agruparSessoesHistoricoPorTeste } from '../utils/agruparSessoesHistoricoPorTeste';
 import { ProvaComColunaRubrica } from './ProvaComColunaRubrica';
@@ -104,7 +103,7 @@ function linhaCombinaNipNome(l: ResultadoTafLinha, nipRaw: string, nomeRaw: stri
 
 function linhasCompletasHistoricoComRubricas(
   sessoes: SessaoAplicacaoTaf[],
-  cadastros: Awaited<ReturnType<typeof getAllCadastros>>,
+  cadastros: CadastroItemPersist[],
   rubricasSessoes: Map<string, RubricasPorNip>,
   rubricasCadastros: Map<string, RubricasPorNip>,
 ): ResultadoTafLinha[] {
@@ -119,7 +118,7 @@ function linhasCompletasHistoricoComRubricas(
 }
 
 function linhasComRubricasMescladas(
-  cadastros: Awaited<ReturnType<typeof getAllCadastros>>,
+  cadastros: CadastroItemPersist[],
   rubricasSessoes: Map<string, RubricasPorNip>,
   rubricasCadastros: Map<string, RubricasPorNip>,
   sessoes: SessaoAplicacaoTaf[] = [],
@@ -140,7 +139,17 @@ function linhasComRubricasMescladas(
     : linhas;
 }
 
-export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: NormaTafVista }) {
+export function ResultadosConsultaPanel({
+  normaTaf = 'armada',
+  cadastros: cadastrosDataset,
+  sessoes: sessoesDataset,
+  onDatasetRefresh,
+}: {
+  normaTaf?: NormaTafVista;
+  cadastros: CadastroItemPersist[];
+  sessoes: SessaoAplicacaoTaf[];
+  onDatasetRefresh?: () => void | Promise<void>;
+}) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
   const ui = useMemo(() => getUiColors(theme), [theme]);
@@ -157,8 +166,15 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       blocos: ResultadosTafPdfBloco[];
     }) | null
   >(null);
-  const [todosCadastros, setTodosCadastros] = useState<Awaited<ReturnType<typeof getAllCadastros>>>([]);
-  const [sessoesHistorico, setSessoesHistorico] = useState<SessaoAplicacaoTaf[]>([]);
+  const [todosCadastros, setTodosCadastros] = useState<CadastroItemPersist[]>(cadastrosDataset);
+  const [sessoesHistorico, setSessoesHistorico] = useState<SessaoAplicacaoTaf[]>(() => {
+    const { sessoesNorma } = prepararDadosResultadosNorma(
+      sessoesDataset,
+      cadastrosDataset,
+      normaTaf,
+    );
+    return sessoesNorma;
+  });
   const [rubricasSessoes, setRubricasSessoes] = useState<Map<string, RubricasPorNip>>(new Map());
   const [excluindo, setExcluindo] = useState(false);
   const [confirmarExclusao, setConfirmarExclusao] = useState<{
@@ -176,24 +192,20 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
   } | null>(null);
   const [salvandoRubrica, setSalvandoRubrica] = useState(false);
 
-  const carregarBase = useCallback(async () => {
-    const [lista, sessoes] = await Promise.all([
-      getAllCadastros(),
-      getAllSessoesAplicacao(),
-    ]);
-    // Lista completa para busca por NIP / Cadastrar Resultados (inclui quem ainda não tem TAF).
-    // O filtro por norma vale só para o histórico de sessões exibido.
-    const { sessoesNorma } = prepararDadosResultadosNorma(sessoes, lista, normaTaf);
-    setTodosCadastros(lista);
+  useEffect(() => {
+    const { sessoesNorma } = prepararDadosResultadosNorma(
+      sessoesDataset,
+      cadastrosDataset,
+      normaTaf,
+    );
+    setTodosCadastros(cadastrosDataset);
     setSessoesHistorico(sessoesNorma);
-    return lista;
-  }, [normaTaf]);
+  }, [cadastrosDataset, sessoesDataset, normaTaf]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void carregarBase();
-    }, [carregarBase]),
-  );
+  const carregarBase = useCallback(async () => {
+    await onDatasetRefresh?.();
+    return cadastrosDataset;
+  }, [onDatasetRefresh, cadastrosDataset]);
 
   const sincronizarCampoPar = useCallback(
     (origem: 'nip' | 'nome', valor: string) => {
@@ -243,7 +255,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       return;
     }
 
-    const lista = todosCadastros.length ? todosCadastros : await carregarBase();
+    const lista = todosCadastros.length ? todosCadastros : cadastrosDataset;
     const cadastrados = filtrarCadastrosPorNipNome(lista, nipTrim, nomeTrim, {
       somenteComResultadoTaf: false,
     });
@@ -256,7 +268,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     const sessoes = sessoesHistorico.length
       ? sessoesHistorico
       : agruparSessoesHistoricoPorTeste(
-          unificarSessoesComCadastroRegistrador(await getAllSessoesAplicacao(), lista),
+          unificarSessoesComCadastroRegistrador(sessoesDataset, lista),
         );
     setLinhas(linhasComRubricasMescladas(comResultado, new Map(), new Map(), sessoes));
 
@@ -265,13 +277,13 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     } else if (comResultado.length === 0) {
       setMensagemBusca('Militar Cadastrado não realizou TAF');
     }
-  }, [nip, nome, todosCadastros, carregarBase, sessoesHistorico, normaTaf]);
+  }, [nip, nome, todosCadastros, cadastrosDataset, sessoesDataset, sessoesHistorico, normaTaf]);
 
   const handleGerarResultados = useCallback(async () => {
     setAviso(null);
 
-    const lista = todosCadastros.length ? todosCadastros : await carregarBase();
-    const sessoesRaw = sessoesHistorico.length ? sessoesHistorico : await getAllSessoesAplicacao();
+    const lista = todosCadastros.length ? todosCadastros : cadastrosDataset;
+    const sessoesRaw = sessoesHistorico.length ? sessoesHistorico : sessoesDataset;
     const sessoes = sessoesHistorico.length
       ? sessoesRaw
       : agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoesRaw, lista));
@@ -352,10 +364,10 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     nome,
     buscou,
     todosCadastros,
+    cadastrosDataset,
+    sessoesDataset,
     sessoesHistorico,
     rubricasSessoes,
-    carregarBase,
-    getAllSessoesAplicacao,
   ]);
 
   const confirmarGerarPdf = useCallback(async () => {
@@ -376,7 +388,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
     setExcluindo(true);
     setAviso(null);
     try {
-      const lista = todosCadastros.length ? todosCadastros : await carregarBase();
+      const lista = todosCadastros.length ? todosCadastros : cadastrosDataset;
       const porId = lista.find((c) => c.id === confirmarExclusao.cadastroId);
       const porNip = buscarCadastroPorNomeOuNip(lista, confirmarExclusao.nip);
       const cadastro = porId ?? (porNip.kind === 'found' ? porNip.cadastro : undefined);
@@ -397,11 +409,12 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
         confirmarExclusao.modalidade,
         atualizado,
       );
-      const sessoes = await getAllSessoesAplicacao();
       const novaBase = lista.map((c) => (c.id === atualizado.id ? atualizado : c));
       setTodosCadastros(novaBase);
       setSessoesHistorico(
-        agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoes, novaBase)),
+        agruparSessoesHistoricoPorTeste(
+          unificarSessoesComCadastroRegistrador(sessoesDataset, novaBase),
+        ),
       );
       setLinhas((prev) => {
         if (!cadastroComAlgumResultadoTaf(atualizado)) {
@@ -412,12 +425,20 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
         return prev.map((l) => (l.id === atualizado.id ? linha : l));
       });
       setConfirmarExclusao(null);
+      await onDatasetRefresh?.();
     } catch (e) {
       setAviso(e instanceof Error ? e.message : 'Não foi possível excluir o resultado.');
     } finally {
       setExcluindo(false);
     }
-  }, [confirmarExclusao, todosCadastros, carregarBase]);
+  }, [
+    confirmarExclusao,
+    todosCadastros,
+    cadastrosDataset,
+    sessoesDataset,
+    carregarBase,
+    onDatasetRefresh,
+  ]);
 
   const aoSalvarEdicao = useCallback(
     async (atualizado: CadastroItemPersist) => {
@@ -425,9 +446,10 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
       const novaBase = todosCadastros.map((c) => (c.id === atualizado.id ? atualizado : c));
       setTodosCadastros(novaBase);
 
-      const sessoes = await getAllSessoesAplicacao();
       setSessoesHistorico(
-        agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoes, novaBase)),
+        agruparSessoesHistoricoPorTeste(
+          unificarSessoesComCadastroRegistrador(sessoesDataset, novaBase),
+        ),
       );
 
       if (cadastroComAlgumResultadoTaf(atualizado)) {
@@ -438,8 +460,9 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
         setLinhas((prev) => prev.filter((l) => l.id !== atualizado.id));
         setMensagemBusca('Militar Cadastrado não realizou TAF');
       }
+      await onDatasetRefresh?.();
     },
-    [todosCadastros],
+    [todosCadastros, sessoesDataset, onDatasetRefresh],
   );
 
   const abrirEdicaoRubrica = useCallback(
@@ -499,14 +522,8 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
           }
         };
         setLinhas((prev) => prev.map(patchLinha));
-
-        const lista = await getAllCadastros();
-        setTodosCadastros(lista);
         setRubricasSessoes(new Map());
-        const sessoes = await getAllSessoesAplicacao();
-        setSessoesHistorico(
-          agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoes, lista)),
-        );
+        await onDatasetRefresh?.();
 
         setRubricaEdicao(null);
         setAviso('Rúbrica salva com sucesso.');
@@ -516,7 +533,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
         setSalvandoRubrica(false);
       }
     },
-    [rubricaEdicao, salvandoRubrica],
+    [rubricaEdicao, salvandoRubrica, onDatasetRefresh],
   );
 
   const inputStyle = [
@@ -711,7 +728,7 @@ export function ResultadosConsultaPanel({ normaTaf = 'armada' }: { normaTaf?: No
         cadastros={todosCadastros}
         onAviso={setAviso}
         onResultadosCadastrados={() => {
-          void carregarBase();
+          void onDatasetRefresh?.();
         }}
       />
 

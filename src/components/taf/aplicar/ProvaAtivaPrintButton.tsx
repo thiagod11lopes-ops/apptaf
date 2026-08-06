@@ -2,8 +2,8 @@ import React, { useCallback, useState } from 'react';
 import { View, StyleSheet, Platform, ActivityIndicator, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Camera } from 'lucide-react-native';
-import { PressableScale } from '../premium/PressableScale';
-import { capturarESalvarPrintPagina } from '../../utils/capturarPrintPagina';
+import { PressableScale } from '../../premium/PressableScale';
+import { capturarESalvarPrintPagina } from '../../../utils/capturarPrintPagina';
 
 type Props = {
   compact?: boolean;

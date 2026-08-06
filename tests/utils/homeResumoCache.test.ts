@@ -10,14 +10,21 @@ vi.mock('../../src/offline-first/sync/SyncEngine', () => ({
   subscribeDataChanged: () => () => {},
 }));
 
-vi.mock('../../src/offline-first/db/tafDatabase', () => ({
-  getTafDatabase: () => ({}),
+vi.mock('../../src/services/cadastrosIndexedDb', () => ({
+  getAllCadastros: vi.fn(async () => []),
 }));
 
-vi.mock('../../src/offline-first/db/localDb', () => ({
-  listCadastrosForDisplay: vi.fn(async () => []),
-  listSessoesForDisplay: vi.fn(async () => []),
-  listDeletedSessoesForDisplay: vi.fn(async () => []),
+vi.mock('../../src/services/resultadosAplicadosIndexedDb', () => ({
+  getAllSessoesAplicacao: vi.fn(async () => []),
+  getDeletedSessoesAplicacao: vi.fn(async () => []),
+}));
+
+vi.mock('../../src/services/cadastrosListCache', () => ({
+  peekCadastrosListCache: () => null,
+}));
+
+vi.mock('../../src/services/sessoesListCache', () => ({
+  peekSessoesListCache: () => null,
 }));
 
 vi.mock('../../src/services/restritosStorage', () => ({
@@ -26,6 +33,10 @@ vi.mock('../../src/services/restritosStorage', () => ({
 
 vi.mock('../../src/services/fatoresRiscoStorage', () => ({
   getNipsComFatoresRiscoPreenchidos: vi.fn(async () => new Set()),
+}));
+
+vi.mock('../../src/utils/yieldToUi', () => ({
+  yieldToUi: vi.fn(async () => {}),
 }));
 
 vi.mock('../../src/utils/resultadoGeralHistorico', () => ({
@@ -80,5 +91,20 @@ describe('homeResumo cache SWR', () => {
     ownerRef.current = 'owner-b';
     expect(peekHomeResumoCache()).toBeNull();
     expect(isHomeResumoCacheDirty()).toBe(true);
+  });
+
+  it('invalidate meta não exige full quando há lastInputs', async () => {
+    const { getAllCadastros } = await import('../../src/services/cadastrosIndexedDb');
+    const getAll = vi.mocked(getAllCadastros);
+
+    await loadResumoInicioFromIndexedDb({ force: true });
+    const callsAfterWarm = getAll.mock.calls.length;
+
+    invalidateHomeResumoCache('meta');
+    await loadResumoInicioFromIndexedDb({ force: true });
+
+    // Refresh meta reutiliza lastInputs — não chama getAllCadastros de novo.
+    expect(getAll.mock.calls.length).toBe(callsAfterWarm);
+    expect(isHomeResumoCacheWarm()).toBe(true);
   });
 });

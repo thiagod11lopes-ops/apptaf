@@ -1,11 +1,5 @@
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
-import { getTafDatabase } from '../offline-first/db/tafDatabase';
-import {
-  listCadastrosForDisplay,
-  listSessoesForDisplay,
-  listDeletedSessoesForDisplay,
-} from '../offline-first/db/localDb';
 import {
   subscribeDataChanged,
   type DataChangeScope,
@@ -14,10 +8,12 @@ import {
   calcularResumoInicioTafFromHistorico,
   type ResumoInicioTafHistorico,
 } from './resultadoGeralHistorico';
-import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
 import { getNipsRestritosAtivos } from '../services/restritosStorage';
 import { getNipsComFatoresRiscoPreenchidos } from '../services/fatoresRiscoStorage';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
+import { peekCadastrosListCache } from '../services/cadastrosListCache';
+import { peekSessoesListCache } from '../services/sessoesListCache';
+import { yieldToUi } from './yieldToUi';
 
 const RESUMO_VAZIO: ResumoInicioTafHistorico = {
   totalCadastrados: 0,
@@ -30,13 +26,10 @@ const RESUMO_VAZIO: ResumoInicioTafHistorico = {
   reprovados: 0,
 };
 
-/** Escopos que alteram os cards da Home. */
-const HOME_RESUMO_SCOPES: readonly DataChangeScope[] = [
-  'cadastros',
-  'sessoes',
-  'fatores',
-  'restritos',
-];
+/** Escopos que alteram cadastros/sessões — exigem rescan das listas. */
+const HOME_RESUMO_FULL_SCOPES: readonly DataChangeScope[] = ['cadastros', 'sessoes'];
+/** Só NIPs de fatores/restritos — reutiliza listas já carregadas. */
+const HOME_RESUMO_META_SCOPES: readonly DataChangeScope[] = ['fatores', 'restritos'];
 
 type HomeResumoCacheEntry = {
   ownerUid: string | null;
@@ -45,7 +38,18 @@ type HomeResumoCacheEntry = {
   dirty: boolean;
 };
 
+type ResumoInputs = {
+  cadastros: CadastroItemPersist[];
+  sessoes: SessaoAplicacaoTaf[];
+  sessoesExcluidas: SessaoAplicacaoTaf[];
+};
+
+type DirtyKind = 'none' | 'meta' | 'full';
+
 let cache: HomeResumoCacheEntry | null = null;
+/** Snapshot das listas do último cálculo completo — refresh parcial de meta. */
+let lastInputs: ResumoInputs | null = null;
+let dirtyKind: DirtyKind = 'none';
 /** Sobe a cada invalidação — descarta resultados in-flight obsoletos. */
 let cacheGeneration = 0;
 let inFlight: {
@@ -59,17 +63,25 @@ function ensureHomeResumoInvalidation(): void {
   if (invalidationSubscribed) return;
   invalidationSubscribed = true;
   subscribeDataChanged(() => {
-    invalidateHomeResumoCache();
-  }, { scopes: HOME_RESUMO_SCOPES });
+    invalidateHomeResumoCache('full');
+  }, { scopes: HOME_RESUMO_FULL_SCOPES });
+  subscribeDataChanged(() => {
+    invalidateHomeResumoCache('meta');
+  }, { scopes: HOME_RESUMO_META_SCOPES });
 }
 
 /**
  * Soft-invalidate: marca sujo, mas mantém o último resumo (stale-while-revalidate).
- * Evita flash de zeros ao trocar de aba.
+ * `meta` = só fatores/restritos; `full` = cadastros/sessões (ou inválida ampla).
  */
-export function invalidateHomeResumoCache(): void {
+export function invalidateHomeResumoCache(kind: 'meta' | 'full' = 'full'): void {
   cacheGeneration += 1;
   inFlight = null;
+  if (kind === 'full' || dirtyKind === 'full') {
+    dirtyKind = 'full';
+  } else if (dirtyKind !== 'full') {
+    dirtyKind = 'meta';
+  }
   if (cache) {
     cache = { ...cache, dirty: true };
   }
@@ -78,6 +90,8 @@ export function invalidateHomeResumoCache(): void {
 /** Limpa tudo (troca de conta / logout). */
 export function clearHomeResumoCache(): void {
   cache = null;
+  lastInputs = null;
+  dirtyKind = 'none';
   cacheGeneration += 1;
   inFlight = null;
 }
@@ -101,85 +115,68 @@ export function isHomeResumoCacheWarm(): boolean {
   return peekHomeResumoCache() != null && !isHomeResumoCacheDirty();
 }
 
-function stripCadastro(row: Record<string, unknown>): CadastroItemPersist {
-  const copy = { ...row };
-  for (const key of [
-    'ownerUid',
-    'createdAt',
-    'version',
-    'deviceId',
-    'userId',
-    'syncStatus',
-    'deleted',
-    'deletedAt',
-    'deletedBy',
-    'lastModifiedBy',
-    'syncVersion',
-  ]) {
-    delete copy[key];
-  }
-  return copy as unknown as CadastroItemPersist;
+function resolveInputsForMeta(): ResumoInputs | null {
+  const peekedCad = peekCadastrosListCache({ includeDemo: false });
+  const peekedSess = peekSessoesListCache({ includeDemo: false });
+  const cadastros = peekedCad ?? lastInputs?.cadastros ?? null;
+  const sessoes = peekedSess ?? lastInputs?.sessoes ?? null;
+  const sessoesExcluidas = lastInputs?.sessoesExcluidas ?? null;
+  if (!cadastros || !sessoes || !sessoesExcluidas) return null;
+  return { cadastros, sessoes, sessoesExcluidas };
 }
 
-function stripSessao(row: Record<string, unknown>): SessaoAplicacaoTaf {
-  const copy = { ...row };
-  for (const key of [
-    'ownerUid',
-    'createdAt',
-    'version',
-    'deviceId',
-    'userId',
-    'syncStatus',
-    'deleted',
-    'deletedAt',
-    'deletedBy',
-    'lastModifiedBy',
-    'syncVersion',
-  ]) {
-    delete copy[key];
-  }
-  return copy as unknown as SessaoAplicacaoTaf;
-}
-
-async function computeResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHistorico> {
-  const db = getTafDatabase();
-  if (!db) return RESUMO_VAZIO;
-
+async function computeFromInputs(inputs: ResumoInputs): Promise<ResumoInicioTafHistorico> {
   const ownerUid = getCachedDataOwnerUid();
-  const [cadRows, sessRows, deletedRows, nipsRestritos, nipsFatoresPreenchidos] =
-    await Promise.all([
-      listCadastrosForDisplay(null),
-      listSessoesForDisplay(null),
-      listDeletedSessoesForDisplay(null),
-      getNipsRestritosAtivos(),
-      getNipsComFatoresRiscoPreenchidos(ownerUid),
-    ]);
-
-  const cadastros = cadRows
-    .filter((row) => row.deleted !== true && !isDemoCadastroId(row.id))
-    .map((row) => stripCadastro(row as unknown as Record<string, unknown>));
-
-  const sessoes = sessRows
-    .filter((row) => row.deleted !== true && !isDemoSessaoId(row.id))
-    .map((row) => stripSessao(row as unknown as Record<string, unknown>));
-
-  const sessoesExcluidas = deletedRows
-    .filter((row) => !isDemoSessaoId(row.id))
-    .map((row) => stripSessao(row as unknown as Record<string, unknown>));
-
+  const [nipsRestritos, nipsFatoresPreenchidos] = await Promise.all([
+    getNipsRestritosAtivos(),
+    getNipsComFatoresRiscoPreenchidos(ownerUid),
+  ]);
+  // Cede a UI antes do agregador (CPU pesada em bases grandes).
+  if (inputs.cadastros.length + inputs.sessoes.length > 80) {
+    await yieldToUi();
+  }
   return calcularResumoInicioTafFromHistorico(
-    sessoes,
-    cadastros,
-    sessoesExcluidas,
+    inputs.sessoes,
+    inputs.cadastros,
+    inputs.sessoesExcluidas,
     nipsRestritos,
     new Set(),
     nipsFatoresPreenchidos,
   );
 }
 
+/** Full path: reutiliza caches quentes de lista (Cadastro/Resultados). */
+async function computeResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHistorico> {
+  const { getAllCadastros } = await import('../services/cadastrosIndexedDb');
+  const { getAllSessoesAplicacao, getDeletedSessoesAplicacao } = await import(
+    '../services/resultadosAplicadosIndexedDb'
+  );
+
+  const [cadastros, sessoes, sessoesExcluidas] = await Promise.all([
+    getAllCadastros({ includeDemo: false }),
+    getAllSessoesAplicacao({ includeDemo: false }),
+    getDeletedSessoesAplicacao(),
+  ]);
+
+  const inputs: ResumoInputs = { cadastros, sessoes, sessoesExcluidas };
+  lastInputs = inputs;
+  return computeFromInputs(inputs);
+}
+
+async function computeResumoCheap(): Promise<ResumoInicioTafHistorico> {
+  if (dirtyKind === 'meta') {
+    const inputs = resolveInputsForMeta();
+    if (inputs) {
+      return computeFromInputs(inputs);
+    }
+  }
+  return computeResumoInicioFromIndexedDb();
+}
+
 /**
  * Resumo dos cards da Home **somente a partir do IndexedDB (Dexie)**.
  * Stale-while-revalidate: invalidação marca dirty sem apagar o valor.
+ * Dirty `meta` evita relistar cadastros/sessões; full reutiliza list caches.
  * Não consulta a nuvem.
  */
 export async function loadResumoInicioFromIndexedDb(options?: {
@@ -203,12 +200,13 @@ export async function loadResumoInicioFromIndexedDb(options?: {
   }
 
   const generation = cacheGeneration;
-  const promise = computeResumoInicioFromIndexedDb()
+  const promise = computeResumoCheap()
     .then((resumo) => {
       if (generation !== cacheGeneration) {
         return loadResumoInicioFromIndexedDb({ force: true });
       }
       cache = { ownerUid, resumo, dirty: false };
+      dirtyKind = 'none';
       if (inFlight?.promise === promise) inFlight = null;
       return resumo;
     })

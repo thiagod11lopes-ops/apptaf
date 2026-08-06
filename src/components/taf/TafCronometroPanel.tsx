@@ -1,19 +1,22 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Platform,
   Animated,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Pause, Play, Timer } from 'lucide-react-native';
+import { ArrowLeft, Camera, Pause, Play, Timer } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import { PressableScale } from '../premium/PressableScale';
 import type { TafCronometroEstado } from '../../hooks/useTafReactStopwatch';
 import { EditarCronometroPausadoModal } from './EditarCronometroPausadoModal';
+import { capturarESalvarPrintPagina } from '../../utils/capturarPrintPagina';
 
 export type { TafCronometroEstado };
 
@@ -234,58 +237,130 @@ export function TafCronometroPanel({
   const toggleGlow = rodando
     ? '0 8px 28px rgba(249, 115, 22, 0.45), 0 0 0 1px rgba(251, 191, 36, 0.35)'
     : '0 8px 28px rgba(16, 185, 129, 0.42), 0 0 0 1px rgba(45, 212, 191, 0.35)';
+  const [capturandoPrint, setCapturandoPrint] = useState(false);
 
-  const controlsNode = (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={toggleA11y}
-      onPress={onTogglePress}
-      style={[
-        compact ? styles.toggleOuterCompact : styles.toggleOuter,
-        Platform.OS === 'web' ? ({ boxShadow: toggleGlow } as object) : null,
-      ]}
+  const onPrintPagina = useCallback(async () => {
+    if (capturandoPrint) return;
+    setCapturandoPrint(true);
+    try {
+      const modo = await capturarESalvarPrintPagina();
+      if (modo === 'downloaded') {
+        Alert.alert('Print salvo', 'A foto da prova ativa foi baixada no dispositivo.');
+      }
+    } catch (e) {
+      const msg =
+        e instanceof Error && e.name === 'AbortError'
+          ? null
+          : e instanceof Error
+            ? e.message
+            : 'Não foi possível capturar a tela.';
+      if (msg) Alert.alert('Print', msg);
+    } finally {
+      setCapturandoPrint(false);
+    }
+  }, [capturandoPrint]);
+
+  const printBtnGlow =
+    '0 8px 28px rgba(37, 99, 235, 0.45), 0 0 0 1px rgba(96, 165, 250, 0.4)';
+
+  const printButton = (
+    <View
+      {...(Platform.OS === 'web'
+        ? ({ 'data-taf-skip-capture': '1' } as object)
+        : null)}
     >
-      <LinearGradient
-        colors={toggleColors}
-        locations={[0, 0.55, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={compact ? styles.toggleGradientCompact : styles.toggleGradient}
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel="Print da prova ativa"
+        accessibilityHint="Captura a tela e salva a foto no dispositivo"
+        onPress={() => void onPrintPagina()}
+        disabled={capturandoPrint}
+        style={[
+          compact ? styles.printOuterCompact : styles.printOuter,
+          Platform.OS === 'web' ? ({ boxShadow: printBtnGlow } as object) : null,
+          capturandoPrint ? { opacity: 0.75 } : null,
+        ]}
       >
         <LinearGradient
-          colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.08)', 'transparent']}
-          start={{ x: 0.15, y: 0 }}
-          end={{ x: 0.85, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View style={compact ? styles.toggleIconWrapCompact : styles.toggleIconWrap}>
-          {rodando ? (
-            <Pause
-              size={compact ? 16 : 20}
-              color="#FFFFFF"
-              strokeWidth={2.8}
-              fill="#FFFFFF"
-            />
+          colors={['#60a5fa', '#2563eb', '#1d4ed8']}
+          locations={[0, 0.55, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={compact ? styles.printGradientCompact : styles.printGradient}
+        >
+          {capturandoPrint ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            <Play
-              size={compact ? 16 : 20}
-              color="#FFFFFF"
-              strokeWidth={2.6}
-              fill="#FFFFFF"
-            />
+            <>
+              <View style={compact ? styles.toggleIconWrapCompact : styles.toggleIconWrap}>
+                <Camera
+                  size={compact ? 16 : 20}
+                  color="#FFFFFF"
+                  strokeWidth={2.6}
+                />
+              </View>
+              <Text style={compact ? styles.toggleLabelCompact : styles.toggleLabel}>Print</Text>
+            </>
           )}
-        </View>
-        <Text style={compact ? styles.toggleLabelCompact : styles.toggleLabel}>
-          {compact
-            ? toggleLabel
-            : rodando
-              ? 'Pausar'
-              : pausado
-                ? 'Continuar'
-                : `Iniciar ${tituloProva}`}
-        </Text>
-      </LinearGradient>
-    </PressableScale>
+        </LinearGradient>
+      </PressableScale>
+    </View>
+  );
+
+  const controlsNode = (
+    <View style={compact ? styles.controlsRowCompact : styles.controlsRow}>
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel={toggleA11y}
+        onPress={onTogglePress}
+        style={[
+          compact ? styles.toggleOuterCompact : styles.toggleOuter,
+          Platform.OS === 'web' ? ({ boxShadow: toggleGlow } as object) : null,
+        ]}
+      >
+        <LinearGradient
+          colors={toggleColors}
+          locations={[0, 0.55, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={compact ? styles.toggleGradientCompact : styles.toggleGradient}
+        >
+          <LinearGradient
+            colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.08)', 'transparent']}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 0.85, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <View style={compact ? styles.toggleIconWrapCompact : styles.toggleIconWrap}>
+            {rodando ? (
+              <Pause
+                size={compact ? 16 : 20}
+                color="#FFFFFF"
+                strokeWidth={2.8}
+                fill="#FFFFFF"
+              />
+            ) : (
+              <Play
+                size={compact ? 16 : 20}
+                color="#FFFFFF"
+                strokeWidth={2.6}
+                fill="#FFFFFF"
+              />
+            )}
+          </View>
+          <Text style={compact ? styles.toggleLabelCompact : styles.toggleLabel}>
+            {compact
+              ? toggleLabel
+              : rodando
+                ? 'Pausar'
+                : pausado
+                  ? 'Continuar'
+                  : `Iniciar ${tituloProva}`}
+          </Text>
+        </LinearGradient>
+      </PressableScale>
+      {printButton}
+    </View>
   );
 
   if (compact) {
@@ -566,6 +641,17 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
     lineHeight: Platform.select({ web: 36, default: 32 }),
   },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+    width: '100%',
+  },
+  controlsRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
   toggleOuter: {
     flex: 1,
     borderRadius: 18,
@@ -575,6 +661,38 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
     minWidth: 104,
+  },
+  printOuter: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    minWidth: 112,
+  },
+  printOuterCompact: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    minWidth: 88,
+  },
+  printGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    minHeight: 56,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  printGradientCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 42,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
   },
   toggleGradient: {
     flexDirection: 'row',

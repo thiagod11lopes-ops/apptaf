@@ -46,6 +46,7 @@ import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import { LogombWatermark } from '../mobile/LogombWatermark';
 import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
 import { formatNipInput } from '../../utils/nipFormat';
+import { TAF_PROVA_ATIVA_CAPTURE_ATTR } from '../../utils/capturarPrintPagina';
 
 export type TafProvaTempoModalProva = 'corrida' | 'caminhada' | 'natacao' | 'permanencia';
 
@@ -866,7 +867,12 @@ export function TafProvaTempoModal({
             />
           </View>
         ) : null}
-        <View style={styles.modalForeground}>
+        <View
+          style={styles.modalForeground}
+          {...(Platform.OS === 'web'
+            ? ({ [TAF_PROVA_ATIVA_CAPTURE_ATTR]: '1' } as object)
+            : null)}
+        >
         <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <ScrollView
           style={styles.scroll}

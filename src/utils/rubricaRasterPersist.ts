@@ -273,6 +273,28 @@ export function rubricaParaPersistencia(uri?: string | null): string | undefined
   ) ?? raw;
 }
 
+/**
+ * Mesma conversão de `rubricaParaPersistencia`, mas cede a UI antes do canvas/`toDataURL`.
+ * Use no fluxo “Próximo militar” para não travar o paint.
+ */
+export async function rubricaParaPersistenciaAsync(
+  uri?: string | null,
+): Promise<string | undefined> {
+  const raw = uri?.trim();
+  if (!raw) return undefined;
+  if (isRubricaRasterDataUrl(raw)) return raw;
+  if (!isRubricaSvgDataUrl(raw)) return raw;
+
+  const { yieldToUi } = await import('./yieldToUi');
+  await yieldToUi();
+  if (typeof requestAnimationFrame === 'function') {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  }
+  return rubricaParaPersistencia(raw);
+}
+
 function mapUri(uri: string | undefined, mudou: { value: boolean }): string | undefined {
   if (!precisaRasterizarRubrica(uri)) return uri;
   const next = rubricaParaPersistencia(uri);

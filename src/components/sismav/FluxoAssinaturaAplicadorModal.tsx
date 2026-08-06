@@ -24,7 +24,7 @@ import {
   type AplicadorAssinaturaResumo,
 } from '../../types/aplicadorAssinatura';
 import { buildRubricaSvgDataUrl, buildStrokePath } from '../../utils/rubricaSvgBuilder';
-import { rubricaParaPersistencia } from '../../utils/rubricaRasterPersist';
+import { rubricaParaPersistenciaAsync } from '../../utils/rubricaRasterPersist';
 import { RUBRICA_COR_TRACO } from '../../utils/rubricaSvgNormalize';
 import { compareByNomePtBr } from '../../utils/compareNomePtBr';
 import { formatNomeComPosto } from '../../utils/formatNomeComPosto';
@@ -171,26 +171,26 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
     setErro('');
   }, [limparRubricaDraw]);
 
-  const montarSvgRubricaAtual = useCallback((): string | null => {
+  const montarSvgRubricaAtual = useCallback(async (): Promise<string | null> => {
     const todos = getTodosStrokes();
     if (todos.length === 0) return null;
     const svg = buildRubricaSvgDataUrl(todos, canvasWidth, RUBRICA_NATIVA_ALTURA);
-    return rubricaParaPersistencia(svg) ?? svg;
+    return (await rubricaParaPersistenciaAsync(svg)) ?? svg;
   }, [canvasWidth, getTodosStrokes]);
 
-  const concluirAssinatura = useCallback(() => {
+  const concluirAssinatura = useCallback(async () => {
     if (!aplicadorSelecionado) {
       setErro('Selecione o aplicador.');
-      return;
-    }
-    const rubricaSvg = montarSvgRubricaAtual();
-    if (!rubricaSvg) {
-      setErro('Desenhe a rúbrica do aplicador antes de concluir.');
       return;
     }
     setConcluindo(true);
     setErro('');
     try {
+      const rubricaSvg = await montarSvgRubricaAtual();
+      if (!rubricaSvg) {
+        setErro('Desenhe a rúbrica do aplicador antes de concluir.');
+        return;
+      }
       onConcluir(resumoAssinatura(aplicadorSelecionado, rubricaSvg));
     } finally {
       setConcluindo(false);

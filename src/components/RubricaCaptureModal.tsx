@@ -8,7 +8,6 @@ import type { TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb
 import { tituloTipoProva } from '../services/resultadosAplicadosIndexedDb';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import { buildRubricaSvgDataUrl, buildStrokePath } from '../utils/rubricaSvgBuilder';
-import { rubricaParaPersistencia } from '../utils/rubricaRasterPersist';
 import { RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import { useRubricaStrokeDraw } from '../hooks/useRubricaStrokeDraw';
@@ -88,8 +87,9 @@ export function RubricaCaptureModal({
   const confirmar = useCallback(() => {
     const todos = getTodosStrokes();
     if (todos.length === 0) return;
+    // SVG imediato — quem persiste chama rubricaParaPersistenciaAsync.
     const svg = buildRubricaSvgDataUrl(todos, canvasWidth, RUBRICA_NATIVA_ALTURA);
-    onConfirm(rubricaParaPersistencia(svg) ?? svg);
+    onConfirm(svg);
   }, [canvasWidth, getTodosStrokes, onConfirm]);
 
   if (!visible || !participante) return null;

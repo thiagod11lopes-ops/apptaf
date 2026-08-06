@@ -5,6 +5,7 @@ import {
   precisaRasterizarRubrica,
   rubricaDataUrlPdfFormat,
   rubricaParaPersistencia,
+  rubricaParaPersistenciaAsync,
   rasterizarRubricasNaSessao,
 } from '../../src/utils/rubricaRasterPersist';
 import type { SessaoAplicacaoTaf } from '../../src/services/resultadosAplicadosIndexedDb';
@@ -25,12 +26,14 @@ describe('rubricaRasterPersist', () => {
     expect(rubricaDataUrlPdfFormat('data:image/svg+xml;utf8,x')).toBeNull();
   });
 
-  it('mantém raster e passa SVG intacto sem canvas (node)', () => {
+  it('mantém raster e passa SVG intacto sem canvas (node)', async () => {
     const webp = 'data:image/webp;base64,AAAA';
     expect(rubricaParaPersistencia(webp)).toBe(webp);
+    expect(await rubricaParaPersistenciaAsync(webp)).toBe(webp);
     const svg = 'data:image/svg+xml;utf8,%3Csvg%3E';
     // Sem document/canvas no vitest — preserva SVG.
     expect(rubricaParaPersistencia(svg)).toBe(svg);
+    expect(await rubricaParaPersistenciaAsync(svg)).toBe(svg);
   });
 
   it('rasterizarRubricasNaSessao não altera quando já é raster', () => {

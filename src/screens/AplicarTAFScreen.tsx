@@ -113,7 +113,7 @@ import {
   type ProvaAtivaSessionV1,
 } from '../services/provaAtivaSessionStorage';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
-import { rubricaParaPersistencia } from '../utils/rubricaRasterPersist';
+import { rubricaParaPersistenciaAsync } from '../utils/rubricaRasterPersist';
 import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
@@ -1555,15 +1555,80 @@ export default function AplicarTAFScreen() {
   const buildSvgRubricaAtual = useCallback((): string | null => {
     const strokesProntos = getTodosStrokesRubrica();
     if (strokesProntos.length === 0) return null;
-    const svg = buildRubricaSvgDataUrl(
+    // Só SVG aqui — raster WebP fica em background (não bloqueia “Próximo”).
+    return buildRubricaSvgDataUrl(
       strokesProntos,
       rubricaCanvasWidth,
       RUBRICA_NATIVA_ALTURA,
       RUBRICA_COR_TRACO,
       RUBRICA_COR_FUNDO,
     );
-    return rubricaParaPersistencia(svg) ?? svg;
   }, [getTodosStrokesRubrica, rubricaCanvasWidth]);
+
+  /** Rasteriza e grava após o paint do próximo candidato. */
+  const persistirRubricaCandidatoEmBackground = useCallback(
+    (index: number, listaBase: ResultadoCorridaItem[]) => {
+      const itemBase = listaBase[index];
+      const svgBruto = (itemBase?.rubricaCandidatoSvg || '').trim();
+      if (!svgBruto) return;
+
+      void (async () => {
+        const raster = (await rubricaParaPersistenciaAsync(svgBruto))?.trim() || svgBruto;
+
+        // Mescla no snapshot atual (evita sobrescrever WebP de outros índices).
+        const baseAtual = pendingResultadosNavRef.current ?? listaBase;
+        const listaRaster = baseAtual.map((item, idx) =>
+          idx === index
+            ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: raster }
+            : item,
+        );
+        const itemRaster = listaRaster[index];
+        if (!itemRaster?.rubricaCandidatoSvg?.trim()) return;
+
+        setListaResultadosRubricaNatacao((prev) => {
+          if (!prev || !prev[index]) {
+            pendingResultadosNavRef.current = listaRaster;
+            return prev;
+          }
+          const cur = (prev[index].rubricaCandidatoSvg || '').trim();
+          if (cur && cur !== svgBruto && !cur.startsWith('data:image/svg')) {
+            return prev;
+          }
+          const next = prev.map((item, idx) =>
+            idx === index
+              ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: raster }
+              : item,
+          );
+          pendingResultadosNavRef.current = next;
+          return next;
+        });
+        pendingResultadosNavRef.current = listaRaster;
+
+        setRubricasNatacaoSvg((prev) => {
+          const next = [...prev];
+          while (next.length <= index) next.push('');
+          const cur = (next[index] || '').trim();
+          if (cur && cur !== svgBruto && !cur.startsWith('data:image/svg')) return prev;
+          next[index] = raster;
+          return next;
+        });
+
+        if (!isModoDemonstracaoAtivo()) {
+          await persistirRubricasNoCadastro([itemRaster]);
+        }
+        const listaFinal = (pendingResultadosNavRef.current ?? listaRaster).map((item, idx) =>
+          idx === index
+            ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: raster }
+            : item,
+        );
+        pendingResultadosNavRef.current = listaFinal;
+        await atualizarSessaoEmAndamento(listaFinal);
+      })().catch(() => {
+        // Resultado já está na UI; falha na rúbrica não bloqueia o fluxo.
+      });
+    },
+    [atualizarSessaoEmAndamento],
+  );
 
   const aplicarSvgNoIndiceRubrica = useCallback(
     (index: number, svg: string, listaBase: ResultadoCorridaItem[]) => {
@@ -1594,26 +1659,17 @@ export default function AplicarTAFScreen() {
       let atualizados = res;
       if (svgNovo) {
         atualizados = aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res);
-        const item = atualizados[indiceRubricaNatacao];
-        void (async () => {
-          if (!item?.rubricaCandidatoSvg?.trim()) return;
-          if (!isModoDemonstracaoAtivo()) {
-            await persistirRubricasNoCadastro([item]);
-          }
-          await atualizarSessaoEmAndamento(atualizados);
-        })().catch(() => {
-          // Resultado já está salvo; falha na rúbrica não bloqueia o fluxo.
-        });
+        persistirRubricaCandidatoEmBackground(indiceRubricaNatacao, atualizados);
       }
       setIndiceRubricaNatacao(novoIndex);
       setErroRubricaNatacao('');
     },
     [
       aplicarSvgNoIndiceRubrica,
-      atualizarSessaoEmAndamento,
       buildSvgRubricaAtual,
       indiceRubricaNatacao,
       listaResultadosRubricaNatacao,
+      persistirRubricaCandidatoEmBackground,
     ],
   );
 
@@ -1647,19 +1703,10 @@ export default function AplicarTAFScreen() {
     const atualizados = svgNovo
       ? aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res)
       : res;
-    const itemConfirmado = atualizados[indiceRubricaNatacao];
 
-    const persistirRubricaAtual = async () => {
-      if (!itemConfirmado?.rubricaCandidatoSvg?.trim()) return;
-      if (!isModoDemonstracaoAtivo()) {
-        await persistirRubricasNoCadastro([itemConfirmado]);
-      }
-      await atualizarSessaoEmAndamento(atualizados);
-    };
-
-    void persistirRubricaAtual().catch(() => {
-      // Resultado já está salvo; falha na rúbrica não bloqueia o fluxo.
-    });
+    if (svgNovo) {
+      persistirRubricaCandidatoEmBackground(indiceRubricaNatacao, atualizados);
+    }
 
     const proximo = indiceRubricaNatacao + 1;
     if (proximo < atualizados.length) {
@@ -1688,13 +1735,13 @@ export default function AplicarTAFScreen() {
     setModalParcialAviso(null);
   }, [
     aplicarSvgNoIndiceRubrica,
-    atualizarSessaoEmAndamento,
     buildSvgRubricaAtual,
     indiceRubricaNatacao,
     iniciarFinalizacaoComAssinaturaAplicador,
     limparRubricaDraw,
     listaResultadosRubricaNatacao,
     modalParcialAviso,
+    persistirRubricaCandidatoEmBackground,
     rubricasNatacaoSvg,
   ]);
 

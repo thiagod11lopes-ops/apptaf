@@ -1870,15 +1870,12 @@ export default function AplicarTAFScreen() {
       return;
     }
     scrollNipsAposAddRef.current = false;
+    // Mantém o botão "Adicionar" e a lista de NIPs na área visível da página.
     const scroll = () => nipsScrollRef.current?.scrollToEnd({ animated: true });
-    // Aguarda o layout do novo campo de NIP antes de rolar.
     const raf = requestAnimationFrame(() => {
       InteractionManager.runAfterInteractions(() => {
         scroll();
-        // Web/PWA: um segundo passo cobre atraso de medição do conteúdo.
-        if (Platform.OS === 'web') {
-          setTimeout(scroll, 50);
-        }
+        setTimeout(scroll, Platform.OS === 'web' ? 80 : 40);
       });
     });
     return () => cancelAnimationFrame(raf);

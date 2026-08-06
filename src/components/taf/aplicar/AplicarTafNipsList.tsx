@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   FlatList,
   Platform,
+  type FlatList as FlatListType,
 } from 'react-native';
 import { HeartPulse, Trash2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -597,8 +598,39 @@ export function AplicarTafNipsList({
 
   const keyExtractor = useCallback((_nip: string, index: number) => `nip-row-${index}`, []);
 
+  const listRef = useRef<FlatListType<string>>(null);
+  const prevNipsLenRef = useRef(nips.length);
+  const scrollToEndAposAddRef = useRef(false);
+
+  // Armar o scroll no render (antes do onContentSizeChange) quando um NIP é adicionado.
+  if (nips.length > prevNipsLenRef.current) {
+    scrollToEndAposAddRef.current = true;
+  }
+
+  const rolarParaUltimoNip = useCallback(() => {
+    if (!scrollToEndAposAddRef.current) return;
+    listRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
+  useLayoutEffect(() => {
+    const cresceu = nips.length > prevNipsLenRef.current;
+    prevNipsLenRef.current = nips.length;
+    if (!cresceu && !scrollToEndAposAddRef.current) return;
+    rolarParaUltimoNip();
+    const t1 = setTimeout(rolarParaUltimoNip, 32);
+    const t2 = setTimeout(() => {
+      rolarParaUltimoNip();
+      scrollToEndAposAddRef.current = false;
+    }, 120);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [nips.length, rolarParaUltimoNip]);
+
   return (
     <FlatList
+      ref={listRef}
       data={nips}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
@@ -611,6 +643,7 @@ export function AplicarTafNipsList({
       ItemSeparatorComponent={NipRowSeparator}
       style={styles.list}
       scrollEnabled={nips.length > 0}
+      onContentSizeChange={rolarParaUltimoNip}
     />
   );
 }

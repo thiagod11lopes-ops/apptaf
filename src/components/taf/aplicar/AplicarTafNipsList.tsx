@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   FlatList,
   Platform,
+  type FlatList as FlatListType,
+  useWindowDimensions,
 } from 'react-native';
 import { HeartPulse, Trash2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -597,37 +599,62 @@ export function AplicarTafNipsList({
 
   const keyExtractor = useCallback((_nip: string, index: number) => `nip-row-${index}`, []);
 
-  /**
-   * No web/PWA o scroll aninhado da FlatList costuma falhar no standalone.
-   * Expandimos a lista na página e o ScrollView pai (com scrollIntoView) cuida do foco.
-   */
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.listWeb}>
-        {nips.map((nip, index) => (
-          <View key={keyExtractor(nip, index)}>
-            {index > 0 ? <NipRowSeparator /> : null}
-            {renderItem({ item: nip, index })}
-          </View>
-        ))}
-      </View>
-    );
+  const { height: windowHeight } = useWindowDimensions();
+  const listRef = useRef<FlatListType<string>>(null);
+  const prevNipsLenRef = useRef(nips.length);
+  const scrollToEndAposAddRef = useRef(false);
+
+  // Armar scroll no render quando um NIP é adicionado (antes do onContentSizeChange).
+  if (nips.length > prevNipsLenRef.current) {
+    scrollToEndAposAddRef.current = true;
   }
+
+  const listMaxHeight = useMemo(() => {
+    // Viewport limitado → FlatList virtualiza; o ScrollView da página cobre o resto.
+    const byWindow = Math.round(windowHeight * (Platform.OS === 'web' ? 0.48 : 0.42));
+    return Math.max(280, Math.min(560, byWindow));
+  }, [windowHeight]);
+
+  const rolarParaUltimoNip = useCallback(() => {
+    if (!scrollToEndAposAddRef.current) return;
+    listRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
+  useLayoutEffect(() => {
+    const cresceu = nips.length > prevNipsLenRef.current;
+    prevNipsLenRef.current = nips.length;
+    if (!cresceu && !scrollToEndAposAddRef.current) return;
+    rolarParaUltimoNip();
+    const t1 = setTimeout(rolarParaUltimoNip, 40);
+    const t2 = setTimeout(() => {
+      rolarParaUltimoNip();
+      scrollToEndAposAddRef.current = false;
+    }, Platform.OS === 'web' ? 160 : 100);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [nips.length, rolarParaUltimoNip]);
 
   return (
     <FlatList
+      ref={listRef}
       data={nips}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
       extraData={extraData}
       nestedScrollEnabled
-      initialNumToRender={8}
-      maxToRenderPerBatch={8}
-      windowSize={7}
-      removeClippedSubviews
+      keyboardShouldPersistTaps="handled"
+      initialNumToRender={6}
+      maxToRenderPerBatch={6}
+      windowSize={5}
+      updateCellsBatchingPeriod={50}
+      removeClippedSubviews={Platform.OS !== 'web'}
       ItemSeparatorComponent={NipRowSeparator}
-      style={styles.list}
+      style={[styles.list, { maxHeight: listMaxHeight }]}
       scrollEnabled={nips.length > 0}
+      onContentSizeChange={rolarParaUltimoNip}
+      accessibilityLabel="Lista de NIPs dos participantes"
     />
   );
 }
@@ -818,9 +845,6 @@ function createNipsListStyles(theme: AppTheme, ui: ReturnType<typeof getUiColors
 
 const styles = StyleSheet.create({
   list: {
-    maxHeight: 520,
-  },
-  listWeb: {
     width: '100%',
   },
   separator: {

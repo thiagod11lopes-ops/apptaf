@@ -34,7 +34,8 @@ export type AplicarTafRubricaCandidatoModalProps = {
   indice: number;
   rubricaStrokes: RubricaStroke[];
   rubricaStrokeAtual: RubricaStroke;
-  rubricasSvg: string[];
+  /** SVG já confirmado do participante atual (lido de ref — sem re-render da lista inteira). */
+  svgSalvoAtual?: string | null;
   rubricaCanvasWidth: number;
   erro: string;
   onRequestClose: () => void;
@@ -57,7 +58,7 @@ export function AplicarTafRubricaCandidatoModal({
   indice,
   rubricaStrokes,
   rubricaStrokeAtual,
-  rubricasSvg,
+  svgSalvoAtual,
   rubricaCanvasWidth,
   erro,
   onRequestClose,
@@ -121,9 +122,7 @@ export function AplicarTafRubricaCandidatoModal({
                       : 'Corrida';
               const temTracoRubrica =
                 rubricaStrokes.some((s) => s.length > 0) || rubricaStrokeAtual.length > 0;
-              const svgSalvoUri = normalizarRubricaSvgDataUrl(
-                participanteAtual.rubricaCandidatoSvg || rubricasSvg[indice],
-              );
+              const svgSalvoUri = normalizarRubricaSvgDataUrl(svgSalvoAtual);
               const temRubricaSalva = Boolean(svgSalvoUri);
               const podeAvancar = temTracoRubrica || temRubricaSalva;
               const tempoStr = formatMsByModality(

@@ -314,14 +314,14 @@ export default function AplicarTAFScreen() {
   const pendingCadastrosRef = useRef<CadastroItemPersist[]>([]);
   const pendingCleanupsRef = useRef<Array<() => Promise<void>>>([]);
   const sessaoAplicacaoIdRef = useRef<string | null>(null);
-  /** Lista espelhada em estado para o modal de rúbrica re-renderizar ao mudar o participante. */
+  /** Lista estável no state (abertura/restauração); SVGs e mutações ficam em refs. */
   const [listaResultadosRubricaNatacao, setListaResultadosRubricaNatacao] = useState<
     ResultadoCorridaItem[] | null
   >(null);
   const [modalRubricaNatacaoVisible, setModalRubricaNatacaoVisible] = useState(false);
   const [fluxoAplicadorVisible, setFluxoAplicadorVisible] = useState(false);
   const [indiceRubricaNatacao, setIndiceRubricaNatacao] = useState(0);
-  const [rubricasNatacaoSvg, setRubricasNatacaoSvg] = useState<string[]>([]);
+  const rubricasSvgRef = useRef<string[]>([]);
   const [erroRubricaNatacao, setErroRubricaNatacao] = useState('');
   const {
     strokes: rubricaStrokes,
@@ -716,7 +716,7 @@ export default function AplicarTAFScreen() {
         pendingCadastros: pendingCadastrosRef.current.map((c) => ({ ...c })),
         sessaoAplicacaoId,
         indiceRubrica: indiceRubricaNatacao,
-        listaResultadosRubrica: (listaResultadosRubricaNatacao ?? resultadosPendentes).map(
+        listaResultadosRubrica: (pendingResultadosNavRef.current ?? resultadosPendentes).map(
           (r) => ({ ...r }),
         ),
       };
@@ -840,7 +840,9 @@ export default function AplicarTAFScreen() {
         pendingResultadosNavRef.current = resultados;
         if (fin.fase === 'rubrica_candidatos') {
           const lista = (fin.listaResultadosRubrica ?? resultados).map((r) => ({ ...r }));
+          rubricasSvgRef.current = lista.map((r) => (r.rubricaCandidatoSvg || '').trim());
           setListaResultadosRubricaNatacao(lista);
+          pendingResultadosNavRef.current = lista;
           setIndiceRubricaNatacao(fin.indiceRubrica ?? 0);
           setErroRubricaNatacao('');
           limparRubricaDraw();
@@ -848,6 +850,7 @@ export default function AplicarTAFScreen() {
           setFluxoAplicadorVisible(false);
           setModalTempoRegistradoVisible(false);
         } else if (fin.fase === 'aplicador') {
+          rubricasSvgRef.current = [];
           setListaResultadosRubricaNatacao(null);
           setModalRubricaNatacaoVisible(false);
           setModalTempoRegistradoVisible(false);
@@ -901,6 +904,7 @@ export default function AplicarTAFScreen() {
     setContinuidadeProvaMeta(null);
     limparBufferAplicacao();
     setListaResultadosRubricaNatacao(null);
+    rubricasSvgRef.current = [];
     setModalRubricaNatacaoVisible(false);
     setFluxoAplicadorVisible(false);
     setModalTempoRegistradoVisible(false);
@@ -1247,7 +1251,7 @@ export default function AplicarTAFScreen() {
       rubricaPersistGeracaoRef.current += 1;
       rubricaPersistChainRef.current = Promise.resolve();
       setModalParcialAviso(avisoParcial);
-      setRubricasNatacaoSvg(Array.from({ length: resultados.length }, () => ''));
+      rubricasSvgRef.current = Array.from({ length: resultados.length }, () => '');
       setIndiceRubricaNatacao(0);
       setErroRubricaNatacao('');
       limparRubricaDraw();
@@ -1278,13 +1282,13 @@ export default function AplicarTAFScreen() {
   const cancelarFluxoRubricaCandidatos = useCallback(() => {
     rubricaPersistGeracaoRef.current += 1;
     const res =
-      listaResultadosRubricaNatacao ??
       pendingResultadosNavRef.current ??
+      listaResultadosRubricaNatacao ??
       resultadosPosMilitaresRef.current;
     setModalRubricaNatacaoVisible(false);
     setIndiceRubricaNatacao(0);
     setListaResultadosRubricaNatacao(null);
-    setRubricasNatacaoSvg([]);
+    rubricasSvgRef.current = [];
     setErroRubricaNatacao('');
     limparRubricaDraw();
     setModalParcialAviso(null);
@@ -1651,22 +1655,20 @@ export default function AplicarTAFScreen() {
   const limparRubricaNatacaoAtual = useCallback(() => {
     setErroRubricaNatacao('');
     limparRubricaDraw();
-    setRubricasNatacaoSvg((prev) => {
-      const next = [...prev];
-      if (indiceRubricaNatacao < next.length) next[indiceRubricaNatacao] = '';
-      return next;
-    });
-    setListaResultadosRubricaNatacao((prev) => {
-      if (!prev) return prev;
-      const atualizados = prev.map((item, idx) =>
-        idx === indiceRubricaNatacao
-          ? { ...item, rubricaCandidato: undefined, rubricaCandidatoSvg: undefined }
-          : item,
-      );
-      pendingResultadosNavRef.current = atualizados;
-      return atualizados;
-    });
-  }, [indiceRubricaNatacao, limparRubricaDraw]);
+    const nextSvg = [...rubricasSvgRef.current];
+    if (indiceRubricaNatacao < nextSvg.length) nextSvg[indiceRubricaNatacao] = '';
+    rubricasSvgRef.current = nextSvg;
+
+    const base = pendingResultadosNavRef.current ?? listaResultadosRubricaNatacao;
+    if (!base) return;
+    const atualizados = base.map((item, idx) =>
+      idx === indiceRubricaNatacao
+        ? { ...item, rubricaCandidato: undefined, rubricaCandidatoSvg: undefined }
+        : item,
+    );
+    pendingResultadosNavRef.current = atualizados;
+    // Não setState da lista inteira — o canvas já limpou; índice inalterado.
+  }, [indiceRubricaNatacao, limparRubricaDraw, listaResultadosRubricaNatacao]);
 
   const buildSvgRubricaAtual = useCallback((): string | null => {
     const strokesProntos = getTodosStrokesRubrica();
@@ -1716,6 +1718,7 @@ export default function AplicarTAFScreen() {
       });
   }, []);
 
+  /** Atualiza só refs — sem setState da lista (item 4: menos re-render entre militares). */
   const aplicarSvgNoIndiceRubrica = useCallback(
     (index: number, svg: string, listaBase: ResultadoCorridaItem[]) => {
       const atualizados = listaBase.map((item, idx) =>
@@ -1723,14 +1726,11 @@ export default function AplicarTAFScreen() {
           ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: svg }
           : item,
       );
-      setRubricasNatacaoSvg((prev) => {
-        const next = [...prev];
-        while (next.length < atualizados.length) next.push('');
-        next[index] = svg;
-        return next;
-      });
+      const nextSvg = [...rubricasSvgRef.current];
+      while (nextSvg.length < atualizados.length) nextSvg.push('');
+      nextSvg[index] = svg;
+      rubricasSvgRef.current = nextSvg;
       pendingResultadosNavRef.current = atualizados;
-      setListaResultadosRubricaNatacao(atualizados);
       return atualizados;
     },
     [],
@@ -1738,13 +1738,12 @@ export default function AplicarTAFScreen() {
 
   const irParaRubricaIndex = useCallback(
     (novoIndex: number) => {
-      const res = listaResultadosRubricaNatacao ?? pendingResultadosNavRef.current;
+      const res = pendingResultadosNavRef.current ?? listaResultadosRubricaNatacao;
       if (!res || novoIndex < 0 || novoIndex >= res.length) return;
       if (novoIndex === indiceRubricaNatacao) return;
       const svgNovo = buildSvgRubricaAtual();
-      let atualizados = res;
       if (svgNovo) {
-        atualizados = aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res);
+        aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res);
         enqueuePersistRubricaCandidato(indiceRubricaNatacao, svgNovo);
       }
       setIndiceRubricaNatacao(novoIndex);
@@ -1768,12 +1767,12 @@ export default function AplicarTAFScreen() {
   }, [cancelarFluxoRubricaCandidatos, indiceRubricaNatacao, irParaRubricaIndex]);
 
   const confirmarRubricaNatacao = useCallback(() => {
-    const res = listaResultadosRubricaNatacao ?? pendingResultadosNavRef.current;
+    const res = pendingResultadosNavRef.current ?? listaResultadosRubricaNatacao;
     if (!res || res.length === 0) {
       setModalRubricaNatacaoVisible(false);
       setIndiceRubricaNatacao(0);
       setListaResultadosRubricaNatacao(null);
-      setRubricasNatacaoSvg([]);
+      rubricasSvgRef.current = [];
       setErroRubricaNatacao('');
       limparRubricaDraw();
       return;
@@ -1781,7 +1780,7 @@ export default function AplicarTAFScreen() {
     const svgNovo = buildSvgRubricaAtual();
     const svgExistente =
       (res[indiceRubricaNatacao]?.rubricaCandidatoSvg || '').trim() ||
-      (rubricasNatacaoSvg[indiceRubricaNatacao] || '').trim();
+      (rubricasSvgRef.current[indiceRubricaNatacao] || '').trim();
     if (!svgNovo && !svgExistente) {
       setErroRubricaNatacao('Desenhe a rúbrica do candidato para continuar.');
       return;
@@ -1796,6 +1795,7 @@ export default function AplicarTAFScreen() {
 
     const proximo = indiceRubricaNatacao + 1;
     if (proximo < atualizados.length) {
+      // Só índice (+ limpeza do canvas no effect) — sem setState da lista.
       setIndiceRubricaNatacao(proximo);
       setErroRubricaNatacao('');
       return;
@@ -1809,7 +1809,7 @@ export default function AplicarTAFScreen() {
     setModalRubricaNatacaoVisible(false);
     setIndiceRubricaNatacao(0);
     setListaResultadosRubricaNatacao(null);
-    setRubricasNatacaoSvg([]);
+    rubricasSvgRef.current = [];
     setErroRubricaNatacao('');
     limparRubricaDraw();
     setCorridaEtapa('nips');
@@ -1833,7 +1833,6 @@ export default function AplicarTAFScreen() {
     limparRubricaDraw,
     listaResultadosRubricaNatacao,
     modalParcialAviso,
-    rubricasNatacaoSvg,
   ]);
 
   /** Ao trocar de participante ou abrir o modal: limpa a área de assinatura para não misturar traços. */
@@ -3506,7 +3505,13 @@ export default function AplicarTAFScreen() {
         indice={indiceRubricaNatacao}
         rubricaStrokes={rubricaStrokes}
         rubricaStrokeAtual={rubricaStrokeAtual}
-        rubricasSvg={rubricasNatacaoSvg}
+        svgSalvoAtual={
+          (
+            pendingResultadosNavRef.current?.[indiceRubricaNatacao]?.rubricaCandidatoSvg ||
+            rubricasSvgRef.current[indiceRubricaNatacao] ||
+            ''
+          ).trim() || null
+        }
         rubricaCanvasWidth={rubricaCanvasWidth}
         erro={erroRubricaNatacao}
         onRequestClose={onVoltarRubricaCandidato}

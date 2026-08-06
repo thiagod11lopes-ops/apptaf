@@ -1,5 +1,7 @@
 import React from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useIsFocused } from '@react-navigation/native';
 import type { MainTabParamList } from './types';
 import HomeScreen from '../screens/HomeScreen';
 import CadastroScreenModern from '../screens/CadastroScreenModern';
@@ -10,15 +12,43 @@ import EstatisticasScreen from '../screens/EstatisticasScreen';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 /**
- * Abas principais. Lazy padrão (só monta ao visitar) — evita empilhar telas
- * uma sobre a outra no web/PWA. A barra visual continua em GlassBottomBar / Sidebar.
+ * O bottom-tabs no web mantém abas visitadas com absoluteFill + zIndex -1.
+ * Com fundo transparente do AppShell, as telas de baixo vazam por cima umas das outras.
+ * Aqui a aba sem foco some de verdade (display:none / sem filhos).
+ */
+function TabSceneVisibilityGate({ children }: { children: React.ReactNode }) {
+  const focused = useIsFocused();
+
+  if (!focused) {
+    return (
+      <View
+        style={styles.hiddenScene}
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        {...(Platform.OS === 'web' ? ({ inert: true } as object) : null)}
+      />
+    );
+  }
+
+  return <View style={styles.visibleScene}>{children}</View>;
+}
+
+/**
+ * Abas principais. A barra visual continua em GlassBottomBar / Sidebar.
  */
 export function MainTabNavigator() {
   return (
     <Tab.Navigator
       tabBar={() => null}
+      detachInactiveScreens
       screenOptions={{
         headerShown: false,
+        lazy: true,
+        freezeOnBlur: true,
+        screenLayout: ({ children }) => (
+          <TabSceneVisibilityGate>{children}</TabSceneVisibilityGate>
+        ),
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
@@ -29,3 +59,16 @@ export function MainTabNavigator() {
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  visibleScene: {
+    flex: 1,
+  },
+  hiddenScene: {
+    ...StyleSheet.absoluteFillObject,
+    // web: some o nó da árvore visual; nativo: sem área/opacidade
+    ...(Platform.OS === 'web'
+      ? ({ display: 'none' } as object)
+      : { opacity: 0, overflow: 'hidden' }),
+  },
+});

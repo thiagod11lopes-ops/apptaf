@@ -12,30 +12,30 @@ import EstatisticasScreen from '../screens/EstatisticasScreen';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 /**
- * No web, react-native-screens fica desligado por padrão → abas inativas só
- * recebem zIndex:-1 e vazam pelo fundo transparente. Este gate garante
- * display:none + sem conteúdo quando a aba não está focada.
+ * Item 1 — keep-alive das abas:
+ * - Mantém `{children}` montados (estado, caches e prova ativa preservados).
+ * - Aba sem foco: display:none / hidden (não empilha no fundo transparente).
  *
- * Importante: `screenLayout` é prop do Navigator (não de screenOptions).
+ * `screenLayout` deve ser prop do Navigator (não de screenOptions).
+ * No web, App.tsx liga `enableScreens(true)` para o Screen.web também usar display:none.
  */
 function TabSceneVisibilityGate({ children }: { children: React.ReactNode }) {
   const focused = useIsFocused();
 
-  if (!focused) {
-    return (
-      <View
-        style={styles.hiddenScene}
-        pointerEvents="none"
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        {...(Platform.OS === 'web'
-          ? ({ hidden: true, inert: true } as object)
-          : null)}
-      />
-    );
-  }
-
-  return <View style={styles.visibleScene}>{children}</View>;
+  return (
+    <View
+      style={[styles.scene, focused ? null : styles.sceneHidden]}
+      pointerEvents={focused ? 'auto' : 'none'}
+      accessibilityElementsHidden={!focused}
+      importantForAccessibility={focused ? 'auto' : 'no-hide-descendants'}
+      collapsable={false}
+      {...(Platform.OS === 'web' && !focused
+        ? ({ hidden: true, inert: true, 'aria-hidden': true } as object)
+        : null)}
+    >
+      {children}
+    </View>
+  );
 }
 
 /**
@@ -51,10 +51,9 @@ export function MainTabNavigator() {
       )}
       screenOptions={{
         headerShown: false,
+        /** Primeira visita monta; depois a aba permanece viva (gate não desmonta). */
         lazy: true,
         freezeOnBlur: true,
-        // Reforço: cena inativa some mesmo se o Screen nativo falhar no web.
-        sceneStyle: Platform.OS === 'web' ? styles.sceneWeb : undefined,
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
@@ -67,20 +66,16 @@ export function MainTabNavigator() {
 }
 
 const styles = StyleSheet.create({
-  visibleScene: {
+  scene: {
     flex: 1,
-    backgroundColor: 'transparent',
   },
-  hiddenScene: {
-    flex: 0,
-    height: 0,
-    width: 0,
-    overflow: 'hidden',
+  sceneHidden: {
+    ...StyleSheet.absoluteFillObject,
     opacity: 0,
-    ...(Platform.OS === 'web' ? ({ display: 'none' } as object) : null),
-  },
-  sceneWeb: {
-    flex: 1,
-    backgroundColor: 'transparent',
+    overflow: 'hidden',
+    zIndex: -1,
+    ...(Platform.OS === 'web'
+      ? ({ display: 'none', visibility: 'hidden' } as object)
+      : null),
   },
 });

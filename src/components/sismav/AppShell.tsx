@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
@@ -12,6 +12,10 @@ type Props = {
   fullWidth?: boolean;
 };
 
+/**
+ * Chrome desktop (sidebar + footer). Sem ScrollView externo —
+ * cada tela controla o próprio scroll (MobileScreenScaffold / FlatList).
+ */
 export function AppShell({ children, activeRoute, fullWidth }: Props) {
   const { theme } = useTheme();
   const { useSidebarShell } = useDeviceLayout();
@@ -37,13 +41,9 @@ export function AppShell({ children, activeRoute, fullWidth }: Props) {
         <SidebarNav activeRoute={activeRoute} />
       </LinearGradient>
       <View style={styles.body} {...(Platform.OS === 'web' ? { className: 'app-body' as never } : {})}>
-        <ScrollView
-          style={styles.mainScroll}
-          contentContainerStyle={styles.mainScrollContent}
-          showsVerticalScrollIndicator
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-          {...(Platform.OS === 'web' ? { className: 'app-main-scroll' as never } : {})}
+        <View
+          style={styles.mainArea}
+          {...(Platform.OS === 'web' ? { className: 'app-main-area' as never } : {})}
         >
           <LinearGradient
             colors={['transparent', 'transparent']}
@@ -56,7 +56,7 @@ export function AppShell({ children, activeRoute, fullWidth }: Props) {
           >
             <View style={styles.mainContent}>{children}</View>
           </LinearGradient>
-        </ScrollView>
+        </View>
         <View style={[styles.footer, { borderTopColor: theme.border }]}>
           <Text style={[styles.footerText, { color: theme.textMuted }]}>
             Sistema TAF · {new Date().getFullYear()}
@@ -89,19 +89,19 @@ const styles = StyleSheet.create({
     minHeight: 0,
     flexDirection: 'column',
   },
-  mainScroll: {
+  /** Área da rota — flex fixo; scroll fica nas telas filhas. */
+  mainArea: {
     flex: 1,
     minHeight: 0,
-  },
-  mainScrollContent: {
-    flexGrow: 1,
+    overflow: 'hidden',
   },
   main: {
+    flex: 1,
     width: '100%',
     maxWidth: 1280,
     alignSelf: 'center',
     padding: 24,
-    minHeight: Platform.OS === 'web' ? ('100%' as unknown as number) : undefined,
+    minHeight: 0,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -111,6 +111,7 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     flex: 1,
+    minHeight: 0,
     width: '100%',
     zIndex: 1,
   },

@@ -137,22 +137,26 @@
   overflow: hidden;
 }
 
-.app-main-scroll {
+/* Shell só chrome: sem scroll externo (virtualização / FlatList nas telas). */
+.app-main-area {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-main {
   flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 1280px;
   margin: 0 auto;
   padding: 1.5rem;
   box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-main--full {

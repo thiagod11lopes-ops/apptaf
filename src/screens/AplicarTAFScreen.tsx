@@ -235,10 +235,10 @@ export default function AplicarTAFScreen() {
   const [listaPreCadastros, setListaPreCadastros] = useState<PreCadastroTaf[]>([]);
   const [preCadastroParaExcluir, setPreCadastroParaExcluir] = useState<PreCadastroTaf | null>(null);
   const [excluindoPreCadastro, setExcluindoPreCadastro] = useState(false);
-  /** Nome OTAN do pré-cadastro em edição (Alfa…Zulu). */
-  const [nomeCodigoPreCadastro, setNomeCodigoPreCadastro] = useState<NomeCodigoPreCadastro | null>(
-    null,
-  );
+  /** Nome OTAN do pré-cadastro (Alfa…Zulu) ou `Nenhum` (só numeração). */
+  const [nomeCodigoPreCadastro, setNomeCodigoPreCadastro] = useState<
+    NomeCodigoPreCadastro | 'Nenhum' | null
+  >(null);
   const [mostrarProvas, setMostrarProvas] = useState(false);
   const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
   const tipoProvaRef = useRef<TipoProvaTAF | null>(null);
@@ -2787,22 +2787,31 @@ export default function AplicarTAFScreen() {
       );
       return;
     }
-    if (!nomeCodigoPreCadastro || !isNomeCodigoPreCadastro(nomeCodigoPreCadastro)) {
+    if (nomeCodigoPreCadastro == null) {
       Alert.alert(
         'Nome do pré-cadastro',
-        'Selecione um nome (Alfa, Bravo, Charlie… Zulu) antes de salvar.',
+        'Selecione um nome (Alfa…Zulu) ou a opção Nenhum.',
       );
       return;
     }
-    const nomeJaUsado = listaPreCadastros.some(
-      (p) => (p.nomeCodigo || '').trim() === nomeCodigoPreCadastro,
-    );
-    if (nomeJaUsado) {
-      Alert.alert(
-        'Nome em uso',
-        `O nome ${nomeCodigoPreCadastro} já está em outro pré-cadastro. Escolha outro.`,
+    if (nomeCodigoPreCadastro !== 'Nenhum') {
+      if (!isNomeCodigoPreCadastro(nomeCodigoPreCadastro)) {
+        Alert.alert(
+          'Nome do pré-cadastro',
+          'Selecione um nome válido (Alfa…Zulu) ou a opção Nenhum.',
+        );
+        return;
+      }
+      const nomeJaUsado = listaPreCadastros.some(
+        (p) => (p.nomeCodigo || '').trim() === nomeCodigoPreCadastro,
       );
-      return;
+      if (nomeJaUsado) {
+        Alert.alert(
+          'Nome em uso',
+          `O nome ${nomeCodigoPreCadastro} já está em outro pré-cadastro. Escolha outro.`,
+        );
+        return;
+      }
     }
     for (let i = 0; i < nParticipantesConfirmado; i += 1) {
       if (nipFeedbackLinhas[i]?.tipo !== 'ok') {
@@ -2826,7 +2835,10 @@ export default function AplicarTAFScreen() {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       criadoEm: Date.now(),
       numero: 0, // atribuído em addPreCadastroTaf (max existente + 1, ou 1 se vazio)
-      nomeCodigo: nomeCodigoPreCadastro,
+      nomeCodigo:
+        nomeCodigoPreCadastro !== 'Nenhum' && isNomeCodigoPreCadastro(nomeCodigoPreCadastro)
+          ? nomeCodigoPreCadastro
+          : undefined,
       tipoProva,
       normaTaf: modoTafNaval ? 'cfn' : 'armada',
       participantes,
@@ -3492,7 +3504,7 @@ export default function AplicarTAFScreen() {
                   demoAtivo
                     ? `NIPs, idade e gênero dos ${nParticipantesConfirmado} participantes ficam bloqueados no Modo Teste. Use o botão acima para preencher.`
                     : modoPreCadastro
-                      ? 'Escolha o nome do pré-cadastro (Alfa…Zulu) e informe o NIP de cada participante.'
+                      ? 'Opcional: escolha Alfa…Zulu ou Nenhum. Depois informe o NIP de cada participante.'
                       : 'Informe o NIP de cada participante. Use Adicionar Participante para incluir mais.'
                 }
               />
@@ -3508,17 +3520,25 @@ export default function AplicarTAFScreen() {
                   Nome do pré-cadastro
                 </Text>
                 <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 8 }]}>
-                  Obrigatório e exclusivo. Nomes já usados em outros pré-cadastros não aparecem.
+                  Escolha um nome (único) ou Nenhum para usar só a numeração. Nomes já em uso não
+                  aparecem.
                 </Text>
                 <View style={styles.nomeCodigoChips}>
-                  {nomesCodigoDisponiveis(listaPreCadastros).map((nome) => {
+                  {(
+                    [
+                      'Nenhum' as const,
+                      ...nomesCodigoDisponiveis(listaPreCadastros),
+                    ] as const
+                  ).map((nome) => {
                     const active = nomeCodigoPreCadastro === nome;
                     return (
                       <TouchableOpacity
                         key={nome}
                         accessibilityRole="button"
                         accessibilityState={{ selected: active }}
-                        accessibilityLabel={`Nome ${nome}`}
+                        accessibilityLabel={
+                          nome === 'Nenhum' ? 'Sem nome de código' : `Nome ${nome}`
+                        }
                         onPress={() => setNomeCodigoPreCadastro(nome)}
                         style={[
                           styles.nomeCodigoChip,
@@ -3546,12 +3566,14 @@ export default function AplicarTAFScreen() {
                 </View>
                 {nomeCodigoPreCadastro ? (
                   <Text style={[ts.caption, { color: theme.primary, marginTop: 8, fontWeight: '700' }]}>
-                    Selecionado: {nomeCodigoPreCadastro}
+                    {nomeCodigoPreCadastro === 'Nenhum'
+                      ? 'Selecionado: Nenhum (apenas numeração)'
+                      : `Selecionado: ${nomeCodigoPreCadastro}`}
                   </Text>
                 ) : null}
                 {nomesCodigoDisponiveis(listaPreCadastros).length === 0 ? (
-                  <Text style={[ts.caption, { color: theme.error, marginTop: 8 }]}>
-                    Todos os nomes Alfa–Zulu já estão em uso. Conclua ou exclua um pré-cadastro.
+                  <Text style={[ts.caption, { color: theme.textSecondary, marginTop: 8 }]}>
+                    Todos os nomes Alfa–Zulu estão em uso. Você ainda pode escolher Nenhum.
                   </Text>
                 ) : null}
               </View>

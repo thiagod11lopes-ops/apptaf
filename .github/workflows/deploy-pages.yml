@@ -17,7 +17,8 @@ permissions:
 
 concurrency:
   group: pages-deploy
-  cancel-in-progress: true
+  # false: evita cancelar deploy no meio e deixar o Pages "preso"/em timeout
+  cancel-in-progress: false
 
 jobs:
   deploy:

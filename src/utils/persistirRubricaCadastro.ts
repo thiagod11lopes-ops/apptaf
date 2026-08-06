@@ -1,5 +1,9 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
-import { addCadastro, getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import {
+  addCadastrosEmLote,
+  getAllCadastros,
+  type CadastroItemPersist,
+} from '../services/cadastrosIndexedDb';
 import { peekCadastrosListCache } from '../services/cadastrosListCache';
 import {
   getAllSessoesAplicacao,
@@ -58,13 +62,13 @@ export function aplicarRubricasEmCadastros(
 
 export type PersistirRubricasOpcoes = {
   /**
-   * Grava o data-URL como veio (SVG bruto), sem canvas/WebP.
-   * Use no “Próximo” do fluxo de candidatos para não engasgar.
+   * Grava o data-URL como veio (SVG bruto ou já raster), sem canvas/WebP.
+   * Use no fim do fluxo (batch) ou quando o caller já rasterizou.
    */
   manterSvgBruto?: boolean;
 };
 
-/** Grava rúbricas SVG no cadastro conforme a prova de cada resultado. */
+/** Grava rúbricas no cadastro em um único lote IDB (conforme a prova de cada resultado). */
 export async function persistirRubricasNoCadastro(
   resultados: ResultadoCorridaItem[],
   opcoes?: PersistirRubricasOpcoes,
@@ -74,13 +78,13 @@ export async function persistirRubricasNoCadastro(
   const peeked = peekCadastrosListCache();
   const cadastros = peeked ?? (await getAllCadastros());
   const lista: CadastroItemPersist[] = [...cadastros];
-  let ok = 0;
   const manterSvgBruto = opcoes?.manterSvgBruto === true;
+  const paraGravar: CadastroItemPersist[] = [];
 
   for (const r of resultados) {
     const bruto = (r.rubricaCandidatoSvg || '').trim();
     if (!bruto) continue;
-    // Já rasterizada no caller, ou gravando SVG bruto no fluxo “Próximo”.
+    // Já rasterizada no caller, ou gravando data-URL bruto no batch final.
     const svg = manterSvgBruto || isRubricaRasterDataUrl(bruto)
       ? bruto
       : (await rubricaParaPersistenciaAsync(bruto))?.trim();
@@ -92,24 +96,18 @@ export async function persistirRubricasNoCadastro(
     }
     if (busca.kind !== 'found') continue;
 
-    const prova = r.prova ?? 'corrida';
-    const patch: Partial<CadastroItemPersist> =
-      prova === 'natacao'
-        ? { rubricaNatacaoSvg: svg }
-        : prova === 'permanencia'
-          ? { rubricaPermanenciaSvg: svg }
-          : prova === 'caminhada'
-            ? { rubricaCaminhadaSvg: svg }
-            : { rubricaCorridaSvg: svg };
-
-    const atualizado: CadastroItemPersist = { ...busca.cadastro, ...patch };
-    await addCadastro(atualizado);
+    const atualizado: CadastroItemPersist = {
+      ...busca.cadastro,
+      ...patchRubricaPorProva(r.prova, svg),
+    };
     const idx = lista.findIndex((c) => c.id === atualizado.id);
     if (idx >= 0) lista[idx] = atualizado;
-    ok += 1;
+    paraGravar.push(atualizado);
   }
 
-  return ok;
+  if (paraGravar.length === 0) return 0;
+  await addCadastrosEmLote(paraGravar);
+  return paraGravar.length;
 }
 
 /**

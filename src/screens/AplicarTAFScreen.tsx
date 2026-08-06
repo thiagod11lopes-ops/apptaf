@@ -300,7 +300,7 @@ export default function AplicarTAFScreen() {
   const [modalTempoRegistradoVisible, setModalTempoRegistradoVisible] = useState(false);
   const [modalParcialAviso, setModalParcialAviso] = useState<string | null>(null);
   const pendingResultadosNavRef = useRef<ResultadoCorridaItem[] | null>(null);
-  /** Fila serial: SVG no Próximo; WebP em lote em background (não bloqueia abrir/concluir chefe). */
+  /** Fila de lote: WebP + um write IDB ao abrir o aplicador (não bloqueia UI). */
   const rubricaPersistChainRef = useRef(Promise.resolve());
   const rubricaPersistGeracaoRef = useRef(0);
   const resultadosPosMilitaresRef = useRef<ResultadoCorridaItem[] | null>(null);
@@ -1120,8 +1120,6 @@ export default function AplicarTAFScreen() {
           if (!base?.length) return;
 
           let lista = base.map((r) => ({ ...r }));
-          let mudou = false;
-          const atualizadosParaCadastro: ResultadoCorridaItem[] = [];
 
           for (let i = 0; i < lista.length; i++) {
             if (rubricaPersistGeracaoRef.current !== geracao) return;
@@ -1133,22 +1131,17 @@ export default function AplicarTAFScreen() {
             }
 
             const raster = (await rubricaParaPersistenciaAsync(bruto))?.trim();
-            if (!raster) continue;
-
-            if (raster !== bruto) {
+            if (raster && raster !== bruto) {
               lista[i] = {
                 ...item,
                 rubricaCandidato: 'Rúbrica capturada',
                 rubricaCandidatoSvg: raster,
               };
-              mudou = true;
-              atualizadosParaCadastro.push(lista[i]!);
             }
             await yieldToUi();
           }
 
           if (rubricaPersistGeracaoRef.current !== geracao) return;
-          if (!mudou) return;
 
           if (pendingResultadosNavRef.current) {
             pendingResultadosNavRef.current = lista;
@@ -1157,41 +1150,41 @@ export default function AplicarTAFScreen() {
             resultadosPosMilitaresRef.current = lista;
           }
 
-          if (!isModoDemonstracaoAtivo() && atualizadosParaCadastro.length > 0) {
-            // Já rasterizado: persistirRubricasNoCadastro não redesenha no canvas.
-            await persistirRubricasNoCadastro(atualizadosParaCadastro);
+          // Um único lote IDB no fim (SVG restantes ou WebP) — sem write por militar no meio.
+          const paraCadastro = lista.filter((r) => (r.rubricaCandidatoSvg || '').trim());
+          if (!isModoDemonstracaoAtivo() && paraCadastro.length > 0) {
+            await persistirRubricasNoCadastro(paraCadastro, { manterSvgBruto: true });
           }
 
-          // Se o chefe já concluiu (sessão liberada na UI), ainda troca SVG→WebP na sessão.
+          // Se o chefe já concluiu (sessão liberada na UI), espelha rúbricas na sessão.
           const sessaoId = sessaoAplicacaoIdRef.current ?? sessaoIdSnapshot;
           if (sessaoId) {
             try {
               const sessao = await getSessaoAplicacaoById(sessaoId);
               if (sessao) {
-                const rasterPorNip = new Map(
+                const porNip = new Map(
                   lista.map((r) => [(r.nip || '').replace(/\D/g, ''), r] as const),
                 );
                 const resultados = sessao.resultados.map((r) => {
                   const chave = (r.nip || '').replace(/\D/g, '');
-                  const upd = chave ? rasterPorNip.get(chave) : undefined;
-                  const raster = (upd?.rubricaCandidatoSvg || '').trim();
-                  if (!raster || !isRubricaRasterDataUrl(raster)) return r;
+                  const upd = chave ? porNip.get(chave) : undefined;
+                  const svg = (upd?.rubricaCandidatoSvg || '').trim();
+                  if (!svg) return r;
                   return {
                     ...r,
                     rubricaCandidato: 'Rúbrica capturada',
-                    rubricaCandidatoSvg: raster,
+                    rubricaCandidatoSvg: svg,
                   };
                 });
-                // Reusa `sessao` (inclui assinatura do aplicador se já gravada).
                 await updateSessaoAplicacao({ ...sessao, resultados });
               }
             } catch {
-              // Cadastro já tem WebP; falha ao espelhar na sessão não bloqueia.
+              // Cadastro já gravado; falha ao espelhar na sessão não bloqueia.
             }
           }
         })
         .catch(() => {
-          // SVG já está salvo; falha no lote WebP não bloqueia o fluxo do chefe.
+          // Falha no lote não bloqueia o fluxo do chefe (refs já têm as rúbricas).
         });
     },
     [],
@@ -1683,42 +1676,7 @@ export default function AplicarTAFScreen() {
     );
   }, [getTodosStrokesRubrica, rubricaCanvasWidth]);
 
-  /**
-   * Grava só o SVG bruto em fila (sem canvas/WebP neste clique).
-   * O avançar para o próximo candidato (ou chefe) não espera esta fila.
-   */
-  const enqueuePersistRubricaCandidato = useCallback((index: number, svgBruto: string) => {
-    const svg = svgBruto.trim();
-    if (!svg) return;
-    const geracao = rubricaPersistGeracaoRef.current;
-    rubricaPersistChainRef.current = rubricaPersistChainRef.current
-      .then(async () => {
-        if (rubricaPersistGeracaoRef.current !== geracao) return;
-
-        const baseAtual = pendingResultadosNavRef.current;
-        if (!baseAtual?.[index]) return;
-
-        const listaSvg = baseAtual.map((item, idx) =>
-          idx === index
-            ? { ...item, rubricaCandidato: 'Rúbrica capturada', rubricaCandidatoSvg: svg }
-            : item,
-        );
-        pendingResultadosNavRef.current = listaSvg;
-        resultadosPosMilitaresRef.current = listaSvg;
-
-        if (!isModoDemonstracaoAtivo()) {
-          const itemSvg = listaSvg[index];
-          if (itemSvg?.rubricaCandidatoSvg?.trim()) {
-            await persistirRubricasNoCadastro([itemSvg], { manterSvgBruto: true });
-          }
-        }
-      })
-      .catch(() => {
-        // Resultado já está na UI; falha na rúbrica não bloqueia o fluxo.
-      });
-  }, []);
-
-  /** Atualiza só refs — sem setState da lista (item 4: menos re-render entre militares). */
+  /** Atualiza só refs — sem setState da lista e sem IDB no meio do fluxo (batch no fim). */
   const aplicarSvgNoIndiceRubrica = useCallback(
     (index: number, svg: string, listaBase: ResultadoCorridaItem[]) => {
       const atualizados = listaBase.map((item, idx) =>
@@ -1731,6 +1689,7 @@ export default function AplicarTAFScreen() {
       nextSvg[index] = svg;
       rubricasSvgRef.current = nextSvg;
       pendingResultadosNavRef.current = atualizados;
+      resultadosPosMilitaresRef.current = atualizados;
       return atualizados;
     },
     [],
@@ -1744,7 +1703,6 @@ export default function AplicarTAFScreen() {
       const svgNovo = buildSvgRubricaAtual();
       if (svgNovo) {
         aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res);
-        enqueuePersistRubricaCandidato(indiceRubricaNatacao, svgNovo);
       }
       setIndiceRubricaNatacao(novoIndex);
       setErroRubricaNatacao('');
@@ -1752,7 +1710,6 @@ export default function AplicarTAFScreen() {
     [
       aplicarSvgNoIndiceRubrica,
       buildSvgRubricaAtual,
-      enqueuePersistRubricaCandidato,
       indiceRubricaNatacao,
       listaResultadosRubricaNatacao,
     ],
@@ -1789,10 +1746,6 @@ export default function AplicarTAFScreen() {
       ? aplicarSvgNoIndiceRubrica(indiceRubricaNatacao, svgNovo, res)
       : res;
 
-    if (svgNovo) {
-      enqueuePersistRubricaCandidato(indiceRubricaNatacao, svgNovo);
-    }
-
     const proximo = indiceRubricaNatacao + 1;
     if (proximo < atualizados.length) {
       // Só índice (+ limpeza do canvas no effect) — sem setState da lista.
@@ -1817,7 +1770,7 @@ export default function AplicarTAFScreen() {
       Alert.alert('Registro parcial', modalParcialAviso);
     }
     pendingResultadosNavRef.current = atualizados;
-    // Abre o chefe no próximo frame — raster em lote roda em background ao abrir.
+    // Abre o chefe no próximo frame — raster + IDB em lote rodam em background ao abrir.
     InteractionManager.runAfterInteractions(() => {
       requestAnimationFrame(() => {
         iniciarFinalizacaoComAssinaturaAplicador(atualizados);
@@ -1827,7 +1780,6 @@ export default function AplicarTAFScreen() {
   }, [
     aplicarSvgNoIndiceRubrica,
     buildSvgRubricaAtual,
-    enqueuePersistRubricaCandidato,
     indiceRubricaNatacao,
     iniciarFinalizacaoComAssinaturaAplicador,
     limparRubricaDraw,

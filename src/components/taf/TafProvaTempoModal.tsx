@@ -21,6 +21,7 @@ import { useAplicarTafLayout } from './aplicar/useAplicarTafLayout';
 import { ConfirmacaoDesistenciaModal } from './aplicar/ConfirmacaoDesistenciaModal';
 import { ConfirmacaoVoltarIdentificacaoModal } from './aplicar/ConfirmacaoVoltarIdentificacaoModal';
 import { ParticipantesEscalaScrollBar } from './aplicar/ParticipantesEscalaScrollBar';
+import { ProvaAtivaPrintButton } from './aplicar/ProvaAtivaPrintButton';
 import { TafCronometroPanel, type TafCronometroEstado } from './TafCronometroPanel';
 
 /** Escala dos cards dos militares (barra horizontal na prova ativa). */
@@ -966,28 +967,31 @@ export function TafProvaTempoModal({
             />
           ) : null}
           {podeAplicar ? (
-            <TouchableOpacity
-              accessibilityLabel={`Aplicar resultado da ${tituloProva.toLowerCase()}`}
-              activeOpacity={0.9}
-              onPress={onAplicar}
-              disabled={salvando}
-              style={[styles.btnAplicarWrap, salvando ? styles.btnDisabled : null]}
-            >
-              <LinearGradient
-                colors={[theme.primary, '#6366f1']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.btnAplicar}
+            <View style={styles.aplicarRow}>
+              <TouchableOpacity
+                accessibilityLabel={`Aplicar resultado da ${tituloProva.toLowerCase()}`}
+                activeOpacity={0.9}
+                onPress={onAplicar}
+                disabled={salvando}
+                style={[styles.btnAplicarWrap, salvando ? styles.btnDisabled : null]}
               >
-                {salvando ? (
-                  <ActivityIndicator color={theme.tokens.textOnPrimary} />
-                ) : (
-                  <Text style={[ts.body, styles.btnAplicarText, { color: theme.tokens.textOnPrimary }]}>
-                    Aplicar Resultado
-                  </Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={[theme.primary, '#6366f1']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.btnAplicar}
+                >
+                  {salvando ? (
+                    <ActivityIndicator color={theme.tokens.textOnPrimary} />
+                  ) : (
+                    <Text style={[ts.body, styles.btnAplicarText, { color: theme.tokens.textOnPrimary }]}>
+                      Aplicar Resultado
+                    </Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+              <ProvaAtivaPrintButton compact />
+            </View>
           ) : (
             <TafCronometroPanel
               variant="compact"
@@ -1422,9 +1426,16 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   btnAplicarWrap: {
-    width: '100%',
+    flex: 1,
+    minWidth: 0,
     borderRadius: PREMIUM.radiusMd + 2,
     overflow: 'hidden',
+  },
+  aplicarRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+    width: '100%',
   },
   btnAplicar: {
     width: '100%',

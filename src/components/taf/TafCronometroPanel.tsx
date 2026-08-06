@@ -5,18 +5,15 @@ import {
   StyleSheet,
   Platform,
   Animated,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Camera, Pause, Play, Timer } from 'lucide-react-native';
+import { ArrowLeft, Pause, Play, Timer } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import { PressableScale } from '../premium/PressableScale';
 import type { TafCronometroEstado } from '../../hooks/useTafReactStopwatch';
 import { EditarCronometroPausadoModal } from './EditarCronometroPausadoModal';
-import { capturarESalvarPrintPagina } from '../../utils/capturarPrintPagina';
 
 export type { TafCronometroEstado };
 
@@ -253,71 +250,6 @@ export function TafCronometroPanel({
   const toggleGlow = rodando
     ? '0 8px 28px rgba(249, 115, 22, 0.45), 0 0 0 1px rgba(251, 191, 36, 0.35)'
     : '0 8px 28px rgba(16, 185, 129, 0.42), 0 0 0 1px rgba(45, 212, 191, 0.35)';
-  const [capturandoPrint, setCapturandoPrint] = useState(false);
-
-  const onPrintPagina = useCallback(async () => {
-    if (capturandoPrint) return;
-    setCapturandoPrint(true);
-    try {
-      const modo = await capturarESalvarPrintPagina();
-      if (modo === 'downloaded') {
-        Alert.alert('Print salvo', 'A foto da prova ativa foi baixada no dispositivo.');
-      }
-    } catch (e) {
-      const msg =
-        e instanceof Error && e.name === 'AbortError'
-          ? null
-          : e instanceof Error
-            ? e.message
-            : 'Não foi possível capturar a tela.';
-      if (msg) Alert.alert('Print', msg);
-    } finally {
-      setCapturandoPrint(false);
-    }
-  }, [capturandoPrint]);
-
-  const printBtnGlow =
-    '0 8px 28px rgba(37, 99, 235, 0.45), 0 0 0 1px rgba(96, 165, 250, 0.4)';
-
-  const printButton = (
-    <View
-      {...(Platform.OS === 'web'
-        ? ({ 'data-taf-skip-capture': '1' } as object)
-        : null)}
-    >
-      <PressableScale
-        accessibilityRole="button"
-        accessibilityLabel="Print da prova ativa"
-        accessibilityHint="Captura a tela e salva a foto no dispositivo"
-        onPress={() => void onPrintPagina()}
-        disabled={capturandoPrint}
-        style={[
-          compact ? styles.printOuterCompact : styles.printOuter,
-          Platform.OS === 'web' ? ({ boxShadow: printBtnGlow } as object) : null,
-          capturandoPrint ? { opacity: 0.75 } : null,
-        ]}
-      >
-        <LinearGradient
-          colors={['#60a5fa', '#2563eb', '#1d4ed8']}
-          locations={[0, 0.55, 1]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={compact ? styles.printGradientCompact : styles.printGradient}
-        >
-          {capturandoPrint ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Camera
-              size={compact ? 18 : 22}
-              color="#FFFFFF"
-              strokeWidth={2.6}
-              accessibilityElementsHidden
-            />
-          )}
-        </LinearGradient>
-      </PressableScale>
-    </View>
-  );
 
   const controlsNode = (
     <View style={compact ? styles.controlsRowCompact : styles.controlsRow}>
@@ -371,7 +303,6 @@ export function TafCronometroPanel({
           </Text>
         </LinearGradient>
       </PressableScale>
-      {pausado ? printButton : null}
     </View>
   );
 
@@ -673,34 +604,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
     minWidth: 104,
-  },
-  printOuter: {
-    borderRadius: 18,
-    overflow: 'hidden',
-    width: 56,
-    flexShrink: 0,
-  },
-  printOuterCompact: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    width: 42,
-    flexShrink: 0,
-  },
-  printGradient: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 56,
-    width: 56,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  printGradientCompact: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 42,
-    width: 42,
-    borderRadius: 14,
-    overflow: 'hidden',
+    flex: 1,
   },
   toggleGradient: {
     flexDirection: 'row',

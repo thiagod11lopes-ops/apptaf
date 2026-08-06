@@ -63,6 +63,11 @@ function statusMeta(estado: TafCronometroEstado, theme: ReturnType<typeof useThe
 export type TafCronometroPanelProps = {
   tituloProva: string;
   tempoExibido: string;
+  /**
+   * Assinatura do tempo vivo (~20 Hz) sem re-render do host.
+   * Usado só com estado `rodando`.
+   */
+  subscribeTempoExibido?: (cb: (fmt: string) => void) => () => void;
   estado: TafCronometroEstado;
   pausadoTexto: string;
   onPausadoTextoChange: (text: string) => void;
@@ -83,6 +88,7 @@ export type TafCronometroPanelProps = {
 export function TafCronometroPanel({
   tituloProva,
   tempoExibido,
+  subscribeTempoExibido,
   estado,
   pausadoTexto,
   onPausadoTextoChange,
@@ -101,6 +107,15 @@ export function TafCronometroPanel({
   const compact = variant === 'compact';
   const blinkOpacity = useRef(new Animated.Value(1)).current;
   const [editTempoVisible, setEditTempoVisible] = useState(false);
+  const [tempoLive, setTempoLive] = useState(tempoExibido);
+
+  useEffect(() => {
+    if (estado !== 'rodando' || !subscribeTempoExibido) {
+      setTempoLive(tempoExibido);
+      return;
+    }
+    return subscribeTempoExibido(setTempoLive);
+  }, [estado, subscribeTempoExibido, tempoExibido]);
 
   useEffect(() => {
     if (estado !== 'pausado') {
@@ -149,7 +164,8 @@ export function TafCronometroPanel({
   const monoWeb = Platform.OS === 'web' ? ({ fontVariantNumeric: 'tabular-nums' } as object) : null;
 
   /** Pausado mantém o mesmo formato MM:SS:CS (não vira campo de edição). */
-  const tempoMostrado = estado === 'pausado' ? pausadoTexto || tempoExibido : tempoExibido;
+  const tempoMostrado =
+    estado === 'pausado' ? pausadoTexto || tempoLive || tempoExibido : tempoLive || tempoExibido;
 
   const splitTempo = (() => {
     const parts = tempoMostrado.split(':');

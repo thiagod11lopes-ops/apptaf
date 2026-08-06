@@ -29,6 +29,7 @@ type PermanenciaTafPanelProps = {
   /** Chave `perm:p:aprovado` da única marcação laranja do teste. */
   ultimaMarcacaoKey?: string | null;
   tempoExibido: string;
+  subscribeTempoExibido?: (cb: (fmt: string) => void) => () => void;
   cronometroEstado: CronometroPermanenciaEstado;
   cronometroPausadoTexto: string;
   onCronometroPausadoTextoChange: (text: string) => void;
@@ -105,6 +106,7 @@ export function PermanenciaTafPanel({
   onToggleResultado,
   ultimaMarcacaoKey = null,
   tempoExibido,
+  subscribeTempoExibido,
   cronometroEstado,
   cronometroPausadoTexto,
   onCronometroPausadoTextoChange,
@@ -176,6 +178,7 @@ export function PermanenciaTafPanel({
       <TafCronometroPanel
         tituloProva="Permanência"
         tempoExibido={tempoExibido}
+        subscribeTempoExibido={subscribeTempoExibido}
         estado={cronometroEstado}
         pausadoTexto={cronometroPausadoTexto}
         onPausadoTextoChange={onCronometroPausadoTextoChange}

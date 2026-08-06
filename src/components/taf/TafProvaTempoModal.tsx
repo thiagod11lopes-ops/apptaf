@@ -91,6 +91,7 @@ export type TafProvaTempoModalProps = {
   tituloProva: string;
   labelAtleta: string;
   tempoExibido: string;
+  subscribeTempoExibido?: (cb: (fmt: string) => void) => () => void;
   cronometroEstado: TafCronometroEstado;
   cronometroPausadoTexto: string;
   onCronometroPausadoTextoChange: (text: string) => void;
@@ -407,6 +408,7 @@ export function TafProvaTempoModal({
   tituloProva,
   labelAtleta,
   tempoExibido,
+  subscribeTempoExibido,
   cronometroEstado,
   cronometroPausadoTexto,
   onCronometroPausadoTextoChange,
@@ -945,6 +947,7 @@ export function TafProvaTempoModal({
               variant="compact"
               tituloProva={tituloProva}
               tempoExibido={tempoExibido}
+              subscribeTempoExibido={subscribeTempoExibido}
               estado={cronometroEstado}
               pausadoTexto={cronometroPausadoTexto}
               onPausadoTextoChange={onCronometroPausadoTextoChange}

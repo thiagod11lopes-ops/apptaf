@@ -227,7 +227,7 @@ function limiteParticipantesPreCadastro(tipo: TipoProvaTAF | null): number {
   return MAX_PRE_CADASTRO_PARTICIPANTES;
 }
 
-/** Cronômetro da prova: controlado por react-timer-hook (MM:SS:CS). */
+/** Cronômetro da prova: ticks isolados via subscribeTempoExibido (MM:SS:CS). */
 
 /** Campos de cadastro usados no feedback NIP e no modal de edição. */
 function camposCadastroParaFeedback(c: CadastroItemPersist) {
@@ -3820,6 +3820,7 @@ export default function AplicarTAFScreen() {
         tituloProva={tituloProvaCurta}
         labelAtleta={labelAtleta}
         tempoExibido={tempoExibido}
+        subscribeTempoExibido={stopwatch.subscribeTempoExibido}
         cronometroEstado={cronometroEstado}
         cronometroPausadoTexto={cronometroPausadoTexto}
         onCronometroPausadoTextoChange={onCronometroPausadoTextoChange}

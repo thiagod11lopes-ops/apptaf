@@ -86,6 +86,22 @@ async function queryUnsyncedByOwnerStatus<T extends CadastroRecord | SessaoRecor
   return batches.flat();
 }
 
+async function countUnsyncedByOwnerStatus(
+  table: {
+    where: (index: string) => {
+      equals: (key: [string, SyncStatus]) => { count: () => Promise<number> };
+    };
+  },
+  ownerUid: string,
+): Promise<number> {
+  const counts = await Promise.all(
+    UNSYNCED_STATUSES.map((status) =>
+      table.where('[ownerUid+syncStatus]').equals([ownerUid, status]).count(),
+    ),
+  );
+  return counts.reduce((a, b) => a + b, 0);
+}
+
 /** Retorna registros locais ainda não sincronizados (local, updated, deleted, conflict, pending). */
 export async function getPendingSyncItems(ownerUid: string): Promise<PendingSyncSummary> {
   const db = getTafDatabase();
@@ -160,6 +176,55 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
     sessoes,
     aplicadores,
     pre_cadastros,
+    authorizedEmails,
+  };
+}
+
+/**
+ * Contagens de pending sem materializar registros (badge / ensure).
+ * `items` fica sempre vazio — use `getPendingSyncItems` quando a fila for necessária.
+ */
+export async function getPendingSyncCounts(ownerUid: string): Promise<PendingSyncSummary> {
+  const db = getTafDatabase();
+  const owners = ownerUidsForQuery(ownerUid);
+  if (!db || owners.length === 0) {
+    return {
+      items: [],
+      total: 0,
+      cadastros: 0,
+      sessoes: 0,
+      aplicadores: 0,
+      pre_cadastros: 0,
+      authorizedEmails: 0,
+    };
+  }
+
+  let cadastros = 0;
+  let sessoes = 0;
+  let aplicadores = 0;
+  let authorizedEmails = 0;
+
+  for (const uid of owners) {
+    const [cad, sess, app, localEmails, deletedEmails] = await Promise.all([
+      countUnsyncedByOwnerStatus(db.cadastros, uid),
+      countUnsyncedByOwnerStatus(db.sessoes, uid),
+      countUnsyncedByOwnerStatus(db.aplicadores, uid),
+      db.authorizedEmails.where('[ownerUid+syncStatus]').equals([uid, 'local']).count(),
+      db.authorizedEmails.where('[ownerUid+syncStatus]').equals([uid, 'deleted']).count(),
+    ]);
+    cadastros += cad;
+    sessoes += sess;
+    aplicadores += app;
+    authorizedEmails += localEmails + deletedEmails;
+  }
+
+  return {
+    items: [],
+    total: cadastros + sessoes + aplicadores + authorizedEmails,
+    cadastros,
+    sessoes,
+    aplicadores,
+    pre_cadastros: 0,
     authorizedEmails,
   };
 }

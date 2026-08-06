@@ -5,6 +5,7 @@ import {
   subscribeDataChanged,
   type DataChangeScope,
 } from '../offline-first/sync/SyncEngine';
+import { runWhenIdle } from '../utils/yieldToUi';
 
 /** Debounce das recargas reagindo a notifyDataChanged (pós-mutação / pós-sync). */
 const DATA_CHANGE_DEBOUNCE_MS = 800;
@@ -27,6 +28,18 @@ export function useAuthDataReload(
   const inFlightRef = useRef(false);
   const pendingRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelIdleRef = useRef<(() => void) | null>(null);
+
+  const cancelScheduled = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (cancelIdleRef.current) {
+      cancelIdleRef.current();
+      cancelIdleRef.current = null;
+    }
+  }, []);
 
   const runReload = useCallback(async () => {
     if (inFlightRef.current) {
@@ -48,34 +61,33 @@ export function useAuthDataReload(
   useFocusEffect(
     useCallback(() => {
       if (!authReady) return;
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
+      cancelScheduled();
       void runReload();
-    }, [authReady, runReload, user?.uid, isAuthorizedMember, dataOwnerUid]),
+    }, [authReady, runReload, cancelScheduled, user?.uid, isAuthorizedMember, dataOwnerUid]),
   );
 
-  // Mutação local / pós-sync: trailing debounce (coalesce tempestade de eventos).
+  // Mutação local / pós-sync: trailing debounce + idle (não compete com a sync).
   useEffect(() => {
     if (!authReady) return;
     const scopes = scopesRef.current;
     return subscribeDataChanged(
       () => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (cancelIdleRef.current) {
+          cancelIdleRef.current();
+          cancelIdleRef.current = null;
+        }
         debounceRef.current = setTimeout(() => {
           debounceRef.current = null;
-          void runReload();
+          cancelIdleRef.current = runWhenIdle(() => {
+            cancelIdleRef.current = null;
+            void runReload();
+          });
         }, DATA_CHANGE_DEBOUNCE_MS);
       },
       scopes != null && scopes.length > 0 ? { scopes } : undefined,
     );
   }, [authReady, runReload, options?.scopes?.join('|')]);
 
-  useEffect(
-    () => () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    },
-    [],
-  );
+  useEffect(() => () => cancelScheduled(), [cancelScheduled]);
 }

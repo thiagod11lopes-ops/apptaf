@@ -73,7 +73,8 @@ import {
   runDeletionGarbageCollection,
 } from './deletionGarbageCollection';
 import type { SyncStepId } from './syncSteps';
-import { getPendingSyncItems } from './pendingSyncItems';
+import { getPendingSyncCounts, getPendingSyncItems } from './pendingSyncItems';
+import { yieldToUi } from '../../utils/yieldToUi';
 import { buildDownloadBreakdown, EMPTY_SYNC_QUEUE_BREAKDOWN, type SyncQueueBreakdown } from './syncQueueBreakdown';
 import {
   decideSyncedLocalOnlyAbsence,
@@ -536,6 +537,7 @@ async function flushRemainingPendingRecords(
     pre_cadastros: buildRemoteMapForLww(ownerUid, remotePre, remoteToPreCadastroRecord),
   };
 
+  const YIELD_EVERY = 4;
   let processed = 0;
   for (const item of pending.items) {
     if (!isCloudSyncCollection(item.collection)) continue;
@@ -599,6 +601,7 @@ async function flushRemainingPendingRecords(
           stepId: 'uploading',
           phase: 'upload',
         });
+        if (processed % YIELD_EVERY === 0) await yieldToUi();
       }
       continue;
     }
@@ -662,6 +665,7 @@ async function flushRemainingPendingRecords(
         stepId: 'uploading',
         phase: 'upload',
       });
+      if (processed % YIELD_EVERY === 0) await yieldToUi();
     }
   }
 }
@@ -899,7 +903,7 @@ async function executePlanItem(
 }
 
 async function ensureNoPendingRemain(ownerUid: string, stats: LwwSyncStats): Promise<void> {
-  const remaining = await getPendingSyncItems(ownerUid);
+  const remaining = await getPendingSyncCounts(ownerUid);
   // E-mails autorizados têm fila própria; não falham o LWW (evita retry em loop).
   const nonEmail = remaining.total - (remaining.authorizedEmails ?? 0);
   if (nonEmail > 0) {
@@ -1336,6 +1340,9 @@ async function runPlanPhase(
       pendingDownloads: plannedDownloads,
       phase,
     });
+    if (offset + concurrency < items.length) {
+      await yieldToUi();
+    }
   }
 }
 

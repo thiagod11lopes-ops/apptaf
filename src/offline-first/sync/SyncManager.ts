@@ -1,8 +1,12 @@
 import { getCachedDataOwnerUid, getCachedLoginUid, setAuthUidState } from '../../services/firebase/authUid';
 import { getFirebaseAuth } from '../../config/firebase';
 import { connectivityMonitor, getConnectivityState } from './ConnectivityMonitor';
-import { getPendingSyncItems, type PendingSyncSummary } from './pendingSyncItems';
-import { syncEngine, notifyDataChanged } from './SyncEngine';
+import { getPendingSyncCounts, type PendingSyncSummary } from './pendingSyncItems';
+import {
+  syncEngine,
+  notifyDataChanged,
+  type DataChangeScope,
+} from './SyncEngine';
 import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip, compactDuplicateAplicadoresByNip, pruneAplicadoresOutsideDataOwner } from '../db/localDb';
 import { systemState } from './SystemState';
 import { isCloudLinkEnabled, setCloudLinkEnabled } from './cloudLinkPreference';
@@ -76,6 +80,17 @@ import {
   stopMemberCloudPoll,
 } from './memberCloudWatch';
 import { isAuthorizedMemberSession } from '../../utils/aplicadorSyncPolicy';
+
+/** Escopos tocados pelo LWW — evita invalidar listeners com `all` sem necessidade. */
+const LWW_DATA_CHANGE_SCOPES: readonly DataChangeScope[] = [
+  'cadastros',
+  'sessoes',
+  'aplicadores',
+  'emails',
+  'fatores',
+  'restritos',
+  'preCadastros',
+];
 
 export type SyncManagerMode = 'OFFLINE' | 'ONLINE_PREPARING' | 'ONLINE_SYNCING';
 
@@ -750,7 +765,8 @@ async function refreshPendingSummary(): Promise<PendingSyncSummary> {
   const uid = ownerUid ?? getCachedDataOwnerUid() ?? ANONYMOUS_OWNER;
   ownerUid = uid !== ANONYMOUS_OWNER ? uid : ownerUid;
   await syncEngine.preparePendingOwner(uid);
-  pendingSummary = await getPendingSyncItems(uid);
+  // Contagens via Dexie.count — badge/ETA sem materializar a fila.
+  pendingSummary = await getPendingSyncCounts(uid);
   await refreshCounters(counters.pendingDownloads);
   return pendingSummary;
 }
@@ -1039,7 +1055,7 @@ async function runSyncPipeline(
           'sync-manager',
           `Sync parcial preservada: ↑${result.stats.uploads} ↓${result.stats.downloads} (sem restore). Erros: ${result.stats.errors.length}`,
         );
-        notifyDataChanged();
+        notifyDataChanged(LWW_DATA_CHANGE_SCOPES);
         await refreshPendingSummary();
         await refreshCloudQueueEstimate(true);
       }
@@ -1099,10 +1115,13 @@ async function runSyncPipeline(
     }
     // Evita eco do próprio upload via postgres_changes reabrir sync em loop.
     suppressRealtimeEcho(2_000);
-    notifyDataChanged();
+    const appliedRecords = result.stats.uploads + result.stats.downloads;
+    if (appliedRecords > 0 || !result.alreadyUpToDate) {
+      notifyDataChanged(LWW_DATA_CHANGE_SCOPES);
+    }
 
     const durationMs = Date.now() - startedAt;
-    const totalRecords = result.stats.uploads + result.stats.downloads;
+    const totalRecords = appliedRecords;
     const avgRecordsPerSecond = totalRecords > 0 ? totalRecords / (durationMs / 1000) : 0;
 
     lastSyncResult = {

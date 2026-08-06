@@ -83,6 +83,39 @@ function addItemToMap(map: Map<string, SyncQueueCategory>, collection: Collectio
 
 /** Detalha o que será enviado para a nuvem (dados locais pendentes). */
 export function buildUploadBreakdown(summary: PendingSyncSummary): SyncQueueBreakdown {
+  // Contagens leves (badge) não materializam items — breakdown grosso por coleção.
+  if (summary.items.length === 0 && summary.total > 0) {
+    const categories: SyncQueueCategory[] = [];
+    if (summary.cadastros > 0) {
+      categories.push({ key: 'cadastros', label: 'Cadastros', count: summary.cadastros });
+    }
+    if (summary.sessoes > 0) {
+      categories.push({ key: 'sessoes', label: 'Sessões', count: summary.sessoes });
+    }
+    if (summary.aplicadores > 0) {
+      categories.push({
+        key: 'aplicadores',
+        label: 'Aplicadores',
+        count: summary.aplicadores,
+      });
+    }
+    if (summary.pre_cadastros > 0) {
+      categories.push({
+        key: 'pre_cadastros',
+        label: 'Pré-cadastros',
+        count: summary.pre_cadastros,
+      });
+    }
+    if (summary.authorizedEmails > 0) {
+      categories.push({
+        key: 'authorizedEmails',
+        label: 'E-mail autorizado',
+        count: summary.authorizedEmails,
+      });
+    }
+    return finalizeBreakdown(categories, summary.total);
+  }
+
   const map = new Map<string, SyncQueueCategory>();
   for (const item of summary.items) {
     addItemToMap(map, item.collection, item.record as BreakdownRecord);

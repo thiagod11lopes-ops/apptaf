@@ -92,10 +92,13 @@ export function ResultadosGeralPanel({
       sessoesDataset,
       cadastrosDataset,
       normaTaf,
+      { jaUnificadas: true },
     );
     setCadastros(cadastrosNorma);
     setSessoes(sessoesNorma);
-    setLista(listarResultadosGeralFromHistorico(sessoesNorma, cadastrosNorma));
+    setLista(
+      listarResultadosGeralFromHistorico(sessoesNorma, cadastrosNorma, { jaUnificadas: true }),
+    );
   }, [cadastrosDataset, sessoesDataset, normaTaf]);
 
   const carregando = carregandoDataset && lista.length === 0;

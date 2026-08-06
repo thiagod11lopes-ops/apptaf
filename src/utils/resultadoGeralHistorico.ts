@@ -2,7 +2,11 @@ import type { ResultadoCorridaItem } from '../navigation/types';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import { formatMsByModality } from '../taf/tafTimeFormat';
-import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
+import {
+  buildCadastroLookupIndex,
+  buscarCadastroIndexed,
+  type CadastroLookupIndex,
+} from './cadastroLookupIndex';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { formatNipInput, nipChaveCadastro, nipDigitos } from './nipFormat';
 import type { PendenciaParcialItem, ResultadoGeralItem, ResultadoTafLinha } from './resultadoTafCadastro';
@@ -52,8 +56,10 @@ function chaveParticipanteAnon(nip: string, nome: string): string {
 function idParticipante(
   r: ResultadoCorridaItem,
   cadastros: CadastroItemPersist[],
+  index: CadastroLookupIndex,
 ): string {
-  const busca = buscarCadastroPorNomeOuNip(
+  const busca = buscarCadastroIndexed(
+    index,
     cadastros,
     (r.nip ?? '').trim() || (r.nome ?? '').trim(),
   );
@@ -102,8 +108,14 @@ function sliceFromResultado(
   };
 }
 
-function atualizarIdentidade(agg: AggRow, r: ResultadoCorridaItem, cadastros: CadastroItemPersist[]) {
-  const busca = buscarCadastroPorNomeOuNip(
+function atualizarIdentidade(
+  agg: AggRow,
+  r: ResultadoCorridaItem,
+  cadastros: CadastroItemPersist[],
+  index: CadastroLookupIndex,
+) {
+  const busca = buscarCadastroIndexed(
+    index,
     cadastros,
     (r.nip ?? '').trim() || (r.nome ?? '').trim(),
   );
@@ -121,6 +133,7 @@ function atualizarIdentidade(agg: AggRow, r: ResultadoCorridaItem, cadastros: Ca
 function metaCorridaCaminhadaFromCadastro(
   agg: AggRow,
   cadastros: CadastroItemPersist[],
+  index: CadastroLookupIndex,
 ): Pick<
   ResultadoGeralItem,
   | 'dataTafCorrida'
@@ -129,7 +142,7 @@ function metaCorridaCaminhadaFromCadastro(
   | 'corridaRegistradaEm'
   | 'caminhadaRegistradaEm'
 > {
-  const busca = buscarCadastroPorNomeOuNip(cadastros, (agg.nip ?? '').trim() || agg.nome);
+  const busca = buscarCadastroIndexed(index, cadastros, (agg.nip ?? '').trim() || agg.nome);
   const c = busca.kind === 'found' ? busca.cadastro : undefined;
   return {
     dataTafCorrida: c && temAvaliacaoCorrida(c) ? (c.dataTafCorrida || '').trim() || undefined : undefined,
@@ -203,6 +216,7 @@ export function agregarHistoricoPorParticipante(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
 ): AggRow[] {
+  const index = buildCadastroLookupIndex(cadastros);
   const map = new Map<string, AggRow>();
   const ordenadas = [...sessoes]
     .filter((s) => !isDemoSessaoId(s.id))
@@ -211,10 +225,11 @@ export function agregarHistoricoPorParticipante(
   for (const sessao of ordenadas) {
     const tipo = sessao.tipoProva;
     for (const r of sessao.resultados ?? []) {
-      const id = idParticipante(r, cadastros);
+      const id = idParticipante(r, cadastros, index);
       if (!id) continue;
 
-      const busca = buscarCadastroPorNomeOuNip(
+      const busca = buscarCadastroIndexed(
+        index,
         cadastros,
         (r.nip ?? '').trim() || (r.nome ?? '').trim(),
       );
@@ -237,7 +252,7 @@ export function agregarHistoricoPorParticipante(
         map.set(merged.key, agg);
       }
 
-      atualizarIdentidade(agg, r, cadastros);
+      atualizarIdentidade(agg, r, cadastros, index);
       const slice = sliceFromResultado(tipo, r);
 
       if (tipo === 'corrida') {
@@ -251,8 +266,8 @@ export function agregarHistoricoPorParticipante(
     }
   }
 
-  enriquecerCorridaCaminhadaFromCadastros(map, cadastros);
-  enriquecerPermanenciaFromCadastros(map, cadastros);
+  enriquecerCorridaCaminhadaFromCadastros(map, cadastros, index);
+  enriquecerPermanenciaFromCadastros(map, cadastros, index);
 
   return [...map.values()].filter(
     (agg) => agg.corrida || agg.caminhada || agg.natacao || agg.permanencia,
@@ -269,28 +284,32 @@ function situacaoFromNotaCadastro(nota: string | undefined): string {
 function findAggForCadastro(
   map: Map<string, AggRow>,
   c: CadastroItemPersist,
+  byNipAgg: Map<string, AggRow>,
 ): AggRow | undefined {
-  let agg = map.get(c.id);
-  if (!agg) {
-    const nipC = nipDigitos(c.nip);
-    if (nipC.length >= 8) {
-      for (const row of map.values()) {
-        if (nipDigitos(row.nip) === nipC) {
-          agg = row;
-          break;
-        }
-      }
-    }
+  const byId = map.get(c.id);
+  if (byId) return byId;
+  const nipC = nipDigitos(c.nip);
+  if (nipC.length >= 8) return byNipAgg.get(nipC);
+  return undefined;
+}
+
+function buildAggByNip(map: Map<string, AggRow>): Map<string, AggRow> {
+  const byNip = new Map<string, AggRow>();
+  for (const row of map.values()) {
+    const d = nipDigitos(row.nip);
+    if (d.length >= 8 && !byNip.has(d)) byNip.set(d, row);
   }
-  return agg;
+  return byNip;
 }
 
 function enriquecerCorridaCaminhadaFromCadastros(
   map: Map<string, AggRow>,
   cadastros: CadastroItemPersist[],
+  _index: CadastroLookupIndex,
 ): void {
+  const byNipAgg = buildAggByNip(map);
   for (const c of cadastros) {
-    const agg = findAggForCadastro(map, c);
+    const agg = findAggForCadastro(map, c, byNipAgg);
     if (!agg) continue;
 
     if (temAvaliacaoCorrida(c)) {
@@ -322,23 +341,14 @@ function enriquecerCorridaCaminhadaFromCadastros(
 function enriquecerPermanenciaFromCadastros(
   map: Map<string, AggRow>,
   cadastros: CadastroItemPersist[],
+  _index: CadastroLookupIndex,
 ): void {
+  const byNipAgg = buildAggByNip(map);
   for (const c of cadastros) {
     const r = c.resultadoPermanencia ?? c.resultadoNatacao;
     if (r !== 'aprovado' && r !== 'reprovado') continue;
 
-    let agg = map.get(c.id);
-    if (!agg) {
-      const nipC = nipDigitos(c.nip);
-      if (nipC.length >= 8) {
-        for (const row of map.values()) {
-          if (nipDigitos(row.nip) === nipC) {
-            agg = row;
-            break;
-          }
-        }
-      }
-    }
+    const agg = findAggForCadastro(map, c, byNipAgg);
     if (!agg) continue;
 
     const sitAtual = agg.permanencia?.situacao;
@@ -384,18 +394,20 @@ function aggParaPendenciaParcial(agg: AggRow): PendenciaParcialItem | null {
 export function listarResultadosGeralFromHistorico(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
-  opts?: { somenteSessoesInformadas?: boolean },
+  opts?: { somenteSessoesInformadas?: boolean; jaUnificadas?: boolean },
 ): ResultadoGeralItem[] {
   const sessoesReais = sessoes.filter((s) => !isDemoSessaoId(s.id));
   const cadastrosReais = cadastros.filter((c) => !isDemoCadastroId(c.id));
-  // PDF do dia: não misturar sessões virtuais do Registrador (outras datas).
-  const base = opts?.somenteSessoesInformadas
-    ? sessoesReais
-    : unificarSessoesComCadastroRegistrador(sessoesReais, cadastrosReais);
+  const index = buildCadastroLookupIndex(cadastrosReais);
+  // PDF do dia / painéis com dataset já unificado: não remisturar virtuais.
+  const base =
+    opts?.somenteSessoesInformadas || opts?.jaUnificadas
+      ? sessoesReais
+      : unificarSessoesComCadastroRegistrador(sessoesReais, cadastrosReais);
   return agregarHistoricoPorParticipante(base, cadastrosReais)
     .map((agg) => ({
       ...aggParaLinha(agg),
-      ...metaCorridaCaminhadaFromCadastro(agg, cadastrosReais),
+      ...metaCorridaCaminhadaFromCadastro(agg, cadastrosReais, index),
       postoGrad: postoGradFromLinhaId(agg.id, agg.nip, cadastrosReais),
     }))
     .sort(compareByNomePtBr);
@@ -407,10 +419,13 @@ export function listarResultadosGeralFromHistorico(
 export function listarPendenciasParciaisFromHistorico(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
+  opts?: { jaUnificadas?: boolean },
 ): PendenciaParcialItem[] {
   const sessoesReais = sessoes.filter((s) => !isDemoSessaoId(s.id));
   const cadastrosReais = cadastros.filter((c) => !isDemoCadastroId(c.id));
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoesReais, cadastrosReais);
+  const unificadas = opts?.jaUnificadas
+    ? sessoesReais
+    : unificarSessoesComCadastroRegistrador(sessoesReais, cadastrosReais);
   return agregarHistoricoPorParticipante(unificadas, cadastrosReais)
     .map(aggParaPendenciaParcial)
     .filter((item): item is PendenciaParcialItem => item != null)
@@ -435,6 +450,7 @@ export function enriquecerLinhasDistanciaMetaFromHistorico(
 ): ResultadoTafLinha[] {
   const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
   const aggs = agregarHistoricoPorParticipante(unificadas, cadastros);
+  const index = buildCadastroLookupIndex(cadastros);
   const byId = new Map(aggs.map((a) => [a.id, a]));
 
   return linhas.map((linha) => {
@@ -446,7 +462,7 @@ export function enriquecerLinhasDistanciaMetaFromHistorico(
       }
     }
     if (!agg) return linha;
-    return { ...linha, ...metaCorridaCaminhadaFromCadastro(agg, cadastros) };
+    return { ...linha, ...metaCorridaCaminhadaFromCadastro(agg, cadastros, index) };
   });
 }
 
@@ -527,11 +543,13 @@ function chavesComReprovacaoEmSessoes(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[],
 ): Set<string> {
+  const index = buildCadastroLookupIndex(cadastros);
   const keys = new Set<string>();
   for (const sessao of sessoes) {
     for (const r of sessao.resultados ?? []) {
       if (!resultadoItemEhReprovado(r)) continue;
-      const busca = buscarCadastroPorNomeOuNip(
+      const busca = buscarCadastroIndexed(
+        index,
         cadastros,
         (r.nip ?? '').trim() || (r.nome ?? '').trim(),
       );

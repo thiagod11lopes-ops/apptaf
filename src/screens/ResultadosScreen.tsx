@@ -31,8 +31,14 @@ import {
   tituloTipoProva,
   type SessaoAplicacaoTaf,
 } from '../services/resultadosAplicadosIndexedDb';
-import { peekCadastrosListCache } from '../services/cadastrosListCache';
-import { peekSessoesListCache } from '../services/sessoesListCache';
+import {
+  isCadastrosListCacheWarm,
+  peekCadastrosListCache,
+} from '../services/cadastrosListCache';
+import {
+  isSessoesListCacheWarm,
+  peekSessoesListCache,
+} from '../services/sessoesListCache';
 import { isDemoSessaoId } from '../utils/gatherSystemBackupData';
 import {
   deleteSessaoFromHistorico,
@@ -92,11 +98,10 @@ export default function ResultadosScreen() {
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>(
     () => peekCadastrosListCache() ?? [],
   );
-  const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>(() => {
-    const cad = peekCadastrosListCache() ?? [];
-    const sess = peekSessoesListCache({ includeDemo: true }) ?? [];
-    return unificarSessoesComCadastroRegistrador(sess, cad, []);
-  });
+  /** Unificação pesada fica no `carregar` (após yield), não no first paint. */
+  const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>(
+    () => peekSessoesListCache({ includeDemo: true }) ?? [],
+  );
   const [historicoFiltroMilitar, setHistoricoFiltroMilitar] = useState<FiltroHistoricoMilitar | null>(
     null,
   );
@@ -113,44 +118,56 @@ export default function ResultadosScreen() {
   const [erroExclusao, setErroExclusao] = useState<string | null>(null);
   const ultimoToqueCardRef = useRef<{ id: string; at: number } | null>(null);
 
-  /** Painéis (consulta/geral/…) usam sessões sem demo — alinhado ao getAll antigo. */
+  /**
+   * Painéis recebem sessões já unificadas (sem demo) — evita unificar de novo em
+   * Geral/Pendência/Concluído/Consulta.
+   */
   const sessoesParaPaineis = useMemo(
-    () => sessoesRaw.filter((s) => !isDemoSessaoId(s.id)),
-    [sessoesRaw],
+    () => sessoes.filter((s) => !isDemoSessaoId(s.id)),
+    [sessoes],
   );
 
-  const carregar = useCallback(() => {
+  const carregar = useCallback(async () => {
     const peekedCad = peekCadastrosListCache();
     const peekedSess = peekSessoesListCache({ includeDemo: true });
-    if (peekedCad) setCadastros(peekedCad);
-    if (peekedSess) {
-      setSessoesRaw(peekedSess);
-      if (peekedCad) {
-        setSessoes(unificarSessoesComCadastroRegistrador(peekedSess, peekedCad, []));
-      }
+
+    // Cache quente + já carregou (incl. sessões excluídas): não re-unifica no foco.
+    if (
+      hasLoadedOnceRef.current &&
+      isCadastrosListCacheWarm() &&
+      isSessoesListCacheWarm()
+    ) {
+      setCarregando(false);
+      return;
     }
+
+    if (peekedCad) setCadastros(peekedCad);
+    if (peekedSess) setSessoesRaw(peekedSess);
 
     const cold = !hasLoadedOnceRef.current;
     const hasPeek = (peekedCad?.length ?? 0) > 0 || (peekedSess?.length ?? 0) > 0;
     if (cold && !hasPeek) setCarregando(true);
 
-    Promise.all([
-      getAllCadastros(),
-      getAllSessoesAplicacao({ includeDemo: true }),
-      getDeletedSessoesAplicacao(),
-    ])
-      .then(([cadastrosLista, sessoesLista, sessoesExcluidas]) => {
-        setCadastros(cadastrosLista);
-        setSessoesRaw(sessoesLista);
-        setSessoes(
-          unificarSessoesComCadastroRegistrador(sessoesLista, cadastrosLista, sessoesExcluidas),
-        );
-        hasLoadedOnceRef.current = true;
-      })
-      .catch((error) => {
-        console.warn('[historico] falha ao carregar sessões:', error);
-      })
-      .finally(() => setCarregando(false));
+    try {
+      const [cadastrosLista, sessoesLista, sessoesExcluidas] = await Promise.all([
+        getAllCadastros(),
+        getAllSessoesAplicacao({ includeDemo: true }),
+        getDeletedSessoesAplicacao(),
+      ]);
+      setCadastros(cadastrosLista);
+      setSessoesRaw(sessoesLista);
+      // Cede o frame antes da unificação (CPU-bound) para a UI não travar.
+      const { yieldToUi } = await import('../utils/yieldToUi');
+      await yieldToUi();
+      setSessoes(
+        unificarSessoesComCadastroRegistrador(sessoesLista, cadastrosLista, sessoesExcluidas),
+      );
+      hasLoadedOnceRef.current = true;
+    } catch (error) {
+      console.warn('[historico] falha ao carregar sessões:', error);
+    } finally {
+      setCarregando(false);
+    }
   }, []);
 
   useAuthDataReload(carregar, {

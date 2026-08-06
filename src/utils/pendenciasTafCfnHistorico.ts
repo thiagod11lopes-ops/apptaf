@@ -303,7 +303,7 @@ function montarListaCfn<T>(
   cadastros: CadastroItemPersist[],
   mapItemCadastro: (c: CadastroItemPersist, agg: AggCfn | undefined) => T | null,
   mapItemAgg: (agg: AggCfn) => T | null,
-  opts?: { todosCadastros?: boolean },
+  opts?: { todosCadastros?: boolean; jaUnificadas?: boolean },
 ): T[] {
   let sessoesNorma: SessaoAplicacaoTaf[];
   let cadastrosNorma: CadastroItemPersist[];
@@ -311,22 +311,30 @@ function montarListaCfn<T>(
   if (opts?.todosCadastros) {
     const sessoesSemDemo = sessoes.filter((s) => !s.id.startsWith('demo-sess-'));
     const cadastrosSemDemo = cadastros.filter((c) => !c.id.startsWith('demo-cad-'));
-    const unificadas = unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
+    const unificadas = opts?.jaUnificadas
+      ? sessoesSemDemo
+      : unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
     sessoesNorma = filtrarSessoesPorNorma(unificadas, 'cfn');
     cadastrosNorma = cadastrosSemDemo;
   } else {
-    ({ sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(sessoes, cadastros, 'cfn'));
+    ({ sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(sessoes, cadastros, 'cfn', {
+      jaUnificadas: opts?.jaUnificadas,
+    }));
   }
 
   const aggs = agregarCfnPorParticipante(sessoesNorma, cadastrosNorma);
   const aggMap = new Map<string, AggCfn>();
-  for (const agg of aggs) aggMap.set(agg.id, agg);
+  const aggByNip = new Map<string, AggCfn>();
   for (const agg of aggs) {
+    aggMap.set(agg.id, agg);
     const nipA = nipDigitos(agg.nip);
-    if (nipA.length < 8) continue;
-    for (const c of cadastrosNorma) {
-      if (nipDigitos(c.nip) === nipA) aggMap.set(c.id, agg);
-    }
+    if (nipA.length >= 8 && !aggByNip.has(nipA)) aggByNip.set(nipA, agg);
+  }
+  for (const c of cadastrosNorma) {
+    const nipC = nipDigitos(c.nip);
+    if (nipC.length < 8) continue;
+    const agg = aggByNip.get(nipC);
+    if (agg) aggMap.set(c.id, agg);
   }
 
   const lista: T[] = [];
@@ -352,14 +360,17 @@ function montarListaCfn<T>(
     if (chaveNip) idsIncluidos.add(chaveNip);
   }
 
-  return lista.sort(compareByNomePtBr);
+  return lista.sort((a, b) => compareByNomePtBr(a as { nome?: string | null }, b as { nome?: string | null }));
 }
 
 export function montarListaPendenciasCfn(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
+  opts?: { jaUnificadas?: boolean },
 ): PendenciaCfnItem[] {
-  return montarListaCfn(sessoes, cadastros, itemPendenciaFromCadastro, itemPendenciaFromAgg);
+  return montarListaCfn(sessoes, cadastros, itemPendenciaFromCadastro, itemPendenciaFromAgg, {
+    jaUnificadas: opts?.jaUnificadas,
+  });
 }
 
 /** CFN: ao menos um teste e incompleto. */
@@ -378,10 +389,12 @@ export function filtrarPendenciasTotaisCfn(lista: PendenciaCfnItem[]): Pendencia
 export function montarListaPendenciasTotaisCfn(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
+  opts?: { jaUnificadas?: boolean },
 ): PendenciaCfnItem[] {
   return filtrarPendenciasTotaisCfn(
     montarListaCfn(sessoes, cadastros, itemPendenciaFromCadastro, itemPendenciaFromAgg, {
       todosCadastros: true,
+      jaUnificadas: opts?.jaUnificadas ?? true,
     }),
   );
 }
@@ -389,8 +402,11 @@ export function montarListaPendenciasTotaisCfn(
 export function montarListaConcluidosCfn(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
+  opts?: { jaUnificadas?: boolean },
 ): ConcluidoCfnItem[] {
-  return montarListaCfn(sessoes, cadastros, itemConcluidoFromCadastro, itemConcluidoFromAgg);
+  return montarListaCfn(sessoes, cadastros, itemConcluidoFromCadastro, itemConcluidoFromAgg, {
+    jaUnificadas: opts?.jaUnificadas,
+  });
 }
 
 export const CFN_CHIP_LABELS: { key: keyof ProvasCfnStatus; label: string }[] = [

@@ -172,6 +172,7 @@ export function ResultadosConsultaPanel({
       sessoesDataset,
       cadastrosDataset,
       normaTaf,
+      { jaUnificadas: true },
     );
     return sessoesNorma;
   });
@@ -197,6 +198,7 @@ export function ResultadosConsultaPanel({
       sessoesDataset,
       cadastrosDataset,
       normaTaf,
+      { jaUnificadas: true },
     );
     setTodosCadastros(cadastrosDataset);
     setSessoesHistorico(sessoesNorma);

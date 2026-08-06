@@ -87,10 +87,13 @@ export function prepararDadosResultadosNorma(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[],
   norma: NormaTafVista,
+  opts?: { jaUnificadas?: boolean },
 ): { sessoesNorma: SessaoAplicacaoTaf[]; cadastrosNorma: CadastroItemPersist[] } {
   const sessoesSemDemo = sessoes.filter((s) => !s.id.startsWith('demo-sess-'));
   const cadastrosSemDemo = cadastros.filter((c) => !c.id.startsWith('demo-cad-'));
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
+  const unificadas = opts?.jaUnificadas
+    ? sessoesSemDemo
+    : unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
   const sessoesNorma = agruparSessoesHistoricoPorTeste(
     filtrarSessoesPorNorma(unificadas, norma),
   );

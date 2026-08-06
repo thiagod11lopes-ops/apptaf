@@ -68,16 +68,17 @@ export function ResultadosConcluidoPanel({
     if (normaTaf === 'cfn') {
       return {
         lista: [] as ConcluidoTafItem[],
-        listaCfn: montarListaConcluidosCfn(sessoes, cadastros),
+        listaCfn: montarListaConcluidosCfn(sessoes, cadastros, { jaUnificadas: true }),
       };
     }
     const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
       sessoes,
       cadastros,
       'armada',
+      { jaUnificadas: true },
     );
     return {
-      lista: montarListaConcluidos(sessoesNorma, cadastrosNorma),
+      lista: montarListaConcluidos(sessoesNorma, cadastrosNorma, { jaUnificadas: true }),
       listaCfn: [] as ConcluidoCfnItem[],
     };
   }, [normaTaf, cadastros, sessoes]);

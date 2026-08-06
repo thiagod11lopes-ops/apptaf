@@ -34,17 +34,17 @@ function aggPorCadastro(
   aggs: ReturnType<typeof agregarHistoricoPorParticipante>,
 ): Map<string, (typeof aggs)[number]> {
   const porId = new Map<string, (typeof aggs)[number]>();
+  const aggByNip = new Map<string, (typeof aggs)[number]>();
   for (const agg of aggs) {
     porId.set(agg.id, agg);
-  }
-  for (const agg of aggs) {
     const nipA = nipDigitos(agg.nip);
-    if (nipA.length < 8) continue;
-    for (const c of cadastros) {
-      if (nipDigitos(c.nip) === nipA) {
-        porId.set(c.id, agg);
-      }
-    }
+    if (nipA.length >= 8 && !aggByNip.has(nipA)) aggByNip.set(nipA, agg);
+  }
+  for (const c of cadastros) {
+    const nipC = nipDigitos(c.nip);
+    if (nipC.length < 8) continue;
+    const agg = aggByNip.get(nipC);
+    if (agg) porId.set(c.id, agg);
   }
   return porId;
 }
@@ -111,8 +111,11 @@ function itemFromCadastro(
 export function montarListaPendencias(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
+  opts?: { jaUnificadas?: boolean },
 ): PendenciaTafItem[] {
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  const unificadas = opts?.jaUnificadas
+    ? sessoes
+    : unificarSessoesComCadastroRegistrador(sessoes, cadastros);
   const aggs = agregarHistoricoPorParticipante(unificadas, cadastros);
   const aggMap = aggPorCadastro(cadastros, aggs);
 
@@ -159,12 +162,17 @@ export function filtrarPendenciasTotais(lista: PendenciaTafItem[]): PendenciaTaf
 export function montarListaPendenciasTotais(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
+  opts?: { jaUnificadas?: boolean },
 ): PendenciaTafItem[] {
   const sessoesSemDemo = sessoes.filter((s) => !s.id.startsWith('demo-sess-'));
   const cadastrosSemDemo = cadastros.filter((c) => !c.id.startsWith('demo-cad-'));
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
+  const unificadas = opts?.jaUnificadas
+    ? sessoesSemDemo
+    : unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
   const sessoesArmada = filtrarSessoesPorNorma(unificadas, 'armada');
-  return filtrarPendenciasTotais(montarListaPendencias(sessoesArmada, cadastrosSemDemo));
+  return filtrarPendenciasTotais(
+    montarListaPendencias(sessoesArmada, cadastrosSemDemo, { jaUnificadas: true }),
+  );
 }
 
 export function calcularContagemPendencias(
@@ -248,8 +256,11 @@ function concluidoFromCadastro(
 export function montarListaConcluidos(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
+  opts?: { jaUnificadas?: boolean },
 ): ConcluidoTafItem[] {
-  const unificadas = unificarSessoesComCadastroRegistrador(sessoes, cadastros);
+  const unificadas = opts?.jaUnificadas
+    ? sessoes
+    : unificarSessoesComCadastroRegistrador(sessoes, cadastros);
   const aggs = agregarHistoricoPorParticipante(unificadas, cadastros);
   const aggMap = aggPorCadastro(cadastros, aggs);
 

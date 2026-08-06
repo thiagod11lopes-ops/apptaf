@@ -83,13 +83,15 @@ export function ResultadosPendenciaParcialPanel({
         lista: [] as PendenciaTafItem[],
         listaCfn:
           modo === 'total'
-            ? montarListaPendenciasTotaisCfn(sessoes, cadastros)
-            : filtrarPendenciasParciaisCfn(montarListaPendenciasCfn(sessoes, cadastros)),
+            ? montarListaPendenciasTotaisCfn(sessoes, cadastros, { jaUnificadas: true })
+            : filtrarPendenciasParciaisCfn(
+                montarListaPendenciasCfn(sessoes, cadastros, { jaUnificadas: true }),
+              ),
       };
     }
     if (modo === 'total') {
       return {
-        lista: montarListaPendenciasTotais(sessoes, cadastros),
+        lista: montarListaPendenciasTotais(sessoes, cadastros, { jaUnificadas: true }),
         listaCfn: [] as PendenciaCfnItem[],
       };
     }
@@ -97,9 +99,12 @@ export function ResultadosPendenciaParcialPanel({
       sessoes,
       cadastros,
       'armada',
+      { jaUnificadas: true },
     );
     return {
-      lista: filtrarPendenciasParciais(montarListaPendencias(sessoesNorma, cadastrosNorma)),
+      lista: filtrarPendenciasParciais(
+        montarListaPendencias(sessoesNorma, cadastrosNorma, { jaUnificadas: true }),
+      ),
       listaCfn: [] as PendenciaCfnItem[],
     };
   }, [normaTaf, modo, cadastros, sessoes]);

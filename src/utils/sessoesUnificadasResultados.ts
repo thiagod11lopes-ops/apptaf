@@ -3,7 +3,11 @@ import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import { tempoStringParaMsProva } from './calcularIdade';
-import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
+import {
+  buildCadastroLookupIndex,
+  buscarCadastroIndexed,
+  type CadastroLookupIndex,
+} from './cadastroLookupIndex';
 import { nipDigitos } from './nipFormat';
 import { dataBrParaIso, dataHojeBr } from './tafRegistro';
 import {
@@ -37,8 +41,10 @@ export function isSessaoApenasVirtualCadastro(sessao: SessaoAplicacaoTaf): boole
 function idParticipanteSessao(
   r: ResultadoCorridaItem,
   cadastros: CadastroItemPersist[],
+  index: CadastroLookupIndex,
 ): string {
-  const busca = buscarCadastroPorNomeOuNip(
+  const busca = buscarCadastroIndexed(
+    index,
     cadastros,
     (r.nip ?? '').trim() || (r.nome ?? '').trim(),
   );
@@ -50,19 +56,25 @@ function idParticipanteSessao(
   return '';
 }
 
-function participanteJaNaSessaoReal(
-  cadastroId: string,
-  tipo: TipoProvaAplicada,
-  sessoesReais: SessaoAplicacaoTaf[],
+/** Pré-computa chaves de participante por tipo — evita O(C×S×R) no loop de virtuais. */
+function buildParticipantesPorTipo(
+  sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[],
-): boolean {
-  for (const sessao of sessoesReais) {
-    if (sessao.tipoProva !== tipo) continue;
-    for (const r of sessao.resultados) {
-      if (idParticipanteSessao(r, cadastros) === cadastroId) return true;
+  index: CadastroLookupIndex,
+): Map<TipoProvaAplicada, Set<string>> {
+  const out = new Map<TipoProvaAplicada, Set<string>>();
+  for (const sessao of sessoes) {
+    let set = out.get(sessao.tipoProva);
+    if (!set) {
+      set = new Set();
+      out.set(sessao.tipoProva, set);
+    }
+    for (const r of sessao.resultados ?? []) {
+      const id = idParticipanteSessao(r, cadastros, index);
+      if (id) set.add(id);
     }
   }
-  return false;
+  return out;
 }
 
 function resultadoCorridaFromCadastro(
@@ -178,18 +190,12 @@ function resultadoFromCadastro(
 function cadastroSuprimidoPorSessaoExcluida(
   cadastroId: string,
   tipo: TipoProvaAplicada,
-  cadastros: CadastroItemPersist[],
-  sessoesExcluidas: SessaoAplicacaoTaf[],
+  excluidosPorTipo: Map<TipoProvaAplicada, Set<string>>,
+  idsPersistidosExcluidos: Set<string>,
 ): boolean {
   const persistedId = `${SESSAO_REGISTRADOR_ID_PREFIX}${cadastroId}-${tipo}`;
-  for (const s of sessoesExcluidas) {
-    if (s.tipoProva !== tipo) continue;
-    if (s.id === persistedId) return true;
-    for (const r of s.resultados ?? []) {
-      if (idParticipanteSessao(r, cadastros) === cadastroId) return true;
-    }
-  }
-  return false;
+  if (idsPersistidosExcluidos.has(persistedId)) return true;
+  return excluidosPorTipo.get(tipo)?.has(cadastroId) ?? false;
 }
 
 /** Gera sessões virtuais a partir do Registrador de TAF (dados só no cadastro). */
@@ -198,13 +204,21 @@ export function gerarSessoesVirtuaisFromCadastros(
   sessoesReais: SessaoAplicacaoTaf[],
   sessoesExcluidas: SessaoAplicacaoTaf[] = [],
 ): SessaoAplicacaoTaf[] {
+  const index = buildCadastroLookupIndex(cadastros);
+  const reaisPorTipo = buildParticipantesPorTipo(sessoesReais, cadastros, index);
+  const excluidosPorTipo = buildParticipantesPorTipo(sessoesExcluidas, cadastros, index);
+  const idsPersistidosExcluidos = new Set(
+    sessoesExcluidas.map((s) => s.id).filter((id) => id.startsWith(SESSAO_REGISTRADOR_ID_PREFIX)),
+  );
   const grupos = new Map<string, { data: string; tipo: TipoProvaAplicada; resultados: ResultadoCorridaItem[] }>();
 
   for (const c of cadastros) {
     for (const tipo of ['corrida', 'natacao', 'permanencia', 'caminhada'] as const) {
       if (!cadastroTemModalidade(c, tipo)) continue;
-      if (participanteJaNaSessaoReal(c.id, tipo, sessoesReais, cadastros)) continue;
-      if (cadastroSuprimidoPorSessaoExcluida(c.id, tipo, cadastros, sessoesExcluidas)) continue;
+      if (reaisPorTipo.get(tipo)?.has(c.id)) continue;
+      if (cadastroSuprimidoPorSessaoExcluida(c.id, tipo, excluidosPorTipo, idsPersistidosExcluidos)) {
+        continue;
+      }
 
       const data = dataModalidadeParaSessao(c, tipo);
       if (!data) continue;

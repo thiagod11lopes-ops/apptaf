@@ -398,6 +398,8 @@ export default function AplicarTAFScreen() {
   } | null>(null);
   const suppressPersistProvaRef = useRef(false);
   const provaAtivaRestauradaRef = useRef(false);
+  const nipsScrollRef = useRef<ScrollView>(null);
+  const scrollNipsAposAddRef = useRef(false);
 
   /** Após “Aplicar Resultado”: tempos gravados no cadastro. */
   const [salvandoResultadosCorrida, setSalvandoResultadosCorrida] = useState(false);
@@ -1856,9 +1858,31 @@ export default function AplicarTAFScreen() {
       return;
     }
     setErroParticipantes('');
+    scrollNipsAposAddRef.current = true;
     setNipsParticipantes((prev) => [...prev, '']);
     setNipFeedbackLinhas((prev) => [...prev, null]);
   }, [modoPreCadastro, tipoProva, nipsParticipantes.length]);
+
+  useLayoutEffect(() => {
+    if (!scrollNipsAposAddRef.current) return;
+    if (corridaEtapa !== 'nips') {
+      scrollNipsAposAddRef.current = false;
+      return;
+    }
+    scrollNipsAposAddRef.current = false;
+    const scroll = () => nipsScrollRef.current?.scrollToEnd({ animated: true });
+    // Aguarda o layout do novo campo de NIP antes de rolar.
+    const raf = requestAnimationFrame(() => {
+      InteractionManager.runAfterInteractions(() => {
+        scroll();
+        // Web/PWA: um segundo passo cobre atraso de medição do conteúdo.
+        if (Platform.OS === 'web') {
+          setTimeout(scroll, 50);
+        }
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [nipsParticipantes.length, corridaEtapa]);
 
   const removerParticipanteNip = useCallback((index: number) => {
     setErroParticipantes('');
@@ -3430,6 +3454,7 @@ export default function AplicarTAFScreen() {
       />
 
       <ScrollView
+        ref={nipsScrollRef}
         contentContainerStyle={[
           styles.scrollContentCadastro,
           { paddingHorizontal: horizontalPad, paddingBottom: scrollBottomPad },

@@ -54,11 +54,20 @@ export function stripDemoDataFromBackupPayload(payload: SystemBackupPayload): Sy
 }
 
 export async function gatherSystemBackupData(): Promise<SystemBackupPayload> {
-  const [cadastros, sessoes, aplicadores, preCadastros] = await Promise.all([
+  const [cadastrosRaw, sessoesRaw, aplicadores, preCadastros] = await Promise.all([
     getAllCadastros(),
     getAllSessoesAplicacao(),
     getAllAplicadores(),
     getAllPreCadastrosTaf(),
+  ]);
+
+  // Reaplica imagens da side table — CSV não pode exportar só o marcador.
+  const { hydrateCadastroComRubricas, hydrateSessoesComRubricas } = await import(
+    './hydrateRubricas'
+  );
+  const [cadastros, sessoes] = await Promise.all([
+    Promise.all(cadastrosRaw.map((c) => hydrateCadastroComRubricas(c))),
+    hydrateSessoesComRubricas(sessoesRaw),
   ]);
 
   const db = getTafDatabase();

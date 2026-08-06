@@ -1,6 +1,7 @@
 import type { CadastroRubricas } from '../../utils/cadastroLight';
+import { hasCadastroRubricas, mergeCadastroRubricasFields } from '../../utils/cadastroLight';
 import type { SessaoResultadoRubrica } from '../../utils/sessaoLight';
-import { hasCadastroRubricas } from '../../utils/cadastroLight';
+import { mergeSessaoResultadoRubricas } from '../../utils/mergeSessaoRubricas';
 import { isRubricaImagemDataUrl } from '../../utils/rubricaPresence';
 import { getTafDatabase } from './tafDatabase';
 
@@ -19,6 +20,10 @@ export type SessaoRubricasRecord = {
   aplicadorRubricaSvg?: string;
 };
 
+/**
+ * Grava rúbricas de cadastro. Nunca apaga a side table por payload vazio —
+ * use deleteCadastroRubricasLocal só em exclusão explícita.
+ */
 export async function putCadastroRubricasLocal(
   ownerUid: string,
   id: string,
@@ -26,18 +31,19 @@ export async function putCadastroRubricasLocal(
 ): Promise<void> {
   const db = getTafDatabase();
   if (!db) return;
-  if (!hasCadastroRubricas(rubricas)) {
-    await db.cadastroRubricas.delete(id);
+  const previous = await db.cadastroRubricas.get(id);
+  const merged = mergeCadastroRubricasFields(previous ?? null, rubricas);
+  if (!hasCadastroRubricas(merged)) {
     return;
   }
   const row: CadastroRubricasRecord = {
     id,
     ownerUid,
     updatedAt: Date.now(),
-    rubricaCorridaSvg: rubricas.rubricaCorridaSvg,
-    rubricaNatacaoSvg: rubricas.rubricaNatacaoSvg,
-    rubricaCaminhadaSvg: rubricas.rubricaCaminhadaSvg,
-    rubricaPermanenciaSvg: rubricas.rubricaPermanenciaSvg,
+    rubricaCorridaSvg: merged.rubricaCorridaSvg,
+    rubricaNatacaoSvg: merged.rubricaNatacaoSvg,
+    rubricaCaminhadaSvg: merged.rubricaCaminhadaSvg,
+    rubricaPermanenciaSvg: merged.rubricaPermanenciaSvg,
   };
   await db.cadastroRubricas.put(row);
 }
@@ -77,6 +83,18 @@ export async function getCadastroRubricasLocalByIds(
   return map;
 }
 
+export async function listCadastroRubricasLocal(
+  ownerUid: string,
+): Promise<CadastroRubricasRecord[]> {
+  const db = getTafDatabase();
+  if (!db) return [];
+  return db.cadastroRubricas.where('ownerUid').equals(ownerUid).toArray();
+}
+
+/**
+ * Grava rúbricas de sessão. Payload vazio não apaga; resultados novos
+ * são unidos aos anteriores (anti-perda).
+ */
 export async function putSessaoRubricasLocal(
   ownerUid: string,
   id: string,
@@ -91,8 +109,7 @@ export async function putSessaoRubricasLocal(
   const incoming = (payload.resultados ?? []).filter((r) =>
     isRubricaImagemDataUrl(r.rubricaCandidatoSvg),
   );
-  // Payload vazio não apaga side table (download light sem pacote de rúbricas).
-  const resultados = incoming.length > 0 ? incoming : (previous?.resultados ?? []);
+  const resultados = mergeSessaoResultadoRubricas(previous?.resultados, incoming);
   const aplicadorIncoming = isRubricaImagemDataUrl(payload.aplicadorRubricaSvg)
     ? payload.aplicadorRubricaSvg!.trim()
     : undefined;

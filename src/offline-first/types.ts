@@ -182,6 +182,9 @@ export interface LocalBackupSnapshot {
   cadastros: CadastroRecord[];
   sessoes: SessaoRecord[];
   aplicadores: AplicadorRecord[];
+  /** Side tables — obrigatórias para não perder imagens no restore pré-sync. */
+  cadastroRubricas?: import('./db/localDbRubricas').CadastroRubricasRecord[];
+  sessaoRubricas?: import('./db/localDbRubricas').SessaoRubricasRecord[];
 }
 
 /** @deprecated LWW substitui resolução manual de conflitos */

@@ -2,6 +2,10 @@ import { getTafDatabase } from '../db/tafDatabase';
 import type { LocalBackupSnapshot } from '../types';
 import { listAplicadores, listCadastros, listSessoes, wipeOwnerData } from '../db/localDb';
 import { putAplicadorRecord, putCadastroRecord, putSessaoRecord } from '../db/localDb';
+import {
+  listCadastroRubricasLocal,
+  listSessaoRubricasLocal,
+} from '../db/localDbRubricas';
 
 const MAX_BACKUPS = 10;
 
@@ -9,10 +13,12 @@ export async function createLocalBackup(ownerUid: string): Promise<number | null
   const db = getTafDatabase();
   if (!db || !ownerUid.trim()) return null;
 
-  const [cadastros, sessoes, aplicadores] = await Promise.all([
+  const [cadastros, sessoes, aplicadores, cadastroRubricas, sessaoRubricas] = await Promise.all([
     listCadastros(ownerUid, true),
     listSessoes(ownerUid, true),
     listAplicadores(ownerUid, true),
+    listCadastroRubricasLocal(ownerUid),
+    listSessaoRubricasLocal(ownerUid),
   ]);
 
   const snapshot: LocalBackupSnapshot = {
@@ -21,6 +27,8 @@ export async function createLocalBackup(ownerUid: string): Promise<number | null
     cadastros,
     sessoes,
     aplicadores,
+    cadastroRubricas,
+    sessaoRubricas,
   };
 
   const id = await db.localBackups.add(snapshot);
@@ -45,6 +53,12 @@ export async function restoreLocalBackup(backupId: number): Promise<boolean> {
   }
   for (const row of snapshot.aplicadores) {
     await putAplicadorRecord(row);
+  }
+  if (snapshot.cadastroRubricas?.length) {
+    await db.cadastroRubricas.bulkPut(snapshot.cadastroRubricas);
+  }
+  if (snapshot.sessaoRubricas?.length) {
+    await db.sessaoRubricas.bulkPut(snapshot.sessaoRubricas);
   }
 
   return true;

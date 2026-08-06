@@ -44,11 +44,26 @@ export async function getAllSessoesFirestore(uid: string): Promise<SessaoAplicac
 async function persistSessao(uid: string, sessao: SessaoAplicacaoTaf): Promise<void> {
   const { rasterizarRubricasNaSessao } = await import('../../utils/rubricaRasterPersist');
   const { hydrateSessaoComRubricas } = await import('../../utils/hydrateRubricas');
+  const { mergeSessaoResultadoRubricas, pickAplicadorRubricaSvg } = await import(
+    '../../utils/mergeSessaoRubricas'
+  );
+  const { getSessaoRubricasLocal } = await import('../../offline-first/db/localDbRubricas');
+  const { getSessaoRubricasCloud } = await import('./sessaoRubricasCloud');
+
   const hydrated = await hydrateSessaoComRubricas(sessao);
   const { sessao: sessaoRaster } = rasterizarRubricasNaSessao(hydrated);
   const stamped = stampSessao(sessaoRaster, sessaoRaster.updatedAt);
-  const rubricas = extractSessaoRubricas(stamped);
-  const aplicadorRubricaSvg = extractSessaoAplicadorRubrica(stamped);
+  const localSide = await getSessaoRubricasLocal(sessao.id);
+  const cloudSide = await getSessaoRubricasCloud(uid, sessao.id);
+  const rubricas = mergeSessaoResultadoRubricas(
+    mergeSessaoResultadoRubricas(cloudSide?.resultados, localSide?.resultados),
+    extractSessaoRubricas(stamped),
+  );
+  const aplicadorRubricaSvg = pickAplicadorRubricaSvg(
+    extractSessaoAplicadorRubrica(stamped),
+    localSide?.aplicadorRubricaSvg,
+    cloudSide?.aplicadorRubricaSvg,
+  );
   const light = toSessaoLight(stamped);
   const syncVersion =
     typeof (stamped as { syncVersion?: number }).syncVersion === 'number'
@@ -67,13 +82,12 @@ async function persistSessao(uid: string, sessao: SessaoAplicacaoTaf): Promise<v
     } as Record<string, unknown>,
     stamped.updatedAt ?? Date.now(),
   );
+  // Nunca apaga pacote na nuvem por extract vazio (anti-perda).
   if (rubricas.length > 0 || aplicadorRubricaSvg) {
     await setSessaoRubricasCloud(uid, sessao.id, {
       resultados: rubricas,
       ...(aplicadorRubricaSvg ? { aplicadorRubricaSvg } : {}),
     });
-  } else {
-    await deleteSessaoRubricasCloud(uid, sessao.id);
   }
 }
 

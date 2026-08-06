@@ -802,13 +802,22 @@ async function downloadRecord(
     const rubricas = rubricCaches
       ? (rubricCaches.cadastros.get(remote.id) ?? null)
       : await getCadastroRubricasFirestore(ownerUid, remote.id);
-    const { putCadastroRubricasLocal } = await import('../db/localDbRubricas');
-    const { toCadastroLightFromRubricas, extractCadastroRubricas } = await import(
-      '../../utils/cadastroLight'
+    const { getCadastroRubricasLocal, putCadastroRubricasLocal } = await import(
+      '../db/localDbRubricas'
     );
+    const {
+      toCadastroLightFromRubricas,
+      extractCadastroRubricas,
+      mergeCadastroRubricasFields,
+      hasCadastroRubricas,
+    } = await import('../../utils/cadastroLight');
+    const previous = await getCadastroRubricasLocal(remote.id);
     const fromRemote = rubricas ?? extractCadastroRubricas(payload as CadastroRecord);
-    await putCadastroRubricasLocal(ownerUid, remote.id, fromRemote);
-    payload = toCadastroLightFromRubricas(payload as CadastroRecord, fromRemote) as SyncRecord;
+    const merged = mergeCadastroRubricasFields(previous, fromRemote);
+    if (hasCadastroRubricas(merged)) {
+      await putCadastroRubricasLocal(ownerUid, remote.id, merged);
+    }
+    payload = toCadastroLightFromRubricas(payload as CadastroRecord, merged) as SyncRecord;
   } else if (collection === 'sessoes' && remote.deleted !== true) {
     const rubDoc = rubricCaches
       ? (rubricCaches.sessoes.get(remote.id) ?? null)

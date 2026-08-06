@@ -55,16 +55,24 @@ export async function getCadastrosFirestoreSince(
 async function persistCadastro(uid: string, item: CadastroItemPersist): Promise<void> {
   const { rasterizarRubricasNoCadastro } = await import('../../utils/rubricaRasterPersist');
   const { hydrateCadastroComRubricas } = await import('../../utils/hydrateRubricas');
+  const { mergeCadastroRubricasFields } = await import('../../utils/cadastroLight');
+  const { getCadastroRubricasLocal } = await import('../../offline-first/db/localDbRubricas');
+  const { getCadastroRubricasCloud } = await import('./cadastroRubricasCloud');
+
   const hydrated = await hydrateCadastroComRubricas(item);
   const { cadastro: itemRaster } = rasterizarRubricasNoCadastro(hydrated);
   const stamped = stampCadastro(itemRaster, itemRaster.updatedAt);
-  const rubricas = extractCadastroRubricas(stamped);
+  const localSide = await getCadastroRubricasLocal(item.id);
+  const cloudSide = await getCadastroRubricasCloud(uid, item.id);
+  const rubricas = mergeCadastroRubricasFields(
+    mergeCadastroRubricasFields(cloudSide, localSide),
+    extractCadastroRubricas(stamped),
+  );
   const light = toCadastroLight(stamped);
   await upsertOwnerDoc(TABLE, uid, stamped.id, { ...light, updatedAt: stamped.updatedAt }, stamped.updatedAt ?? Date.now());
+  // Nunca apaga pacote na nuvem por extract vazio (anti-perda).
   if (hasCadastroRubricas(rubricas)) {
     await setCadastroRubricasCloud(uid, item.id, rubricas);
-  } else {
-    await deleteCadastroRubricasCloud(uid, item.id);
   }
 }
 

@@ -611,12 +611,13 @@ export async function saveCadastro(
     payload = { ...payload, id: byNip.id };
   }
 
+  const { mergeCadastroRubricasFields } = await import('../../utils/cadastroLight');
   const extracted = extractCadastroRubricas(payload);
   const previous = await getCadastroRubricasLocal(payload.id);
-  const rubricas = hasCadastroRubricas(extracted)
-    ? extracted
-    : (previous ?? extracted);
-  await putCadastroRubricasLocal(ownerUid, payload.id, rubricas);
+  const rubricas = mergeCadastroRubricasFields(previous, extracted);
+  if (hasCadastroRubricas(rubricas)) {
+    await putCadastroRubricasLocal(ownerUid, payload.id, rubricas);
+  }
   payload = toCadastroLightFromRubricas(payload, rubricas);
 
   const operation = existing ? 'UPDATE' : 'CREATE';
@@ -681,6 +682,17 @@ export async function saveCadastrosBatch(
   }
 
   const { rasterizarRubricasNoCadastro } = await import('../../utils/rubricaRasterPersist');
+  const {
+    extractCadastroRubricas,
+    hasCadastroRubricas,
+    mergeCadastroRubricasFields,
+    toCadastroLightFromRubricas,
+  } = await import('../../utils/cadastroLight');
+  const {
+    getCadastroRubricasLocal,
+    putCadastroRubricasLocal,
+  } = await import('./localDbRubricas');
+
   for (const item of items) {
     const itemRaster = rasterizarRubricasNoCadastro(item).cadastro;
     const nipKey = nipChaveCadastro(itemRaster.nip);
@@ -692,7 +704,14 @@ export async function saveCadastrosBatch(
         : existingByNip && existingByNip.ownerUid === ownerUid && !existingByNip.deleted
           ? existingByNip
           : undefined;
-    const payload = existing ? { ...itemRaster, id: existing.id } : itemRaster;
+    let payload = existing ? { ...itemRaster, id: existing.id } : itemRaster;
+    const extracted = extractCadastroRubricas(payload);
+    const previous = await getCadastroRubricasLocal(payload.id);
+    const rubricas = mergeCadastroRubricasFields(previous, extracted);
+    if (hasCadastroRubricas(rubricas)) {
+      await putCadastroRubricasLocal(ownerUid, payload.id, rubricas);
+    }
+    payload = toCadastroLightFromRubricas(payload, rubricas);
     const operation = existing ? 'UPDATE' : 'CREATE';
     const record = await toCadastroRecord(
       existing ? { ...existing, ...payload } : payload,
@@ -1154,6 +1173,55 @@ export type ApplyCsvLwwResult = 'created' | 'applied' | 'kept_local';
  * Importação CSV no estilo do sync por disquete (last-write-wins por updatedAt).
  * Se o CSV não trouxer updatedAt, trata como 0 — o local mais recente prevalece.
  */
+/** Extrai imagens do CSV/doc para side table e devolve doc light. */
+async function materializeCadastroRubricasFromDoc(
+  ownerUid: string,
+  item: CadastroItemPersist,
+): Promise<CadastroItemPersist> {
+  const {
+    extractCadastroRubricas,
+    hasCadastroRubricas,
+    mergeCadastroRubricasFields,
+    toCadastroLightFromRubricas,
+  } = await import('../../utils/cadastroLight');
+  const { getCadastroRubricasLocal, putCadastroRubricasLocal } = await import('./localDbRubricas');
+  const extracted = extractCadastroRubricas(item);
+  const previous = await getCadastroRubricasLocal(item.id);
+  const rubricas = mergeCadastroRubricasFields(previous, extracted);
+  if (hasCadastroRubricas(rubricas)) {
+    await putCadastroRubricasLocal(ownerUid, item.id, rubricas);
+  }
+  return toCadastroLightFromRubricas(item, rubricas);
+}
+
+async function materializeSessaoRubricasFromDoc(
+  ownerUid: string,
+  sessao: SessaoAplicacaoTaf,
+): Promise<SessaoAplicacaoTaf> {
+  const {
+    extractSessaoAplicadorRubrica,
+    extractSessaoRubricas,
+    toSessaoLightComMarcadores,
+  } = await import('../../utils/sessaoLight');
+  const { mergeSessaoResultadoRubricas, pickAplicadorRubricaSvg } = await import(
+    '../../utils/mergeSessaoRubricas'
+  );
+  const { getSessaoRubricasLocal, putSessaoRubricasLocal } = await import('./localDbRubricas');
+  const previous = await getSessaoRubricasLocal(sessao.id);
+  const resultados = mergeSessaoResultadoRubricas(
+    previous?.resultados,
+    extractSessaoRubricas(sessao),
+  );
+  const aplicadorRubricaSvg = pickAplicadorRubricaSvg(
+    extractSessaoAplicadorRubrica(sessao),
+    previous?.aplicadorRubricaSvg,
+  );
+  if (resultados.length > 0 || aplicadorRubricaSvg) {
+    await putSessaoRubricasLocal(ownerUid, sessao.id, { resultados, aplicadorRubricaSvg });
+  }
+  return toSessaoLightComMarcadores(sessao, { resultados, aplicadorRubricaSvg });
+}
+
 export async function applyCsvCadastroLww(
   remote: CadastroItemPersist,
   ownerUid: string,
@@ -1166,6 +1234,7 @@ export async function applyCsvCadastroLww(
   if (byNip && !byNip.deleted) {
     payload = { ...payload, id: byNip.id };
   }
+  payload = await materializeCadastroRubricasFromDoc(ownerUid, payload);
 
   const local = await db.cadastros.get(payload.id);
   const remoteAt =
@@ -1212,7 +1281,10 @@ export async function applyCsvSessaoLww(
   const db = getTafDatabase();
   if (!db) throw new Error('Armazenamento local indisponível.');
 
-  const normalized = normalizeSessaoShape(remote);
+  const normalized = await materializeSessaoRubricasFromDoc(
+    ownerUid,
+    normalizeSessaoShape(remote),
+  );
   const local = await db.sessoes.get(normalized.id);
   const remoteAt =
     typeof normalized.updatedAt === 'number' && normalized.updatedAt > 0
@@ -1316,6 +1388,8 @@ export async function wipeOwnerData(ownerUid: string): Promise<void> {
   await db.sessoes.where('ownerUid').equals(ownerUid).delete();
   await db.preCadastros.where('ownerUid').equals(ownerUid).delete();
   await db.syncQueue.where('ownerUid').equals(ownerUid).delete();
+  await db.cadastroRubricas.where('ownerUid').equals(ownerUid).delete();
+  await db.sessaoRubricas.where('ownerUid').equals(ownerUid).delete();
 }
 
 /**

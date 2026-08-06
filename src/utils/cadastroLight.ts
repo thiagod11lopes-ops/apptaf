@@ -31,6 +31,27 @@ export function hasCadastroRubricas(r: CadastroRubricas): boolean {
   );
 }
 
+/** Une modalidades; `primary` vence quando ambos têm imagem. Nunca descarta fallback sem imagem nova. */
+export function mergeCadastroRubricasFields(
+  fallback?: CadastroRubricas | null,
+  primary?: CadastroRubricas | null,
+): CadastroRubricas {
+  const pick = (a?: string, b?: string) => {
+    if (isRubricaImagemDataUrl(a)) return a!.trim();
+    if (isRubricaImagemDataUrl(b)) return b!.trim();
+    return undefined;
+  };
+  return {
+    rubricaCorridaSvg: pick(primary?.rubricaCorridaSvg, fallback?.rubricaCorridaSvg),
+    rubricaNatacaoSvg: pick(primary?.rubricaNatacaoSvg, fallback?.rubricaNatacaoSvg),
+    rubricaCaminhadaSvg: pick(primary?.rubricaCaminhadaSvg, fallback?.rubricaCaminhadaSvg),
+    rubricaPermanenciaSvg: pick(
+      primary?.rubricaPermanenciaSvg,
+      fallback?.rubricaPermanenciaSvg,
+    ),
+  };
+}
+
 /** Remove imagens; mantém marcador de presença quando havia rúbrica. */
 export function toCadastroLight(item: CadastroItemPersist): CadastroItemPersist {
   return {

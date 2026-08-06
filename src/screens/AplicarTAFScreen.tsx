@@ -2727,6 +2727,43 @@ export default function AplicarTAFScreen() {
     voltarInicioAplicarTaf();
   }, [fatoresRiscoOrigem, recarregarFatoresRisco, voltarInicioAplicarTaf]);
 
+  /** Voltar interno da aba Aplicar (nunca troca para a aba Iniciar). */
+  const voltarHierarquiaAplicar = useCallback(() => {
+    if (mostrarFatoresRisco) {
+      fecharPainelFatoresRisco();
+      return;
+    }
+    if (mostrarRestritos || mostrarListaPreCadastro) {
+      voltarInicioAplicarTaf();
+      return;
+    }
+    if (mostrarProvas) {
+      if (corridaEtapa === 'nips') {
+        voltarMenuProvas();
+        return;
+      }
+      if (modoPreCadastro) {
+        setModoPreCadastro(false);
+        setModoTafNaval(false);
+        setMostrarProvas(false);
+        void recarregarListaPreCadastros().then(() => setMostrarListaPreCadastro(true));
+        return;
+      }
+      voltarInicioAplicarTaf();
+    }
+  }, [
+    mostrarFatoresRisco,
+    mostrarRestritos,
+    mostrarListaPreCadastro,
+    mostrarProvas,
+    corridaEtapa,
+    modoPreCadastro,
+    fecharPainelFatoresRisco,
+    voltarInicioAplicarTaf,
+    voltarMenuProvas,
+    recarregarListaPreCadastros,
+  ]);
+
   const iniciarNovoPreCadastro = useCallback(() => {
     tipoProvaRef.current = null;
     preCadastroOrigemIdRef.current = null;
@@ -3379,7 +3416,7 @@ export default function AplicarTAFScreen() {
             <AplicarTafFlowHeader
               title={flowHeader.title}
               subtitle={flowHeader.subtitle}
-              onBack={() => navigation.goBack()}
+              onBack={voltarHierarquiaAplicar}
             />
           )}
 

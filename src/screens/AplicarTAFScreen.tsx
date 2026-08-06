@@ -218,6 +218,10 @@ export default function AplicarTAFScreen() {
     null,
   );
   const [participanteNipParaExcluir, setParticipanteNipParaExcluir] = useState<number | null>(null);
+  /** De onde o modal de exclusão foi aberto — ajusta o texto de ajuda. */
+  const [exclusaoParticipanteOrigem, setExclusaoParticipanteOrigem] = useState<'nips' | 'prova'>(
+    'nips',
+  );
   const [modalCadastroRapido, setModalCadastroRapido] = useState<{
     index: number;
     nip: string;
@@ -1832,6 +1836,7 @@ export default function AplicarTAFScreen() {
   const removerParticipanteNip = useCallback((index: number) => {
     setErroParticipantes('');
     setParticipanteNipParaExcluir(null);
+    setExclusaoParticipanteOrigem('nips');
     setModalEditarIdadeGeneroIndex((cur) => {
       if (cur == null) return null;
       if (cur === index) return null;
@@ -1854,10 +1859,40 @@ export default function AplicarTAFScreen() {
     nipsRepeticaoAutorizadaRef.current = rep;
   }, []);
 
+  const solicitarExclusaoParticipanteNip = useCallback((index: number) => {
+    setExclusaoParticipanteOrigem('nips');
+    setParticipanteNipParaExcluir(index);
+  }, []);
+
+  const solicitarExclusaoParticipanteProva = useCallback(
+    (index: number) => {
+      if (nipsParticipantes.length <= 1) {
+        Alert.alert(
+          'Não é possível excluir',
+          'A prova precisa de ao menos um participante. Volte à identificação para cancelar a prova.',
+        );
+        return;
+      }
+      setExclusaoParticipanteOrigem('prova');
+      setParticipanteNipParaExcluir(index);
+    },
+    [nipsParticipantes.length],
+  );
+
   const confirmarExclusaoParticipanteNip = useCallback(() => {
     if (participanteNipParaExcluir == null) return;
-    removerParticipanteNip(participanteNipParaExcluir);
-  }, [participanteNipParaExcluir, removerParticipanteNip]);
+    const index = participanteNipParaExcluir;
+    if (exclusaoParticipanteOrigem === 'prova') {
+      dispatchTrial({ type: 'removeParticipanteAt', index });
+      setResultadoPermanenciaLinhas((prev) => prev.filter((_, i) => i !== index));
+      setRepeticoesParticipantes((prev) => prev.filter((_, i) => i !== index));
+    }
+    removerParticipanteNip(index);
+  }, [
+    participanteNipParaExcluir,
+    exclusaoParticipanteOrigem,
+    removerParticipanteNip,
+  ]);
 
   const fbExclusaoParticipante =
     participanteNipParaExcluir != null ? nipFeedbackLinhas[participanteNipParaExcluir] : null;
@@ -3429,7 +3464,7 @@ export default function AplicarTAFScreen() {
               labelAtleta={labelAtleta}
               onAtualizarNip={atualizarNip}
               onVerificarNip={(index) => void verificarNipNoCadastro(index)}
-              onRemoverPress={setParticipanteNipParaExcluir}
+              onRemoverPress={solicitarExclusaoParticipanteNip}
               onEditarMilitar={setModalEditarIdadeGeneroIndex}
               onAtualizarDados={atualizarDadosNipLinha}
               onConfirmarDados={(index) => void confirmarDadosNipLinha(index)}
@@ -3498,7 +3533,15 @@ export default function AplicarTAFScreen() {
         index={participanteNipParaExcluir ?? 0}
         nip={nipExclusaoParticipante}
         nome={nomeExclusaoParticipante}
-        onClose={() => setParticipanteNipParaExcluir(null)}
+        hint={
+          exclusaoParticipanteOrigem === 'prova'
+            ? 'O militar será removido desta prova ativa. Tempos e marcações dele serão descartados.'
+            : undefined
+        }
+        onClose={() => {
+          setParticipanteNipParaExcluir(null);
+          setExclusaoParticipanteOrigem('nips');
+        }}
         onConfirm={confirmarExclusaoParticipanteNip}
       />
 
@@ -3557,6 +3600,7 @@ export default function AplicarTAFScreen() {
         nomesParticipantes={nomesParticipantesModal}
         participantesComFatorRisco={participantesComFatorRiscoModal}
         onPressNomeParticipante={abrirModalFatoresRiscoParticipante}
+        onDoublePressNomeParticipante={solicitarExclusaoParticipanteProva}
         checksVoltas={checksVoltas}
         chegadaNatacao={chegadaNatacao}
         ultimaMarcacaoKey={ultimaMarcacaoChecklistKey}
@@ -3597,6 +3641,7 @@ export default function AplicarTAFScreen() {
         nipsParticipantes={nipsParticipantes}
         participantesComFatorRisco={participantesComFatorRiscoModal}
         onPressNomeParticipante={abrirModalFatoresRiscoParticipante}
+        onDoublePressNomeParticipante={solicitarExclusaoParticipanteProva}
         valores={repeticoesParticipantes}
         onChangeValor={atualizarRepeticaoParticipante}
         getNota={(index) => notaRepeticoesPorLinha[index] ?? '—'}

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ export type TafProvaRepeticoesModalProps = {
   nipsParticipantes?: string[];
   participantesComFatorRisco?: boolean[];
   onPressNomeParticipante?: (index: number) => void;
+  onDoublePressNomeParticipante?: (index: number) => void;
   valores: string[];
   onChangeValor: (index: number, text: string) => void;
   getNota: (index: number) => string;
@@ -48,6 +49,7 @@ export function TafProvaRepeticoesModal({
   nipsParticipantes = [],
   participantesComFatorRisco = [],
   onPressNomeParticipante,
+  onDoublePressNomeParticipante,
   valores,
   onChangeValor,
   getNota,
@@ -62,6 +64,33 @@ export function TafProvaRepeticoesModal({
   const glass = getAplicarTafGlass(theme);
   const backdropColors = getAplicarTafBackdrop(theme);
   const { isNarrowPhone, isLandscape } = useAplicarTafLayout();
+  const ultimoToqueNomeRef = useRef<{ index: number; at: number } | null>(null);
+  const singlePressNomeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onPressNomeComDuplo = useCallback(
+    (index: number) => {
+      const agora = Date.now();
+      const ultimo = ultimoToqueNomeRef.current;
+      if (ultimo && ultimo.index === index && agora - ultimo.at < 320) {
+        if (singlePressNomeTimerRef.current) {
+          clearTimeout(singlePressNomeTimerRef.current);
+          singlePressNomeTimerRef.current = null;
+        }
+        ultimoToqueNomeRef.current = null;
+        onDoublePressNomeParticipante?.(index);
+        return;
+      }
+      ultimoToqueNomeRef.current = { index, at: agora };
+      if (singlePressNomeTimerRef.current) clearTimeout(singlePressNomeTimerRef.current);
+      singlePressNomeTimerRef.current = setTimeout(() => {
+        singlePressNomeTimerRef.current = null;
+        if (participantesComFatorRisco[index] === true && onPressNomeParticipante) {
+          onPressNomeParticipante(index);
+        }
+      }, 320);
+    },
+    [onDoublePressNomeParticipante, onPressNomeParticipante, participantesComFatorRisco],
+  );
 
   const rows = useMemo(
     () => Array.from({ length: nParticipantes }, (_, i) => i),
@@ -107,12 +136,23 @@ export function TafProvaRepeticoesModal({
                     <View style={styles.rowBody}>
                       <View style={styles.rowHead}>
                         <Text
-                          accessibilityRole={temFatorRisco ? 'button' : undefined}
-                          onPress={
-                            temFatorRisco && onPressNomeParticipante
-                              ? () => onPressNomeParticipante(index)
-                              : undefined
-                          }
+                          accessibilityRole="button"
+                          accessibilityHint="Toque duas vezes para excluir o participante da prova"
+                          {...(Platform.OS === 'web'
+                            ? ({
+                                onClick: (e: { detail?: number }) => {
+                                  if (e?.detail === 2) {
+                                    onDoublePressNomeParticipante?.(index);
+                                    return;
+                                  }
+                                  if (e?.detail === 1 && temFatorRisco && onPressNomeParticipante) {
+                                    onPressNomeParticipante(index);
+                                  }
+                                },
+                              } as object)
+                            : {
+                                onPress: () => onPressNomeComDuplo(index),
+                              })}
                           style={[
                             styles.rowNome,
                             {

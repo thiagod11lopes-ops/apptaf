@@ -12,6 +12,8 @@ type Props = {
   index: number;
   nip: string;
   nome: string;
+  /** Texto de ajuda abaixo da mensagem (padrão: exclusão na lista de NIPs). */
+  hint?: string;
   onClose: () => void;
   onConfirm: () => void;
 };
@@ -21,6 +23,7 @@ export function ConfirmacaoExcluirParticipanteNipModal({
   index,
   nip,
   nome,
+  hint,
   onClose,
   onConfirm,
 }: Props) {
@@ -29,6 +32,7 @@ export function ConfirmacaoExcluirParticipanteNipModal({
   const nipFmt = formatNipInput(nip);
   const nomeExibir = nome.trim();
   const labelParticipante = `participante ${index + 1}`;
+  const hintText = hint ?? 'O campo de NIP será removido desta prova.';
 
   const footer = (
     <View style={styles.footerRow}>
@@ -92,7 +96,7 @@ export function ConfirmacaoExcluirParticipanteNipModal({
           ?
         </Text>
         <Text style={[styles.hint, { color: theme.textMuted }]}>
-          O campo de NIP será removido desta prova.
+          {hintText}
         </Text>
       </View>
     </ModernModal>

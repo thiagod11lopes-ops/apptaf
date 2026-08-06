@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -113,6 +113,8 @@ export type TafProvaTempoModalProps = {
   /** Índices (ou flags por participante) com fator de risco marcado. */
   participantesComFatorRisco?: boolean[];
   onPressNomeParticipante?: (index: number) => void;
+  /** Dois toques/cliques no nome — ex.: excluir militar da prova ativa. */
+  onDoublePressNomeParticipante?: (index: number) => void;
   checksVoltas?: boolean[][];
   chegadaNatacao?: boolean[];
   /**
@@ -427,6 +429,7 @@ export function TafProvaTempoModal({
   nomesParticipantes,
   participantesComFatorRisco = [],
   onPressNomeParticipante,
+  onDoublePressNomeParticipante,
   checksVoltas = [],
   chegadaNatacao = [],
   ultimaMarcacaoKey = null,
@@ -468,6 +471,33 @@ export function TafProvaTempoModal({
     PARTICIPANTES_ESCALA_DEFAULT,
   );
   const [participantesBaseHeight, setParticipantesBaseHeight] = useState(0);
+  const ultimoToqueNomeRef = useRef<{ index: number; at: number } | null>(null);
+  const singlePressNomeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onPressNomeComDuplo = useCallback(
+    (index: number) => {
+      const agora = Date.now();
+      const ultimo = ultimoToqueNomeRef.current;
+      if (ultimo && ultimo.index === index && agora - ultimo.at < 320) {
+        if (singlePressNomeTimerRef.current) {
+          clearTimeout(singlePressNomeTimerRef.current);
+          singlePressNomeTimerRef.current = null;
+        }
+        ultimoToqueNomeRef.current = null;
+        onDoublePressNomeParticipante?.(index);
+        return;
+      }
+      ultimoToqueNomeRef.current = { index, at: agora };
+      if (singlePressNomeTimerRef.current) clearTimeout(singlePressNomeTimerRef.current);
+      singlePressNomeTimerRef.current = setTimeout(() => {
+        singlePressNomeTimerRef.current = null;
+        if (participantesComFatorRisco[index] === true && onPressNomeParticipante) {
+          onPressNomeParticipante(index);
+        }
+      }, 320);
+    },
+    [onDoublePressNomeParticipante, onPressNomeParticipante, participantesComFatorRisco],
+  );
 
   const onModalLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -483,6 +513,11 @@ export function TafProvaTempoModal({
       setConfirmarVoltarIdentificacao(false);
       setEscalaParticipantesNorm(PARTICIPANTES_ESCALA_DEFAULT);
       setParticipantesBaseHeight(0);
+      ultimoToqueNomeRef.current = null;
+      if (singlePressNomeTimerRef.current) {
+        clearTimeout(singlePressNomeTimerRef.current);
+        singlePressNomeTimerRef.current = null;
+      }
     }
   }, [visible]);
 
@@ -690,12 +725,23 @@ export function TafProvaTempoModal({
                   ) : null}
                   <View style={styles.identityTextCol}>
                     <Text
-                      accessibilityRole={temFatorRisco ? 'button' : undefined}
-                      onPress={
-                        temFatorRisco && onPressNomeParticipante
-                          ? () => onPressNomeParticipante(index)
-                          : undefined
-                      }
+                      accessibilityRole="button"
+                      accessibilityHint="Toque duas vezes para excluir o participante da prova"
+                      {...(Platform.OS === 'web'
+                        ? ({
+                            onClick: (e: { detail?: number }) => {
+                              if (e?.detail === 2) {
+                                onDoublePressNomeParticipante?.(index);
+                                return;
+                              }
+                              if (e?.detail === 1 && temFatorRisco && onPressNomeParticipante) {
+                                onPressNomeParticipante(index);
+                              }
+                            },
+                          } as object)
+                        : {
+                            onPress: () => onPressNomeComDuplo(index),
+                          })}
                       style={[
                         styles.participantNome,
                         styles.participantNomeAdaptive,

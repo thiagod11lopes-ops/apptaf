@@ -54,7 +54,9 @@ export type TrialTableAction =
       participante: number;
       /** null = desmarcado; reprovado não entra no laranja/verde. */
       opcao: 'aprovado' | 'reprovado' | null;
-    };
+    }
+  /** Remove o participante no índice e remapeia marcações dos índices posteriores. */
+  | { type: 'removeParticipanteAt'; index: number };
 
 export const initialTrialTableState: TrialTableState = {
   checksVoltas: [],
@@ -203,6 +205,44 @@ function normalizeHydrateState(raw: Partial<TrialTableState>): TrialTableState {
     base.marcacoesOrdem = pruneMarcacoesOrdem(base);
   }
   return base;
+}
+
+function remapMarcacaoKeyAposRemocao(key: string, removedIndex: number): string | null {
+  if (key.startsWith('volta:')) {
+    const parts = key.split(':');
+    const p = Number(parts[1]);
+    const v = Number(parts[2]);
+    if (!Number.isFinite(p) || !Number.isFinite(v)) return null;
+    if (p === removedIndex) return null;
+    if (p > removedIndex) return chaveMarcacaoVolta(p - 1, v);
+    return key;
+  }
+  if (key.startsWith('chegada:')) {
+    const p = Number(key.slice('chegada:'.length));
+    if (!Number.isFinite(p)) return null;
+    if (p === removedIndex) return null;
+    if (p > removedIndex) return chaveMarcacaoChegada(p - 1);
+    return key;
+  }
+  if (key.startsWith('perm:') && key.endsWith(':aprovado')) {
+    const m = /^perm:(\d+):aprovado$/.exec(key);
+    if (!m) return null;
+    const p = Number(m[1]);
+    if (!Number.isFinite(p)) return null;
+    if (p === removedIndex) return null;
+    if (p > removedIndex) return chaveMarcacaoPermAprovado(p - 1);
+    return key;
+  }
+  return key;
+}
+
+function remapMarcacoesOrdemAposRemocao(ordem: string[], removedIndex: number): string[] {
+  const next: string[] = [];
+  for (const key of ordem) {
+    const remapped = remapMarcacaoKeyAposRemocao(key, removedIndex);
+    if (remapped) next.push(remapped);
+  }
+  return next;
 }
 
 export function aplicarTafTrialReducer(
@@ -436,6 +476,20 @@ export function aplicarTafTrialReducer(
         marcacoesOrdem = removeMarcacao(marcacoesOrdem, key);
       }
       return { ...state, marcacoesOrdem };
+    }
+
+    case 'removeParticipanteAt': {
+      const { index } = action;
+      if (index < 0) return state;
+      const spliceAt = <T,>(arr: T[]): T[] => arr.filter((_, i) => i !== index);
+      return {
+        checksVoltas: spliceAt(state.checksVoltas),
+        chegadaNatacao: spliceAt(state.chegadaNatacao),
+        temposMilitaresMs: spliceAt(state.temposMilitaresMs),
+        desistenciaParticipantes: spliceAt(state.desistenciaParticipantes),
+        desistenciaVoltasParticipantes: spliceAt(state.desistenciaVoltasParticipantes),
+        marcacoesOrdem: remapMarcacoesOrdemAposRemocao(state.marcacoesOrdem ?? [], index),
+      };
     }
 
     default:

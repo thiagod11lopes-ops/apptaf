@@ -23,16 +23,13 @@ import {
   postoGradAplicador,
   type AplicadorAssinaturaResumo,
 } from '../../types/aplicadorAssinatura';
-import {
-  buildRubricaSvgDataUrl,
-  buildStrokePath,
-  type RubricaStroke,
-} from '../../utils/rubricaSvgBuilder';
+import { buildRubricaSvgDataUrl, buildStrokePath } from '../../utils/rubricaSvgBuilder';
 import { rubricaParaPersistencia } from '../../utils/rubricaRasterPersist';
 import { RUBRICA_COR_TRACO } from '../../utils/rubricaSvgNormalize';
 import { compareByNomePtBr } from '../../utils/compareNomePtBr';
 import { formatNomeComPosto } from '../../utils/formatNomeComPosto';
 import { RUBRICA_NATIVA_ALTURA } from '../../utils/rubricaConstants';
+import { useRubricaStrokeDraw } from '../../hooks/useRubricaStrokeDraw';
 import {
   AssinaturaFuturistaOverlay,
   AssinaturaFuturistaScroll,
@@ -83,8 +80,16 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
   const [aplicadores, setAplicadores] = useState<AplicadorItemPersist[]>([]);
   const [carregandoAplicadores, setCarregandoAplicadores] = useState(false);
   const [aplicadorSelecionadoId, setAplicadorSelecionadoId] = useState('');
-  const [rubricaStrokes, setRubricaStrokes] = useState<RubricaStroke[]>([]);
-  const [rubricaStrokeAtual, setRubricaStrokeAtual] = useState<RubricaStroke>([]);
+  const {
+    strokes: rubricaStrokes,
+    strokeAtual: rubricaStrokeAtual,
+    temTraco: temTracoRubrica,
+    iniciar: iniciarRubricaPoint,
+    mover: moverRubricaPoint,
+    finalizar: finalizarRubricaStroke,
+    limpar: limparRubricaDraw,
+    getTodosStrokes,
+  } = useRubricaStrokeDraw();
   const [canvasWidth, setCanvasWidth] = useState(420);
   const [erro, setErro] = useState('');
   const [concluindo, setConcluindo] = useState(false);
@@ -96,11 +101,10 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
 
   const resetFluxo = useCallback(() => {
     setAplicadorSelecionadoId('');
-    setRubricaStrokes([]);
-    setRubricaStrokeAtual([]);
+    limparRubricaDraw();
     setErro('');
     setConcluindo(false);
-  }, []);
+  }, [limparRubricaDraw]);
 
   useEffect(() => {
     if (!visible) return;
@@ -136,48 +140,43 @@ export function FluxoAssinaturaAplicadorModal({ visible, onConcluir, onCancelar 
     };
   }, [visible, resetFluxo]);
 
-  const selecionarAplicador = useCallback((id: string) => {
-    setAplicadorSelecionadoId(id);
-    setErro('');
-    setRubricaStrokes([]);
-    setRubricaStrokeAtual([]);
-  }, []);
+  const selecionarAplicador = useCallback(
+    (id: string) => {
+      setAplicadorSelecionadoId(id);
+      setErro('');
+      limparRubricaDraw();
+    },
+    [limparRubricaDraw],
+  );
 
-  const iniciarRubricaStroke = useCallback((event: GestureResponderEvent) => {
-    const { locationX, locationY } = event.nativeEvent;
-    setRubricaStrokeAtual([{ x: locationX, y: locationY }]);
-    setErro('');
-  }, []);
+  const iniciarRubricaStroke = useCallback(
+    (event: GestureResponderEvent) => {
+      setErro('');
+      const { locationX, locationY } = event.nativeEvent;
+      iniciarRubricaPoint(locationX, locationY);
+    },
+    [iniciarRubricaPoint],
+  );
 
-  const moverRubricaStroke = useCallback((event: GestureResponderEvent) => {
-    const { locationX, locationY } = event.nativeEvent;
-    setRubricaStrokeAtual((prev) => [...prev, { x: locationX, y: locationY }]);
-  }, []);
-
-  const finalizarRubricaStroke = useCallback(() => {
-    if (rubricaStrokeAtual.length === 0) return;
-    setRubricaStrokes((prev) => [...prev, rubricaStrokeAtual]);
-    setRubricaStrokeAtual([]);
-  }, [rubricaStrokeAtual]);
+  const moverRubricaStroke = useCallback(
+    (event: GestureResponderEvent) => {
+      const { locationX, locationY } = event.nativeEvent;
+      moverRubricaPoint(locationX, locationY);
+    },
+    [moverRubricaPoint],
+  );
 
   const limparRubrica = useCallback(() => {
-    setRubricaStrokes([]);
-    setRubricaStrokeAtual([]);
+    limparRubricaDraw();
     setErro('');
-  }, []);
-
-  const temTracoRubrica =
-    rubricaStrokes.some((s) => s.length > 0) || rubricaStrokeAtual.length > 0;
+  }, [limparRubricaDraw]);
 
   const montarSvgRubricaAtual = useCallback((): string | null => {
-    const todos: RubricaStroke[] = [
-      ...rubricaStrokes.filter((s) => s.length > 0),
-      ...(rubricaStrokeAtual.length > 0 ? [rubricaStrokeAtual] : []),
-    ];
+    const todos = getTodosStrokes();
     if (todos.length === 0) return null;
     const svg = buildRubricaSvgDataUrl(todos, canvasWidth, RUBRICA_NATIVA_ALTURA);
     return rubricaParaPersistencia(svg) ?? svg;
-  }, [canvasWidth, rubricaStrokeAtual, rubricaStrokes]);
+  }, [canvasWidth, getTodosStrokes]);
 
   const concluirAssinatura = useCallback(() => {
     if (!aplicadorSelecionado) {

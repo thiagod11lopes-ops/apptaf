@@ -87,7 +87,6 @@ import {
   metaPreCadastro,
   buildRubricaSvgDataUrl,
   type CorridaEtapa,
-  type RubricaStroke,
 } from './aplicarTaf/aplicarTafScreenHelpers';
 import { createAplicarTafStyles } from './aplicarTaf/aplicarTafScreenStyles';
 import {
@@ -164,6 +163,7 @@ import {
 } from './aplicarTafNotaHelpers';
 import { useTafTimeFormat } from '../hooks/useTafTimeFormat';
 import { useTafReactStopwatch } from '../hooks/useTafReactStopwatch';
+import { useRubricaStrokeDraw } from '../hooks/useRubricaStrokeDraw';
 import type { RootStackParamList, ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import {
@@ -315,8 +315,15 @@ export default function AplicarTAFScreen() {
   const [indiceRubricaNatacao, setIndiceRubricaNatacao] = useState(0);
   const [rubricasNatacaoSvg, setRubricasNatacaoSvg] = useState<string[]>([]);
   const [erroRubricaNatacao, setErroRubricaNatacao] = useState('');
-  const [rubricaStrokes, setRubricaStrokes] = useState<RubricaStroke[]>([]);
-  const [rubricaStrokeAtual, setRubricaStrokeAtual] = useState<RubricaStroke>([]);
+  const {
+    strokes: rubricaStrokes,
+    strokeAtual: rubricaStrokeAtual,
+    iniciar: iniciarRubricaStrokePoint,
+    mover: moverRubricaStrokePoint,
+    finalizar: finalizarRubricaStroke,
+    limpar: limparRubricaDraw,
+    getTodosStrokes: getTodosStrokesRubrica,
+  } = useRubricaStrokeDraw();
   const [rubricaCanvasWidth, setRubricaCanvasWidth] = useState(420);
 
   const [resultadoPermanenciaLinhas, setResultadoPermanenciaLinhas] = useState<
@@ -828,8 +835,7 @@ export default function AplicarTAFScreen() {
           setListaResultadosRubricaNatacao(lista);
           setIndiceRubricaNatacao(fin.indiceRubrica ?? 0);
           setErroRubricaNatacao('');
-          setRubricaStrokes([]);
-          setRubricaStrokeAtual([]);
+          limparRubricaDraw();
           setModalRubricaNatacaoVisible(true);
           setFluxoAplicadorVisible(false);
           setModalTempoRegistradoVisible(false);
@@ -878,7 +884,7 @@ export default function AplicarTAFScreen() {
         });
       });
     },
-    [stopwatch.restaurar, limparBufferAplicacao],
+    [stopwatch.restaurar, limparBufferAplicacao, limparRubricaDraw],
   );
 
   const descartarSessaoProvaAtivaRestaurada = useCallback(() => {
@@ -1129,8 +1135,7 @@ export default function AplicarTAFScreen() {
       setRubricasNatacaoSvg(Array.from({ length: resultados.length }, () => ''));
       setIndiceRubricaNatacao(0);
       setErroRubricaNatacao('');
-      setRubricaStrokes([]);
-      setRubricaStrokeAtual([]);
+      limparRubricaDraw();
       const copia = resultados.map((r) => ({ ...r }));
       setListaResultadosRubricaNatacao(copia);
       pendingResultadosNavRef.current = copia;
@@ -1152,7 +1157,7 @@ export default function AplicarTAFScreen() {
         }
       }, 2500);
     },
-    [],
+    [limparRubricaDraw],
   );
 
   const cancelarFluxoRubricaCandidatos = useCallback(() => {
@@ -1165,8 +1170,7 @@ export default function AplicarTAFScreen() {
     setListaResultadosRubricaNatacao(null);
     setRubricasNatacaoSvg([]);
     setErroRubricaNatacao('');
-    setRubricaStrokes([]);
-    setRubricaStrokeAtual([]);
+    limparRubricaDraw();
     setModalParcialAviso(null);
     pendingResultadosNavRef.current = res;
     aplicandoResultadoLockRef.current = false;
@@ -1175,7 +1179,7 @@ export default function AplicarTAFScreen() {
     if (res && res.length > 0) {
       iniciarFinalizacaoComAssinaturaAplicador(res);
     }
-  }, [iniciarFinalizacaoComAssinaturaAplicador, listaResultadosRubricaNatacao]);
+  }, [iniciarFinalizacaoComAssinaturaAplicador, limparRubricaDraw, listaResultadosRubricaNatacao]);
 
   const onCadastrarResultados = useCallback(async () => {
     if (aplicandoResultadoLockRef.current || salvandoResultadosCorrida) return;
@@ -1511,27 +1515,26 @@ export default function AplicarTAFScreen() {
     }
   }, [iniciarFinalizacaoComAssinaturaAplicador, modalParcialAviso]);
 
-  const iniciarRubricaStroke = useCallback((event: GestureResponderEvent) => {
-    const { locationX, locationY } = event.nativeEvent;
-    setErroRubricaNatacao('');
-    setRubricaStrokeAtual([{ x: locationX, y: locationY }]);
-  }, []);
+  const iniciarRubricaStroke = useCallback(
+    (event: GestureResponderEvent) => {
+      setErroRubricaNatacao('');
+      const { locationX, locationY } = event.nativeEvent;
+      iniciarRubricaStrokePoint(locationX, locationY);
+    },
+    [iniciarRubricaStrokePoint],
+  );
 
-  const moverRubricaStroke = useCallback((event: GestureResponderEvent) => {
-    const { locationX, locationY } = event.nativeEvent;
-    setRubricaStrokeAtual((prev) => [...prev, { x: locationX, y: locationY }]);
-  }, []);
-
-  const finalizarRubricaStroke = useCallback(() => {
-    if (rubricaStrokeAtual.length === 0) return;
-    setRubricaStrokes((prev) => [...prev, rubricaStrokeAtual]);
-    setRubricaStrokeAtual([]);
-  }, [rubricaStrokeAtual]);
+  const moverRubricaStroke = useCallback(
+    (event: GestureResponderEvent) => {
+      const { locationX, locationY } = event.nativeEvent;
+      moverRubricaStrokePoint(locationX, locationY);
+    },
+    [moverRubricaStrokePoint],
+  );
 
   const limparRubricaNatacaoAtual = useCallback(() => {
     setErroRubricaNatacao('');
-    setRubricaStrokes([]);
-    setRubricaStrokeAtual([]);
+    limparRubricaDraw();
     setRubricasNatacaoSvg((prev) => {
       const next = [...prev];
       if (indiceRubricaNatacao < next.length) next[indiceRubricaNatacao] = '';
@@ -1547,13 +1550,10 @@ export default function AplicarTAFScreen() {
       pendingResultadosNavRef.current = atualizados;
       return atualizados;
     });
-  }, [indiceRubricaNatacao]);
+  }, [indiceRubricaNatacao, limparRubricaDraw]);
 
   const buildSvgRubricaAtual = useCallback((): string | null => {
-    const strokesProntos = [
-      ...rubricaStrokes.filter((s) => s.length > 0),
-      ...(rubricaStrokeAtual.length > 0 ? [rubricaStrokeAtual] : []),
-    ];
+    const strokesProntos = getTodosStrokesRubrica();
     if (strokesProntos.length === 0) return null;
     const svg = buildRubricaSvgDataUrl(
       strokesProntos,
@@ -1563,7 +1563,7 @@ export default function AplicarTAFScreen() {
       RUBRICA_COR_FUNDO,
     );
     return rubricaParaPersistencia(svg) ?? svg;
-  }, [rubricaCanvasWidth, rubricaStrokeAtual, rubricaStrokes]);
+  }, [getTodosStrokesRubrica, rubricaCanvasWidth]);
 
   const aplicarSvgNoIndiceRubrica = useCallback(
     (index: number, svg: string, listaBase: ResultadoCorridaItem[]) => {
@@ -1633,8 +1633,7 @@ export default function AplicarTAFScreen() {
       setListaResultadosRubricaNatacao(null);
       setRubricasNatacaoSvg([]);
       setErroRubricaNatacao('');
-      setRubricaStrokes([]);
-      setRubricaStrokeAtual([]);
+      limparRubricaDraw();
       return;
     }
     const svgNovo = buildSvgRubricaAtual();
@@ -1679,8 +1678,7 @@ export default function AplicarTAFScreen() {
     setListaResultadosRubricaNatacao(null);
     setRubricasNatacaoSvg([]);
     setErroRubricaNatacao('');
-    setRubricaStrokes([]);
-    setRubricaStrokeAtual([]);
+    limparRubricaDraw();
     setCorridaEtapa('nips');
     if (modalParcialAviso) {
       Alert.alert('Registro parcial', modalParcialAviso);
@@ -1694,6 +1692,7 @@ export default function AplicarTAFScreen() {
     buildSvgRubricaAtual,
     indiceRubricaNatacao,
     iniciarFinalizacaoComAssinaturaAplicador,
+    limparRubricaDraw,
     listaResultadosRubricaNatacao,
     modalParcialAviso,
     rubricasNatacaoSvg,
@@ -1702,10 +1701,9 @@ export default function AplicarTAFScreen() {
   /** Ao trocar de participante ou abrir o modal: limpa a área de assinatura para não misturar traços. */
   useEffect(() => {
     if (!modalRubricaNatacaoVisible) return;
-    setRubricaStrokes([]);
-    setRubricaStrokeAtual([]);
+    limparRubricaDraw();
     setErroRubricaNatacao('');
-  }, [indiceRubricaNatacao, modalRubricaNatacaoVisible]);
+  }, [indiceRubricaNatacao, limparRubricaDraw, modalRubricaNatacaoVisible]);
 
   /** Evita scroll da página por trás do modal de assinatura (web / PWA). */
   useEffect(() => {

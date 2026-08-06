@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, TouchableOpacity, Text, View, Platform } from 'react-native';
+import { TouchableOpacity, Text, View, Platform } from 'react-native';
 import { AppModal } from './premium/AppModal';
 import Svg, { Path as SvgPath } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,14 +7,11 @@ import type { ResultadoCorridaItem } from '../navigation/types';
 import type { TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import { tituloTipoProva } from '../services/resultadosAplicadosIndexedDb';
 import { formatMsByModality } from '../taf/tafTimeFormat';
-import {
-  buildRubricaSvgDataUrl,
-  buildStrokePath,
-  type RubricaStroke,
-} from '../utils/rubricaSvgBuilder';
+import { buildRubricaSvgDataUrl, buildStrokePath } from '../utils/rubricaSvgBuilder';
 import { rubricaParaPersistencia } from '../utils/rubricaRasterPersist';
 import { RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
+import { useRubricaStrokeDraw } from '../hooks/useRubricaStrokeDraw';
 import {
   AssinaturaFuturistaOverlay,
   AssinaturaFuturistaScroll,
@@ -54,53 +51,51 @@ export function RubricaCaptureModal({
   onCancel,
 }: Props) {
   const { theme } = useTheme();
-  const [strokes, setStrokes] = useState<RubricaStroke[]>([]);
-  const [strokeAtual, setStrokeAtual] = useState<RubricaStroke>([]);
+  const {
+    strokes,
+    strokeAtual,
+    temTraco,
+    iniciar,
+    mover,
+    finalizar,
+    limpar,
+    getTodosStrokes,
+  } = useRubricaStrokeDraw();
   const [canvasWidth, setCanvasWidth] = useState(420);
 
   useEffect(() => {
     if (visible) {
-      setStrokes([]);
-      setStrokeAtual([]);
+      limpar();
     }
-  }, [visible, participante?.corredor, indice]);
+  }, [visible, participante?.corredor, indice, limpar]);
 
-  const iniciarStroke = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
-    const { locationX, locationY } = event.nativeEvent;
-    setStrokeAtual([{ x: locationX, y: locationY }]);
-  }, []);
+  const iniciarStroke = useCallback(
+    (event: { nativeEvent: { locationX: number; locationY: number } }) => {
+      const { locationX, locationY } = event.nativeEvent;
+      iniciar(locationX, locationY);
+    },
+    [iniciar],
+  );
 
-  const moverStroke = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
-    const { locationX, locationY } = event.nativeEvent;
-    setStrokeAtual((prev) => [...prev, { x: locationX, y: locationY }]);
-  }, []);
-
-  const finalizarStroke = useCallback(() => {
-    if (strokeAtual.length === 0) return;
-    setStrokes((prev) => [...prev, strokeAtual]);
-    setStrokeAtual([]);
-  }, [strokeAtual]);
-
-  const limpar = useCallback(() => {
-    setStrokes([]);
-    setStrokeAtual([]);
-  }, []);
+  const moverStroke = useCallback(
+    (event: { nativeEvent: { locationX: number; locationY: number } }) => {
+      const { locationX, locationY } = event.nativeEvent;
+      mover(locationX, locationY);
+    },
+    [mover],
+  );
 
   const confirmar = useCallback(() => {
-    const todos: RubricaStroke[] = [
-      ...strokes.filter((s) => s.length > 0),
-      ...(strokeAtual.length > 0 ? [strokeAtual] : []),
-    ];
+    const todos = getTodosStrokes();
     if (todos.length === 0) return;
     const svg = buildRubricaSvgDataUrl(todos, canvasWidth, RUBRICA_NATIVA_ALTURA);
     onConfirm(rubricaParaPersistencia(svg) ?? svg);
-  }, [strokes, strokeAtual, canvasWidth, onConfirm]);
+  }, [canvasWidth, getTodosStrokes, onConfirm]);
 
   if (!visible || !participante) return null;
 
   const mod = participante.prova ?? tipoProva;
   const modLabel = tituloTipoProva(mod);
-  const temTraco = strokes.some((s) => s.length > 0) || strokeAtual.length > 0;
   const tempoStr = formatMsByModality(mod === 'natacao' ? 'natacao' : 'corrida', participante.tempoMs);
 
   return (
@@ -136,8 +131,8 @@ export function RubricaCaptureModal({
                 onMoveShouldSetResponder: () => true,
                 onResponderGrant: iniciarStroke,
                 onResponderMove: moverStroke,
-                onResponderRelease: finalizarStroke,
-                onResponderTerminate: finalizarStroke,
+                onResponderRelease: finalizar,
+                onResponderTerminate: finalizar,
               }}
             >
               <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>

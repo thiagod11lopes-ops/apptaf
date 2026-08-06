@@ -41,6 +41,8 @@ const HOME_RESUMO_SCOPES: readonly DataChangeScope[] = [
 type HomeResumoCacheEntry = {
   ownerUid: string | null;
   resumo: ResumoInicioTafHistorico;
+  /** true = há mudança; UI pode mostrar stale enquanto recalcula. */
+  dirty: boolean;
 };
 
 let cache: HomeResumoCacheEntry | null = null;
@@ -61,18 +63,42 @@ function ensureHomeResumoInvalidation(): void {
   }, { scopes: HOME_RESUMO_SCOPES });
 }
 
-/** Descarta o cache (chamado automaticamente via notifyDataChanged). */
+/**
+ * Soft-invalidate: marca sujo, mas mantém o último resumo (stale-while-revalidate).
+ * Evita flash de zeros ao trocar de aba.
+ */
 export function invalidateHomeResumoCache(): void {
+  cacheGeneration += 1;
+  inFlight = null;
+  if (cache) {
+    cache = { ...cache, dirty: true };
+  }
+}
+
+/** Limpa tudo (troca de conta / logout). */
+export function clearHomeResumoCache(): void {
   cache = null;
   cacheGeneration += 1;
   inFlight = null;
 }
 
-/** Leitura síncrona do cache atual (mesmo owner). Útil para hidratar UI sem esperar I/O. */
+/** Leitura síncrona do cache atual (mesmo owner), mesmo se dirty. */
 export function peekHomeResumoCache(): ResumoInicioTafHistorico | null {
   const ownerUid = getCachedDataOwnerUid();
   if (!cache || cache.ownerUid !== ownerUid) return null;
   return cache.resumo;
+}
+
+/** Cache do owner atual precisa recalcular. */
+export function isHomeResumoCacheDirty(): boolean {
+  const ownerUid = getCachedDataOwnerUid();
+  if (!cache || cache.ownerUid !== ownerUid) return true;
+  return cache.dirty;
+}
+
+/** Cache fresco — foco na Home pode pular o scan Dexie. */
+export function isHomeResumoCacheWarm(): boolean {
+  return peekHomeResumoCache() != null && !isHomeResumoCacheDirty();
 }
 
 function stripCadastro(row: Record<string, unknown>): CadastroItemPersist {
@@ -119,49 +145,42 @@ async function computeResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHistor
   const db = getTafDatabase();
   if (!db) return RESUMO_VAZIO;
 
-  try {
-    const ownerUid = getCachedDataOwnerUid();
-    const [cadRows, sessRows, deletedRows, nipsRestritos, nipsFatoresPreenchidos] =
-      await Promise.all([
-        listCadastrosForDisplay(null),
-        listSessoesForDisplay(null),
-        listDeletedSessoesForDisplay(null),
-        getNipsRestritosAtivos(),
-        getNipsComFatoresRiscoPreenchidos(ownerUid),
-      ]);
+  const ownerUid = getCachedDataOwnerUid();
+  const [cadRows, sessRows, deletedRows, nipsRestritos, nipsFatoresPreenchidos] =
+    await Promise.all([
+      listCadastrosForDisplay(null),
+      listSessoesForDisplay(null),
+      listDeletedSessoesForDisplay(null),
+      getNipsRestritosAtivos(),
+      getNipsComFatoresRiscoPreenchidos(ownerUid),
+    ]);
 
-    const cadastros = cadRows
-      .filter((row) => row.deleted !== true && !isDemoCadastroId(row.id))
-      .map((row) => stripCadastro(row as unknown as Record<string, unknown>));
+  const cadastros = cadRows
+    .filter((row) => row.deleted !== true && !isDemoCadastroId(row.id))
+    .map((row) => stripCadastro(row as unknown as Record<string, unknown>));
 
-    const sessoes = sessRows
-      .filter((row) => row.deleted !== true && !isDemoSessaoId(row.id))
-      .map((row) => stripSessao(row as unknown as Record<string, unknown>));
+  const sessoes = sessRows
+    .filter((row) => row.deleted !== true && !isDemoSessaoId(row.id))
+    .map((row) => stripSessao(row as unknown as Record<string, unknown>));
 
-    const sessoesExcluidas = deletedRows
-      .filter((row) => !isDemoSessaoId(row.id))
-      .map((row) => stripSessao(row as unknown as Record<string, unknown>));
+  const sessoesExcluidas = deletedRows
+    .filter((row) => !isDemoSessaoId(row.id))
+    .map((row) => stripSessao(row as unknown as Record<string, unknown>));
 
-    return calcularResumoInicioTafFromHistorico(
-      sessoes,
-      cadastros,
-      sessoesExcluidas,
-      nipsRestritos,
-      new Set(),
-      nipsFatoresPreenchidos,
-    );
-  } catch (error) {
-    console.warn('[home-resumo] leitura IndexedDB falhou:', error);
-    return RESUMO_VAZIO;
-  }
+  return calcularResumoInicioTafFromHistorico(
+    sessoes,
+    cadastros,
+    sessoesExcluidas,
+    nipsRestritos,
+    new Set(),
+    nipsFatoresPreenchidos,
+  );
 }
 
 /**
  * Resumo dos cards da Home **somente a partir do IndexedDB (Dexie)**.
- * Cache em memória por owner — invalida em notify dos escopos da Home.
- * Não consulta a nuvem — evita zerar Cadastrados/Parcial/Concluídos/Pendente
- * quando a sync falha ou a nuvem está vazia/divergente.
- * Modo Teste (ids demo-cad- e demo-sess-) não entra no balanço.
+ * Stale-while-revalidate: invalidação marca dirty sem apagar o valor.
+ * Não consulta a nuvem.
  */
 export async function loadResumoInicioFromIndexedDb(options?: {
   force?: boolean;
@@ -169,13 +188,13 @@ export async function loadResumoInicioFromIndexedDb(options?: {
   ensureHomeResumoInvalidation();
 
   const ownerUid = getCachedDataOwnerUid();
-  if (!options?.force) {
-    const hit = peekHomeResumoCache();
-    if (hit) return hit;
+  const stale = peekHomeResumoCache();
+
+  if (!options?.force && stale && cache && !cache.dirty && cache.ownerUid === ownerUid) {
+    return stale;
   }
 
   if (
-    !options?.force &&
     inFlight &&
     inFlight.ownerUid === ownerUid &&
     inFlight.generation === cacheGeneration
@@ -184,15 +203,22 @@ export async function loadResumoInicioFromIndexedDb(options?: {
   }
 
   const generation = cacheGeneration;
-  const promise = computeResumoInicioFromIndexedDb().then((resumo) => {
-    if (generation !== cacheGeneration) {
-      // Invalidado durante o cálculo — não aplica resultado obsoleto.
-      return loadResumoInicioFromIndexedDb();
-    }
-    cache = { ownerUid, resumo };
-    if (inFlight?.promise === promise) inFlight = null;
-    return resumo;
-  });
+  const promise = computeResumoInicioFromIndexedDb()
+    .then((resumo) => {
+      if (generation !== cacheGeneration) {
+        return loadResumoInicioFromIndexedDb({ force: true });
+      }
+      cache = { ownerUid, resumo, dirty: false };
+      if (inFlight?.promise === promise) inFlight = null;
+      return resumo;
+    })
+    .catch((error) => {
+      console.warn('[home-resumo] leitura IndexedDB falhou:', error);
+      if (inFlight?.promise === promise) inFlight = null;
+      // Mantém último valor — não zera cards por falha transitória.
+      if (stale) return stale;
+      return RESUMO_VAZIO;
+    });
 
   inFlight = { ownerUid, generation, promise };
   return promise;

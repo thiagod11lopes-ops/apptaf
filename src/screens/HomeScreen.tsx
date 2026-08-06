@@ -8,6 +8,7 @@ import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
 import {
+  isHomeResumoCacheWarm,
   loadResumoInicioFromIndexedDb,
   peekHomeResumoCache,
 } from '../utils/homeResumoIndexedDb';
@@ -68,13 +69,13 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const { isNarrowPhone } = useAplicarTafLayout();
   const { user, authReady, isAuthenticated, dataOwnerUid } = useAuth();
-  /** Etapa 13: hidrata com cache em memória se houver (troca de aba sem re-scan Dexie). */
+  /** Hidrata com último resumo (mesmo dirty) — evita flash de zeros ao remount. */
   const [resumo, setResumo] = useState<ResumoInicioTafHistorico>(
     () => peekHomeResumoCache() ?? RESUMO_INICIAL,
   );
   const progressAnim = useRef(new Animated.Value(0)).current;
   const [emailFixoPrefixo, setEmailFixoPrefixo] = useState<string | null>(null);
-  /** Etapa 4: só calcula cards após o 1º paint (UI monta com zeros). */
+  /** Só inicia I/O dos cards após o 1º paint. */
   const cardsPaintReadyRef = useRef(false);
   const [cardsPaintReady, setCardsPaintReady] = useState(false);
 
@@ -162,13 +163,23 @@ export default function HomeScreen() {
     };
   }, [authReady, isAuthenticated, dataOwnerUid, user?.uid, cloudLinkOn]);
 
-  /** Cards = espelho local (Dexie) com cache em memória. Debounce evita tempestade. */
+  /** Cards = espelho local (Dexie) com cache SWR. Debounce evita tempestade. */
   const resumoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumoInFlightRef = useRef(false);
   const resumoPendingRef = useRef(false);
 
   const loadResumoNow = useCallback(async () => {
     if (!cardsPaintReadyRef.current) return;
+
+    // Pinta stale na hora (remount / foco) — sem esperar Dexie.
+    const peeked = peekHomeResumoCache();
+    if (peeked) {
+      setResumo((prev) => (resumoInicioEquals(prev, peeked) ? prev : peeked));
+    }
+
+    // Cache fresco: troca de aba sem re-scan.
+    if (isHomeResumoCacheWarm()) return;
+
     if (resumoInFlightRef.current) {
       resumoPendingRef.current = true;
       return;
@@ -178,8 +189,7 @@ export default function HomeScreen() {
       do {
         resumoPendingRef.current = false;
         try {
-          // Cache hit: resolve sem I/O. Miss / invalidação: recalcula IndexedDB.
-          const next = await loadResumoInicioFromIndexedDb();
+          const next = await loadResumoInicioFromIndexedDb({ force: true });
           setResumo((prev) => (resumoInicioEquals(prev, next) ? prev : next));
         } catch (error) {
           console.warn('[home] falha ao recalcular cards:', error);
@@ -193,6 +203,16 @@ export default function HomeScreen() {
   const scheduleRecarregarResumo = useCallback(
     (mode: 'immediate' | 'debounce' = 'debounce') => {
       if (!cardsPaintReadyRef.current) return;
+
+      // Foco com cache quente: nada a fazer.
+      if (mode === 'immediate' && isHomeResumoCacheWarm()) {
+        const peeked = peekHomeResumoCache();
+        if (peeked) {
+          setResumo((prev) => (resumoInicioEquals(prev, peeked) ? prev : peeked));
+        }
+        return;
+      }
+
       if (resumoDebounceRef.current) {
         clearTimeout(resumoDebounceRef.current);
         resumoDebounceRef.current = null;
@@ -201,6 +221,7 @@ export default function HomeScreen() {
         void loadResumoNow();
         return;
       }
+      // Mutação: se ainda há valor na tela, debounce o refresh em background.
       resumoDebounceRef.current = setTimeout(() => {
         resumoDebounceRef.current = null;
         void loadResumoNow();
@@ -223,12 +244,22 @@ export default function HomeScreen() {
     [],
   );
 
-  // useAuthDataReload: debounce + escopos — cobre mutação local e pós-sync (notify).
-  useAuthDataReload(() => scheduleRecarregarResumo('debounce'), {
+  // Foco + mutação local / pós-sync.
+  useAuthDataReload(() => {
+    if (isHomeResumoCacheWarm()) {
+      const peeked = peekHomeResumoCache();
+      if (peeked) {
+        setResumo((prev) => (resumoInicioEquals(prev, peeked) ? prev : peeked));
+      }
+      return;
+    }
+    // Com stale dirty: refresh em background; UI já mostra último valor.
+    scheduleRecarregarResumo(peekHomeResumoCache() ? 'debounce' : 'immediate');
+  }, {
     scopes: ['cadastros', 'sessoes', 'fatores', 'restritos'],
   });
 
-  // Primeiro carregamento após o paint — imediato (sem esperar debounce).
+  // Primeiro paint: imediato só se precisar (miss ou dirty).
   useEffect(() => {
     if (!cardsPaintReady) return;
     scheduleRecarregarResumo('immediate');

@@ -853,6 +853,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearMemoryCloudCache();
     resetCloudSyncStatus();
     confirmCloudDisplayReady();
+    try {
+      const { clearHomeResumoCache } = await import('../utils/homeResumoIndexedDb');
+      clearHomeResumoCache();
+    } catch {
+      /* ignore */
+    }
     syncEngine.shutdown();
     await syncManager.shutdown();
     await systemState.setOfflineMode();

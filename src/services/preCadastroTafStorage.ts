@@ -31,11 +31,69 @@ export type PreCadastroTaf = {
    * Só recomeça do 1 quando a lista estiver vazia.
    */
   numero: number;
+  /**
+   * Nome de código OTAN (Alfa…Zulu). Obrigatório em novos; único entre pré-cadastros ativos.
+   */
+  nomeCodigo?: string;
   tipoProva: TipoProvaTAF;
   /** Padrão armada quando omitido (registros antigos). */
   normaTaf?: NormaTafPreCadastro;
   participantes: PreCadastroParticipante[];
 };
+
+/** Alfabeto fonético (Alfa → Zulu) para nomear pré-cadastros. */
+export const NOMES_CODIGO_PRE_CADASTRO = [
+  'Alfa',
+  'Bravo',
+  'Charlie',
+  'Delta',
+  'Echo',
+  'Foxtrot',
+  'Golf',
+  'Hotel',
+  'India',
+  'Juliet',
+  'Kilo',
+  'Lima',
+  'Mike',
+  'November',
+  'Oscar',
+  'Papa',
+  'Quebec',
+  'Romeo',
+  'Sierra',
+  'Tango',
+  'Uniform',
+  'Victor',
+  'Whiskey',
+  'Xray',
+  'Yankee',
+  'Zulu',
+] as const;
+
+export type NomeCodigoPreCadastro = (typeof NOMES_CODIGO_PRE_CADASTRO)[number];
+
+export function isNomeCodigoPreCadastro(value: string): value is NomeCodigoPreCadastro {
+  return (NOMES_CODIGO_PRE_CADASTRO as readonly string[]).includes(value);
+}
+
+export function nomesCodigoEmUso(
+  existentes: ReadonlyArray<{ nomeCodigo?: string }>,
+): Set<string> {
+  const used = new Set<string>();
+  for (const item of existentes) {
+    const n = (item.nomeCodigo || '').trim();
+    if (n) used.add(n);
+  }
+  return used;
+}
+
+export function nomesCodigoDisponiveis(
+  existentes: ReadonlyArray<{ nomeCodigo?: string }>,
+): NomeCodigoPreCadastro[] {
+  const used = nomesCodigoEmUso(existentes);
+  return NOMES_CODIGO_PRE_CADASTRO.filter((n) => !used.has(n));
+}
 
 /** Ordena pelo número persistente (menor em cima); desempate por criação. */
 export function sortPreCadastrosPorNumero<T extends { numero?: number; criadoEm: number }>(

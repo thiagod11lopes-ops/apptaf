@@ -31,6 +31,34 @@ export function createAplicarTafStyles(theme: AppTheme, ui: UiColors) {
     gap: 12,
     marginTop: 4,
   },
+  nomeCodigoBox: {
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    padding: 12,
+    marginBottom: 12,
+  },
+  nomeCodigoLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  nomeCodigoChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  nomeCodigoChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  nomeCodigoChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
   modalTempoOverlay: {
     flex: 1,
     backgroundColor: 'rgba(2, 6, 23, 0.62)',

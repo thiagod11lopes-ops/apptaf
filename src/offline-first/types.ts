@@ -63,6 +63,8 @@ export interface PreCadastroRecord extends SyncableMeta {
   criadoEm: number;
   /** Número fixo na criação; ausente em registros legados. */
   numero?: number;
+  /** Nome de código OTAN (Alfa…Zulu). */
+  nomeCodigo?: string;
   tipoProva: TipoProvaTAF;
   normaTaf?: NormaTafPreCadastro;
   participantes: PreCadastroParticipante[];

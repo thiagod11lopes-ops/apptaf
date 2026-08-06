@@ -177,6 +177,7 @@ const PRE_CADASTRO_COLUMNS = [
   'id',
   'criadoEm',
   'numero',
+  'nomeCodigo',
   'tipoProva',
   'normaTaf',
   'participantesJson',
@@ -514,6 +515,7 @@ function preCadastroToRow(item: PreCadastroTaf): string {
     item.id,
     item.criadoEm,
     item.numero,
+    item.nomeCodigo ?? '',
     item.tipoProva,
     item.normaTaf ?? '',
     JSON.stringify(item.participantes),
@@ -541,11 +543,13 @@ function rowToPreCadastro(row: Record<string, string>): PreCadastroTaf | null {
   const normaTaf = normaRaw === 'armada' || normaRaw === 'cfn' ? normaRaw : undefined;
   const numeroRaw = optionalNumber(row.numero ?? '');
   const numero = numeroRaw != null && numeroRaw > 0 ? numeroRaw : 0;
+  const nomeCodigo = row.nomeCodigo?.trim() || undefined;
 
   return {
     id,
     criadoEm,
     numero,
+    nomeCodigo,
     tipoProva,
     normaTaf,
     participantes,

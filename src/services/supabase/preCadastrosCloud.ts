@@ -21,6 +21,7 @@ export async function addPreCadastroFirestore(uid: string, item: PreCadastroReco
       id: item.id,
       criadoEm: item.criadoEm,
       numero: item.numero,
+      nomeCodigo: item.nomeCodigo,
       tipoProva: item.tipoProva,
       normaTaf: item.normaTaf,
       participantes: item.participantes,

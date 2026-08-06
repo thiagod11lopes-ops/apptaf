@@ -174,8 +174,11 @@ import {
 import {
   addPreCadastroTaf,
   getAllPreCadastrosTaf,
+  isNomeCodigoPreCadastro,
   MAX_PRE_CADASTRO_PARTICIPANTES,
+  nomesCodigoDisponiveis,
   removePreCadastroTaf,
+  type NomeCodigoPreCadastro,
   type PreCadastroTaf,
 } from '../services/preCadastroTafStorage';
 import {
@@ -232,6 +235,10 @@ export default function AplicarTAFScreen() {
   const [listaPreCadastros, setListaPreCadastros] = useState<PreCadastroTaf[]>([]);
   const [preCadastroParaExcluir, setPreCadastroParaExcluir] = useState<PreCadastroTaf | null>(null);
   const [excluindoPreCadastro, setExcluindoPreCadastro] = useState(false);
+  /** Nome OTAN do pré-cadastro em edição (Alfa…Zulu). */
+  const [nomeCodigoPreCadastro, setNomeCodigoPreCadastro] = useState<NomeCodigoPreCadastro | null>(
+    null,
+  );
   const [mostrarProvas, setMostrarProvas] = useState(false);
   const [tipoProva, setTipoProva] = useState<TipoProvaTAF | null>(null);
   const tipoProvaRef = useRef<TipoProvaTAF | null>(null);
@@ -2733,6 +2740,7 @@ export default function AplicarTAFScreen() {
     setTipoProva(null);
     setCorridaEtapa('menu');
     setErroParticipantes('');
+    setNomeCodigoPreCadastro(null);
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
@@ -2757,6 +2765,7 @@ export default function AplicarTAFScreen() {
     setTipoProva(null);
     setCorridaEtapa('menu');
     setErroParticipantes('');
+    setNomeCodigoPreCadastro(null);
     setNipsParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
@@ -2775,6 +2784,23 @@ export default function AplicarTAFScreen() {
         modoTafNaval
           ? 'Volte ao menu e escolha a prova CFN desejada.'
           : 'Volte ao menu e escolha Corrida, Natação, Caminhada ou Permanência.',
+      );
+      return;
+    }
+    if (!nomeCodigoPreCadastro || !isNomeCodigoPreCadastro(nomeCodigoPreCadastro)) {
+      Alert.alert(
+        'Nome do pré-cadastro',
+        'Selecione um nome (Alfa, Bravo, Charlie… Zulu) antes de salvar.',
+      );
+      return;
+    }
+    const nomeJaUsado = listaPreCadastros.some(
+      (p) => (p.nomeCodigo || '').trim() === nomeCodigoPreCadastro,
+    );
+    if (nomeJaUsado) {
+      Alert.alert(
+        'Nome em uso',
+        `O nome ${nomeCodigoPreCadastro} já está em outro pré-cadastro. Escolha outro.`,
       );
       return;
     }
@@ -2800,6 +2826,7 @@ export default function AplicarTAFScreen() {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       criadoEm: Date.now(),
       numero: 0, // atribuído em addPreCadastroTaf (max existente + 1, ou 1 se vazio)
+      nomeCodigo: nomeCodigoPreCadastro,
       tipoProva,
       normaTaf: modoTafNaval ? 'cfn' : 'armada',
       participantes,
@@ -2816,6 +2843,7 @@ export default function AplicarTAFScreen() {
     setCorridaEtapa('menu');
     setTipoProva(null);
     tipoProvaRef.current = null;
+    setNomeCodigoPreCadastro(null);
     await recarregarListaPreCadastros();
     setMostrarListaPreCadastro(true);
     Alert.alert('Pré-cadastro salvo', 'Os participantes foram salvos. Use "Iniciar Prova" quando for aplicar o TAF.');
@@ -2826,6 +2854,8 @@ export default function AplicarTAFScreen() {
     nipsParticipantes,
     recarregarListaPreCadastros,
     modoTafNaval,
+    nomeCodigoPreCadastro,
+    listaPreCadastros,
   ]);
 
   const iniciarProvaFromPreCadastro = useCallback(
@@ -3360,8 +3390,15 @@ export default function AplicarTAFScreen() {
                   <AplicarTafPreCadastroCard
                     key={pre.id}
                     numero={pre.numero > 0 ? pre.numero : 1}
-                    titulo={labelTipoProvaPreCadastro(pre)}
-                    meta={metaPreCadastro(pre)}
+                    titulo={
+                      (pre.nomeCodigo || '').trim() ||
+                      labelTipoProvaPreCadastro(pre)
+                    }
+                    meta={
+                      (pre.nomeCodigo || '').trim()
+                        ? `${labelTipoProvaPreCadastro(pre)} · ${metaPreCadastro(pre)}`
+                        : metaPreCadastro(pre)
+                    }
                     nomesPreview={pre.participantes.map((p) => p.nomeMilitar).join(', ')}
                     accentColors={PRE_CADASTRO_ACCENTS[pre.tipoProva] ?? PRE_CADASTRO_ACCENTS.corrida}
                     onIniciar={() => iniciarProvaFromPreCadastro(pre)}
@@ -3454,9 +3491,71 @@ export default function AplicarTAFScreen() {
                 subtitle={
                   demoAtivo
                     ? `NIPs, idade e gênero dos ${nParticipantesConfirmado} participantes ficam bloqueados no Modo Teste. Use o botão acima para preencher.`
-                    : 'Informe o NIP de cada participante. Use Adicionar Participante para incluir mais.'
+                    : modoPreCadastro
+                      ? 'Escolha o nome do pré-cadastro (Alfa…Zulu) e informe o NIP de cada participante.'
+                      : 'Informe o NIP de cada participante. Use Adicionar Participante para incluir mais.'
                 }
               />
+
+            {modoPreCadastro ? (
+              <View
+                style={[
+                  styles.nomeCodigoBox,
+                  { backgroundColor: inputBg, borderColor: inputBorder },
+                ]}
+              >
+                <Text style={[ts.label, styles.nomeCodigoLabel, { color: theme.textMuted }]}>
+                  Nome do pré-cadastro
+                </Text>
+                <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 8 }]}>
+                  Obrigatório e exclusivo. Nomes já usados em outros pré-cadastros não aparecem.
+                </Text>
+                <View style={styles.nomeCodigoChips}>
+                  {nomesCodigoDisponiveis(listaPreCadastros).map((nome) => {
+                    const active = nomeCodigoPreCadastro === nome;
+                    return (
+                      <TouchableOpacity
+                        key={nome}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={`Nome ${nome}`}
+                        onPress={() => setNomeCodigoPreCadastro(nome)}
+                        style={[
+                          styles.nomeCodigoChip,
+                          {
+                            borderColor: active ? theme.primary : theme.border,
+                            backgroundColor: active
+                              ? theme.isDark
+                                ? 'rgba(37,99,235,0.35)'
+                                : 'rgba(37,99,235,0.12)'
+                              : theme.backgroundSecondary,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.nomeCodigoChipText,
+                            { color: active ? theme.primary : theme.textSecondary },
+                          ]}
+                        >
+                          {nome}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {nomeCodigoPreCadastro ? (
+                  <Text style={[ts.caption, { color: theme.primary, marginTop: 8, fontWeight: '700' }]}>
+                    Selecionado: {nomeCodigoPreCadastro}
+                  </Text>
+                ) : null}
+                {nomesCodigoDisponiveis(listaPreCadastros).length === 0 ? (
+                  <Text style={[ts.caption, { color: theme.error, marginTop: 8 }]}>
+                    Todos os nomes Alfa–Zulu já estão em uso. Conclua ou exclua um pré-cadastro.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
 
             <AplicarTafNipsList
               nips={nipsParticipantes}

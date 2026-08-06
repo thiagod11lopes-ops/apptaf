@@ -124,10 +124,12 @@ export async function ensurePreCadastrosLocalOnly(ownerUid: string): Promise<voi
 }
 
 export function preCadastroRecordToTaf(record: PreCadastroRecord): PreCadastroTaf {
+  const nomeCodigo = (record.nomeCodigo || '').trim();
   return {
     id: record.id,
     criadoEm: record.criadoEm,
     numero: typeof record.numero === 'number' && record.numero > 0 ? record.numero : 0,
+    nomeCodigo: nomeCodigo || undefined,
     tipoProva: record.tipoProva,
     normaTaf: record.normaTaf ?? 'armada',
     participantes: record.participantes,

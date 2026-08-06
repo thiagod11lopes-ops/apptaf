@@ -19,7 +19,13 @@ import { CarregarPlanilhaCadastro } from '../components/CarregarPlanilhaCadastro
 import { LabelNip } from '../components/LabelNip';
 import { LabelSO } from '../components/LabelSO';
 import { LabelSvgText } from '../components/LabelSvgText';
-import { addCadastro, deleteCadastro, getAllCadastros, peekCadastrosListCache } from '../services/cadastrosIndexedDb';
+import {
+  addCadastro,
+  deleteCadastro,
+  getAllCadastros,
+  isCadastrosListCacheWarm,
+  peekCadastrosListCache,
+} from '../services/cadastrosIndexedDb';
 import {
   notaCorridaParaPersistencia,
   textoNotaCorridaFromCadastro,
@@ -342,6 +348,10 @@ export default function CadastroScreenModern() {
   }
 
   const recarregarCadastros = useCallback(() => {
+    // Peek imediato (stale-while-revalidate); skip Dexie se cache quente.
+    const peeked = peekCadastrosListCache();
+    if (peeked) setCadastros(peeked as CadastroItem[]);
+    if (isCadastrosListCacheWarm()) return;
     getAllCadastros()
       .then((items) => setCadastros(items as CadastroItem[]))
       .catch(() => undefined);

@@ -11,11 +11,9 @@ import {
 } from 'react-native';
 import { CalendarDays, CalendarCheck, Search, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useAuthDataReload } from '../../hooks/useAuthDataReload';
 import { getUiColors } from '../../theme/uiColors';
 import {
   addCadastro,
-  getAllCadastros,
   type CadastroItemPersist,
 } from '../../services/cadastrosIndexedDb';
 import { dataNascimentoCadastroValida } from '../../utils/cadastroDadosTaf';
@@ -49,11 +47,19 @@ function matchBuscaNomeOuNip(c: CadastroItemPersist, query: string): boolean {
   return nome.includes(q);
 }
 
-export function EstatisticasDnPendentePanel() {
+export function EstatisticasDnPendentePanel({
+  cadastros: cadastrosDataset,
+  onDatasetRefresh,
+  carregandoDataset = false,
+}: {
+  cadastros: CadastroItemPersist[];
+  onDatasetRefresh?: () => void | Promise<void>;
+  carregandoDataset?: boolean;
+}) {
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
-  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>(cadastrosDataset);
+  const loading = carregandoDataset && cadastros.length === 0;
   const [modo, setModo] = useState<ModoModal | null>(null);
 
   // Modal DN Pendente (adicionar por NIP)
@@ -72,16 +78,9 @@ export function EstatisticasDnPendentePanel() {
   const [erroOk, setErroOk] = useState('');
   const [sucessoOk, setSucessoOk] = useState('');
 
-  const carregar = useCallback(async () => {
-    setLoading(true);
-    try {
-      setCadastros(await getAllCadastros());
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useAuthDataReload(carregar, { scopes: ['cadastros', 'sessoes'] });
+  useEffect(() => {
+    setCadastros(cadastrosDataset);
+  }, [cadastrosDataset]);
 
   const { qtdPendente, qtdOk, comDn } = useMemo(() => {
     const okList: CadastroItemPersist[] = [];
@@ -189,12 +188,13 @@ export function EstatisticasDnPendentePanel() {
       setNip('');
       setDataNascimento('');
       setSucesso('Data de nascimento adicionada com sucesso.');
+      await onDatasetRefresh?.();
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao salvar.');
     } finally {
       setSalvando(false);
     }
-  }, [encontrado, dataNascimento]);
+  }, [encontrado, dataNascimento, onDatasetRefresh]);
 
   const salvarDnOk = useCallback(
     async (c: CadastroItemPersist) => {
@@ -224,13 +224,14 @@ export function EstatisticasDnPendentePanel() {
           setDnDrafts((prev) => ({ ...prev, [c.id]: data }));
           setSucessoOk(`Data atualizada: ${c.nome || c.nip}.`);
         }
+        await onDatasetRefresh?.();
       } catch (e) {
         setErroOk(e instanceof Error ? e.message : 'Falha ao salvar.');
       } finally {
         setSalvandoId(null);
       }
     },
-    [dnDrafts],
+    [dnDrafts, onDatasetRefresh],
   );
 
   const apagarDnOk = useCallback(
@@ -252,6 +253,7 @@ export function EstatisticasDnPendentePanel() {
           return next;
         });
         setSucessoOk(`Data removida de ${c.nome || c.nip}.`);
+        await onDatasetRefresh?.();
       } catch (e) {
         setErroOk(e instanceof Error ? e.message : 'Falha ao apagar.');
         setDnDrafts((prev) => ({ ...prev, [c.id]: c.dataNascimento || '' }));
@@ -259,7 +261,7 @@ export function EstatisticasDnPendentePanel() {
         setSalvandoId(null);
       }
     },
-    [],
+    [onDatasetRefresh],
   );
 
   useEffect(() => {

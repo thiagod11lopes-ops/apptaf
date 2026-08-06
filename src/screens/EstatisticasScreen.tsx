@@ -8,8 +8,20 @@ import {
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
-import { getAllCadastros } from '../services/cadastrosIndexedDb';
-import { getAllSessoesAplicacao } from '../services/resultadosAplicadosIndexedDb';
+import {
+  getAllCadastros,
+  isCadastrosListCacheWarm,
+  peekCadastrosListCache,
+  type CadastroItemPersist,
+} from '../services/cadastrosIndexedDb';
+import {
+  getAllSessoesAplicacao,
+  type SessaoAplicacaoTaf,
+} from '../services/resultadosAplicadosIndexedDb';
+import {
+  isSessoesListCacheWarm,
+  peekSessoesListCache,
+} from '../services/sessoesListCache';
 import { calcularEstatisticasTaf, META_CONCLUSAO_TAF_PCT } from '../utils/estatisticasTaf';
 import { formatNomeComPostoParts } from '../utils/formatNomeComPosto';
 import { StatSection } from '../components/estatisticas/StatSection';
@@ -35,19 +47,58 @@ function pctHint(val: number | null, suffix = '%'): string | undefined {
   return `${val}${suffix}`;
 }
 
+function statsFromLists(
+  cadastros: CadastroItemPersist[],
+  sessoes: SessaoAplicacaoTaf[],
+): ReturnType<typeof calcularEstatisticasTaf> | null {
+  if (cadastros.length === 0 && sessoes.length === 0) return null;
+  return calcularEstatisticasTaf(cadastros, sessoes);
+}
+
 export default function EstatisticasScreen() {
   const { theme } = useTheme();
   const ts = theme.textStyles;
-  const [stats, setStats] = useState<ReturnType<typeof calcularEstatisticasTaf> | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [cadastros, setCadastros] = useState<CadastroItemPersist[]>(
+    () => peekCadastrosListCache() ?? [],
+  );
+  const [stats, setStats] = useState<ReturnType<typeof calcularEstatisticasTaf> | null>(() =>
+    statsFromLists(peekCadastrosListCache() ?? [], peekSessoesListCache() ?? []),
+  );
+  /** Spinner só no cold start sem peek — foco com dados não apaga a tela. */
+  const [loading, setLoading] = useState(() => {
+    const cad = peekCadastrosListCache();
+    const sess = peekSessoesListCache();
+    return (cad?.length ?? 0) === 0 && (sess?.length ?? 0) === 0;
+  });
   const hasLoadedOnceRef = useRef(false);
   const [tab, setTab] = useState<ViewTab>('geral');
 
   const carregar = useCallback(async () => {
-    if (!hasLoadedOnceRef.current) setLoading(true);
+    const peekedCad = peekCadastrosListCache();
+    const peekedSess = peekSessoesListCache();
+    if (peekedCad) setCadastros(peekedCad);
+    if (peekedCad || peekedSess) {
+      const next = statsFromLists(peekedCad ?? [], peekedSess ?? []);
+      if (next) setStats(next);
+    }
+
+    if (isCadastrosListCacheWarm() && isSessoesListCacheWarm()) {
+      hasLoadedOnceRef.current = true;
+      setLoading(false);
+      return;
+    }
+
+    const cold = !hasLoadedOnceRef.current;
+    const hasPeek = (peekedCad?.length ?? 0) > 0 || (peekedSess?.length ?? 0) > 0;
+    if (cold && !hasPeek) setLoading(true);
+
     try {
-      const [lista, sessoes] = await Promise.all([getAllCadastros(), getAllSessoesAplicacao()]);
-      setStats(calcularEstatisticasTaf(lista, sessoes));
+      const [lista, sessoesLista] = await Promise.all([
+        getAllCadastros(),
+        getAllSessoesAplicacao(),
+      ]);
+      setCadastros(lista);
+      setStats(calcularEstatisticasTaf(lista, sessoesLista));
       hasLoadedOnceRef.current = true;
     } finally {
       setLoading(false);
@@ -124,7 +175,13 @@ export default function EstatisticasScreen() {
             </Suspense>
           ) : null}
 
-          {tab === 'dn_pendente' ? <EstatisticasDnPendentePanel /> : null}
+          {tab === 'dn_pendente' ? (
+            <EstatisticasDnPendentePanel
+              cadastros={cadastros}
+              onDatasetRefresh={carregar}
+              carregandoDataset={loading}
+            />
+          ) : null}
 
           {(tab === 'geral' || tab === 'modalidade') && (
             <StatSection title="Resumo geral" accent="cyan">

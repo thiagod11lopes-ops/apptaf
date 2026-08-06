@@ -65,6 +65,7 @@ import { dataStore } from '../offline-first/store/DataStore';
 import {
   getCadastrosListCached,
   invalidateCadastrosListCache,
+  isCadastrosListCacheWarm,
   peekCadastrosListCache,
 } from './cadastrosListCache';
 import {
@@ -74,7 +75,11 @@ import {
   deleteCadastroOffline,
 } from './offline/offlineCloudEngine';
 
-export { invalidateCadastrosListCache, peekCadastrosListCache };
+export {
+  invalidateCadastrosListCache,
+  isCadastrosListCacheWarm,
+  peekCadastrosListCache,
+};
 function useOfflineFirstDb(): boolean {
   return getTafDatabase() != null;
 }

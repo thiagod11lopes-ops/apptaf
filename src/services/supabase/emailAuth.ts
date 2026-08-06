@@ -168,6 +168,18 @@ function translateAuthError(message: string, context?: 'signin' | 'signup' | 're
       'Não use Criar conta de novo se a conta já existe.'
     );
   }
+  if (
+    m.includes('failed to fetch') ||
+    m.includes('network request failed') ||
+    m.includes('load failed') ||
+    m.includes('networkerror')
+  ) {
+    return (
+      'Sem conexão com o servidor de login (rede bloqueou o acesso). ' +
+      'No tablet: tente dados móveis, outra Wi‑Fi, ou abra o site no navegador (não só no ícone PWA) e recarregue. ' +
+      'Se o PC na mesma rede funciona, limpe dados do site / reinstale o PWA.'
+    );
+  }
   return message;
 }
 

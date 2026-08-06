@@ -10,7 +10,6 @@ import React, {
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   ScrollView,
   Platform,
@@ -24,14 +23,11 @@ import {
   InteractionManager,
 } from 'react-native';
 import { AppModal } from '../components/premium/AppModal';
-import Svg, { Path as SvgPath } from 'react-native-svg';
 import { SafeAreaView as SafeAreaViewInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
-import type { AppTheme } from '../theme/premium';
-import { PREMIUM } from '../theme/premium';
 import { AplicarTafShell } from '../components/taf/aplicar/AplicarTafShell';
 import {
   AplicarTafFlowHeader,
@@ -77,19 +73,23 @@ import {
 } from '../components/sismav/ModalModalidadeExcludente';
 import { ConfirmacaoExcluirPreCadastroModal } from '../components/sismav/ConfirmacaoExcluirPreCadastroModal';
 import { FluxoAssinaturaAplicadorModal } from '../components/sismav/FluxoAssinaturaAplicadorModal';
+import { AplicarTafRubricaCandidatoModal } from './aplicarTaf/AplicarTafRubricaCandidatoModal';
 import {
-  AssinaturaFuturistaOverlay,
-  AssinaturaFuturistaScroll,
-  AssinaturaFuturistaCard,
-  AssinaturaFuturistaHeader,
-  AssinaturaFuturistaNav,
-  AssinaturaFuturistaMetaChip,
-  AssinaturaFuturistaCanvas,
-  AssinaturaFuturistaError,
-  AssinaturaFuturistaBtnRow,
-  AssinaturaFuturistaBtnGhost,
-  AssinaturaFuturistaBtnPrimary,
-} from '../components/assinatura/AssinaturaFuturistaUi';
+  MAX_PARTICIPANTES,
+  NUMERO_VOLTAS_PADRAO,
+  PERMANENCIA_DURACAO_MS,
+  MAX_VOLTAS_COLUNAS,
+  formatNipInput,
+  trialTipoFromProva,
+  limiteParticipantesPreCadastro,
+  camposCadastroParaFeedback,
+  labelTipoProvaPreCadastro,
+  metaPreCadastro,
+  buildRubricaSvgDataUrl,
+  type CorridaEtapa,
+  type RubricaStroke,
+} from './aplicarTaf/aplicarTafScreenHelpers';
+import { createAplicarTafStyles } from './aplicarTaf/aplicarTafScreenStyles';
 import {
   type ResultadoPermanenciaOpcao,
 } from '../components/PermanenciaTafPanel';
@@ -97,7 +97,6 @@ import {
   TafProvaTempoModal,
   type TafProvaTempoModalProva,
 } from '../components/taf/TafProvaTempoModal';
-import { RubricaCell } from '../components/RubricaThumb';
 import { getAllCadastros, addCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import {
   addSessaoAplicacao,
@@ -115,12 +114,8 @@ import {
   type ProvaAtivaSessionV1,
 } from '../services/provaAtivaSessionStorage';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
-import {
-  normalizarRubricaSvgDataUrl,
-  RUBRICA_COR_FUNDO,
-  RUBRICA_COR_TRACO,
-} from '../utils/rubricaSvgNormalize';
 import { rubricaParaPersistencia } from '../utils/rubricaRasterPersist';
+import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
 import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
   buscarRegistroModalidadeExistente,
@@ -190,133 +185,6 @@ import {
   type FatoresRiscoRegistro,
 } from '../services/fatoresRiscoStorage';
 import { nipDigitos } from '../utils/nipFormat';
-
-/** Máscara NIP: 00.0000.00 (igual ao cadastro) */
-function formatNipInput(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 8);
-  const a = digits.slice(0, 2);
-  const b = digits.slice(2, 6);
-  const c = digits.slice(6, 8);
-  if (digits.length <= 2) return a;
-  if (digits.length <= 6) return `${a}.${digits.slice(2)}`;
-  return `${a}.${b}.${c}`;
-}
-
-const MAX_PARTICIPANTES = 200;
-
-/** Prefill do número de voltas em corrida/caminhada. */
-const NUMERO_VOLTAS_PADRAO = '6';
-
-/** Duração da prova de permanência — ao atingir, exibe modal de finalização. */
-const PERMANENCIA_DURACAO_MS = 10 * 60 * 1000;
-
-type CorridaEtapa =
-  | 'menu'
-  | 'nips'
-  | 'tabela_corrida'
-  | 'tabela_permanencia'
-  | 'tabela_repeticoes';
-
-function trialTipoFromProva(tipo: TipoProvaTAF): 'corrida' | 'natacao' | 'caminhada' {
-  if (tipo === 'natacao' || tipo === 'abdominal_prancha') return 'natacao';
-  if (tipo === 'caminhada') return 'caminhada';
-  return 'corrida';
-}
-
-/** Pré-cadastro: caminhada usa o limite da prova ao vivo; demais atividades ficam em 15. */
-function limiteParticipantesPreCadastro(tipo: TipoProvaTAF | null): number {
-  if (tipo === 'caminhada') return MAX_PARTICIPANTES;
-  return MAX_PRE_CADASTRO_PARTICIPANTES;
-}
-
-/** Cronômetro da prova: ticks isolados via subscribeTempoExibido (MM:SS:CS). */
-
-/** Campos de cadastro usados no feedback NIP e no modal de edição. */
-function camposCadastroParaFeedback(c: CadastroItemPersist) {
-  const nomeBare = (c.nome || '').trim() || 'Sem nome';
-  return {
-    nomeMilitar: formatNomeComPosto({ ...c, nome: nomeBare }),
-    nome: nomeBare,
-    categoria: c.categoria === 'Oficiais' ? ('Oficiais' as const) : ('Praças' as const),
-    oficial: c.oficial,
-    praca: c.praca,
-    dataNascimento: (c.dataNascimento || '').trim(),
-    sexo: c.sexo,
-    vinculo: c.vinculo === 'carreira' || c.vinculo === 'rm2' ? c.vinculo : undefined,
-  };
-}
-
-const MAX_VOLTAS_COLUNAS = 99;
-
-function labelTipoProvaPreCadastro(pre: PreCadastroTaf): string {
-  const norma = pre.normaTaf ?? 'armada';
-  const titulo = tituloProvaTaf(pre.tipoProva, norma === 'cfn');
-  return norma === 'cfn' ? `CFN · ${titulo}` : titulo;
-}
-
-function metaPreCadastro(pre: PreCadastroTaf): string {
-  const norma = pre.normaTaf === 'cfn' ? 'CFN' : 'Armada';
-  const qtd = pre.participantes.length;
-  return `${norma} · ${qtd} participante${qtd !== 1 ? 's' : ''} · ${formatarDataPreCadastro(pre.criadoEm)}`;
-}
-
-function formatarDataPreCadastro(ms: number): string {
-  const d = new Date(ms);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
-}
-
-type RubricaPoint = { x: number; y: number };
-type RubricaStroke = RubricaPoint[];
-
-function buildStrokePath(points: RubricaPoint[]): string {
-  if (points.length === 0) return '';
-  if (points.length === 1) {
-    const p = points[0];
-    return `M ${p.x.toFixed(1)} ${p.y.toFixed(1)} L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
-  }
-  return points
-    .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-    .join(' ');
-}
-
-function buildRubricaSvgDataUrl(
-  strokes: RubricaStroke[],
-  width: number,
-  height: number,
-  strokeColor: string,
-  bgColor: string,
-): string {
-  const paths = strokes
-    .filter((s) => s.length > 0)
-    .map(
-      (s) =>
-        `<path d="${buildStrokePath(s)}" fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`,
-    )
-    .join('');
-  const safeWidth = Math.max(1, Math.round(width));
-  const safeHeight = Math.max(1, Math.round(height));
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeWidth}" height="${safeHeight}" viewBox="0 0 ${safeWidth} ${safeHeight}"><rect width="100%" height="100%" fill="${bgColor}"/>${paths}</svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
-
-/** Situação no modal de rúbrica — corrida e natação (alinhada ao PDF). */
-function textoSituacaoRubricaModal(r: ResultadoCorridaItem): string {
-  if (r.reprovacaoTexto) return r.reprovacaoTexto;
-  if (r.desistencia || isNotaReprovacaoTexto(r.notaTexto)) return 'Reprovado';
-  if (r.notaTexto != null && r.notaTexto !== '') return 'Aprovado';
-  return '—';
-}
-
-function textoNotaRubricaModal(r: ResultadoCorridaItem): string {
-  const t = r.notaTexto ?? r.noraTexto;
-  if (t == null || t === '') return '—';
-  return t;
-}
 
 export default function AplicarTAFScreen() {
   const { theme } = useTheme();
@@ -3355,188 +3223,28 @@ export default function AplicarTAFScreen() {
           </View>
         </View>
       </AppModal>
-      <AppModal
+      <AplicarTafRubricaCandidatoModal
         visible={modalRubricaNatacaoVisible && !continuidadeProvaVisible}
-        transparent
-        animationType="fade"
+        horizontalPad={horizontalPad}
+        paddingBottom={Math.max(insets.bottom, 16)}
+        lista={listaResultadosRubricaNatacao}
+        indice={indiceRubricaNatacao}
+        rubricaStrokes={rubricaStrokes}
+        rubricaStrokeAtual={rubricaStrokeAtual}
+        rubricasSvg={rubricasNatacaoSvg}
+        rubricaCanvasWidth={rubricaCanvasWidth}
+        erro={erroRubricaNatacao}
         onRequestClose={onVoltarRubricaCandidato}
-        accessibilityViewIsModal
-      >
-        <AssinaturaFuturistaOverlay
-          style={{
-            paddingHorizontal: horizontalPad,
-            paddingBottom: Math.max(insets.bottom, 16),
-          }}
-        >
-          <AssinaturaFuturistaScroll>
-            {(() => {
-              const lista = listaResultadosRubricaNatacao;
-              const participanteAtual = lista?.[indiceRubricaNatacao];
-              const totalLista = lista?.length ?? 0;
-              if (!participanteAtual) {
-                return (
-                  <AssinaturaFuturistaCard accent="cyan">
-                    <AssinaturaFuturistaHeader
-                      kicker="CANDIDATO"
-                      title="Assinatura do candidato"
-                      subtitle="Não foi possível carregar o participante."
-                      accent="cyan"
-                      onBack={cancelarFluxoRubricaCandidatos}
-                      backLabel="Voltar"
-                    />
-                    <AssinaturaFuturistaBtnRow>
-                      <AssinaturaFuturistaBtnPrimary
-                        label="Voltar à prova"
-                        onPress={cancelarFluxoRubricaCandidatos}
-                        accent="cyan"
-                        flex
-                      />
-                    </AssinaturaFuturistaBtnRow>
-                  </AssinaturaFuturistaCard>
-                );
-              }
-              const modProva = participanteAtual.prova ?? 'corrida';
-              const tituloModalidade =
-                modProva === 'natacao'
-                  ? 'Natação'
-                  : modProva === 'permanencia'
-                    ? 'Permanência'
-                    : modProva === 'caminhada'
-                      ? 'Caminhada'
-                      : 'Corrida';
-              const temTracoRubrica =
-                rubricaStrokes.some((s) => s.length > 0) || rubricaStrokeAtual.length > 0;
-              const svgSalvoUri = normalizarRubricaSvgDataUrl(
-                participanteAtual.rubricaCandidatoSvg || rubricasNatacaoSvg[indiceRubricaNatacao],
-              );
-              const temRubricaSalva = Boolean(svgSalvoUri);
-              const podeAvancar = temTracoRubrica || temRubricaSalva;
-              const tempoStr = formatMsByModality(
-                modProva === 'natacao' ? 'natacao' : 'corrida',
-                participanteAtual.tempoMs,
-              );
-
-              return (
-                <AssinaturaFuturistaCard key={`rubrica-participante-${indiceRubricaNatacao}`} accent="cyan">
-                  <AssinaturaFuturistaHeader
-                    kicker="CANDIDATO"
-                    title="Assinatura do candidato"
-                    subtitle={`Participante ${indiceRubricaNatacao + 1} de ${totalLista} · ${tituloModalidade}`}
-                    accent="cyan"
-                    onBack={onVoltarRubricaCandidato}
-                    backLabel={indiceRubricaNatacao === 0 ? 'Voltar à prova' : 'Anterior'}
-                  />
-
-                  {totalLista > 1 ? (
-                    <AssinaturaFuturistaNav
-                      current={indiceRubricaNatacao + 1}
-                      total={totalLista}
-                      accent="cyan"
-                      onPrev={
-                        indiceRubricaNatacao > 0
-                          ? () => irParaRubricaIndex(indiceRubricaNatacao - 1)
-                          : undefined
-                      }
-                      onNext={
-                        indiceRubricaNatacao + 1 < totalLista && podeAvancar
-                          ? () => irParaRubricaIndex(indiceRubricaNatacao + 1)
-                          : undefined
-                      }
-                    />
-                  ) : null}
-
-                  <AssinaturaFuturistaMetaChip
-                    label="Militar"
-                    value={`${participanteAtual.nome} · NIP ${participanteAtual.nip || '—'}`}
-                  />
-                  <AssinaturaFuturistaMetaChip
-                    label="Resultado"
-                    value={`Tempo ${tempoStr} · Nota ${textoNotaRubricaModal(participanteAtual)}`}
-                  />
-
-                  <AssinaturaFuturistaCanvas
-                    accent="cyan"
-                    height={RUBRICA_NATIVA_ALTURA}
-                    onLayout={(e) => {
-                      const w = e.nativeEvent.layout.width;
-                      if (w > 0) setRubricaCanvasWidth(w);
-                    }}
-                    canvasProps={{
-                      onStartShouldSetResponder: () => true,
-                      onMoveShouldSetResponder: () => true,
-                      onResponderTerminationRequest: () => false,
-                      onResponderGrant: iniciarRubricaStroke,
-                      onResponderMove: moverRubricaStroke,
-                      onResponderRelease: finalizarRubricaStroke,
-                      onResponderTerminate: finalizarRubricaStroke,
-                    }}
-                  >
-                    {!temTracoRubrica && svgSalvoUri ? (
-                      <View
-                        style={{
-                          width: '100%',
-                          height: RUBRICA_NATIVA_ALTURA,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                        pointerEvents="none"
-                      >
-                        <RubricaCell
-                          svgUri={svgSalvoUri}
-                          maxWidth={rubricaCanvasWidth || 420}
-                          maxHeight={RUBRICA_NATIVA_ALTURA}
-                        />
-                      </View>
-                    ) : (
-                      <Svg width="100%" height={RUBRICA_NATIVA_ALTURA}>
-                        {rubricaStrokes.map((stroke, idx) => (
-                          <SvgPath
-                            key={`stroke-${indiceRubricaNatacao}-${idx}`}
-                            d={buildStrokePath(stroke)}
-                            stroke={RUBRICA_COR_TRACO}
-                            strokeWidth={2.5}
-                            fill="none"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        ))}
-                        {rubricaStrokeAtual.length > 0 ? (
-                          <SvgPath
-                            d={buildStrokePath(rubricaStrokeAtual)}
-                            stroke={RUBRICA_COR_TRACO}
-                            strokeWidth={2.5}
-                            fill="none"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        ) : null}
-                      </Svg>
-                    )}
-                  </AssinaturaFuturistaCanvas>
-
-                  {erroRubricaNatacao ? (
-                    <AssinaturaFuturistaError message={erroRubricaNatacao} />
-                  ) : null}
-
-                  <AssinaturaFuturistaBtnRow>
-                    <AssinaturaFuturistaBtnGhost
-                      label="Limpar"
-                      onPress={limparRubricaNatacaoAtual}
-                    />
-                    <AssinaturaFuturistaBtnPrimary
-                      label={indiceRubricaNatacao + 1 < totalLista ? 'Próximo' : 'Finalizar'}
-                      onPress={confirmarRubricaNatacao}
-                      disabled={!podeAvancar}
-                      accent="cyan"
-                      flex
-                    />
-                  </AssinaturaFuturistaBtnRow>
-                </AssinaturaFuturistaCard>
-              );
-            })()}
-          </AssinaturaFuturistaScroll>
-        </AssinaturaFuturistaOverlay>
-      </AppModal>
+        onVoltar={onVoltarRubricaCandidato}
+        onCancelarFluxo={cancelarFluxoRubricaCandidatos}
+        onIrParaIndex={irParaRubricaIndex}
+        onCanvasWidth={setRubricaCanvasWidth}
+        onStartStroke={iniciarRubricaStroke}
+        onMoveStroke={moverRubricaStroke}
+        onEndStroke={finalizarRubricaStroke}
+        onLimpar={limparRubricaNatacaoAtual}
+        onConfirmar={confirmarRubricaNatacao}
+      />
       <FluxoAssinaturaAplicadorModal
         visible={fluxoAplicadorVisible && !continuidadeProvaVisible}
         onConcluir={(assinatura) => void onConcluirAssinaturaAplicador(assinatura)}
@@ -3908,256 +3616,3 @@ export default function AplicarTAFScreen() {
   );
 }
 
-function createAplicarTafStyles(theme: AppTheme, ui: ReturnType<typeof getUiColors>) {
-  return StyleSheet.create({
-  safe: { flex: 1, position: 'relative' as const },
-  keyboardRoot: { flex: 1 },
-  scrollContentCadastro: { paddingVertical: 12 },
-  nipsFimAnchor: { height: 1, width: '100%' },
-  centerWrap: { flex: 1, alignItems: 'stretch' as const, maxWidth: 720, alignSelf: 'center', width: '100%' },
-  section: { width: '100%' },
-  identTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 12,
-    width: '100%',
-  },
-  identTopBack: {
-    flex: 1,
-    minWidth: 0,
-  },
-  preCadastroVazio: {
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  preCadastroActions: {
-    gap: 12,
-    marginTop: 4,
-  },
-  modalTempoOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.62)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalFuturisticCard: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: PREMIUM.radiusLg + 4,
-    backgroundColor: theme.isDark ? 'rgba(15, 23, 42, 0.94)' : 'rgba(255, 255, 255, 0.96)',
-    padding: 22,
-    borderWidth: 1,
-    borderColor: theme.isDark ? 'rgba(148, 163, 184, 0.22)' : theme.border,
-    overflow: 'hidden',
-    ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0 24px 64px rgba(15,23,42,0.28)' } as object)
-      : {
-          shadowColor: '#0f172a',
-          shadowOffset: { width: 0, height: 16 },
-          shadowOpacity: 0.25,
-          shadowRadius: 28,
-          elevation: 12,
-        }),
-  },
-  modalFuturisticStripe: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-  },
-  modalTempoMensagemCadastro: {
-    fontSize: 17,
-    fontWeight: '900',
-    textAlign: 'center',
-    color: ui.text,
-    lineHeight: 24,
-    marginTop: 6,
-  },
-  modalTempoParcialCadastro: {
-    marginTop: 12,
-    fontSize: 13,
-    fontWeight: '700',
-    color: ui.text,
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-  btnIniciarDisabled: {
-    opacity: 0.72,
-  },
-  erroText: {
-    marginTop: 8,
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.isDark ? ui.text : '#B91C1C',
-  },
-  campoVoltasInput: {
-    width: '100%',
-    marginBottom: 16,
-  },
-  tabelaScrollHorizontal: {
-    width: '100%',
-    marginBottom: 4,
-  },
-  tabelaCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  tabelaHeaderRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: ui.headerBorder,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    backgroundColor: ui.tableHeaderBg,
-  },
-  tabelaHeaderCell: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: ui.text,
-  },
-  tabelaHeaderVolta: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: -0.2,
-  },
-  tabelaDataRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    minHeight: 44,
-  },
-  tabelaCell: {
-    justifyContent: 'center',
-  },
-  tabelaCellText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: ui.text,
-  },
-  tabelaColCorredor: {
-    width: 56,
-    minWidth: 56,
-    paddingRight: 4,
-  },
-  tabelaColNome: {
-    flex: 1,
-    minWidth: 100,
-    paddingRight: 4,
-  },
-  tabelaGrupoNomeVoltas: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 0,
-    gap: 2,
-  },
-  tabelaColNomeInline: {
-    width: 128,
-    minWidth: 96,
-    maxWidth: 160,
-    paddingRight: 4,
-  },
-  tabelaColChegadaInline: {
-    width: 40,
-    minWidth: 40,
-    textAlign: 'center',
-    paddingHorizontal: 0,
-  },
-  tabelaHeaderChegada: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: -0.2,
-    textAlign: 'center',
-    width: 52,
-    minWidth: 52,
-  },
-  tabelaColMarcarChegada: {
-    width: 128,
-    minWidth: 128,
-    textAlign: 'center',
-    paddingHorizontal: 4,
-  },
-  tabelaColVolta: {
-    width: 40,
-    minWidth: 40,
-    textAlign: 'center',
-    paddingHorizontal: 0,
-  },
-  tabelaColTempo: {
-    width: 82,
-    minWidth: 82,
-    textAlign: 'center',
-  },
-  tabelaColNota: {
-    width: 64,
-    minWidth: 64,
-    textAlign: 'center',
-  },
-  tabelaNotaText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  tabelaNotaRepro: {
-    color: theme.isDark ? ui.text : '#B91C1C',
-    fontSize: 9,
-  },
-  tabelaCelulaTempo: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabelaTempoText: {
-    fontSize: 12,
-    fontWeight: '800',
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  },
-  tabelaCelulaCheck: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkVoltaOuter: {
-    padding: 2,
-  },
-  checkVoltaBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-  },
-  checkVoltaBoxOff: {
-    borderColor: theme.isDark ? 'rgba(255,255,255,0.35)' : 'rgba(17,24,39,0.25)',
-    backgroundColor: 'transparent',
-  },
-  checkVoltaBoxOn: {
-    borderColor: '#15803D',
-    backgroundColor: '#15803D',
-  },
-  tabelaNumeroVerde: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: theme.isDark ? ui.text : theme.success,
-  },
-  modalPermanenciaFinalTitulo: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: ui.text,
-    textAlign: 'center',
-    letterSpacing: 0.8,
-    marginTop: 8,
-    marginBottom: 10,
-  },
-  modalPermanenciaFinalSub: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: 8,
-  },
-  });
-}

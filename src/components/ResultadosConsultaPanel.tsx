@@ -287,39 +287,46 @@ export function ResultadosConsultaPanel({
     const sessoes = sessoesHistorico.length
       ? sessoesRaw
       : agruparSessoesHistoricoPorTeste(unificarSessoesComCadastroRegistrador(sessoesRaw, lista));
+    // Filtra primeiro sem carregar imagens — rúbricas só sob demanda para o PDF.
     const baseLinhas = listarResultadosCompletosFromHistorico(sessoes, lista);
-    // PDF: carrega imagens só neste momento.
-    const [rubSessoes, rubCadastros] = await Promise.all([
-      carregarRubricasDasSessoesPorNip(),
-      carregarRubricasCadastrosPorIds(baseLinhas.map((l) => l.id)),
-    ]);
-    const linhasCompletas = linhasCompletasHistoricoComRubricas(
-      sessoes,
-      lista,
-      rubSessoes,
-      rubCadastros,
-    );
 
     let subtitulo =
       'Integrantes com TAF completo (corrida, natação e permanência) — Aplicar TAF e Registrador';
 
     const nipTrim = nip.trim();
     const nomeTrim = nome.trim();
-    let filtroLinhas = linhasCompletas;
+    let alvoLinhas = baseLinhas;
     if (nipTrim || nomeTrim) {
       if (!buscou) {
         setAviso('Busque um militar antes de gerar o PDF filtrado.');
         return;
       }
-      filtroLinhas = linhasCompletas.filter((l) => linhaCombinaNipNome(l, nipTrim, nomeTrim));
-      if (filtroLinhas.length === 0) {
+      alvoLinhas = baseLinhas.filter((l) => linhaCombinaNipNome(l, nipTrim, nomeTrim));
+      if (alvoLinhas.length === 0) {
         setAviso('Este militar não completou as três provas no histórico.');
         return;
       }
       subtitulo = `Filtro: ${[nipTrim && `NIP ${nipTrim}`, nomeTrim && `Nome ${nomeTrim}`]
         .filter(Boolean)
         .join(' · ')} · TAF completo`;
-    } else if (filtroLinhas.length === 0) {
+    } else if (alvoLinhas.length === 0) {
+      setAviso('Nenhum militar com TAF completo no histórico.');
+      return;
+    }
+
+    const { yieldToUi } = await import('../utils/yieldToUi');
+    await yieldToUi();
+    const [rubSessoes, rubCadastros] = await Promise.all([
+      carregarRubricasDasSessoesPorNip(alvoLinhas.map((l) => l.nip)),
+      carregarRubricasCadastrosPorIds(alvoLinhas.map((l) => l.id)),
+    ]);
+    const filtroLinhas = linhasCompletasHistoricoComRubricas(
+      sessoes,
+      lista.filter((c) => alvoLinhas.some((l) => l.id === c.id)),
+      rubSessoes,
+      rubCadastros,
+    ).filter((l) => alvoLinhas.some((a) => a.id === l.id));
+    if (filtroLinhas.length === 0) {
       setAviso('Nenhum militar com TAF completo no histórico.');
       return;
     }
@@ -328,10 +335,16 @@ export function ResultadosConsultaPanel({
       '../utils/resultadosTafPdfPorAplicador'
     );
     const { hydrateSessoesComRubricas } = await import('../utils/hydrateRubricas');
-    const sessoesHydrated = await hydrateSessoesComRubricas(sessoes);
     const idsCompletos = new Set(filtroLinhas.map((l) => l.id));
     const nipsCompletos = new Set(
       filtroLinhas.map((l) => nipDigitos(l.nip)).filter((d) => d.length >= 8),
+    );
+    // Hidrata só sessões que tocam os NIPs do PDF (evita carregar todas as imagens).
+    const sessoesRelevantes = sessoes.filter((s) =>
+      (s.resultados ?? []).some((r) => nipsCompletos.has(nipDigitos(r.nip))),
+    );
+    const sessoesHydrated = await hydrateSessoesComRubricas(
+      sessoesRelevantes.length > 0 ? sessoesRelevantes : sessoes,
     );
     const blocos = montarBlocosResultadosTafPorAplicador({
       sessoes: sessoesHydrated,

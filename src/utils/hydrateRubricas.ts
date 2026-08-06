@@ -97,5 +97,13 @@ export async function hydrateSessaoComRubricas(
 export async function hydrateSessoesComRubricas(
   sessoes: SessaoAplicacaoTaf[],
 ): Promise<SessaoAplicacaoTaf[]> {
-  return Promise.all(sessoes.map((s) => hydrateSessaoComRubricas(s)));
+  const { yieldToUi } = await import('./yieldToUi');
+  const out: SessaoAplicacaoTaf[] = [];
+  const CHUNK = 4;
+  for (let i = 0; i < sessoes.length; i += CHUNK) {
+    const batch = sessoes.slice(i, i + CHUNK);
+    out.push(...(await Promise.all(batch.map((s) => hydrateSessaoComRubricas(s)))));
+    if (i + CHUNK < sessoes.length) await yieldToUi();
+  }
+  return out;
 }

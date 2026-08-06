@@ -2,6 +2,7 @@ import { nipDigitos } from './nipFormat';
 import { listSessaoRubricasLocal } from '../offline-first/db/localDbRubricas';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import { isRubricaImagemDataUrl } from './rubricaPresence';
+import { yieldToUi } from './yieldToUi';
 
 export type RubricasPorNip = {
   corrida?: string;
@@ -10,19 +11,37 @@ export type RubricasPorNip = {
   permanencia?: string;
 };
 
-/** Rúbricas das sessões — side table local (imagens reais para PDF). */
-export async function carregarRubricasDasSessoesPorNip(): Promise<Map<string, RubricasPorNip>> {
+/**
+ * Rúbricas das sessões — side table local (imagens reais para PDF).
+ * `nipsFiltro`: quando informado, só materializa esses NIPs (sob demanda).
+ */
+export async function carregarRubricasDasSessoesPorNip(
+  nipsFiltro?: Iterable<string>,
+): Promise<Map<string, RubricasPorNip>> {
   const map = new Map<string, RubricasPorNip>();
   const ownerUid = getCachedDataOwnerUid();
   if (!ownerUid) return map;
 
+  const allowed =
+    nipsFiltro != null
+      ? new Set(
+          [...nipsFiltro]
+            .map((n) => nipDigitos(n))
+            .filter((d) => d.length >= 8),
+        )
+      : null;
+  if (allowed && allowed.size === 0) return map;
+
   const rows = await listSessaoRubricasLocal(ownerUid);
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i += 1) {
+    if (i > 0 && i % 24 === 0) await yieldToUi();
+    const row = rows[i]!;
     for (const r of row.resultados ?? []) {
       const svg = r.rubricaCandidatoSvg?.trim();
       if (!isRubricaImagemDataUrl(svg)) continue;
       const key = nipDigitos(r.nip);
       if (!key) continue;
+      if (allowed && !allowed.has(key)) continue;
       const prova = r.prova;
       const atual = map.get(key) ?? {};
       if (prova === 'natacao') atual.natacao = svg;

@@ -204,11 +204,21 @@ export async function gerarResultadosTafPdfBlobWeb(
       }
     }
   }
-  await Promise.all(
-    [...uris].map(async (uri) => {
-      pngCache.set(uri, await rubricaParaPdfEmbedDataUrl(uri, RUBRICA_PDF_LARGURA, RUBRICA_PDF_ALTURA));
-    }),
-  );
+  const { yieldToUi } = await import('./yieldToUi');
+  const uriList = [...uris];
+  const EMBED_CHUNK = 6;
+  for (let i = 0; i < uriList.length; i += EMBED_CHUNK) {
+    const batch = uriList.slice(i, i + EMBED_CHUNK);
+    await Promise.all(
+      batch.map(async (uri) => {
+        pngCache.set(
+          uri,
+          await rubricaParaPdfEmbedDataUrl(uri, RUBRICA_PDF_LARGURA, RUBRICA_PDF_ALTURA),
+        );
+      }),
+    );
+    if (i + EMBED_CHUNK < uriList.length) await yieldToUi();
+  }
   const pngOf = (svg?: string) => {
     const key = svg?.trim() || '';
     if (!key) return null;
@@ -310,6 +320,7 @@ export async function gerarResultadosTafPdfBlobWeb(
     desenharCabecalhoPagina(bloco.rotuloAplicador);
     desenharHeaderTabela();
 
+    let linhasDesenhadas = 0;
     for (const linha of bloco.linhas) {
       if (y + rowH > pageH - marginBottom) {
         desenharAssinaturaAplicador(
@@ -326,8 +337,11 @@ export async function gerarResultadosTafPdfBlobWeb(
         y = marginTop;
         desenharCabecalhoPagina(bloco.rotuloAplicador);
         desenharHeaderTabela();
+        await yieldToUi();
       }
       desenharLinha(linha);
+      linhasDesenhadas += 1;
+      if (linhasDesenhadas % 40 === 0) await yieldToUi();
     }
 
     desenharAssinaturaAplicador(
@@ -340,6 +354,7 @@ export async function gerarResultadosTafPdfBlobWeb(
       marginBottom,
       pngOf,
     );
+    if (bi + 1 < blocos.length) await yieldToUi();
   }
 
   return doc.output('blob');

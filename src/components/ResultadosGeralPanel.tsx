@@ -109,7 +109,10 @@ export function ResultadosGeralPanel({
     setSalvandoCompleto(true);
     setAvisoPdf(null);
     try {
-      const rubSessoes = await carregarRubricasDasSessoesPorNip();
+      const { yieldToUi } = await import('../utils/yieldToUi');
+      await yieldToUi();
+      const nipsLista = lista.map((l) => l.nip);
+      const rubSessoes = await carregarRubricasDasSessoesPorNip(nipsLista);
       const { montarBlocosResultadosTafPorAplicador } = await import(
         '../utils/resultadosTafPdfPorAplicador'
       );

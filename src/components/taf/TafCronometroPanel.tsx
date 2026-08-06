@@ -291,16 +291,12 @@ export function TafCronometroPanel({
           {capturandoPrint ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            <>
-              <View style={compact ? styles.toggleIconWrapCompact : styles.toggleIconWrap}>
-                <Camera
-                  size={compact ? 16 : 20}
-                  color="#FFFFFF"
-                  strokeWidth={2.6}
-                />
-              </View>
-              <Text style={compact ? styles.toggleLabelCompact : styles.toggleLabel}>Print</Text>
-            </>
+            <Camera
+              size={compact ? 18 : 22}
+              color="#FFFFFF"
+              strokeWidth={2.6}
+              accessibilityElementsHidden
+            />
           )}
         </LinearGradient>
       </PressableScale>
@@ -665,32 +661,28 @@ const styles = StyleSheet.create({
   printOuter: {
     borderRadius: 18,
     overflow: 'hidden',
-    minWidth: 112,
+    width: 56,
+    flexShrink: 0,
   },
   printOuterCompact: {
     borderRadius: 14,
     overflow: 'hidden',
-    minWidth: 88,
+    width: 42,
+    flexShrink: 0,
   },
   printGradient: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
     minHeight: 56,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    width: 56,
     borderRadius: 18,
     overflow: 'hidden',
   },
   printGradientCompact: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     minHeight: 42,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    width: 42,
     borderRadius: 14,
     overflow: 'hidden',
   },

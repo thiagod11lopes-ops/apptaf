@@ -108,8 +108,10 @@ import {
 import {
   clearProvaAtivaSession,
   loadProvaAtivaSession,
+  markContinuidadeModalOffered,
   resolveCronometroElapsedMs,
   saveProvaAtivaSession,
+  shouldOfferContinuidadeModal,
   type ProvaAtivaSessionV1,
 } from '../services/provaAtivaSessionStorage';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
@@ -971,11 +973,17 @@ export default function AplicarTAFScreen() {
         setModalTempoRegistradoVisible(false);
       }
 
-      setContinuidadeProvaMeta({
-        provaLabel: tituloProvaTaf(tipo, session.modoTafNaval),
-        participantesCount: session.nipsParticipantes.length,
-      });
-      setContinuidadeProvaVisible(true);
+      // Modal só no cold start; remount/troca de aba restaura em silêncio.
+      if (shouldOfferContinuidadeModal()) {
+        markContinuidadeModalOffered();
+        setContinuidadeProvaMeta({
+          provaLabel: tituloProvaTaf(tipo, session.modoTafNaval),
+          participantesCount: session.nipsParticipantes.length,
+        });
+        setContinuidadeProvaVisible(true);
+      } else {
+        setContinuidadeProvaVisible(false);
+      }
 
       requestAnimationFrame(() => {
         suppressPersistProvaRef.current = false;

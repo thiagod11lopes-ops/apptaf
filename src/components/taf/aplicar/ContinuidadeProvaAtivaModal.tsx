@@ -14,7 +14,7 @@ type Props = {
   onDescartar: () => void;
 };
 
-/** Aviso ao reabrir o app com prova ativa ainda não lançada pelo aplicador. */
+/** Aviso no cold start com prova ativa ainda não lançada pelo aplicador. */
 export function ContinuidadeProvaAtivaModal({
   visible,
   provaLabel,

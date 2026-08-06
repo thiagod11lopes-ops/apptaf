@@ -8,6 +8,21 @@ import type { ResultadoPermanenciaOpcao } from '../components/PermanenciaTafPane
 
 export const PROVA_ATIVA_SESSION_META_KEY = 'provaAtiva:session';
 
+/**
+ * Modal "Teste em andamento" só no cold start (nova vida do JS).
+ * Troca de aba / remount na mesma sessão não deve reabrir o aviso.
+ */
+let continuidadeModalOfferedThisRuntime = false;
+
+/** `true` se ainda não oferecemos o modal nesta vida do app. */
+export function shouldOfferContinuidadeModal(): boolean {
+  return !continuidadeModalOfferedThisRuntime;
+}
+
+export function markContinuidadeModalOffered(): void {
+  continuidadeModalOfferedThisRuntime = true;
+}
+
 /** Continuação local após o lançamento (rúbricas / aplicador opcional). */
 export type ProvaAtivaFinalizacaoFase =
   | 'rubrica_candidatos'

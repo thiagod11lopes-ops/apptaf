@@ -44,20 +44,14 @@ export function createAplicarTafStyles(theme: AppTheme, ui: UiColors) {
     textTransform: 'uppercase',
     marginBottom: 4,
   },
-  nomeCodigoChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  nomeCodigoChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
+  nomeCodigoSelectList: {
     borderWidth: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
-  nomeCodigoChipText: {
-    fontSize: 12,
-    fontWeight: '800',
+  nomeCodigoSelectRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   modalTempoOverlay: {
     flex: 1,

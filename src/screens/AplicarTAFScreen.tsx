@@ -3216,6 +3216,30 @@ export default function AplicarTAFScreen() {
     });
   }, []);
 
+  const opcoesNomeCodigoPreCadastro = useMemo(
+    () => (['Nenhum', ...nomesCodigoDisponiveis(listaPreCadastros)] as const),
+    [listaPreCadastros],
+  );
+
+  const nomeCodigoSelectWebStyle = useMemo(
+    () =>
+      ({
+        width: '100%',
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: inputBorder,
+        borderRadius: 12,
+        paddingLeft: 14,
+        paddingRight: 14,
+        paddingTop: 12,
+        paddingBottom: 12,
+        fontSize: 16,
+        backgroundColor: inputBg,
+        color: theme.text,
+      }) as object,
+    [inputBg, inputBorder, theme.text],
+  );
+
   return (
     <AplicarTafShell>
     <SafeAreaViewInsets
@@ -3523,54 +3547,71 @@ export default function AplicarTAFScreen() {
                   Escolha um nome (único) ou Nenhum para usar só a numeração. Nomes já em uso não
                   aparecem.
                 </Text>
-                <View style={styles.nomeCodigoChips}>
-                  {(
-                    [
-                      'Nenhum' as const,
-                      ...nomesCodigoDisponiveis(listaPreCadastros),
-                    ] as const
-                  ).map((nome) => {
-                    const active = nomeCodigoPreCadastro === nome;
-                    return (
-                      <TouchableOpacity
-                        key={nome}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                        accessibilityLabel={
-                          nome === 'Nenhum' ? 'Sem nome de código' : `Nome ${nome}`
-                        }
-                        onPress={() => setNomeCodigoPreCadastro(nome)}
-                        style={[
-                          styles.nomeCodigoChip,
-                          {
-                            borderColor: active ? theme.primary : theme.border,
-                            backgroundColor: active
-                              ? theme.isDark
-                                ? 'rgba(37,99,235,0.35)'
-                                : 'rgba(37,99,235,0.12)'
-                              : theme.backgroundSecondary,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.nomeCodigoChipText,
-                            { color: active ? theme.primary : theme.textSecondary },
-                          ]}
-                        >
-                          {nome}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                {nomeCodigoPreCadastro ? (
-                  <Text style={[ts.caption, { color: theme.primary, marginTop: 8, fontWeight: '700' }]}>
-                    {nomeCodigoPreCadastro === 'Nenhum'
-                      ? 'Selecionado: Nenhum (apenas numeração)'
-                      : `Selecionado: ${nomeCodigoPreCadastro}`}
-                  </Text>
-                ) : null}
+                {Platform.OS === 'web' ? (
+                  <select
+                    value={nomeCodigoPreCadastro ?? ''}
+                    aria-label="Nome do pré-cadastro"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '') {
+                        setNomeCodigoPreCadastro(null);
+                        return;
+                      }
+                      if (v === 'Nenhum' || isNomeCodigoPreCadastro(v)) {
+                        setNomeCodigoPreCadastro(v);
+                      }
+                    }}
+                    style={nomeCodigoSelectWebStyle}
+                  >
+                    <option value="">Selecione…</option>
+                    {opcoesNomeCodigoPreCadastro.map((nome) => (
+                      <option key={nome} value={nome}>
+                        {nome === 'Nenhum' ? 'Nenhum (apenas numeração)' : nome}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <View style={[styles.nomeCodigoSelectList, { borderColor: theme.border }]}>
+                    <ScrollView
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator
+                      style={{ maxHeight: 200 }}
+                    >
+                      {opcoesNomeCodigoPreCadastro.map((nome) => {
+                        const active = nomeCodigoPreCadastro === nome;
+                        return (
+                          <TouchableOpacity
+                            key={nome}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: active }}
+                            accessibilityLabel={
+                              nome === 'Nenhum' ? 'Sem nome de código' : `Nome ${nome}`
+                            }
+                            onPress={() => setNomeCodigoPreCadastro(nome)}
+                            style={[
+                              styles.nomeCodigoSelectRow,
+                              {
+                                backgroundColor: active ? theme.primary : 'transparent',
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 15,
+                                fontWeight: '600',
+                                color: active
+                                  ? theme.tokens.textOnPrimary
+                                  : theme.textSecondary,
+                              }}
+                            >
+                              {nome === 'Nenhum' ? 'Nenhum (apenas numeração)' : nome}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
                 {nomesCodigoDisponiveis(listaPreCadastros).length === 0 ? (
                   <Text style={[ts.caption, { color: theme.textSecondary, marginTop: 8 }]}>
                     Todos os nomes Alfa–Zulu estão em uso. Você ainda pode escolher Nenhum.

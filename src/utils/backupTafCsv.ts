@@ -173,7 +173,14 @@ const APLICADOR_COLUMNS = [
   'updatedAt',
 ] as const;
 
-const PRE_CADASTRO_COLUMNS = ['id', 'criadoEm', 'tipoProva', 'normaTaf', 'participantesJson'] as const;
+const PRE_CADASTRO_COLUMNS = [
+  'id',
+  'criadoEm',
+  'numero',
+  'tipoProva',
+  'normaTaf',
+  'participantesJson',
+] as const;
 
 const EMAIL_AUTORIZADO_COLUMNS = [
   'id',
@@ -506,6 +513,7 @@ function preCadastroToRow(item: PreCadastroTaf): string {
   return csvRow([
     item.id,
     item.criadoEm,
+    item.numero,
     item.tipoProva,
     item.normaTaf ?? '',
     JSON.stringify(item.participantes),
@@ -531,10 +539,13 @@ function rowToPreCadastro(row: Record<string, string>): PreCadastroTaf | null {
 
   const normaRaw = row.normaTaf?.trim();
   const normaTaf = normaRaw === 'armada' || normaRaw === 'cfn' ? normaRaw : undefined;
+  const numeroRaw = optionalNumber(row.numero ?? '');
+  const numero = numeroRaw != null && numeroRaw > 0 ? numeroRaw : 0;
 
   return {
     id,
     criadoEm,
+    numero,
     tipoProva,
     normaTaf,
     participantes,

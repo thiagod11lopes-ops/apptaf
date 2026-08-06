@@ -61,6 +61,8 @@ export interface PreCadastroRecord extends SyncableMeta {
   id: string;
   ownerUid: string;
   criadoEm: number;
+  /** Número fixo na criação; ausente em registros legados. */
+  numero?: number;
   tipoProva: TipoProvaTAF;
   normaTaf?: NormaTafPreCadastro;
   participantes: PreCadastroParticipante[];

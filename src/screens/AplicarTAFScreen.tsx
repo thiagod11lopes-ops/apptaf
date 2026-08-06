@@ -2799,6 +2799,7 @@ export default function AplicarTAFScreen() {
     const item: PreCadastroTaf = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       criadoEm: Date.now(),
+      numero: 0, // atribuído em addPreCadastroTaf (max existente + 1, ou 1 se vazio)
       tipoProva,
       normaTaf: modoTafNaval ? 'cfn' : 'armada',
       participantes,
@@ -3355,10 +3356,10 @@ export default function AplicarTAFScreen() {
                   Nenhum pré-cadastro salvo ainda.
                 </Text>
               ) : (
-                listaPreCadastros.map((pre, index) => (
+                listaPreCadastros.map((pre) => (
                   <AplicarTafPreCadastroCard
                     key={pre.id}
-                    numero={index + 1}
+                    numero={pre.numero > 0 ? pre.numero : 1}
                     titulo={labelTipoProvaPreCadastro(pre)}
                     meta={metaPreCadastro(pre)}
                     nomesPreview={pre.participantes.map((p) => p.nomeMilitar).join(', ')}

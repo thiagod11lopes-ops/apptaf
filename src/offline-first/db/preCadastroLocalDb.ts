@@ -47,7 +47,12 @@ export async function listPreCadastros(
   const deviceId = await getDeviceId();
   const rows = await db.preCadastros.where('ownerUid').equals(ownerUid).toArray();
   const filtered = rows.filter((r) => r.deviceId === deviceId && (includeDeleted || !r.deleted));
-  return filtered.sort((a, b) => b.criadoEm - a.criadoEm);
+  return filtered.sort((a, b) => {
+    const na = typeof a.numero === 'number' && a.numero > 0 ? a.numero : Number.POSITIVE_INFINITY;
+    const nb = typeof b.numero === 'number' && b.numero > 0 ? b.numero : Number.POSITIVE_INFINITY;
+    if (na !== nb) return na - nb;
+    return a.criadoEm - b.criadoEm;
+  });
 }
 
 /** Pré-cadastro não sincroniza — retorna vazio para o motor LWW. */
@@ -122,6 +127,7 @@ export function preCadastroRecordToTaf(record: PreCadastroRecord): PreCadastroTa
   return {
     id: record.id,
     criadoEm: record.criadoEm,
+    numero: typeof record.numero === 'number' && record.numero > 0 ? record.numero : 0,
     tipoProva: record.tipoProva,
     normaTaf: record.normaTaf ?? 'armada',
     participantes: record.participantes,

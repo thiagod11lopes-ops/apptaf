@@ -698,9 +698,9 @@ export default function AplicarTAFScreen() {
     const elapsedMs = getElapsedRaceMs() ?? 0;
     let finalizacao: ProvaAtivaSessionV1['finalizacao'];
     const resultadosPendentes =
-      listaResultadosRubricaNatacao ??
+      pendingResultadosNavRef.current ??
       resultadosPosMilitaresRef.current ??
-      pendingResultadosNavRef.current;
+      listaResultadosRubricaNatacao;
     const sessaoAplicacaoId = sessaoAplicacaoIdRef.current ?? undefined;
     if (fluxoAplicadorVisible && resultadosPendentes) {
       finalizacao = {
@@ -1651,6 +1651,27 @@ export default function AplicarTAFScreen() {
     [moverRubricaStrokePoint],
   );
 
+  /** Checkpoint local das rúbricas SVG (prova ativa + sessão), sem raster/cadastro. */
+  const checkpointRubricaSvgLocal = useCallback(
+    (lista: ResultadoCorridaItem[]) => {
+      pendingResultadosNavRef.current = lista;
+      resultadosPosMilitaresRef.current = lista;
+      persistirProvaAtivaAgora();
+      const sessaoId = sessaoAplicacaoIdRef.current;
+      if (!sessaoId || isModoDemonstracaoAtivo()) return;
+      void (async () => {
+        try {
+          await yieldToUiHeavy();
+          const atual = pendingResultadosNavRef.current ?? lista;
+          await atualizarSessaoEmAndamento(atual);
+        } catch {
+          // Continuindade via prova ativa já cobre; falha na sessão não bloqueia o fluxo.
+        }
+      })();
+    },
+    [atualizarSessaoEmAndamento, persistirProvaAtivaAgora],
+  );
+
   const limparRubricaNatacaoAtual = useCallback(() => {
     setErroRubricaNatacao('');
     limparRubricaDraw();
@@ -1665,9 +1686,13 @@ export default function AplicarTAFScreen() {
         ? { ...item, rubricaCandidato: undefined, rubricaCandidatoSvg: undefined }
         : item,
     );
-    pendingResultadosNavRef.current = atualizados;
-    // Não setState da lista inteira — o canvas já limpou; índice inalterado.
-  }, [indiceRubricaNatacao, limparRubricaDraw, listaResultadosRubricaNatacao]);
+    checkpointRubricaSvgLocal(atualizados);
+  }, [
+    checkpointRubricaSvgLocal,
+    indiceRubricaNatacao,
+    limparRubricaDraw,
+    listaResultadosRubricaNatacao,
+  ]);
 
   const buildSvgRubricaAtual = useCallback((): string | null => {
     const strokesProntos = getTodosStrokesRubrica();
@@ -1682,7 +1707,7 @@ export default function AplicarTAFScreen() {
     );
   }, [getTodosStrokesRubrica, rubricaCanvasWidth]);
 
-  /** Atualiza só refs — sem setState da lista e sem IDB no meio do fluxo (batch no fim). */
+  /** Atualiza só refs — sem setState da lista e sem IDB de cadastro no meio do fluxo. */
   const aplicarSvgNoIndiceRubrica = useCallback(
     (index: number, svg: string, listaBase: ResultadoCorridaItem[]) => {
       const atualizados = listaBase.map((item, idx) =>
@@ -1694,11 +1719,10 @@ export default function AplicarTAFScreen() {
       while (nextSvg.length < atualizados.length) nextSvg.push('');
       nextSvg[index] = svg;
       rubricasSvgRef.current = nextSvg;
-      pendingResultadosNavRef.current = atualizados;
-      resultadosPosMilitaresRef.current = atualizados;
+      checkpointRubricaSvgLocal(atualizados);
       return atualizados;
     },
-    [],
+    [checkpointRubricaSvgLocal],
   );
 
   const irParaRubricaIndex = useCallback(

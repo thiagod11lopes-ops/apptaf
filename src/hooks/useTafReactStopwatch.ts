@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { formatElapsedMs, parseFormatoElapsedParaMs } from '../utils/formatRaceTime';
+import { formatCronometroElapsedMs, parseFormatoElapsedParaMs } from '../utils/formatRaceTime';
 
 export type TafCronometroEstado = 'inicial' | 'rodando' | 'pausado' | 'finalizado';
 
-/** Atualização visual ~20 Hz só para assinantes (painel), sem re-render do Aplicar. */
-const DISPLAY_INTERVAL_MS = 50;
-const ZERO = formatElapsedMs(0);
+/** Atualização visual ~4 Hz (MM:SS); assinantes do painel sem re-render do Aplicar. */
+const DISPLAY_INTERVAL_MS = 250;
+const ZERO = formatCronometroElapsedMs(0);
 
 type Options = {
   /** Limite em ms (ex.: permanência 10 min). Null/undefined = sem limite. */
@@ -14,7 +14,7 @@ type Options = {
 };
 
 /**
- * Cronômetro TAF (MM:SS:CS).
+ * Cronômetro TAF (MM:SS — sem centésimos na prova ativa).
  * Enquanto `rodando`, o tempo vivo vai só para `subscribeTempoExibido` —
  * o host (AplicarTAFScreen) não re-renderiza a cada tick.
  */
@@ -48,7 +48,7 @@ export function useTafReactStopwatch({ getMaxMs, onMaxReached }: Options = {}) {
   }, []);
 
   const emitFmt = useCallback((ms: number) => {
-    const fmt = formatElapsedMs(ms);
+    const fmt = formatCronometroElapsedMs(ms);
     tempoExibidoRef.current = fmt;
     listenersRef.current.forEach((cb) => cb(fmt));
     return fmt;

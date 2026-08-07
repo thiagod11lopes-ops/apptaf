@@ -12,38 +12,33 @@ import { Timer } from 'lucide-react-native';
 import { ModernModal } from '../sismav/ModernModal';
 import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
-import { formatElapsedMs, parseFormatoElapsedParaMs } from '../../utils/formatRaceTime';
+import {
+  formatCronometroElapsedMs,
+  parseFormatoElapsedParaMs,
+} from '../../utils/formatRaceTime';
 
 type Props = {
   visible: boolean;
-  /** Tempo atual no formato MM:SS:CS (ou MM:SS). */
+  /** Tempo atual no formato MM:SS (ou MM:SS:CS legado). */
   tempoAtual: string;
   onClose: () => void;
-  /** Confirma novo tempo MM:SS:CS (centésimos preservados do atual). */
-  onConfirm: (tempoMmSsCs: string) => void;
+  /** Confirma novo tempo MM:SS. */
+  onConfirm: (tempoMmSs: string) => void;
 };
 
 function onlyDigits(value: string, maxLen: number): string {
   return value.replace(/\D/g, '').slice(0, maxLen);
 }
 
-function splitTempoParts(tempo: string): { mm: string; ss: string; cs: string } {
+function splitTempoParts(tempo: string): { mm: string; ss: string } {
   const parts = tempo.trim().split(':');
-  if (parts.length >= 3) {
+  if (parts.length >= 2) {
     return {
       mm: onlyDigits(parts[0] || '0', 4) || '0',
       ss: onlyDigits(parts[1] || '0', 2) || '0',
-      cs: onlyDigits(parts[2] || '0', 2).padStart(2, '0') || '00',
     };
   }
-  if (parts.length === 2) {
-    return {
-      mm: onlyDigits(parts[0] || '0', 4) || '0',
-      ss: onlyDigits(parts[1] || '0', 2) || '0',
-      cs: '00',
-    };
-  }
-  return { mm: '0', ss: '0', cs: '00' };
+  return { mm: '0', ss: '0' };
 }
 
 export function EditarCronometroPausadoModal({
@@ -55,7 +50,6 @@ export function EditarCronometroPausadoModal({
   const { theme } = useTheme();
   const [minutos, setMinutos] = useState('0');
   const [segundos, setSegundos] = useState('0');
-  const [centesimos, setCentesimos] = useState('00');
   const [erro, setErro] = useState('');
   const [aplicando, setAplicando] = useState(false);
 
@@ -64,7 +58,6 @@ export function EditarCronometroPausadoModal({
     const parts = splitTempoParts(tempoAtual);
     setMinutos(parts.mm.replace(/^0+(?=\d)/, '') || '0');
     setSegundos(parts.ss.replace(/^0+(?=\d)/, '') || '0');
-    setCentesimos(parts.cs.padStart(2, '0'));
     setErro('');
     setAplicando(false);
   }, [visible, tempoAtual]);
@@ -72,16 +65,14 @@ export function EditarCronometroPausadoModal({
   const preview = useMemo(() => {
     const mm = parseInt(minutos || '0', 10);
     const ss = parseInt(segundos || '0', 10);
-    const cs = parseInt(centesimos || '0', 10);
-    if (!Number.isFinite(mm) || !Number.isFinite(ss) || !Number.isFinite(cs)) return null;
-    if (mm < 0 || ss < 0 || ss > 59 || cs < 0 || cs > 99) return null;
-    return formatElapsedMs(mm * 60_000 + ss * 1000 + cs * 10);
-  }, [minutos, segundos, centesimos]);
+    if (!Number.isFinite(mm) || !Number.isFinite(ss)) return null;
+    if (mm < 0 || ss < 0 || ss > 59) return null;
+    return formatCronometroElapsedMs(mm * 60_000 + ss * 1000);
+  }, [minutos, segundos]);
 
   const confirmar = () => {
     const mm = parseInt(minutos || '0', 10);
     const ss = parseInt(segundos || '0', 10);
-    const cs = parseInt(centesimos || '0', 10);
     if (!Number.isFinite(mm) || mm < 0) {
       setErro('Informe os minutos (0 ou mais).');
       return;
@@ -90,11 +81,7 @@ export function EditarCronometroPausadoModal({
       setErro('Segundos devem estar entre 0 e 59.');
       return;
     }
-    if (!Number.isFinite(cs) || cs < 0 || cs > 99) {
-      setErro('Centésimos inválidos.');
-      return;
-    }
-    const fmt = formatElapsedMs(mm * 60_000 + ss * 1000 + cs * 10);
+    const fmt = formatCronometroElapsedMs(mm * 60_000 + ss * 1000);
     if (parseFormatoElapsedParaMs(fmt) == null) {
       setErro('Tempo inválido.');
       return;
@@ -118,7 +105,7 @@ export function EditarCronometroPausadoModal({
     >
       <View style={styles.body}>
         <Text style={[styles.hint, { color: theme.textSecondary }]}>
-          Ajuste minutos e segundos. Os centésimos atuais são mantidos.
+          Ajuste minutos e segundos do cronômetro.
         </Text>
 
         <View style={styles.fieldsRow}>
@@ -177,14 +164,8 @@ export function EditarCronometroPausadoModal({
           </View>
         </View>
 
-        <Text style={[styles.csHint, { color: theme.textMuted }]}>
-          Centésimos mantidos: {centesimos.padStart(2, '0')}
-        </Text>
-
         {preview ? (
-          <Text style={[styles.preview, { color: theme.text }]}>
-            Prévia: {preview}
-          </Text>
+          <Text style={[styles.preview, { color: theme.text }]}>Prévia: {preview}</Text>
         ) : null}
 
         {erro ? <Text style={[styles.erro, { color: theme.error }]}>{erro}</Text> : null}
@@ -265,10 +246,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 8,
     paddingHorizontal: 2,
-  },
-  csHint: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   preview: {
     fontSize: 15,

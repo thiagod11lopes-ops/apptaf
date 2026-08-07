@@ -1,7 +1,7 @@
 /**
  * Formatação de tempo de prova / cronômetro.
- * Exibição oficial: **MM:SS:CS** (minutos : segundos : centésimos).
- * Notas nas tabelas continuam usando segundos inteiros truncados.
+ * Tempos de resultado (tabela): **MM:SS:CS**.
+ * Cronômetro na prova ativa: **MM:SS** (sem centésimos).
  */
 
 export function pad2(n: number) {
@@ -29,6 +29,18 @@ export function formatElapsedMs(ms: number): string {
   const s = totalSec % 60;
   const totalMin = Math.floor(totalSec / 60);
   return `${totalMin.toString().padStart(2, '0')}:${pad2(s)}:${pad2(cs)}`;
+}
+
+/**
+ * Formata ms em **MM:SS** para o cronômetro da prova ativa (sem centésimos).
+ * Ex.: 303_450 ms → `05:03`.
+ */
+export function formatCronometroElapsedMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) ms = 0;
+  const totalSec = Math.floor(ms / 1000);
+  const s = totalSec % 60;
+  const totalMin = Math.floor(totalSec / 60);
+  return `${totalMin.toString().padStart(2, '0')}:${pad2(s)}`;
 }
 
 /**

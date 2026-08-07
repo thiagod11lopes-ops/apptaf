@@ -160,19 +160,16 @@ export function TafCronometroPanel({
 
   const monoWeb = Platform.OS === 'web' ? ({ fontVariantNumeric: 'tabular-nums' } as object) : null;
 
-  /** Pausado mantém o mesmo formato MM:SS:CS (não vira campo de edição). */
+  /** Pausado mantém o mesmo formato MM:SS (não vira campo de edição). */
   const tempoMostrado =
     estado === 'pausado' ? pausadoTexto || tempoLive || tempoExibido : tempoLive || tempoExibido;
 
   const splitTempo = (() => {
     const parts = tempoMostrado.split(':');
-    if (parts.length >= 3) {
-      return { mm: parts[0] || '00', ss: parts[1] || '00', cs: parts[2] || '00' };
+    if (parts.length >= 2) {
+      return { mm: parts[0] || '00', ss: parts[1] || '00' };
     }
-    if (parts.length === 2) {
-      return { mm: parts[0] || '00', ss: parts[1] || '00', cs: '00' };
-    }
-    return { mm: '00', ss: '00', cs: '00' };
+    return { mm: '00', ss: '00' };
   })();
 
   const digitBlock = (value: string, label: string) => (
@@ -199,10 +196,6 @@ export function TafCronometroPanel({
         :
       </Text>
       {digitBlock(splitTempo.ss, 'seg')}
-      <Text style={[compact ? styles.digitSepCompact : styles.digitSep, { color: displayColor }]}>
-        :
-      </Text>
-      {digitBlock(splitTempo.cs, 'cs')}
     </Animated.View>
   );
 
@@ -408,9 +401,7 @@ export function TafCronometroPanel({
       >
         {timeNode}
         <Text style={styles.displayHint}>
-          {estado === 'pausado'
-            ? 'toque no tempo para editar · min · seg · centésimos'
-            : 'min · seg · centésimos'}
+          {estado === 'pausado' ? 'toque no tempo para editar · min · seg' : 'min · seg'}
         </Text>
       </View>
 

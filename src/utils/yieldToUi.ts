@@ -9,6 +9,34 @@ export function yieldToUi(): Promise<void> {
 }
 
 /**
+ * Cede a UI de forma mais forte (macrotask + frame) entre itens pesados de um lote.
+ * Preferível no raster em série de rúbricas enquanto o aplicador assina.
+ */
+export async function yieldToUiHeavy(): Promise<void> {
+  await yieldToUi();
+  if (typeof requestAnimationFrame === 'function') {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  }
+}
+
+/**
+ * Chama `yieldFn` a cada `n` itens processados (1-based count).
+ * Com `n <= 1`, yield em todo item.
+ */
+export async function yieldEveryN(
+  itensProcessados: number,
+  n: number,
+  yieldFn: () => Promise<void> = yieldToUiHeavy,
+): Promise<void> {
+  const passo = Math.max(1, Math.floor(n) || 1);
+  if (itensProcessados > 0 && itensProcessados % passo === 0) {
+    await yieldFn();
+  }
+}
+
+/**
  * Agenda tarefa quando o browser está ocioso (PWA/web).
  * Fallback: após o primeiro paint / interações.
  */

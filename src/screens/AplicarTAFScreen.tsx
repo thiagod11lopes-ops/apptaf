@@ -118,9 +118,9 @@ import {
   isRubricaSvgDataUrl,
   rubricaParaPersistenciaAsync,
 } from '../utils/rubricaRasterPersist';
-import { yieldToUi } from '../utils/yieldToUi';
+import { yieldEveryN, yieldToUiHeavy } from '../utils/yieldToUi';
+import { RUBRICA_LOTE_YIELD_A_CADA, RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import { RUBRICA_COR_FUNDO, RUBRICA_COR_TRACO } from '../utils/rubricaSvgNormalize';
-import { RUBRICA_NATIVA_ALTURA } from '../utils/rubricaConstants';
 import {
   buscarRegistroModalidadeExistente,
   removerParticipanteModalidadeDoHistorico,
@@ -1120,6 +1120,9 @@ export default function AplicarTAFScreen() {
           if (!base?.length) return;
 
           let lista = base.map((r) => ({ ...r }));
+          let rasterizados = 0;
+
+          await yieldToUiHeavy();
 
           for (let i = 0; i < lista.length; i++) {
             if (rubricaPersistGeracaoRef.current !== geracao) return;
@@ -1138,7 +1141,8 @@ export default function AplicarTAFScreen() {
                 rubricaCandidatoSvg: raster,
               };
             }
-            await yieldToUi();
+            rasterizados += 1;
+            await yieldEveryN(rasterizados, RUBRICA_LOTE_YIELD_A_CADA);
           }
 
           if (rubricaPersistGeracaoRef.current !== geracao) return;
@@ -1153,7 +1157,9 @@ export default function AplicarTAFScreen() {
           // Um único lote IDB no fim (SVG restantes ou WebP) — sem write por militar no meio.
           const paraCadastro = lista.filter((r) => (r.rubricaCandidatoSvg || '').trim());
           if (!isModoDemonstracaoAtivo() && paraCadastro.length > 0) {
+            await yieldToUiHeavy();
             await persistirRubricasNoCadastro(paraCadastro, { manterSvgBruto: true });
+            await yieldToUiHeavy();
           }
 
           // Se o chefe já concluiu (sessão liberada na UI), espelha rúbricas na sessão.

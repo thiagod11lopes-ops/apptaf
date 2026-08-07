@@ -80,6 +80,7 @@ export async function persistirRubricasNoCadastro(
   const lista: CadastroItemPersist[] = [...cadastros];
   const manterSvgBruto = opcoes?.manterSvgBruto === true;
   const paraGravar: CadastroItemPersist[] = [];
+  let processadosPesados = 0;
 
   for (const r of resultados) {
     const bruto = (r.rubricaCandidatoSvg || '').trim();
@@ -103,6 +104,13 @@ export async function persistirRubricasNoCadastro(
     const idx = lista.findIndex((c) => c.id === atualizado.id);
     if (idx >= 0) lista[idx] = atualizado;
     paraGravar.push(atualizado);
+
+    if (!manterSvgBruto) {
+      processadosPesados += 1;
+      const { yieldEveryN } = await import('./yieldToUi');
+      const { RUBRICA_LOTE_YIELD_A_CADA } = await import('./rubricaConstants');
+      await yieldEveryN(processadosPesados, RUBRICA_LOTE_YIELD_A_CADA);
+    }
   }
 
   if (paraGravar.length === 0) return 0;

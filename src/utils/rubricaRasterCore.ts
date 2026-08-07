@@ -126,5 +126,23 @@ export function desenharRubricaSvgNoContexto(
     }
   }
   ctx.restore();
+
+  // Overlay “No Impedimento” (texto SVG / atributo) — o motor só rasteriza paths.
+  if (
+    opts.svgMarkup.includes('data-taf-no-impedimento') ||
+    opts.svgMarkup.includes('Rubrica do Aplicador')
+  ) {
+    const fontSize = Math.max(13, Math.round(Math.min(canvasWidth, canvasHeight) * 0.13));
+    ctx.save();
+    ctx.translate(canvasWidth / 2, canvasHeight / 2);
+    ctx.rotate((-28 * Math.PI) / 180);
+    ctx.fillStyle = 'rgba(17,24,39,0.42)';
+    ctx.font = `700 ${fontSize}px Arial, Helvetica, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Rubrica do Aplicador', 0, 0);
+    ctx.restore();
+  }
+
   return true;
 }

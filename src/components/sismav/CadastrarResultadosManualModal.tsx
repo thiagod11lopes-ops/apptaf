@@ -555,6 +555,7 @@ export function CadastrarResultadosManualModal({
         total={1}
         tipoProva="corrida"
         ultimo={false}
+        habilitarNoImpedimento
         onConfirm={onRubricaMilitar}
         onSkip={() =>
           Alert.alert('Rúbrica obrigatória', 'Desenhe a rúbrica do militar para continuar.')

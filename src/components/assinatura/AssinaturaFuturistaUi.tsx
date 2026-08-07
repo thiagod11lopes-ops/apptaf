@@ -115,6 +115,7 @@ export function AssinaturaFuturistaHeader({
   accent = 'cyan',
   onBack,
   backLabel = 'Voltar',
+  headerRight,
 }: {
   kicker?: string;
   title: string;
@@ -122,6 +123,8 @@ export function AssinaturaFuturistaHeader({
   accent?: AssinaturaAccent;
   onBack?: () => void;
   backLabel?: string;
+  /** Conteúdo no canto superior direito (ex.: toggle “No Impedimento”). */
+  headerRight?: React.ReactNode;
 }) {
   const { theme } = useTheme();
   const ui = getUiColors(theme);
@@ -138,6 +141,7 @@ export function AssinaturaFuturistaHeader({
           <Text style={[styles.headerSub, { color: theme.textSecondary }]}>{subtitle}</Text>
         ) : null}
       </View>
+      {headerRight ? <View style={styles.headerRightSlot}>{headerRight}</View> : null}
       {onBack ? (
         <TouchableOpacity
           accessibilityLabel={backLabel}
@@ -477,6 +481,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 4,
+  },
+  headerRightSlot: {
+    flexShrink: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    paddingTop: 2,
   },
   headerKicker: {
     fontSize: 10,

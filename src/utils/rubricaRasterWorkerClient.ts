@@ -131,6 +131,18 @@ async function renderToDataUrl(msg) {
     }
   }
   ctx.restore();
+  if (svg.indexOf('data-taf-no-impedimento') >= 0 || svg.indexOf('Rubrica do Aplicador') >= 0) {
+    var fontSizeTxt = Math.max(13, Math.round(Math.min(w, h) * 0.13));
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate((-28 * Math.PI) / 180);
+    ctx.fillStyle = 'rgba(17,24,39,0.42)';
+    ctx.font = '700 ' + fontSizeTxt + 'px Arial, Helvetica, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Rubrica do Aplicador', 0, 0);
+    ctx.restore();
+  }
 
   var mime = msg.mime || 'image/webp';
   var quality = typeof msg.quality === 'number' ? msg.quality : 0.72;

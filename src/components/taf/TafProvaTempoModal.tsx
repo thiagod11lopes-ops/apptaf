@@ -12,7 +12,8 @@ import {
 import { AppModal } from '../premium/AppModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, Flag } from 'lucide-react-native';
+import { Check, Flag, Trash2 } from 'lucide-react-native';
+import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
@@ -886,6 +887,30 @@ export function TafProvaTempoModal({
                 ) : null}
               </View>
             </View>
+
+            {onDoublePressNomeParticipante ? (
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel={`Excluir participante ${index + 1} da prova`}
+                accessibilityHint="Abre confirmação para remover este militar da prova ativa"
+                onPress={() => onDoublePressNomeParticipante(index)}
+                style={styles.excluirParticipanteBtn}
+                hitSlop={6}
+              >
+                <View
+                  style={[
+                    styles.excluirParticipanteInner,
+                    {
+                      backgroundColor: theme.isDark
+                        ? 'rgba(220,38,38,0.22)'
+                        : 'rgba(254,226,226,0.95)',
+                    },
+                  ]}
+                >
+                  <Trash2 size={16} color={theme.loss} strokeWidth={2.4} />
+                </View>
+              </PressableScale>
+            ) : null}
           </View>
         );
       })}
@@ -1116,6 +1141,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingLeft: 6,
     paddingRight: 6,
+    justifyContent: 'center',
+  },
+  excluirParticipanteBtn: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    flexShrink: 0,
+  },
+  excluirParticipanteInner: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   participantTopRow: {

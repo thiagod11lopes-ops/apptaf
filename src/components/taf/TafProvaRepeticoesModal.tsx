@@ -12,6 +12,8 @@ import {
 import { AppModal } from '../premium/AppModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Trash2 } from 'lucide-react-native';
+import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
@@ -206,6 +208,29 @@ export function TafProvaRepeticoesModal({
                         </View>
                       </View>
                     </View>
+                    {onDoublePressNomeParticipante ? (
+                      <PressableScale
+                        accessibilityRole="button"
+                        accessibilityLabel={`Excluir participante ${index + 1} da prova`}
+                        accessibilityHint="Abre confirmação para remover este militar da prova ativa"
+                        onPress={() => onDoublePressNomeParticipante(index)}
+                        style={styles.excluirParticipanteBtn}
+                        hitSlop={6}
+                      >
+                        <View
+                          style={[
+                            styles.excluirParticipanteInner,
+                            {
+                              backgroundColor: theme.isDark
+                                ? 'rgba(220,38,38,0.22)'
+                                : 'rgba(254,226,226,0.95)',
+                            },
+                          ]}
+                        >
+                          <Trash2 size={16} color={theme.loss} strokeWidth={2.4} />
+                        </View>
+                      </PressableScale>
+                    ) : null}
                     <View
                       style={[styles.rowNumSide, { backgroundColor: PREMIUM.accentMuted }]}
                       accessibilityLabel={`Participante ${index + 1}`}
@@ -299,6 +324,19 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     paddingRight: 8,
+    justifyContent: 'center',
+  },
+  excluirParticipanteBtn: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    flexShrink: 0,
+  },
+  excluirParticipanteInner: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   rowHead: { flexDirection: 'column', alignItems: 'flex-start', gap: 2, minWidth: 0 },

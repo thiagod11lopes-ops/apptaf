@@ -873,6 +873,7 @@ export default function AplicacaoTAFScreen() {
         tipoProva={tipoProva ?? 'corrida'}
         ultimo
         confirmLabel="Continuar · Aplicador"
+        habilitarNoImpedimento
         onConfirm={(svg) => {
           if (!resultadoPendente) return;
           setResultadoPendente({

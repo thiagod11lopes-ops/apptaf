@@ -56,7 +56,7 @@ export function RubricaCaptureModal({
   tipoProva,
   ultimo,
   confirmLabel,
-  habilitarNoImpedimento = false,
+  habilitarNoImpedimento = true,
   onConfirm,
   onSkip,
   onCancel,

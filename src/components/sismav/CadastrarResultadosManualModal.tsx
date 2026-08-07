@@ -27,6 +27,7 @@ import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuN
 import { formatNipInput, nipDigitos } from '../../utils/nipFormat';
 import {
   formatMinutosSegundosInput,
+  tempoMinutosSegundosValido,
   tempoParaExibicao,
 } from '../../utils/formatMinutosSegundos';
 import {
@@ -35,6 +36,9 @@ import {
   type EdicaoResultadoTafInput,
 } from '../../utils/atualizarResultadoTaf';
 import { idadeFromDataNascimento } from '../../utils/idadeFromDataNascimento';
+import { dataBrParaIso } from '../../utils/tafRegistro';
+import { textoNotaCorridaFromCadastro } from '../../taf/corrida2400Nota';
+import { textoNotaNatacaoFromCadastro } from '../../taf/natacaoNota';
 import { PREMIUM } from '../../theme/premium';
 
 type Etapa = 'form' | 'rubricaMilitar' | 'aplicador';
@@ -71,6 +75,10 @@ function dataNascimentoValida(value: string): boolean {
   return idadeFromDataNascimento(t) != null;
 }
 
+function dataAplicacaoValida(value: string): boolean {
+  return dataBrParaIso(value.trim()) != null;
+}
+
 export function CadastrarResultadosManualModal({
   visible,
   cadastros,
@@ -85,6 +93,7 @@ export function CadastrarResultadosManualModal({
   const [nip, setNip] = useState('');
   const [cadastro, setCadastro] = useState<CadastroItemPersist | null>(null);
   const [avisoBusca, setAvisoBusca] = useState('');
+  const [dataAplicacao, setDataAplicacao] = useState(dataAplicacaoBr);
   const [tempoCorrida, setTempoCorrida] = useState('');
   const [tempoNatacao, setTempoNatacao] = useState('');
   const [permanencia, setPermanencia] = useState<'aprovado' | 'reprovado' | null>(null);
@@ -99,6 +108,7 @@ export function CadastrarResultadosManualModal({
     setNip('');
     setCadastro(null);
     setAvisoBusca('');
+    setDataAplicacao(dataAplicacaoBr);
     setTempoCorrida('');
     setTempoNatacao('');
     setPermanencia(null);
@@ -106,7 +116,7 @@ export function CadastrarResultadosManualModal({
     setErro('');
     setSalvando(false);
     setRubricaMilitarSvg('');
-  }, []);
+  }, [dataAplicacaoBr]);
 
   useEffect(() => {
     if (!visible) return;
@@ -144,6 +154,30 @@ export function CadastrarResultadosManualModal({
     if (!t || !dataNascimentoValida(t)) return null;
     return idadeFromDataNascimento(t);
   }, [dataNascimento]);
+
+  const notaCorridaPreview = useMemo(() => {
+    const tempo = tempoCorrida.trim();
+    if (!tempo || !tempo.includes(':') || !tempoMinutosSegundosValido(tempo)) return null;
+    if (!dataNascimento.trim() || !dataNascimentoValida(dataNascimento)) return null;
+    const nota = textoNotaCorridaFromCadastro({
+      tempoCorrida: tempo,
+      dataNascimento: dataNascimento.trim(),
+      sexo: cadastro?.sexo,
+    });
+    return nota === '—' ? null : nota;
+  }, [tempoCorrida, dataNascimento, cadastro?.sexo]);
+
+  const notaNatacaoPreview = useMemo(() => {
+    const tempo = tempoNatacao.trim();
+    if (!tempo || !tempo.includes(':') || !tempoMinutosSegundosValido(tempo)) return null;
+    if (!dataNascimento.trim() || !dataNascimentoValida(dataNascimento)) return null;
+    const nota = textoNotaNatacaoFromCadastro({
+      tempoNatacao: tempo,
+      dataNascimento: dataNascimento.trim(),
+      sexo: cadastro?.sexo,
+    });
+    return nota === '—' ? null : nota;
+  }, [tempoNatacao, dataNascimento, cadastro?.sexo]);
 
   const cadastroComData = useMemo((): CadastroItemPersist | null => {
     if (!cadastro) return null;
@@ -248,6 +282,10 @@ export function CadastrarResultadosManualModal({
       setErro('Busque e selecione o militar pelo NIP.');
       return;
     }
+    if (!dataAplicacaoValida(dataAplicacao)) {
+      setErro('Informe a data da aplicação no formato DD/MM/AAAA.');
+      return;
+    }
     if (!dataNascimentoValida(dataNascimento)) {
       setErro('Data de nascimento inválida. Use DD/MM/AAAA.');
       return;
@@ -263,7 +301,7 @@ export function CadastrarResultadosManualModal({
     }
     setErro('');
     setEtapa('rubricaMilitar');
-  }, [cadastroComData, dataNascimento, tempoCorrida, tempoNatacao, inputResultados]);
+  }, [cadastroComData, dataAplicacao, dataNascimento, tempoCorrida, tempoNatacao, inputResultados]);
 
   const onRubricaMilitar = useCallback((svg: string) => {
     setRubricaMilitarSvg(svg);
@@ -279,7 +317,7 @@ export function CadastrarResultadosManualModal({
         const atualizado = await cadastrarResultadosManual({
           cadastro: cadastroComData,
           input: inputResultados,
-          dataAplicacaoBr,
+          dataAplicacaoBr: dataAplicacao.trim(),
           rubricaMilitarSvg,
           aplicadorAssinatura: assinatura,
         });
@@ -296,7 +334,7 @@ export function CadastrarResultadosManualModal({
       cadastroComData,
       salvando,
       inputResultados,
-      dataAplicacaoBr,
+      dataAplicacao,
       rubricaMilitarSvg,
       onSalvo,
       onClose,
@@ -330,12 +368,9 @@ export function CadastrarResultadosManualModal({
               </TouchableOpacity>
             </View>
 
-            <Text style={[theme.textStyles.caption, styles.subtitle, { color: theme.textSecondary }]}>
-              Data da aplicação: {dataAplicacaoBr}
-            </Text>
             <Text style={[theme.textStyles.caption, styles.hint, { color: theme.textMuted }]}>
-              Informe o NIP, lance os resultados e avance para as rúbricas do militar e do
-              aplicador.
+              Informe a data da aplicação (mesmo sem registro no calendário), o NIP, lance os
+              resultados e avance para as rúbricas do militar e do aplicador.
             </Text>
 
             <ScrollView
@@ -343,6 +378,26 @@ export function CadastrarResultadosManualModal({
               style={styles.scroll}
               contentContainerStyle={styles.scrollContent}
             >
+              <Text style={[theme.textStyles.label, styles.fieldLabel, { color: ui.text }]}>
+                Data da aplicação
+              </Text>
+              <TextInput
+                value={dataAplicacao}
+                onChangeText={(t) => {
+                  setErro('');
+                  setDataAplicacao(formatDateInput(t));
+                }}
+                placeholder="DD/MM/AAAA"
+                placeholderTextColor={ui.placeholder}
+                style={[
+                  styles.input,
+                  { borderColor: theme.border, color: ui.text, backgroundColor: theme.cardBg },
+                ]}
+                keyboardType={Platform.OS === 'web' ? 'default' : 'number-pad'}
+                maxLength={10}
+                editable={!salvando}
+              />
+
               <LabelNip color={ui.text} fontSize={13} fontWeight="700" />
               <View style={styles.nipRow}>
                 <TextInput
@@ -458,6 +513,37 @@ export function CadastrarResultadosManualModal({
                 maxLength={5}
                 editable={!salvando && !!cadastro}
               />
+              {notaCorridaPreview ? (
+                <Text
+                  style={[
+                    theme.textStyles.caption,
+                    {
+                      color:
+                        notaCorridaPreview === 'REPROVADO' || notaCorridaPreview === 'Reprovado'
+                          ? theme.loss
+                          : theme.gain,
+                      marginTop: -4,
+                      marginBottom: 8,
+                      fontWeight: '700',
+                    },
+                  ]}
+                >
+                  Nota corrida: {notaCorridaPreview}
+                </Text>
+              ) : tempoCorrida.trim() &&
+                tempoCorrida.includes(':') &&
+                tempoMinutosSegundosValido(tempoCorrida.trim()) &&
+                cadastro &&
+                !dataNascimento.trim() ? (
+                <Text
+                  style={[
+                    theme.textStyles.caption,
+                    { color: theme.textMuted, marginTop: -4, marginBottom: 8 },
+                  ]}
+                >
+                  Informe a data de nascimento para calcular a nota.
+                </Text>
+              ) : null}
 
               <Text style={[theme.textStyles.label, styles.fieldLabel, { color: ui.text }]}>
                 Natação (MM:SS)
@@ -478,6 +564,37 @@ export function CadastrarResultadosManualModal({
                 maxLength={5}
                 editable={!salvando && !!cadastro}
               />
+              {notaNatacaoPreview ? (
+                <Text
+                  style={[
+                    theme.textStyles.caption,
+                    {
+                      color:
+                        notaNatacaoPreview === 'REPROVADO' || notaNatacaoPreview === 'Reprovado'
+                          ? theme.loss
+                          : theme.gain,
+                      marginTop: -4,
+                      marginBottom: 8,
+                      fontWeight: '700',
+                    },
+                  ]}
+                >
+                  Nota natação: {notaNatacaoPreview}
+                </Text>
+              ) : tempoNatacao.trim() &&
+                tempoNatacao.includes(':') &&
+                tempoMinutosSegundosValido(tempoNatacao.trim()) &&
+                cadastro &&
+                !dataNascimento.trim() ? (
+                <Text
+                  style={[
+                    theme.textStyles.caption,
+                    { color: theme.textMuted, marginTop: -4, marginBottom: 8 },
+                  ]}
+                >
+                  Informe a data de nascimento para calcular a nota.
+                </Text>
+              ) : null}
 
               <Text style={[theme.textStyles.label, styles.fieldLabel, { color: ui.text }]}>
                 Permanência
@@ -607,7 +724,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   closeBtn: { padding: 4 },
-  subtitle: { marginBottom: 6 },
   hint: { marginBottom: 12, lineHeight: 18 },
   scroll: { flexGrow: 0 },
   scrollContent: { paddingBottom: 4 },

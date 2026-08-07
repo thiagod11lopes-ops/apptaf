@@ -40,6 +40,7 @@ import {
   sessoesDoDiaIso,
   tituloMesAno,
 } from '../../utils/historicoPorDia';
+import { dataBrParaIso } from '../../utils/tafRegistro';
 import { agruparSessoesHistoricoPorTeste } from '../../utils/agruparSessoesHistoricoPorTeste';
 import { exportResumosSessoesDiaPdf } from '../../utils/exportResumoAplicacaoPdf';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from '../../utils/exportResultadosTafPdf';
@@ -712,8 +713,21 @@ export function HistoricoCalendarioTaf({
         cadastros={cadastros}
         dataAplicacaoBr={dataBrSelecionada || dataBrDoDiaIso(hoje)}
         onClose={() => setModalCadastrar(false)}
-        onSalvo={() => {
+        onSalvo={(atualizado) => {
           setModalCadastrar(false);
+          const dataBr =
+            (atualizado.dataTafCorrida || '').trim() ||
+            (atualizado.dataTafNatacao || '').trim() ||
+            (atualizado.dataTafPermanencia || '').trim();
+          const iso = dataBr ? dataBrParaIso(dataBr) : null;
+          if (iso) {
+            const [y, m] = iso.split('-').map((x) => parseInt(x, 10));
+            if (Number.isFinite(y) && Number.isFinite(m)) {
+              setAno(y);
+              setMes(m - 1);
+            }
+            setDiaSelecionado(iso);
+          }
           onAviso?.('Resultados cadastrados com sucesso.');
           onResultadosCadastrados?.();
         }}

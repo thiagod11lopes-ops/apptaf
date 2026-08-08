@@ -34,12 +34,22 @@ import { TafGlassPanel } from './mobile/TafTabChrome';
 
 const MIN_BUSCA = 3;
 
-type FiltroModalidade = 'todos' | 'corrida' | 'natacao' | 'permanencia';
+type FiltroModalidade = 'todos' | 'corrida' | 'caminhada' | 'natacao' | 'permanencia';
+
+const FILTROS_MODALIDADE: { key: FiltroModalidade; label: string }[] = [
+  { key: 'todos',      label: 'Todos' },
+  { key: 'corrida',    label: 'Corrida' },
+  { key: 'caminhada',  label: 'Caminhada' },
+  { key: 'natacao',    label: 'Natação' },
+  { key: 'permanencia', label: 'Permanência' },
+];
 
 function temModalidadeItem(item: ResultadoGeralItem, filtro: FiltroModalidade): boolean {
   switch (filtro) {
     case 'corrida':
-      return item.notaCorrida !== '—' || item.notaCaminhada !== '—';
+      return item.notaCorrida !== '—';
+    case 'caminhada':
+      return item.notaCaminhada !== '—';
     case 'natacao':
       return item.notaNatacao !== '—';
     case 'permanencia':
@@ -207,10 +217,11 @@ export function ResultadosGeralPanel({
     return q;
   }, [filtroBusca]);
 
-  const contagensModalidade = useMemo(() => ({
+  const contagensModalidade = useMemo((): Record<FiltroModalidade, number> => ({
     todos: lista.length,
-    corrida: lista.filter((i) => temModalidadeItem(i, 'corrida')).length,
-    natacao: lista.filter((i) => temModalidadeItem(i, 'natacao')).length,
+    corrida:    lista.filter((i) => temModalidadeItem(i, 'corrida')).length,
+    caminhada:  lista.filter((i) => temModalidadeItem(i, 'caminhada')).length,
+    natacao:    lista.filter((i) => temModalidadeItem(i, 'natacao')).length,
     permanencia: lista.filter((i) => temModalidadeItem(i, 'permanencia')).length,
   }), [lista]);
 
@@ -309,14 +320,7 @@ export function ResultadosGeralPanel({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filtrosRow}
           >
-            {(
-              [
-                { key: 'todos', label: 'Todos' },
-                { key: 'corrida', label: 'Corrida' },
-                { key: 'natacao', label: 'Natação' },
-                { key: 'permanencia', label: 'Permanência' },
-              ] as { key: FiltroModalidade; label: string }[]
-            ).map(({ key, label }) => {
+            {FILTROS_MODALIDADE.map(({ key, label }) => {
               const ativo = filtroModalidade === key;
               const count = contagensModalidade[key];
               return (

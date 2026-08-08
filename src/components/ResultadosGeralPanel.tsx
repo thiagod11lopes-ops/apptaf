@@ -9,9 +9,10 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Download, Filter, ChevronDown } from 'lucide-react-native';
+import { Download, Filter, ChevronDown, BarChart3 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { ResultadosGeralTable } from './ResultadosGeralTable';
+import { ResultadosResumoModal } from './ResultadosResumoModal';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 import { type ResultadoGeralItem } from '../utils/resultadoTafCadastro';
@@ -138,6 +139,7 @@ export function ResultadosGeralPanel({
   const [filtroBusca, setFiltroBusca] = useState('');
   const [filtroModalidade, setFiltroModalidade] = useState<FiltroModalidade>('todos');
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  const [resumoAberto, setResumoAberto] = useState(false);
 
   // Resetar filtro ao trocar de norma para evitar filtro inválido entre Armada e CFN
   useEffect(() => {
@@ -352,6 +354,30 @@ export function ResultadosGeralPanel({
           {avisoPdf}
         </Text>
       ) : null}
+
+      {/* Botão Resumo */}
+      <TouchableOpacity
+        onPress={() => setResumoAberto(true)}
+        accessibilityRole="button"
+        style={[
+          styles.resumoBtn,
+          {
+            backgroundColor: glass.highlight,
+            borderColor: glass.border,
+          },
+        ]}
+      >
+        <BarChart3 size={16} color={theme.primary} strokeWidth={2.4} />
+        <Text style={[styles.resumoBtnLabel, { color: theme.textSecondary }]}>
+          Resumo
+        </Text>
+      </TouchableOpacity>
+
+      <ResultadosResumoModal
+        visible={resumoAberto}
+        onClose={() => setResumoAberto(false)}
+        sessoes={sessoesDataset}
+      />
 
       {lista.length > 0 ? (
         <View style={styles.filtrosWrap}>
@@ -576,6 +602,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  resumoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  resumoBtnLabel: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   filtrosWrap: {
     marginBottom: 12,

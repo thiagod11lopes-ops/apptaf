@@ -39,6 +39,11 @@ type AggRow = {
   permanencia?: ModalidadeHistorico;
   corridaSessaoEm?: string;
   caminhadaSessaoEm?: string;
+  /** CFN */
+  flexaoBarra?: ModalidadeHistorico;
+  flexaoSolo?: ModalidadeHistorico;
+  abdominalRemador?: ModalidadeHistorico;
+  abdominalPrancha?: ModalidadeHistorico;
 };
 
 function temRequisitoCorridaOuCaminhada(agg: AggRow): boolean {
@@ -159,7 +164,22 @@ function aggParaLinha(agg: AggRow): ResultadoGeralItem {
   const temCaminhada = !!agg.caminhada;
   const temNatacao = !!agg.natacao;
   const temPerm = !!agg.permanencia;
+  const temFlexBarra = !!agg.flexaoBarra;
+  const temFlexSolo = !!agg.flexaoSolo;
+  const temAbdRemador = !!agg.abdominalRemador;
+  const temAbdPrancha = !!agg.abdominalPrancha;
   const requisitoCorrida = temRequisitoCorridaOuCaminhada(agg);
+  const isCfn = temFlexBarra || temFlexSolo || temAbdRemador || temAbdPrancha;
+
+  let statusTaf: 'Completo' | 'Parcial';
+  if (isCfn) {
+    const temForca = temFlexBarra || temFlexSolo;
+    const temAbdome = temAbdRemador || temAbdPrancha;
+    const temAqua = temNatacao || temPerm;
+    statusTaf = temForca && temAbdome && temAqua ? 'Completo' : 'Parcial';
+  } else {
+    statusTaf = requisitoCorrida && temNatacao && temPerm ? 'Completo' : 'Parcial';
+  }
 
   return {
     id: agg.id,
@@ -178,8 +198,15 @@ function aggParaLinha(agg: AggRow): ResultadoGeralItem {
     rubricaCaminhadaSvg: agg.caminhada?.rubricaSvg,
     rubricaNatacaoSvg: agg.natacao?.rubricaSvg,
     rubricaPermanenciaSvg: agg.permanencia?.rubricaSvg,
-    statusTaf:
-      requisitoCorrida && temNatacao && temPerm ? ('Completo' as const) : ('Parcial' as const),
+    notaFlexaoBarra: temFlexBarra ? agg.flexaoBarra!.nota : '—',
+    situacaoFlexaoBarra: temFlexBarra ? agg.flexaoBarra!.situacao : '—',
+    notaFlexaoSolo: temFlexSolo ? agg.flexaoSolo!.nota : '—',
+    situacaoFlexaoSolo: temFlexSolo ? agg.flexaoSolo!.situacao : '—',
+    notaAbdominalRemador: temAbdRemador ? agg.abdominalRemador!.nota : '—',
+    situacaoAbdominalRemador: temAbdRemador ? agg.abdominalRemador!.situacao : '—',
+    notaAbdominalPrancha: temAbdPrancha ? agg.abdominalPrancha!.nota : '—',
+    situacaoAbdominalPrancha: temAbdPrancha ? agg.abdominalPrancha!.situacao : '—',
+    statusTaf,
   };
 }
 
@@ -263,14 +290,21 @@ export function agregarHistoricoPorParticipante(
         agg.caminhadaSessaoEm = sessao.criadoEm;
       } else if (tipo === 'natacao') agg.natacao = slice;
       else if (tipo === 'permanencia') agg.permanencia = slice;
+      else if (tipo === 'flexao_barra') agg.flexaoBarra = slice;
+      else if (tipo === 'flexao_solo') agg.flexaoSolo = slice;
+      else if (tipo === 'abdominal_remador') agg.abdominalRemador = slice;
+      else if (tipo === 'abdominal_prancha') agg.abdominalPrancha = slice;
     }
   }
 
   enriquecerCorridaCaminhadaFromCadastros(map, cadastros, index);
   enriquecerPermanenciaFromCadastros(map, cadastros, index);
+  enriquecerCfnFromCadastros(map, cadastros, index);
 
   return [...map.values()].filter(
-    (agg) => agg.corrida || agg.caminhada || agg.natacao || agg.permanencia,
+    (agg) =>
+      agg.corrida || agg.caminhada || agg.natacao || agg.permanencia ||
+      agg.flexaoBarra || agg.flexaoSolo || agg.abdominalRemador || agg.abdominalPrancha,
   );
 }
 
@@ -360,6 +394,69 @@ function enriquecerPermanenciaFromCadastros(
       tempo: (c.tempoPermanencia ?? '').trim() || PERMANENCIA_TEMPO_PDF_PADRAO,
       rubricaSvg: c.rubricaPermanenciaSvg ?? agg.permanencia?.rubricaSvg,
     };
+  }
+}
+
+function enriquecerCfnFromCadastros(
+  map: Map<string, AggRow>,
+  cadastros: CadastroItemPersist[],
+  _index: CadastroLookupIndex,
+): void {
+  const byNipAgg = buildAggByNip(map);
+  for (const c of cadastros) {
+    const agg = findAggForCadastro(map, c, byNipAgg);
+    if (!agg) {
+      // cadastro CFN sem sessão — criar entrada nova se tiver algum resultado CFN
+      const temCfn =
+        (c.notaFlexaoBarra ?? '').trim() || c.repsFlexaoBarra != null ||
+        (c.notaFlexaoSolo ?? '').trim() || c.repsFlexaoSolo != null ||
+        (c.notaAbdominalRemador ?? '').trim() || c.repsAbdominalRemador != null ||
+        (c.notaAbdominalPrancha ?? '').trim() || (c.tempoAbdominalPrancha ?? '').trim();
+      if (!temCfn) continue;
+      const nipD = nipDigitos(c.nip ?? '');
+      const key = nipD.length >= 8 ? `nip:${nipD}` : `id:${c.id}`;
+      const novo: AggRow = {
+        id: c.id,
+        nip: c.nip ?? '—',
+        nome: c.nome ?? '—',
+      };
+      map.set(key, novo);
+      preencherCfnEmAgg(novo, c);
+      continue;
+    }
+    preencherCfnEmAgg(agg, c);
+  }
+}
+
+function preencherCfnEmAgg(agg: AggRow, c: CadastroItemPersist): void {
+  const notaFB = (c.notaFlexaoBarra ?? '').trim();
+  if (notaFB || c.repsFlexaoBarra != null) {
+    if (!agg.flexaoBarra?.nota || agg.flexaoBarra.nota === '—') {
+      agg.flexaoBarra = { nota: notaFB || '—', situacao: situacaoFromNotaCadastro(notaFB) };
+    }
+  }
+  const notaFS = (c.notaFlexaoSolo ?? '').trim();
+  if (notaFS || c.repsFlexaoSolo != null) {
+    if (!agg.flexaoSolo?.nota || agg.flexaoSolo.nota === '—') {
+      agg.flexaoSolo = { nota: notaFS || '—', situacao: situacaoFromNotaCadastro(notaFS) };
+    }
+  }
+  const notaAR = (c.notaAbdominalRemador ?? '').trim();
+  if (notaAR || c.repsAbdominalRemador != null) {
+    if (!agg.abdominalRemador?.nota || agg.abdominalRemador.nota === '—') {
+      agg.abdominalRemador = { nota: notaAR || '—', situacao: situacaoFromNotaCadastro(notaAR) };
+    }
+  }
+  const notaAP = (c.notaAbdominalPrancha ?? '').trim();
+  const tempoAP = (c.tempoAbdominalPrancha ?? '').trim();
+  if (notaAP || tempoAP) {
+    if (!agg.abdominalPrancha?.nota || agg.abdominalPrancha.nota === '—') {
+      agg.abdominalPrancha = {
+        nota: notaAP || '—',
+        situacao: situacaoFromNotaCadastro(notaAP),
+        tempo: tempoAP || undefined,
+      };
+    }
   }
 }
 

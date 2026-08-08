@@ -31,6 +31,15 @@ export type ResultadoTafLinha = {
   /** ISO da sessão do Histórico (desempate quando as datas coincidem). */
   corridaRegistradaEm?: string;
   caminhadaRegistradaEm?: string;
+  /** TAF CFN */
+  notaFlexaoBarra: string;
+  situacaoFlexaoBarra: string;
+  notaFlexaoSolo: string;
+  situacaoFlexaoSolo: string;
+  notaAbdominalRemador: string;
+  situacaoAbdominalRemador: string;
+  notaAbdominalPrancha: string;
+  situacaoAbdominalPrancha: string;
 };
 
 function tempos(c: CadastroItemPersist) {
@@ -211,6 +220,10 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
   const temCaminhada = !!(t.caminhada || (c.notaCaminhada || '').trim());
   const temNatacao = !!(t.natacao || (c.notaNatacao || '').trim());
   const temPerm = !!(resultadoPermanenciaCadastro(c) || t.permanencia);
+  const temFlexBarra = !!(c.repsFlexaoBarra != null || (c.notaFlexaoBarra || '').trim());
+  const temFlexSolo = !!(c.repsFlexaoSolo != null || (c.notaFlexaoSolo || '').trim());
+  const temAbdRemador = !!(c.repsAbdominalRemador != null || (c.notaAbdominalRemador || '').trim());
+  const temAbdPrancha = !!((c.tempoAbdominalPrancha || '').trim() || (c.notaAbdominalPrancha || '').trim());
 
   return {
     id: c.id,
@@ -232,6 +245,14 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
     dataTafCorrida: temCorrida ? (c.dataTafCorrida || '').trim() || undefined : undefined,
     dataTafCaminhada: temCaminhada ? (c.dataTafCaminhada || '').trim() || undefined : undefined,
     modalidadeDistanciaAtiva: c.modalidadeDistanciaAtiva,
+    notaFlexaoBarra: temFlexBarra ? (c.notaFlexaoBarra || '—').trim() || '—' : '—',
+    situacaoFlexaoBarra: situacaoDeNota(c.notaFlexaoBarra, temFlexBarra),
+    notaFlexaoSolo: temFlexSolo ? (c.notaFlexaoSolo || '—').trim() || '—' : '—',
+    situacaoFlexaoSolo: situacaoDeNota(c.notaFlexaoSolo, temFlexSolo),
+    notaAbdominalRemador: temAbdRemador ? (c.notaAbdominalRemador || '—').trim() || '—' : '—',
+    situacaoAbdominalRemador: situacaoDeNota(c.notaAbdominalRemador, temAbdRemador),
+    notaAbdominalPrancha: temAbdPrancha ? (c.notaAbdominalPrancha || '—').trim() || '—' : '—',
+    situacaoAbdominalPrancha: situacaoDeNota(c.notaAbdominalPrancha, temAbdPrancha),
   };
 }
 

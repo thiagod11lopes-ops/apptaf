@@ -33,28 +33,50 @@ import { TafGlassPanel } from './mobile/TafTabChrome';
 
 const MIN_BUSCA = 3;
 
-type FiltroModalidade = 'todos' | 'corrida' | 'caminhada' | 'natacao' | 'permanencia';
+type FiltroModalidade =
+  | 'todos'
+  | 'corrida'
+  | 'caminhada'
+  | 'natacao'
+  | 'permanencia'
+  | 'flexao_barra'
+  | 'flexao_solo'
+  | 'abdominal_remador'
+  | 'abdominal_prancha';
 
-const FILTROS_MODALIDADE: { key: FiltroModalidade; label: string }[] = [
-  { key: 'todos',      label: 'Todos' },
-  { key: 'corrida',    label: 'Corrida' },
-  { key: 'caminhada',  label: 'Caminhada' },
-  { key: 'natacao',    label: 'Natação' },
+const FILTROS_ARMADA: { key: FiltroModalidade; label: string }[] = [
+  { key: 'todos',       label: 'Todos' },
+  { key: 'corrida',     label: 'Corrida' },
+  { key: 'caminhada',   label: 'Caminhada' },
+  { key: 'natacao',     label: 'Natação' },
   { key: 'permanencia', label: 'Permanência' },
 ];
 
+const FILTROS_CFN: { key: FiltroModalidade; label: string }[] = [
+  { key: 'todos',             label: 'Todos' },
+  { key: 'flexao_barra',      label: 'Flexão na Barra' },
+  { key: 'flexao_solo',       label: 'Flexão no Solo' },
+  { key: 'abdominal_remador', label: 'Abd. Remador' },
+  { key: 'abdominal_prancha', label: 'Abd. Prancha' },
+  { key: 'natacao',           label: 'Natação' },
+  { key: 'permanencia',       label: 'Permanência' },
+];
+
+function filtrosParaNorma(norma: 'armada' | 'cfn'): { key: FiltroModalidade; label: string }[] {
+  return norma === 'cfn' ? FILTROS_CFN : FILTROS_ARMADA;
+}
+
 function temModalidadeItem(item: ResultadoGeralItem, filtro: FiltroModalidade): boolean {
   switch (filtro) {
-    case 'corrida':
-      return item.notaCorrida !== '—';
-    case 'caminhada':
-      return item.notaCaminhada !== '—';
-    case 'natacao':
-      return item.notaNatacao !== '—';
-    case 'permanencia':
-      return item.situacaoPermanencia !== '—';
-    default:
-      return true;
+    case 'corrida':           return item.notaCorrida !== '—';
+    case 'caminhada':         return item.notaCaminhada !== '—';
+    case 'natacao':           return item.notaNatacao !== '—';
+    case 'permanencia':       return item.situacaoPermanencia !== '—';
+    case 'flexao_barra':      return item.notaFlexaoBarra !== '—';
+    case 'flexao_solo':       return item.notaFlexaoSolo !== '—';
+    case 'abdominal_remador': return item.notaAbdominalRemador !== '—';
+    case 'abdominal_prancha': return item.notaAbdominalPrancha !== '—';
+    default:                  return true;
   }
 }
 
@@ -72,6 +94,14 @@ function linhaCombinaBusca(item: ResultadoGeralItem, q: string, qDigits: string)
     item.situacaoNatacao,
     item.permanenciaTempo,
     item.situacaoPermanencia,
+    item.notaFlexaoBarra,
+    item.situacaoFlexaoBarra,
+    item.notaFlexaoSolo,
+    item.situacaoFlexaoSolo,
+    item.notaAbdominalRemador,
+    item.situacaoAbdominalRemador,
+    item.notaAbdominalPrancha,
+    item.situacaoAbdominalPrancha,
   ]
     .join(' ')
     .toLowerCase();
@@ -108,6 +138,12 @@ export function ResultadosGeralPanel({
   const [filtroBusca, setFiltroBusca] = useState('');
   const [filtroModalidade, setFiltroModalidade] = useState<FiltroModalidade>('todos');
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+
+  // Resetar filtro ao trocar de norma para evitar filtro inválido entre Armada e CFN
+  useEffect(() => {
+    setFiltroModalidade('todos');
+    setFiltrosAbertos(false);
+  }, [normaTaf]);
   const [cadastroEmEdicao, setCadastroEmEdicao] = useState<CadastroItemPersist | null>(null);
   const [militarParaExcluir, setMilitarParaExcluir] = useState<ResultadoGeralItem | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -218,11 +254,15 @@ export function ResultadosGeralPanel({
   }, [filtroBusca]);
 
   const contagensModalidade = useMemo((): Record<FiltroModalidade, number> => ({
-    todos: lista.length,
-    corrida:    lista.filter((i) => temModalidadeItem(i, 'corrida')).length,
-    caminhada:  lista.filter((i) => temModalidadeItem(i, 'caminhada')).length,
-    natacao:    lista.filter((i) => temModalidadeItem(i, 'natacao')).length,
-    permanencia: lista.filter((i) => temModalidadeItem(i, 'permanencia')).length,
+    todos:             lista.length,
+    corrida:           lista.filter((i) => temModalidadeItem(i, 'corrida')).length,
+    caminhada:         lista.filter((i) => temModalidadeItem(i, 'caminhada')).length,
+    natacao:           lista.filter((i) => temModalidadeItem(i, 'natacao')).length,
+    permanencia:       lista.filter((i) => temModalidadeItem(i, 'permanencia')).length,
+    flexao_barra:      lista.filter((i) => temModalidadeItem(i, 'flexao_barra')).length,
+    flexao_solo:       lista.filter((i) => temModalidadeItem(i, 'flexao_solo')).length,
+    abdominal_remador: lista.filter((i) => temModalidadeItem(i, 'abdominal_remador')).length,
+    abdominal_prancha: lista.filter((i) => temModalidadeItem(i, 'abdominal_prancha')).length,
   }), [lista]);
 
   const linhasVisiveis = useMemo(() => {
@@ -344,7 +384,7 @@ export function ResultadosGeralPanel({
             >
               Filtrar por Modalidades
               {filtroModalidade !== 'todos'
-                ? `: ${FILTROS_MODALIDADE.find((f) => f.key === filtroModalidade)?.label}`
+                ? `: ${filtrosParaNorma(normaTaf).find((f) => f.key === filtroModalidade)?.label}`
                 : ''}
             </Text>
             {filtroModalidade !== 'todos' && (
@@ -371,7 +411,7 @@ export function ResultadosGeralPanel({
               ]}
             >
               <View style={styles.filtrosGrid}>
-                {FILTROS_MODALIDADE.map(({ key, label }) => {
+                {filtrosParaNorma(normaTaf).map(({ key, label }) => {
                   const ativo = filtroModalidade === key;
                   const count = contagensModalidade[key];
                   return (
@@ -461,6 +501,7 @@ export function ResultadosGeralPanel({
         <ResultadosGeralTable
           data={linhasVisiveis}
           buscaLower={buscaLower}
+          normaTaf={normaTaf}
           onVerHistorico={abrirHistorico}
           onEditar={abrirEdicao}
           onExcluir={setMilitarParaExcluir}

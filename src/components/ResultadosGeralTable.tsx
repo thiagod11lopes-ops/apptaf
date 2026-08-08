@@ -128,6 +128,7 @@ type ResultadoRowProps = {
   loss: string;
   glassBorder: string;
   glassBg: string;
+  normaTaf?: 'armada' | 'cfn';
   onEditar?: (item: ResultadoGeralItem) => void;
   onExcluir?: (item: ResultadoGeralItem) => void;
   onVerHistorico?: (item: ResultadoGeralItem) => void;
@@ -142,10 +143,12 @@ const ResultadoGeralRow = memo(function ResultadoGeralRow({
   loss,
   glassBorder,
   glassBg,
+  normaTaf,
   onEditar,
   onExcluir,
   onVerHistorico,
 }: ResultadoRowProps) {
+  const isCfn = normaTaf === 'cfn';
   const nomeComPosto = formatNomeComPostoParts(item.postoGrad, item.nome);
 
   const body = (
@@ -226,32 +229,75 @@ const ResultadoGeralRow = memo(function ResultadoGeralRow({
         />
 
         <View style={styles.modalityGrid}>
-          <ModalityBlock
-            label="CORRIDA"
-            nota={item.notaCorrida}
-            situacao={item.situacaoCorrida}
-            buscaLower={buscaLower}
-            dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'corrida')}
-          />
-          <ModalityBlock
-            label="CAMINHADA"
-            nota={item.notaCaminhada}
-            situacao={item.situacaoCaminhada}
-            buscaLower={buscaLower}
-            dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'caminhada')}
-          />
-          <ModalityBlock
-            label="NATAÇÃO"
-            nota={item.notaNatacao}
-            situacao={item.situacaoNatacao}
-            buscaLower={buscaLower}
-          />
-          <ModalityBlock
-            label="PERMANÊNCIA"
-            nota={item.permanenciaTempo}
-            situacao={item.situacaoPermanencia}
-            buscaLower={buscaLower}
-          />
+          {isCfn ? (
+            <>
+              <ModalityBlock
+                label="FLEXÃO NA BARRA"
+                nota={item.notaFlexaoBarra}
+                situacao={item.situacaoFlexaoBarra}
+                buscaLower={buscaLower}
+              />
+              <ModalityBlock
+                label="FLEXÃO NO SOLO"
+                nota={item.notaFlexaoSolo}
+                situacao={item.situacaoFlexaoSolo}
+                buscaLower={buscaLower}
+              />
+              <ModalityBlock
+                label="ABD. REMADOR"
+                nota={item.notaAbdominalRemador}
+                situacao={item.situacaoAbdominalRemador}
+                buscaLower={buscaLower}
+              />
+              <ModalityBlock
+                label="ABD. PRANCHA"
+                nota={item.notaAbdominalPrancha}
+                situacao={item.situacaoAbdominalPrancha}
+                buscaLower={buscaLower}
+              />
+              <ModalityBlock
+                label="NATAÇÃO"
+                nota={item.notaNatacao}
+                situacao={item.situacaoNatacao}
+                buscaLower={buscaLower}
+              />
+              <ModalityBlock
+                label="PERMANÊNCIA"
+                nota={item.permanenciaTempo}
+                situacao={item.situacaoPermanencia}
+                buscaLower={buscaLower}
+              />
+            </>
+          ) : (
+            <>
+              <ModalityBlock
+                label="CORRIDA"
+                nota={item.notaCorrida}
+                situacao={item.situacaoCorrida}
+                buscaLower={buscaLower}
+                dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'corrida')}
+              />
+              <ModalityBlock
+                label="CAMINHADA"
+                nota={item.notaCaminhada}
+                situacao={item.situacaoCaminhada}
+                buscaLower={buscaLower}
+                dispensavel={modalidadeCorridaCaminhadaDispensavel(item, 'caminhada')}
+              />
+              <ModalityBlock
+                label="NATAÇÃO"
+                nota={item.notaNatacao}
+                situacao={item.situacaoNatacao}
+                buscaLower={buscaLower}
+              />
+              <ModalityBlock
+                label="PERMANÊNCIA"
+                nota={item.permanenciaTempo}
+                situacao={item.situacaoPermanencia}
+                buscaLower={buscaLower}
+              />
+            </>
+          )}
         </View>
     </>
   );
@@ -282,6 +328,7 @@ function ResultadoRowSeparator() {
 type Props = {
   data: ResultadoGeralItem[];
   buscaLower: string;
+  normaTaf?: 'armada' | 'cfn';
   onEditar?: (item: ResultadoGeralItem) => void;
   onExcluir?: (item: ResultadoGeralItem) => void;
   onVerHistorico?: (item: ResultadoGeralItem) => void;
@@ -290,6 +337,7 @@ type Props = {
 export function ResultadosGeralTable({
   data,
   buscaLower,
+  normaTaf,
   onEditar,
   onExcluir,
   onVerHistorico,
@@ -309,6 +357,7 @@ export function ResultadosGeralTable({
         loss={theme.loss}
         glassBorder={glass.border}
         glassBg={glass.bg}
+        normaTaf={normaTaf}
         onEditar={onEditar}
         onExcluir={onExcluir}
         onVerHistorico={onVerHistorico}
@@ -316,6 +365,7 @@ export function ResultadosGeralTable({
     ),
     [
       buscaLower,
+      normaTaf,
       glass.border,
       glass.bg,
       onEditar,

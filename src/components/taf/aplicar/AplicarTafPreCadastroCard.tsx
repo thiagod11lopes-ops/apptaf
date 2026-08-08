@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Pencil } from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
@@ -16,6 +17,7 @@ type Props = {
   nomesPreview: string;
   onIniciar: () => void;
   onExcluir: () => void;
+  onEditar: () => void;
   accentColors: [string, string];
 };
 
@@ -26,6 +28,7 @@ export function AplicarTafPreCadastroCard({
   nomesPreview,
   onIniciar,
   onExcluir,
+  onEditar,
   accentColors,
 }: Props) {
   const { theme } = useTheme();
@@ -53,39 +56,49 @@ export function AplicarTafPreCadastroCard({
             <Text style={[styles.titulo, { color: ui.text }]}>{titulo}</Text>
             <Text style={[styles.meta, { color: theme.textSecondary }]}>{meta}</Text>
           </View>
-          <View
-            style={[
-              styles.numeroOrb,
-              Platform.OS === 'web'
-                ? ({
-                    boxShadow: `0 8px 22px ${accentColors[0]}55, 0 0 0 1px ${accentColors[1]}44`,
-                  } as object)
-                : {
-                    shadowColor: accentColors[0],
-                    shadowOffset: { width: 0, height: 6 },
-                    shadowOpacity: 0.35,
-                    shadowRadius: 12,
-                    elevation: 6,
-                  },
-            ]}
-            accessibilityLabel={`Pré-cadastro número ${numLabel}`}
-          >
-            <LinearGradient
-              colors={[...accentColors]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.numeroOrbFill}
+          <View style={styles.orbArea}>
+            <TouchableOpacity
+              onPress={onEditar}
+              style={styles.editBtn}
+              accessibilityLabel={`Editar pré-cadastro número ${numLabel}`}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+            >
+              <Pencil size={17} color={accentColors[0]} strokeWidth={2.3} />
+            </TouchableOpacity>
+            <View
+              style={[
+                styles.numeroOrb,
+                Platform.OS === 'web'
+                  ? ({
+                      boxShadow: `0 8px 22px ${accentColors[0]}55, 0 0 0 1px ${accentColors[1]}44`,
+                    } as object)
+                  : {
+                      shadowColor: accentColors[0],
+                      shadowOffset: { width: 0, height: 6 },
+                      shadowOpacity: 0.35,
+                      shadowRadius: 12,
+                      elevation: 6,
+                    },
+              ]}
+              accessibilityLabel={`Pré-cadastro número ${numLabel}`}
             >
               <LinearGradient
-                colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.06)', 'transparent']}
-                start={{ x: 0.2, y: 0 }}
-                end={{ x: 0.9, y: 1 }}
-                style={StyleSheet.absoluteFillObject}
-              />
-              <Text style={styles.numeroText} numberOfLines={1}>
-                {numLabel}
-              </Text>
-            </LinearGradient>
+                colors={[...accentColors]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.numeroOrbFill}
+              >
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.06)', 'transparent']}
+                  start={{ x: 0.2, y: 0 }}
+                  end={{ x: 0.9, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+                <Text style={styles.numeroText} numberOfLines={1}>
+                  {numLabel}
+                </Text>
+              </LinearGradient>
+            </View>
           </View>
         </View>
         <Text style={[styles.nomes, { color: theme.textMuted }]} numberOfLines={2}>
@@ -130,6 +143,19 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 4,
     paddingRight: 4,
+  },
+  orbArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  editBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   numeroOrb: {
     width: 44,

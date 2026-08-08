@@ -240,6 +240,7 @@ export default function AplicarTAFScreen() {
   const [listaPreCadastros, setListaPreCadastros] = useState<PreCadastroTaf[]>([]);
   const [preCadastroParaExcluir, setPreCadastroParaExcluir] = useState<PreCadastroTaf | null>(null);
   const [excluindoPreCadastro, setExcluindoPreCadastro] = useState(false);
+  const [preCadastroEditando, setPreCadastroEditando] = useState<PreCadastroTaf | null>(null);
   /** Nome OTAN do pré-cadastro (Alfa…Zulu) ou `Nenhum` (só numeração). */
   const [nomeCodigoPreCadastro, setNomeCodigoPreCadastro] = useState<
     NomeCodigoPreCadastro | 'Nenhum' | null
@@ -2885,6 +2886,7 @@ export default function AplicarTAFScreen() {
     tipoProvaRef.current = null;
     preCadastroOrigemIdRef.current = null;
     resetCronometroCorrida();
+    setPreCadastroEditando(null);
     setModoPreCadastro(true);
     setModoTafNaval(false);
     setMostrarListaPreCadastro(false);
@@ -2910,6 +2912,7 @@ export default function AplicarTAFScreen() {
     tipoProvaRef.current = null;
     preCadastroOrigemIdRef.current = null;
     resetCronometroCorrida();
+    setPreCadastroEditando(null);
     setModoPreCadastro(true);
     setModoTafNaval(true);
     setMostrarListaPreCadastro(false);
@@ -2957,7 +2960,9 @@ export default function AplicarTAFScreen() {
         return;
       }
       const nomeJaUsado = listaPreCadastros.some(
-        (p) => (p.nomeCodigo || '').trim() === nomeCodigoPreCadastro,
+        (p) =>
+          p.id !== preCadastroEditando?.id &&
+          (p.nomeCodigo || '').trim() === nomeCodigoPreCadastro,
       );
       if (nomeJaUsado) {
         Alert.alert(
@@ -2985,10 +2990,11 @@ export default function AplicarTAFScreen() {
         sexo: ok.sexo,
       };
     });
+    const editando = preCadastroEditando;
     const item: PreCadastroTaf = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      criadoEm: Date.now(),
-      numero: 0, // atribuído em addPreCadastroTaf (max existente + 1, ou 1 se vazio)
+      id: editando?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      criadoEm: editando?.criadoEm ?? Date.now(),
+      numero: editando?.numero ?? 0, // atribuído em addPreCadastroTaf quando 0
       nomeCodigo:
         nomeCodigoPreCadastro !== 'Nenhum' && isNomeCodigoPreCadastro(nomeCodigoPreCadastro)
           ? nomeCodigoPreCadastro
@@ -3003,6 +3009,7 @@ export default function AplicarTAFScreen() {
       Alert.alert('Erro', 'Não foi possível salvar o pré-cadastro. Tente novamente.');
       return;
     }
+    setPreCadastroEditando(null);
     setModoPreCadastro(false);
     setModoTafNaval(false);
     setMostrarProvas(false);
@@ -3012,7 +3019,12 @@ export default function AplicarTAFScreen() {
     setNomeCodigoPreCadastro(null);
     await recarregarListaPreCadastros();
     setMostrarListaPreCadastro(true);
-    Alert.alert('Pré-cadastro salvo', 'Os participantes foram salvos. Use "Iniciar Prova" quando for aplicar o TAF.');
+    Alert.alert(
+      editando ? 'Pré-cadastro atualizado' : 'Pré-cadastro salvo',
+      editando
+        ? 'As alterações foram salvas com sucesso.'
+        : 'Os participantes foram salvos. Use "Iniciar Prova" quando for aplicar o TAF.',
+    );
   }, [
     tipoProva,
     nParticipantesConfirmado,
@@ -3022,6 +3034,7 @@ export default function AplicarTAFScreen() {
     modoTafNaval,
     nomeCodigoPreCadastro,
     listaPreCadastros,
+    preCadastroEditando,
   ]);
 
   const iniciarProvaFromPreCadastro = useCallback(
@@ -3114,6 +3127,60 @@ export default function AplicarTAFScreen() {
   const excluirPreCadastro = useCallback((pre: PreCadastroTaf) => {
     setPreCadastroParaExcluir(pre);
   }, []);
+
+  const editarPreCadastro = useCallback(
+    (pre: PreCadastroTaf) => {
+      void (async () => {
+        let lista: CadastroItemPersist[] = [];
+        try {
+          lista = await getAllCadastros({ includeDemo: true });
+        } catch { lista = []; }
+
+        setPreCadastroEditando(pre);
+        tipoProvaRef.current = pre.tipoProva;
+        setTipoProva(pre.tipoProva);
+        setModoTafNaval((pre.normaTaf ?? 'armada') === 'cfn');
+        setModoPreCadastro(true);
+        setMostrarListaPreCadastro(false);
+        setMostrarFatoresRisco(false);
+        setMostrarRestritos(false);
+        setMostrarProvas(true);
+        setNomeCodigoPreCadastro(
+          pre.nomeCodigo && isNomeCodigoPreCadastro(pre.nomeCodigo)
+            ? pre.nomeCodigo
+            : 'Nenhum',
+        );
+        setNipsParticipantes(pre.participantes.map((p) => p.nip));
+        setNipFeedbackLinhas(
+          pre.participantes.map((p) => {
+            const busca = buscarCadastroPorNomeOuNip(lista, p.nip);
+            if (busca.kind === 'found') {
+              const campos = camposCadastroParaFeedback(busca.cadastro);
+              return {
+                tipo: 'ok' as const,
+                texto: 'Militar Cadastrado no Sistema.',
+                ...campos,
+                dataNascimento: p.dataNascimento || campos.dataNascimento,
+                sexo: p.sexo ?? campos.sexo,
+              };
+            }
+            return {
+              tipo: 'ok' as const,
+              texto: 'Militar Cadastrado no Sistema.',
+              nomeMilitar: p.nomeMilitar,
+              nome: p.nomeMilitar,
+              categoria: 'Praças' as const,
+              dataNascimento: p.dataNascimento,
+              sexo: p.sexo,
+            };
+          }),
+        );
+        setCorridaEtapa('nips');
+        resetCronometroCorrida();
+      })();
+    },
+    [resetCronometroCorrida],
+  );
 
   const executarExclusaoPreCadastro = useCallback(async () => {
     if (!preCadastroParaExcluir || excluindoPreCadastro) return;
@@ -3370,10 +3437,12 @@ export default function AplicarTAFScreen() {
     });
   }, []);
 
-  const opcoesNomeCodigoPreCadastro = useMemo(
-    () => (['Nenhum', ...nomesCodigoDisponiveis(listaPreCadastros)] as const),
-    [listaPreCadastros],
-  );
+  const opcoesNomeCodigoPreCadastro = useMemo(() => {
+    const listaParaDisponiveis = preCadastroEditando
+      ? listaPreCadastros.filter((p) => p.id !== preCadastroEditando.id)
+      : listaPreCadastros;
+    return ['Nenhum', ...nomesCodigoDisponiveis(listaParaDisponiveis)] as const;
+  }, [listaPreCadastros, preCadastroEditando]);
 
   const nomeCodigoSelectWebStyle = useMemo(
     () =>
@@ -3599,6 +3668,7 @@ export default function AplicarTAFScreen() {
                     accentColors={PRE_CADASTRO_ACCENTS[pre.tipoProva] ?? PRE_CADASTRO_ACCENTS.corrida}
                     onIniciar={() => iniciarProvaFromPreCadastro(pre)}
                     onExcluir={() => excluirPreCadastro(pre)}
+                    onEditar={() => editarPreCadastro(pre)}
                   />
                 ))
               )}
@@ -3636,14 +3706,14 @@ export default function AplicarTAFScreen() {
               <AplicarTafSectionHeader
                 kicker={
                   modoPreCadastro
-                    ? modoTafNaval
-                      ? 'PRÉ-CADASTRO CFN'
-                      : 'PRÉ-CADASTRO ARMADA'
+                    ? preCadastroEditando
+                      ? modoTafNaval ? 'EDITAR PRÉ-CADASTRO CFN' : 'EDITAR PRÉ-CADASTRO'
+                      : modoTafNaval ? 'PRÉ-CADASTRO CFN' : 'PRÉ-CADASTRO ARMADA'
                     : modoTafNaval
                       ? 'TAF NAVAL'
                       : 'PROVA AO VIVO'
                 }
-                title={modoPreCadastro ? 'Selecione a atividade' : modoTafNaval ? 'Provas dos Fuzileiros Navais' : 'Selecione a prova'}
+                title={modoPreCadastro ? (preCadastroEditando ? 'Selecione a atividade' : 'Selecione a atividade') : modoTafNaval ? 'Provas dos Fuzileiros Navais' : 'Selecione a prova'}
                 subtitle={
                   modoPreCadastro
                     ? modoTafNaval

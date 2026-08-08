@@ -170,6 +170,74 @@ function NormaSection({
   );
 }
 
+/* ─── sub-componente: detalhe do dia selecionado ─── */
+function contarParticipantesPorModalidade(
+  sessoes: SessaoAplicacaoTaf[],
+): { tipo: TipoProvaAplicada; norma: 'armada' | 'cfn'; total: number }[] {
+  const mapa = new Map<TipoProvaAplicada, Set<string>>();
+  const normaMap = new Map<TipoProvaAplicada, 'armada' | 'cfn'>();
+  for (const s of sessoes) {
+    const norma = inferNormaSessao(s);
+    const tipo = s.tipoProva;
+    if (!mapa.has(tipo)) {
+      mapa.set(tipo, new Set());
+      normaMap.set(tipo, norma);
+    }
+    const set = mapa.get(tipo)!;
+    for (const r of s.resultados) {
+      const chave = (r.nip ?? '').trim() || (r.nome ?? '').trim().toLowerCase();
+      if (chave) set.add(chave);
+    }
+  }
+  return Array.from(mapa.entries()).map(([tipo, nips]) => ({
+    tipo,
+    norma: normaMap.get(tipo)!,
+    total: nips.size,
+  }));
+}
+
+function DetalhesDia({
+  diaIso,
+  sessoes,
+  glass,
+}: {
+  diaIso: string;
+  sessoes: SessaoAplicacaoTaf[];
+  glass: { highlight: string; border: string };
+}) {
+  const { theme } = useTheme();
+  const ui = getUiColors(theme);
+  const linhas = useMemo(() => contarParticipantesPorModalidade(sessoes), [sessoes]);
+
+  return (
+    <View style={[styles.diaDetalhe, { backgroundColor: glass.highlight, borderColor: glass.border }]}>
+      <Text style={[styles.diaDetalheHeader, { color: theme.primary }]}>
+        {diaIso.split('-').reverse().join('/')}
+      </Text>
+      {linhas.map(({ tipo, norma, total }) => {
+        const cor = norma === 'cfn' ? '#F59E0B' : theme.primary;
+        return (
+          <View key={tipo} style={[styles.diaDetalheItem, { borderColor: glass.border }]}>
+            <View style={[styles.diaDetalheNormaTag, { backgroundColor: cor + '22', borderColor: cor + '55' }]}>
+              <Text style={[styles.diaDetalheNormaText, { color: cor }]}>
+                {norma === 'cfn' ? 'CFN' : 'ARMADA'}
+              </Text>
+            </View>
+            <View style={styles.diaDetalheTexto}>
+              <Text style={[styles.diaDetalheTipoProva, { color: ui.text }]}>
+                {tituloTipoProva(tipo)}
+              </Text>
+              <Text style={[styles.diaDetalheQtd, { color: theme.textMuted }]}>
+                {total} participante{total !== 1 ? 's' : ''}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 /* ─── sub-componente: calendário ─── */
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
@@ -329,35 +397,13 @@ function CalendarioResumo({
         </View>
       </View>
 
-      {/* detalhe do dia */}
+      {/* detalhe do dia — participantes únicos por modalidade */}
       {diaAtivo && sessoesAtivas.length > 0 ? (
-        <View style={[styles.diaDetalhe, { backgroundColor: glass.highlight, borderColor: glass.border }]}>
-          <Text style={[styles.diaDetalheHeader, { color: theme.primary }]}>
-            {diaAtivo.split('-').reverse().join('/')}
-          </Text>
-          {sessoesAtivas.map((s) => {
-            const norma = inferNormaSessao(s);
-            const cor = norma === 'cfn' ? '#F59E0B' : theme.primary;
-            const qtd = s.resultados.length;
-            return (
-              <View key={s.id} style={[styles.diaDetalheItem, { borderColor: glass.border }]}>
-                <View style={[styles.diaDetalheNormaTag, { backgroundColor: cor + '22', borderColor: cor + '55' }]}>
-                  <Text style={[styles.diaDetalheNormaText, { color: cor }]}>
-                    {norma === 'cfn' ? 'CFN' : 'ARMADA'}
-                  </Text>
-                </View>
-                <View style={styles.diaDetalheTexto}>
-                  <Text style={[styles.diaDetalheTipoProva, { color: ui.text }]}>
-                    {tituloTipoProva(s.tipoProva)}
-                  </Text>
-                  <Text style={[styles.diaDetalheQtd, { color: theme.textMuted }]}>
-                    {qtd} participante{qtd !== 1 ? 's' : ''}
-                  </Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
+        <DetalhesDia
+          diaIso={diaAtivo}
+          sessoes={sessoesAtivas}
+          glass={glass}
+        />
       ) : null}
 
       {/* hint */}

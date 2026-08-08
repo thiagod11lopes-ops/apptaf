@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Platform, StyleSheet, View, ActivityIndicator } from 'react-native';
 import {
+  BarChart3,
   BookOpen,
   ClipboardList,
   Cloud,
@@ -62,6 +63,8 @@ type Props = {
   inline?: boolean;
   /** Centraliza os ícones na faixa (Home). */
   centered?: boolean;
+  /** Callback opcional: exibe botão de Resumo à esquerda do login. */
+  onResumo?: () => void;
 };
 
 function wrapTooltip(
@@ -82,6 +85,7 @@ export function TopActionIcons({
   activeRoute,
   inline = false,
   centered = false,
+  onResumo,
 }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss, firebaseEnabled } = useAuth();
@@ -268,6 +272,20 @@ export function TopActionIcons({
           </React.Fragment>
         );
       })}
+      {onResumo
+        ? wrapTooltip(
+            inline,
+            'Resumo',
+            'Ver resumo geral dos testes aplicados',
+            <PressableScale
+              onPress={onResumo}
+              style={btnStyle}
+              accessibilityLabel="Resumo dos testes"
+            >
+              <BarChart3 size={iconSize} color={tabInk} strokeWidth={strokeWidth} />
+            </PressableScale>,
+          )
+        : null}
       {activeRoute !== 'Login'
         ? wrapTooltip(
             inline,

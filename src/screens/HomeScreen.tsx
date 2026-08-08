@@ -27,6 +27,9 @@ import {
   isCloudLinkEnabled,
   subscribeCloudLink,
 } from '../offline-first/sync/cloudLinkPreference';
+import { peekSessoesListCache } from '../services/sessoesListCache';
+import { ResultadosResumoModal } from '../components/ResultadosResumoModal';
+import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 const tafImage = require('../../TAF1.png');
 
 const RESUMO_INICIAL: ResumoInicioTafHistorico = {
@@ -78,6 +81,20 @@ export default function HomeScreen() {
   /** Só inicia I/O dos cards após o 1º paint. */
   const cardsPaintReadyRef = useRef(false);
   const [cardsPaintReady, setCardsPaintReady] = useState(false);
+  const [resumoModalAberto, setResumoModalAberto] = useState(false);
+  const [sessoesResumo, setSessoesResumo] = useState<SessaoAplicacaoTaf[]>([]);
+
+  const handleAbrirResumo = useCallback(async () => {
+    const cached = peekSessoesListCache({ includeDemo: false });
+    if (cached) {
+      setSessoesResumo(cached);
+    } else {
+      const { getAllSessoesAplicacao } = await import('../services/resultadosAplicadosIndexedDb');
+      const all = await getAllSessoesAplicacao({ includeDemo: false });
+      setSessoesResumo(all);
+    }
+    setResumoModalAberto(true);
+  }, []);
 
   const pctConcluidos = useMemo(() => {
     const total = resumo.totalCadastrados;
@@ -306,8 +323,14 @@ export default function HomeScreen() {
             </Text>
           ) : null}
         </View>
-        <TopActionIcons activeRoute="Home" inline centered />
+        <TopActionIcons activeRoute="Home" inline centered onResumo={handleAbrirResumo} />
       </View>
+
+      <ResultadosResumoModal
+        visible={resumoModalAberto}
+        onClose={() => setResumoModalAberto(false)}
+        sessoes={sessoesResumo}
+      />
 
       <TafGlassPanel accent="cyan" style={styles.statsPanel}>
         <View style={styles.statsGrid}>

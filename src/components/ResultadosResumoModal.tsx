@@ -8,7 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft, ChevronRight, X, BarChart3 } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, ChevronDown, X, BarChart3 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppModal } from './premium/AppModal';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
@@ -370,6 +370,50 @@ function CalendarioResumo({
   );
 }
 
+/* ─── sub-componente: seção colapsável do calendário ─── */
+function CalendarioSection({
+  sessoes,
+  sessoesArmada,
+  sessoesCfn,
+}: {
+  sessoes: SessaoAplicacaoTaf[];
+  sessoesArmada: SessaoAplicacaoTaf[];
+  sessoesCfn: SessaoAplicacaoTaf[];
+}) {
+  const { theme } = useTheme();
+  const glass = getAplicarTafGlass(theme);
+  const [aberto, setAberto] = useState(false);
+
+  return (
+    <View style={[styles.calContainer, { backgroundColor: glass.highlight, borderColor: glass.border }]}>
+      {/* botão de expansão */}
+      <TouchableOpacity
+        onPress={() => setAberto((v) => !v)}
+        style={styles.calToggleBtn}
+        accessibilityRole="button"
+      >
+        <Text style={[styles.calSectionTitle, { color: theme.primary }]}>
+          Calendário de Testes
+        </Text>
+        <ChevronDown
+          size={18}
+          color={theme.primary}
+          strokeWidth={2.4}
+          style={{ transform: [{ rotate: aberto ? '180deg' : '0deg' }] }}
+        />
+      </TouchableOpacity>
+
+      {aberto ? (
+        <CalendarioResumo
+          sessoes={sessoes}
+          sessoesArmada={sessoesArmada}
+          sessoesCfn={sessoesCfn}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 /* ─── componente principal: modal ─── */
 type Props = {
   visible: boolean;
@@ -453,14 +497,11 @@ export function ResultadosResumoModal({ visible, onClose, sessoes }: Props) {
               </View>
             )}
 
-            <View style={[styles.calContainer, { backgroundColor: glass.highlight, borderColor: glass.border }]}>
-              <Text style={[styles.calSectionTitle, { color: theme.primary }]}>Calendário de Testes</Text>
-              <CalendarioResumo
-                sessoes={sessoesReais}
-                sessoesArmada={sessoesArmada}
-                sessoesCfn={sessoesCfn}
-              />
-            </View>
+            <CalendarioSection
+              sessoes={sessoesReais}
+              sessoesArmada={sessoesArmada}
+              sessoesCfn={sessoesCfn}
+            />
           </ScrollView>
         </View>
       </View>
@@ -578,6 +619,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     gap: 12,
+  },
+  calToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   calSectionTitle: { fontSize: 14, fontWeight: '800' },
   calHeader: {

@@ -114,14 +114,6 @@ function ModalidadeRow({
         </Text>
         <View style={styles.modalidadeNums}>
           <Text style={[styles.modalidadeNum, { color: theme.text }]}>
-            {filtradas.length}
-            <Text style={[styles.modalidadeNumUnit, { color: theme.textMuted }]}>
-              {' '}
-              {filtradas.length === 1 ? 'sessão' : 'sessões'}
-            </Text>
-          </Text>
-          <Text style={[styles.modalidadeNumSep, { color: theme.textMuted }]}>·</Text>
-          <Text style={[styles.modalidadeNum, { color: theme.text }]}>
             {participantes}
             <Text style={[styles.modalidadeNumUnit, { color: theme.textMuted }]}>
               {' '}
@@ -156,13 +148,6 @@ function NormaSection({
           <Text style={styles.normaBadgeText}>{isCfn ? 'CFN' : 'ARMADA'}</Text>
         </View>
         <View style={styles.normaTotals}>
-          <Text style={[styles.normaTotalNum, { color: theme.text }]}>
-            {sessoes.length}
-            <Text style={[styles.normaTotalUnit, { color: theme.textMuted }]}>
-              {' '}{sessoes.length === 1 ? 'sessão' : 'sessões'}
-            </Text>
-          </Text>
-          <Text style={[styles.normaTotalSep, { color: theme.textMuted }]}> · </Text>
           <Text style={[styles.normaTotalNum, { color: theme.text }]}>
             {totalPart}
             <Text style={[styles.normaTotalUnit, { color: theme.textMuted }]}>

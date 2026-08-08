@@ -7,10 +7,9 @@ import {
   Platform,
   ActivityIndicator,
   TouchableOpacity,
-  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Download } from 'lucide-react-native';
+import { Download, Filter, ChevronDown } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { ResultadosGeralTable } from './ResultadosGeralTable';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
@@ -108,6 +107,7 @@ export function ResultadosGeralPanel({
   const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>([]);
   const [filtroBusca, setFiltroBusca] = useState('');
   const [filtroModalidade, setFiltroModalidade] = useState<FiltroModalidade>('todos');
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [cadastroEmEdicao, setCadastroEmEdicao] = useState<CadastroItemPersist | null>(null);
   const [militarParaExcluir, setMilitarParaExcluir] = useState<ResultadoGeralItem | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -315,58 +315,115 @@ export function ResultadosGeralPanel({
 
       {lista.length > 0 ? (
         <View style={styles.filtrosWrap}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filtrosRow}
+          {/* Botão "Filtrar por Modalidades" */}
+          <TouchableOpacity
+            onPress={() => setFiltrosAbertos((v) => !v)}
+            accessibilityRole="button"
+            style={[
+              styles.filtrosBotao,
+              {
+                backgroundColor: filtroModalidade !== 'todos'
+                  ? theme.primary
+                  : glass.highlight,
+                borderColor: filtroModalidade !== 'todos'
+                  ? theme.primary
+                  : glass.border,
+              },
+            ]}
           >
-            {FILTROS_MODALIDADE.map(({ key, label }) => {
-              const ativo = filtroModalidade === key;
-              const count = contagensModalidade[key];
-              return (
-                <TouchableOpacity
-                  key={key}
-                  onPress={() => setFiltroModalidade(key)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: ativo }}
-                  style={[
-                    styles.filtroChip,
-                    ativo
-                      ? { backgroundColor: theme.primary, borderColor: theme.primary }
-                      : { backgroundColor: glass.highlight, borderColor: glass.border },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.filtroChipLabel,
-                      { color: ativo ? '#FFFFFF' : theme.textSecondary },
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                  <View
-                    style={[
-                      styles.filtroChipBadge,
-                      {
-                        backgroundColor: ativo
-                          ? 'rgba(255,255,255,0.25)'
-                          : theme.primary + '22',
-                      },
-                    ]}
-                  >
-                    <Text
+            <Filter
+              size={15}
+              color={filtroModalidade !== 'todos' ? '#FFFFFF' : theme.primary}
+              strokeWidth={2.4}
+            />
+            <Text
+              style={[
+                styles.filtrosBotaoLabel,
+                { color: filtroModalidade !== 'todos' ? '#FFFFFF' : theme.textSecondary },
+              ]}
+            >
+              Filtrar por Modalidades
+              {filtroModalidade !== 'todos'
+                ? `: ${FILTROS_MODALIDADE.find((f) => f.key === filtroModalidade)?.label}`
+                : ''}
+            </Text>
+            {filtroModalidade !== 'todos' && (
+              <View style={[styles.filtroChipBadge, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+                <Text style={[styles.filtroChipBadgeText, { color: '#FFFFFF' }]}>
+                  {contagensModalidade[filtroModalidade]}
+                </Text>
+              </View>
+            )}
+            <ChevronDown
+              size={16}
+              color={filtroModalidade !== 'todos' ? '#FFFFFF' : theme.textMuted}
+              strokeWidth={2.4}
+              style={{ marginLeft: 'auto', transform: [{ rotate: filtrosAbertos ? '180deg' : '0deg' }] }}
+            />
+          </TouchableOpacity>
+
+          {/* Painel expansível com todos os chips */}
+          {filtrosAbertos && (
+            <View
+              style={[
+                styles.filtrosPainel,
+                { backgroundColor: glass.highlight, borderColor: glass.border },
+              ]}
+            >
+              <View style={styles.filtrosGrid}>
+                {FILTROS_MODALIDADE.map(({ key, label }) => {
+                  const ativo = filtroModalidade === key;
+                  const count = contagensModalidade[key];
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => {
+                        setFiltroModalidade(key);
+                        setFiltrosAbertos(false);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: ativo }}
                       style={[
-                        styles.filtroChipBadgeText,
-                        { color: ativo ? '#FFFFFF' : theme.primary },
+                        styles.filtroChip,
+                        styles.filtroChipGrid,
+                        ativo
+                          ? { backgroundColor: theme.primary, borderColor: theme.primary }
+                          : { backgroundColor: glass.bg, borderColor: glass.border },
                       ]}
                     >
-                      {count}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                      <Text
+                        style={[
+                          styles.filtroChipLabel,
+                          { color: ativo ? '#FFFFFF' : theme.textSecondary },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                      <View
+                        style={[
+                          styles.filtroChipBadge,
+                          {
+                            backgroundColor: ativo
+                              ? 'rgba(255,255,255,0.25)'
+                              : theme.primary + '22',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.filtroChipBadgeText,
+                            { color: ativo ? '#FFFFFF' : theme.primary },
+                          ]}
+                        >
+                          {count}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
         </View>
       ) : null}
 
@@ -481,30 +538,55 @@ const styles = StyleSheet.create({
   },
   filtrosWrap: {
     marginBottom: 12,
+    gap: 6,
   },
-  filtrosRow: {
+  filtrosBotao: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+  },
+  filtrosBotaoLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+  },
+  filtrosPainel: {
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    padding: 12,
+  },
+  filtrosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   filtroChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: PREMIUM.radiusMd,
     borderWidth: 1,
+  },
+  filtroChipGrid: {
+    minWidth: '45%',
+    flexGrow: 1,
   },
   filtroChipLabel: {
     fontSize: 13,
     fontWeight: '700',
+    flex: 1,
   },
   filtroChipBadge: {
     borderRadius: 8,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    minWidth: 24,
+    minWidth: 26,
     alignItems: 'center',
   },
   filtroChipBadgeText: {

@@ -596,8 +596,21 @@ function classificarAggNoResumo(agg: AggRow): 'completo' | 'parcial' | 'vazio' {
   const requisitoCorrida = temRequisitoCorridaOuCaminhada(agg);
   const temNatacao = !!agg.natacao;
   const temPerm = !!agg.permanencia;
+  // Armada: completo = corrida/caminhada + natação + permanência
   if (requisitoCorrida && temNatacao && temPerm) return 'completo';
-  if (requisitoCorrida || temNatacao || temPerm) return 'parcial';
+
+  // CFN: completo = força (barra ou solo) + abdome (remador ou prancha) + aquático
+  const temForca = !!(agg.flexaoBarra || agg.flexaoSolo);
+  const temAbdome = !!(agg.abdominalRemador || agg.abdominalPrancha);
+  const temAqua = temNatacao || temPerm;
+  if (temForca && temAbdome && temAqua) return 'completo';
+
+  // Parcial: ao menos uma modalidade de qualquer norma
+  if (
+    requisitoCorrida || temNatacao || temPerm ||
+    temForca || temAbdome
+  ) return 'parcial';
+
   return 'vazio';
 }
 
@@ -615,7 +628,11 @@ function aggTemReprovacao(agg: AggRow): boolean {
     modalidadeEhReprovada(agg.corrida) ||
     modalidadeEhReprovada(agg.caminhada) ||
     modalidadeEhReprovada(agg.natacao) ||
-    modalidadeEhReprovada(agg.permanencia)
+    modalidadeEhReprovada(agg.permanencia) ||
+    modalidadeEhReprovada(agg.flexaoBarra) ||
+    modalidadeEhReprovada(agg.flexaoSolo) ||
+    modalidadeEhReprovada(agg.abdominalRemador) ||
+    modalidadeEhReprovada(agg.abdominalPrancha)
   );
 }
 

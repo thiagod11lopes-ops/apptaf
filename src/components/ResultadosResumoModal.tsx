@@ -208,12 +208,20 @@ function DetalhesDia({
   const { theme } = useTheme();
   const ui = getUiColors(theme);
   const linhas = useMemo(() => contarParticipantesPorModalidade(sessoes), [sessoes]);
+  const totalDia = useMemo(() => contarParticipantes(sessoes), [sessoes]);
 
   return (
     <View style={[styles.diaDetalhe, { backgroundColor: glass.highlight, borderColor: glass.border }]}>
-      <Text style={[styles.diaDetalheHeader, { color: theme.primary }]}>
-        {diaIso.split('-').reverse().join('/')}
-      </Text>
+      <View style={styles.diaDetalheHeaderRow}>
+        <Text style={[styles.diaDetalheHeader, { color: theme.primary }]}>
+          {diaIso.split('-').reverse().join('/')}
+        </Text>
+        <View style={[styles.diaDetalheTotalBadge, { backgroundColor: theme.primary + '22', borderColor: theme.primary + '55' }]}>
+          <Text style={[styles.diaDetalheTotalText, { color: theme.primary }]}>
+            {totalDia} participante{totalDia !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      </View>
       {linhas.map(({ tipo, norma, total }) => {
         const cor = norma === 'cfn' ? '#F59E0B' : theme.primary;
         return (
@@ -725,10 +733,26 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+  diaDetalheHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
   diaDetalheHeader: {
     fontSize: 14,
     fontWeight: '800',
-    marginBottom: 4,
+  },
+  diaDetalheTotalBadge: {
+    borderRadius: PREMIUM.radiusSm,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  diaDetalheTotalText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   diaDetalheItem: {
     flexDirection: 'row',

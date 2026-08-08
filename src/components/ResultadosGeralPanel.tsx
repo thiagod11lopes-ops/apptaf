@@ -7,6 +7,7 @@ import {
   Platform,
   ActivityIndicator,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Download } from 'lucide-react-native';
@@ -32,6 +33,21 @@ import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from './mobile/TafTabChrome';
 
 const MIN_BUSCA = 3;
+
+type FiltroModalidade = 'todos' | 'corrida' | 'natacao' | 'permanencia';
+
+function temModalidadeItem(item: ResultadoGeralItem, filtro: FiltroModalidade): boolean {
+  switch (filtro) {
+    case 'corrida':
+      return item.notaCorrida !== '—' || item.notaCaminhada !== '—';
+    case 'natacao':
+      return item.notaNatacao !== '—';
+    case 'permanencia':
+      return item.situacaoPermanencia !== '—';
+    default:
+      return true;
+  }
+}
 
 function linhaCombinaBusca(item: ResultadoGeralItem, q: string, qDigits: string): boolean {
   const haystack = [
@@ -81,6 +97,7 @@ export function ResultadosGeralPanel({
   const [cadastros, setCadastros] = useState<CadastroItemPersist[]>([]);
   const [sessoes, setSessoes] = useState<SessaoAplicacaoTaf[]>([]);
   const [filtroBusca, setFiltroBusca] = useState('');
+  const [filtroModalidade, setFiltroModalidade] = useState<FiltroModalidade>('todos');
   const [cadastroEmEdicao, setCadastroEmEdicao] = useState<CadastroItemPersist | null>(null);
   const [militarParaExcluir, setMilitarParaExcluir] = useState<ResultadoGeralItem | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -190,12 +207,23 @@ export function ResultadosGeralPanel({
     return q;
   }, [filtroBusca]);
 
+  const contagensModalidade = useMemo(() => ({
+    todos: lista.length,
+    corrida: lista.filter((i) => temModalidadeItem(i, 'corrida')).length,
+    natacao: lista.filter((i) => temModalidadeItem(i, 'natacao')).length,
+    permanencia: lista.filter((i) => temModalidadeItem(i, 'permanencia')).length,
+  }), [lista]);
+
   const linhasVisiveis = useMemo(() => {
+    let base = lista;
+    if (filtroModalidade !== 'todos') {
+      base = base.filter((item) => temModalidadeItem(item, filtroModalidade));
+    }
     const q = filtroBusca.trim().toLowerCase();
-    if (!q || q.length < MIN_BUSCA) return lista;
+    if (!q || q.length < MIN_BUSCA) return base;
     const qDigits = q.replace(/\D/g, '');
-    return lista.filter((item) => linhaCombinaBusca(item, q, qDigits));
-  }, [lista, filtroBusca]);
+    return base.filter((item) => linhaCombinaBusca(item, q, qDigits));
+  }, [lista, filtroBusca, filtroModalidade]);
 
   const buscaAtiva = filtroBusca.trim().length >= MIN_BUSCA;
 
@@ -274,6 +302,70 @@ export function ResultadosGeralPanel({
         </Text>
       ) : null}
 
+      {lista.length > 0 ? (
+        <View style={styles.filtrosWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtrosRow}
+          >
+            {(
+              [
+                { key: 'todos', label: 'Todos' },
+                { key: 'corrida', label: 'Corrida' },
+                { key: 'natacao', label: 'Natação' },
+                { key: 'permanencia', label: 'Permanência' },
+              ] as { key: FiltroModalidade; label: string }[]
+            ).map(({ key, label }) => {
+              const ativo = filtroModalidade === key;
+              const count = contagensModalidade[key];
+              return (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setFiltroModalidade(key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: ativo }}
+                  style={[
+                    styles.filtroChip,
+                    ativo
+                      ? { backgroundColor: theme.primary, borderColor: theme.primary }
+                      : { backgroundColor: glass.highlight, borderColor: glass.border },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filtroChipLabel,
+                      { color: ativo ? '#FFFFFF' : theme.textSecondary },
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.filtroChipBadge,
+                      {
+                        backgroundColor: ativo
+                          ? 'rgba(255,255,255,0.25)'
+                          : theme.primary + '22',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filtroChipBadgeText,
+                        { color: ativo ? '#FFFFFF' : theme.primary },
+                      ]}
+                    >
+                      {count}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
+
       {filtroBusca.trim().length > 0 && filtroBusca.trim().length < MIN_BUSCA ? (
         <Text style={[ts.caption, styles.hintBusca, { color: theme.textMuted }]}>
           Digite pelo menos {MIN_BUSCA} caracteres para filtrar.
@@ -294,10 +386,12 @@ export function ResultadosGeralPanel({
         </TafGlassPanel>
       ) : null}
 
-      {!carregando && lista.length > 0 && buscaAtiva && linhasVisiveis.length === 0 ? (
+      {!carregando && lista.length > 0 && linhasVisiveis.length === 0 ? (
         <TafGlassPanel style={styles.emptyCard}>
           <Text style={[ts.body, { color: theme.text, textAlign: 'center' }]}>
-            Nenhum resultado para &quot;{filtroBusca.trim()}&quot;.
+            {buscaAtiva
+              ? `Nenhum resultado para "${filtroBusca.trim()}".`
+              : 'Nenhum militar com esta modalidade registrada.'}
           </Text>
         </TafGlassPanel>
       ) : null}
@@ -380,5 +474,38 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  filtrosWrap: {
+    marginBottom: 12,
+  },
+  filtrosRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  filtroChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+  },
+  filtroChipLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  filtroChipBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  filtroChipBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
 });

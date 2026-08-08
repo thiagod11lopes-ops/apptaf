@@ -5,12 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Modal,
   Platform,
-  SafeAreaView,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, ChevronRight, X, BarChart3 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { AppModal } from './premium/AppModal';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { PREMIUM } from '../theme/premium';
 import { getUiColors } from '../theme/uiColors';
@@ -396,99 +396,99 @@ export function ResultadosResumoModal({ visible, onClose, sessoes }: Props) {
     [sessoesReais],
   );
 
-  const conteudo = (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
-      {/* cabeçalho */}
-      <View style={[styles.modalHeader, { borderBottomColor: glass.border }]}>
-        <BarChart3 size={18} color={theme.primary} strokeWidth={2.4} />
-        <Text style={[styles.modalTitle, { color: theme.text }]}>Resumo dos Testes</Text>
-        <TouchableOpacity
-          onPress={onClose}
-          style={[styles.closeBtn, { borderColor: glass.border }]}
-          accessibilityLabel="Fechar resumo"
-        >
-          <X size={20} color={theme.textSecondary} strokeWidth={2.4} />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={styles.scrollContent}
-        contentContainerStyle={styles.scrollInner}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* seção Armada */}
-        {sessoesArmada.length > 0 ? (
-          <NormaSection norma="armada" sessoes={sessoesArmada} />
-        ) : (
-          <View style={[styles.normaVazia, { borderColor: glass.border }]}>
-            <Text style={[styles.normaVaziaText, { color: theme.textMuted }]}>
-              Nenhum teste TAF Armada registrado.
-            </Text>
-          </View>
-        )}
-
-        {/* seção CFN */}
-        {sessoesCfn.length > 0 ? (
-          <NormaSection norma="cfn" sessoes={sessoesCfn} />
-        ) : (
-          <View style={[styles.normaVazia, { borderColor: glass.border }]}>
-            <Text style={[styles.normaVaziaText, { color: theme.textMuted }]}>
-              Nenhum teste TAF CFN registrado.
-            </Text>
-          </View>
-        )}
-
-        {/* calendário */}
-        <View style={[styles.calContainer, { backgroundColor: glass.highlight, borderColor: glass.border }]}>
-          <Text style={[styles.calSectionTitle, { color: theme.primary }]}>Calendário de Testes</Text>
-          <CalendarioResumo
-            sessoes={sessoesReais}
-            sessoesArmada={sessoesArmada}
-            sessoesCfn={sessoesCfn}
-          />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-
-  if (Platform.OS === 'web') {
-    if (!visible) return null;
-    return (
-      <View style={styles.webOverlay}>
-        <View style={[styles.webSheet, { backgroundColor: theme.background, borderColor: glass.border }]}>
-          {conteudo}
-        </View>
-      </View>
-    );
-  }
-
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      {conteudo}
-    </Modal>
+    <AppModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <LinearGradient
+          colors={['rgba(2,6,23,0.72)', 'rgba(15,23,42,0.88)']}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: theme.isDark ? 'rgba(15,23,42,0.98)' : 'rgba(255,255,255,0.98)',
+              borderColor: theme.isDark ? 'rgba(56,189,248,0.35)' : 'rgba(37,99,235,0.22)',
+              ...(Platform.OS === 'web'
+                ? ({ boxShadow: '0 28px 70px rgba(2,6,23,0.45)' } as object)
+                : null),
+            },
+          ]}
+        >
+          {/* cabeçalho */}
+          <View style={[styles.modalHeader, { borderBottomColor: glass.border }]}>
+            <BarChart3 size={18} color={theme.primary} strokeWidth={2.4} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Resumo dos Testes</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { borderColor: glass.border }]}
+              accessibilityLabel="Fechar resumo"
+            >
+              <X size={20} color={theme.textSecondary} strokeWidth={2.4} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={styles.scrollContent}
+            contentContainerStyle={styles.scrollInner}
+            showsVerticalScrollIndicator={false}
+          >
+            {sessoesArmada.length > 0 ? (
+              <NormaSection norma="armada" sessoes={sessoesArmada} />
+            ) : (
+              <View style={[styles.normaVazia, { borderColor: glass.border }]}>
+                <Text style={[styles.normaVaziaText, { color: theme.textMuted }]}>
+                  Nenhum teste TAF Armada registrado.
+                </Text>
+              </View>
+            )}
+
+            {sessoesCfn.length > 0 ? (
+              <NormaSection norma="cfn" sessoes={sessoesCfn} />
+            ) : (
+              <View style={[styles.normaVazia, { borderColor: glass.border }]}>
+                <Text style={[styles.normaVaziaText, { color: theme.textMuted }]}>
+                  Nenhum teste TAF CFN registrado.
+                </Text>
+              </View>
+            )}
+
+            <View style={[styles.calContainer, { backgroundColor: glass.highlight, borderColor: glass.border }]}>
+              <Text style={[styles.calSectionTitle, { color: theme.primary }]}>Calendário de Testes</Text>
+              <CalendarioResumo
+                sessoes={sessoesReais}
+                sessoesArmada={sessoesArmada}
+                sessoesCfn={sessoesCfn}
+              />
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </AppModal>
   );
 }
 
 /* ─── estilos ─── */
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  webOverlay: {
-    position: 'absolute' as const,
-    inset: 0,
-    zIndex: 999,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  } as object,
-  webSheet: {
+  overlay: {
+    flex: 1,
     width: '100%',
-    maxWidth: 560,
-    maxHeight: '92%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    ...Platform.select({
+      web: {
+        minHeight: '100%' as unknown as number,
+        maxHeight: '100dvh' as unknown as number,
+      } as object,
+      default: {},
+    }),
+  },
+  card: {
+    width: '100%',
+    maxWidth: 540,
+    maxHeight: Platform.OS === 'web' ? ('88vh' as unknown as number) : 600,
     borderRadius: PREMIUM.radiusLg,
     borderWidth: 1,
     overflow: 'hidden',

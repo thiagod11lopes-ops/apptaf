@@ -1,5 +1,32 @@
-import { Platform } from 'react-native';
+﻿import { Platform } from 'react-native';
 import * as Print from 'expo-print';
+
+const PRINT_TIMEOUT_MS = 60_000;
+
+/**
+ * Envolve printToFileAsync com um timeout de 60 s.
+ * O expo-print pode travar indefinidamente em HTML complexo (muitas rÃºbricas).
+ */
+async function printToFileComTimeout(
+  options: Parameters<typeof Print.printToFileAsync>[0],
+): Promise<{ uri: string }> {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(
+        new Error(
+          'A geraÃ§Ã£o do PDF demorou muito. Tente com menos participantes ou sem rÃºbricas.',
+        ),
+      );
+    }, PRINT_TIMEOUT_MS);
+  });
+  try {
+    const result = await Promise.race([Print.printToFileAsync(options), timeout]);
+    return result;
+  } finally {
+    clearTimeout(timeoutId!);
+  }
+}
 import type { ResultadoCorridaItem } from '../navigation/AppNavigator';
 import type { AplicadorAssinaturaResumo } from '../types/aplicadorAssinatura';
 import {
@@ -45,7 +72,7 @@ function base64ToUint8Array(base64: string): Uint8Array {
       ? globalThis.atob.bind(globalThis)
       : null;
   if (!atobFn) {
-    throw new Error('Decodificação Base64 indisponível neste ambiente.');
+    throw new Error('DecodificaÃ§Ã£o Base64 indisponÃ­vel neste ambiente.');
   }
   const binary = atobFn(normalized);
   const out = new Uint8Array(binary.length);
@@ -54,8 +81,8 @@ function base64ToUint8Array(base64: string): Uint8Array {
 }
 
 /**
- * Sessões do Histórico consolidadas (1 bloco por aplicação),
- * incluindo aplicações sem assinatura do aplicador.
+ * SessÃµes do HistÃ³rico consolidadas (1 bloco por aplicaÃ§Ã£o),
+ * incluindo aplicaÃ§Ãµes sem assinatura do aplicador.
  */
 export function sessoesHistoricoParaPdfBackup(
   sessoes: SessaoAplicacaoTaf[],
@@ -74,8 +101,8 @@ export function nomeArquivoPdfResultadosHistorico(
 }
 
 /**
- * Bytes do PDF no formato “Gerar Resultados do dia”, com todo o histórico.
- * Retorna `null` se não houver resultados (assinatura não é exigida).
+ * Bytes do PDF no formato â€œGerar Resultados do diaâ€, com todo o histÃ³rico.
+ * Retorna `null` se nÃ£o houver resultados (assinatura nÃ£o Ã© exigida).
  */
 export async function buildResumosHistoricoPdfBytes(
   sessoes: SessaoAplicacaoTaf[],
@@ -90,8 +117,8 @@ export async function buildResumosHistoricoPdfBytes(
     return new Uint8Array(await blob.arrayBuffer());
   }
 
-  const html = buildResumosAplicacaoDiaHtml(blocos, 'Resultados do histórico — TAF');
-  const { uri } = await Print.printToFileAsync({
+  const html = buildResumosAplicacaoDiaHtml(blocos, 'Resultados do histÃ³rico â€” TAF');
+  const { uri } = await printToFileComTimeout({
     html,
     width: PDF_A4_LANDSCAPE_WIDTH,
     height: PDF_A4_LANDSCAPE_HEIGHT,
@@ -104,7 +131,7 @@ export async function buildResumosHistoricoPdfBytes(
 }
 
 /**
- * PDF do histórico completo (mesmo layout do dia), com assinaturas quando existirem.
+ * PDF do histÃ³rico completo (mesmo layout do dia), com assinaturas quando existirem.
  */
 export async function exportResumosHistoricoCompletoPdf(
   sessoes: SessaoAplicacaoTaf[],
@@ -113,7 +140,7 @@ export async function exportResumosHistoricoCompletoPdf(
   const ordenadas = [...agrupadas].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
   const blocos = montarBlocosResumoPdfDasSessoes(ordenadas);
   if (blocos.length === 0) {
-    throw new Error('Não há resultados no histórico para exportar.');
+    throw new Error('NÃ£o hÃ¡ resultados no histÃ³rico para exportar.');
   }
 
   const filename = nomeArquivoPdfResultadosHistorico();
@@ -127,8 +154,8 @@ export async function exportResumosHistoricoCompletoPdf(
     return mensagemSucessoSalvarNaPasta(resultado);
   }
 
-  const html = buildResumosAplicacaoDiaHtml(blocos, 'Resultados do histórico — TAF');
-  const { uri } = await Print.printToFileAsync({
+  const html = buildResumosAplicacaoDiaHtml(blocos, 'Resultados do histÃ³rico â€” TAF');
+  const { uri } = await printToFileComTimeout({
     html,
     width: PDF_A4_LANDSCAPE_WIDTH,
     height: PDF_A4_LANDSCAPE_HEIGHT,
@@ -139,7 +166,7 @@ export async function exportResumosHistoricoCompletoPdf(
     filename,
     mimeType: 'application/pdf',
     uti: 'com.adobe.pdf',
-    dialogTitle: 'Salvar PDF do histórico em Downloads',
+    dialogTitle: 'Salvar PDF do histÃ³rico em Downloads',
   });
 
   if (!resultado.ok) {
@@ -147,7 +174,7 @@ export async function exportResumosHistoricoCompletoPdf(
   }
   return mensagemSucessoSalvarNaPasta(resultado);
 }
-/** Estima quantas folhas A4 paisagem serão necessárias para o resumo da aplicação. */
+/** Estima quantas folhas A4 paisagem serÃ£o necessÃ¡rias para o resumo da aplicaÃ§Ã£o. */
 export function estimarFolhasA4PdfResumoAplicacao(
   quantidadeLinhas: number,
   comAssinaturaAplicador = true,
@@ -158,13 +185,13 @@ export function estimarFolhasA4PdfResumoAplicacao(
   );
 }
 
-/** Inferência do rótulo da prova (Corrida, Natação, etc.) a partir dos resultados da sessão. */
+/** InferÃªncia do rÃ³tulo da prova (Corrida, NataÃ§Ã£o, etc.) a partir dos resultados da sessÃ£o. */
 export function tituloProvaResumoPdf(resultados: ResultadoCorridaItem[]): string {
   const prova = resultados.find((r) => r.prova)?.prova ?? 'corrida';
   return tituloTipoProva(prova as TipoProvaAplicada);
 }
 
-/** Cabeçalho da 1ª coluna: Nadador (só natação), Corredor (só corrida), ou ambos se misto. */
+/** CabeÃ§alho da 1Âª coluna: Nadador (sÃ³ nataÃ§Ã£o), Corredor (sÃ³ corrida), ou ambos se misto. */
 export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[]): string {
   const temNatacao = resultados.some((r) => r.prova === 'natacao');
   const temCorrida = resultados.some((r) => r.prova !== 'natacao');
@@ -174,24 +201,24 @@ export function cabecalhoColunaProvaResultados(resultados: ResultadoCorridaItem[
 }
 
 /**
- * HTML completo do resumo (impressão / PDF nativo).
+ * HTML completo do resumo (impressÃ£o / PDF nativo).
  */
 export function buildResumoAplicacaoHtml(
   resultados: ResultadoCorridaItem[],
   _textoColunaCadastro: string,
-  titulo = 'Resumo da aplicação — TAF',
+  titulo = 'Resumo da aplicaÃ§Ã£o â€” TAF',
   aplicadorAssinatura?: AplicadorAssinaturaResumo,
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
   const colProva = escapeHtmlPdf(cabecalhoColunaProvaResultados(resultados));
   const tituloProva = escapeHtmlPdf(tituloProvaResumoPdf(resultados));
 
-  const theadPdf = `<tr><th>${colProva}</th><th class="col-nome">Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th></tr>`;
+  const theadPdf = `<tr><th>${colProva}</th><th class="col-nome">Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>SituaÃ§Ã£o</th><th class="col-rubrica">RÃºbrica</th></tr>`;
 
   const rows = resultados.map((r) => {
       const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
-      const nip = r.nip ? escapeHtmlPdf(r.nip) : '—';
-      const nota = escapeHtmlPdf(r.notaTexto ?? '—');
+      const nip = r.nip ? escapeHtmlPdf(r.nip) : 'â€”';
+      const nota = escapeHtmlPdf(r.notaTexto ?? 'â€”');
       const situacao = escapeHtmlPdf(
         r.reprovacaoTexto ??
           (r.desistencia || isNotaReprovacaoTexto(r.notaTexto) ? 'Reprovado' : 'Aprovado'),
@@ -208,12 +235,12 @@ export function buildResumoAplicacaoHtml(
       </tr>`;
     });
 
-  const metaHtml = `Gerado em ${escapeHtmlPdf(dataStr)} · <strong>${tituloProva}</strong>`;
+  const metaHtml = `Gerado em ${escapeHtmlPdf(dataStr)} Â· <strong>${tituloProva}</strong>`;
   const comAssinatura = Boolean(aplicadorAssinatura?.nome?.trim());
 
   const conteudoHtml =
     resultados.length === 0
-      ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessão.</p>'
+      ? '<p style="color:#9CA3AF;font-weight:700;">Nenhum resultado nesta sessÃ£o.</p>'
       : buildPdfTableHtml({
           tableClass: 'resultados-taf',
           theadHtml: theadPdf,
@@ -252,8 +279,8 @@ export function nomeArquivoPdfResumo(
 }
 
 /**
- * Gera o PDF em silêncio e baixa para Downloads (web/iPhone/Android).
- * Não abre o PDF na tela.
+ * Gera o PDF em silÃªncio e baixa para Downloads (web/iPhone/Android).
+ * NÃ£o abre o PDF na tela.
  */
 export async function exportResumoAplicacaoPdf(
   resultados: ResultadoCorridaItem[],
@@ -261,13 +288,13 @@ export async function exportResumoAplicacaoPdf(
   aplicadorAssinatura?: AplicadorAssinaturaResumo,
 ): Promise<string> {
   if (resultados.length === 0) {
-    throw new Error('Não há resultados para salvar.');
+    throw new Error('NÃ£o hÃ¡ resultados para salvar.');
   }
 
   const filename = nomeArquivoPdfResumo(resultados);
 
   if (Platform.OS === 'web') {
-    // iPhone/Safari: html2canvas gera PDF em branco — usa jsPDF + download direto.
+    // iPhone/Safari: html2canvas gera PDF em branco â€” usa jsPDF + download direto.
     const blob = await gerarResumoAplicacaoPdfBlobWeb(resultados, aplicadorAssinatura);
     const resultado = await entregarPdfBlobWeb(blob, filename);
     if (!resultado.ok) {
@@ -279,7 +306,7 @@ export async function exportResumoAplicacaoPdf(
   // HTML ainda alimenta o print nativo (Android/iOS app).
   const html = buildResumoAplicacaoHtml(resultados, textoColunaCadastro, undefined, aplicadorAssinatura);
 
-  const { uri } = await Print.printToFileAsync({
+  const { uri } = await printToFileComTimeout({
     html,
     width: PDF_A4_LANDSCAPE_WIDTH,
     height: PDF_A4_LANDSCAPE_HEIGHT,
@@ -299,7 +326,7 @@ export async function exportResumoAplicacaoPdf(
   return mensagemSucessoSalvarNaPasta(resultado);
 }
 
-/** Resultado com `prova` preenchida a partir do tipo da sessão (layout igual ao Salvar). */
+/** Resultado com `prova` preenchida a partir do tipo da sessÃ£o (layout igual ao Salvar). */
 export function resultadosSessaoParaResumoPdf(
   sessao: SessaoAplicacaoTaf,
 ): ResultadoCorridaItem[] {
@@ -309,7 +336,7 @@ export function resultadosSessaoParaResumoPdf(
   }));
 }
 
-/** Blocos de resumo (um por sessão) em ordem cronológica — mesmo layout do Salvar. */
+/** Blocos de resumo (um por sessÃ£o) em ordem cronolÃ³gica â€” mesmo layout do Salvar. */
 export function montarBlocosResumoPdfDasSessoes(
   sessoes: SessaoAplicacaoTaf[],
 ): ResumoAplicacaoPdfBloco[] {
@@ -328,7 +355,7 @@ export function montarBlocosResumoPdfDasSessoes(
 
 /**
  * Nome: Resultados_do_dia_DD-MM-AAAA.pdf
- * (data do dia selecionado no histórico, não a do salvamento).
+ * (data do dia selecionado no histÃ³rico, nÃ£o a do salvamento).
  */
 export function nomeArquivoPdfResultadosDoDia(dataBr: string): string {
   const dataKey = dataBr.trim().replace(/\//g, '-');
@@ -336,14 +363,14 @@ export function nomeArquivoPdfResultadosDoDia(dataBr: string): string {
 }
 
 /**
- * HTML nativo: um bloco (mesmo do Salvar) ou vários seções com quebra de página.
+ * HTML nativo: um bloco (mesmo do Salvar) ou vÃ¡rios seÃ§Ãµes com quebra de pÃ¡gina.
  */
 export function buildResumosAplicacaoDiaHtml(
   blocos: ResumoAplicacaoPdfBloco[],
-  tituloDocumento = 'Resultados do dia — TAF',
+  tituloDocumento = 'Resultados do dia â€” TAF',
 ): string {
   if (blocos.length === 0) {
-    throw new Error('Não há resultados para salvar.');
+    throw new Error('NÃ£o hÃ¡ resultados para salvar.');
   }
   if (blocos.length === 1) {
     const unico = blocos[0]!;
@@ -360,11 +387,11 @@ export function buildResumosAplicacaoDiaHtml(
     const resultados = bloco.resultados;
     const colProva = escapeHtmlPdf(cabecalhoColunaProvaResultados(resultados));
     const tituloProva = escapeHtmlPdf(tituloProvaResumoPdf(resultados));
-    const theadPdf = `<tr><th>${colProva}</th><th class="col-nome">Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>Situação</th><th class="col-rubrica">Rúbrica</th></tr>`;
+    const theadPdf = `<tr><th>${colProva}</th><th class="col-nome">Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>SituaÃ§Ã£o</th><th class="col-rubrica">RÃºbrica</th></tr>`;
     const rows = resultados.map((r) => {
       const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
-      const nip = r.nip ? escapeHtmlPdf(r.nip) : '—';
-      const nota = escapeHtmlPdf(r.notaTexto ?? '—');
+      const nip = r.nip ? escapeHtmlPdf(r.nip) : 'â€”';
+      const nota = escapeHtmlPdf(r.notaTexto ?? 'â€”');
       const situacao = escapeHtmlPdf(
         r.reprovacaoTexto ??
           (r.desistencia || isNotaReprovacaoTexto(r.notaTexto) ? 'Reprovado' : 'Aprovado'),
@@ -391,8 +418,8 @@ export function buildResumosAplicacaoDiaHtml(
     });
     const breakCls = i < blocos.length - 1 ? ' style="page-break-after: always;"' : '';
     return `<section class="resumo-sessao"${breakCls}>
-      <h2 class="resumo-sessao-titulo">Resumo da aplicação — TAF</h2>
-      <p class="resumo-sessao-meta">Gerado em ${escapeHtmlPdf(dataStr)} · <strong>${tituloProva}</strong></p>
+      <h2 class="resumo-sessao-titulo">Resumo da aplicaÃ§Ã£o â€” TAF</h2>
+      <p class="resumo-sessao-meta">Gerado em ${escapeHtmlPdf(dataStr)} Â· <strong>${tituloProva}</strong></p>
       ${tabela}
       <div class="resumo-sessao-assinatura">${blocoAplicadorAssinaturaHtml(bloco.aplicadorAssinatura)}</div>
     </section>`;
@@ -401,7 +428,7 @@ export function buildResumosAplicacaoDiaHtml(
   return buildPdfLandscapeDocument({
     documentTitle: tituloDocumento,
     titulo: tituloDocumento,
-    metaHtml: `Gerado em ${escapeHtmlPdf(dataStr)} · ${blocos.length} aplicações`,
+    metaHtml: `Gerado em ${escapeHtmlPdf(dataStr)} Â· ${blocos.length} aplicaÃ§Ãµes`,
     conteudoHtml: secoes.join('\n'),
     extraStyles: `
       .tempo { font-weight: 800; color: #15803D; font-family: ui-monospace, monospace; }
@@ -416,7 +443,7 @@ export function buildResumosAplicacaoDiaHtml(
 }
 
 /**
- * Um PDF do dia no formato do Salvar pós-rúbrica (uma seção por sessão).
+ * Um PDF do dia no formato do Salvar pÃ³s-rÃºbrica (uma seÃ§Ã£o por sessÃ£o).
  */
 export async function exportResumosSessoesDiaPdf(
   sessoes: SessaoAplicacaoTaf[],
@@ -424,7 +451,7 @@ export async function exportResumosSessoesDiaPdf(
 ): Promise<string> {
   const blocos = montarBlocosResumoPdfDasSessoes(sessoes);
   if (blocos.length === 0) {
-    throw new Error('Não há participantes para exportar neste dia.');
+    throw new Error('NÃ£o hÃ¡ participantes para exportar neste dia.');
   }
 
   const filename = nomeArquivoPdfResultadosDoDia(dataBr);
@@ -440,9 +467,9 @@ export async function exportResumosSessoesDiaPdf(
 
   const html = buildResumosAplicacaoDiaHtml(
     blocos,
-    `Resultados do dia — ${dataBr.trim() || 'TAF'}`,
+    `Resultados do dia â€” ${dataBr.trim() || 'TAF'}`,
   );
-  const { uri } = await Print.printToFileAsync({
+  const { uri } = await printToFileComTimeout({
     html,
     width: PDF_A4_LANDSCAPE_WIDTH,
     height: PDF_A4_LANDSCAPE_HEIGHT,
@@ -461,3 +488,4 @@ export async function exportResumosSessoesDiaPdf(
   }
   return mensagemSucessoSalvarNaPasta(resultado);
 }
+

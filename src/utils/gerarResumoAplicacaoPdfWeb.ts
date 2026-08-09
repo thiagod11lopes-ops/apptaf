@@ -15,6 +15,13 @@ import { formatTempoColunaResultado } from './formatTempoColunaResultado';
 
 export { decodeSvgDataUrl, renderRubricaSvgToPngDataUrl } from './rubricaRasterPersist';
 
+/** Pré-aquece o módulo jsPDF no cache do browser — chamar no mount da tela. */
+export function preAquecerJsPdf(): void {
+  void import('jspdf').catch(() => {
+    // Silencioso: se falhar aqui o erro real será capturado durante a geração
+  });
+}
+
 function tituloProva(resultados: ResultadoCorridaItem[]): string {
   const prova = resultados.find((r) => r.prova)?.prova ?? 'corrida';
   return tituloTipoProva(prova as TipoProvaAplicada);
@@ -36,7 +43,8 @@ function formatarTempo(r: ResultadoCorridaItem): string {
 
 function papelLinha(r: ResultadoCorridaItem): string {
   const label = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
-  return `${label} ${r.corredor}`;
+  const num = r.corredor != null ? ` ${r.corredor}` : '';
+  return `${label}${num}`;
 }
 
 function extrairPathsDoSvg(svg: string): { paths: string[]; vbW: number; vbH: number } {
@@ -164,7 +172,14 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
     throw new Error('Não há resultados para salvar.');
   }
 
-  const { jsPDF } = await import('jspdf');
+  let jsPDF: typeof import('jspdf').jsPDF;
+  try {
+    ({ jsPDF } = await import('jspdf'));
+  } catch {
+    throw new Error(
+      'Não foi possível carregar o gerador de PDF. Verifique sua conexão e tente novamente.',
+    );
+  }
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'pt',
@@ -200,6 +215,10 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
       rubricaSvgByIndex.set(index, svg);
       const png = await rubricaParaPdfEmbedDataUrl(svg, RUBRICA_PDF_LARGURA, RUBRICA_PDF_ALTURA);
       if (png) rubricaPngByIndex.set(index, png);
+      // Yield a cada 5 rúbricas para não travar o thread principal e liberar memória de canvas
+      if (index % 5 === 4) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      }
     }
 
     const aplicadorSvg = isRubricaImagemDataUrl(aplicadorAssinatura?.rubricaSvg)
@@ -406,5 +425,13 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
     await desenharBloco(bloco.resultados, bloco.aplicadorAssinatura, i > 0);
   }
 
-  return doc.output('blob');
+  let blob: Blob;
+  try {
+    blob = doc.output('blob');
+  } catch {
+    throw new Error(
+      'Não foi possível finalizar o PDF. O arquivo pode ser muito grande para este dispositivo. Tente com menos participantes ou sem rúbricas.',
+    );
+  }
+  return blob;
 }

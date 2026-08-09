@@ -21,6 +21,8 @@ import {
   cabecalhoColunaProvaResultados,
   exportResumoAplicacaoPdf,
 } from '../utils/exportResumoAplicacaoPdf';
+import { preAquecerJsPdf } from '../utils/gerarResumoAplicacaoPdfWeb';
+import { MENSAGEM_SALVAMENTO_CANCELADO } from '../utils/salvarArquivoNaPasta';
 import { formatTempoColunaResultado } from '../utils/formatTempoColunaResultado';
 import { getUiColors, type UiColors } from '../theme/uiColors';
 import type { AppTheme } from '../theme/premium';
@@ -50,6 +52,7 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
     void getAllCadastros()
       .then(setCadastros)
       .catch(() => setCadastros([]));
+    if (Platform.OS === 'web') preAquecerJsPdf();
   }, []);
 
   const nomeExibicao = useCallback(
@@ -102,7 +105,14 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Não foi possível salvar o PDF.';
-      if (/cancelad/i.test(msg)) return;
+      if (/cancelad/i.test(msg)) {
+        setFeedback({
+          tipo: 'erro',
+          titulo: 'Salvamento cancelado',
+          mensagem: MENSAGEM_SALVAMENTO_CANCELADO,
+        });
+        return;
+      }
       setFeedback({
         tipo: 'erro',
         titulo: 'Erro ao salvar PDF',
@@ -155,7 +165,10 @@ export default function CadastrarResultadosScreen({ navigation, route }: Props) 
                   accessibilityLabel="Salvar PDF do resumo"
                 >
                   {exportandoPdf ? (
-                    <ActivityIndicator color={theme.text} />
+                    <>
+                      <ActivityIndicator color={theme.text} size="small" />
+                      <Text style={[styles.btnPdfText, { color: theme.text }]}>Gerando PDF…</Text>
+                    </>
                   ) : (
                     <>
                       <FileDown size={18} color={theme.text} strokeWidth={2.5} />

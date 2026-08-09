@@ -50,7 +50,20 @@ async function downloadWebBlob(
         ? content
         : new Blob([await content.arrayBuffer()], { type: mimeType });
 
-  // iPhone/Safari: application/pdf abre preview; octet-stream força o download
+  // iOS PWA modo standalone: anchor.click() é silenciosamente ignorado.
+  // Tentar Web Share API com arquivo (iOS 15+); fallback: abrir blob em nova aba.
+  if (isIosPwaStandalone()) {
+    const blobComTipo = new Blob([await blob.arrayBuffer()], { type: mimeType });
+    const shareResult = await tentarShareBlob(blobComTipo, safeName);
+    if (shareResult) return shareResult;
+    // Web Share indisponível: abre URL de objeto em nova aba para o usuário salvar manualmente
+    const url = URL.createObjectURL(blobComTipo);
+    window.open(url, '_blank');
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    return { ok: true, modo: 'compartilhar' };
+  }
+
+  // iPhone/Safari (aba normal): application/pdf abre preview; octet-stream força o download
   // para a pasta Downloads (Ajustes → Safari → Downloads).
   const forcarDownloadIos =
     isIosWeb() &&
@@ -80,6 +93,46 @@ function isIosWeb(): boolean {
   const ua = navigator.userAgent || '';
   if (/iPad|iPhone|iPod/i.test(ua)) return true;
   return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1;
+}
+
+/**
+ * Retorna true quando o app está rodando como PWA instalada no iOS (modo standalone).
+ * Nesse modo, <a download>.click() é silenciosamente ignorado pelo Safari —
+ * o arquivo nunca é entregue mesmo com ok:true.
+ */
+function isIosPwaStandalone(): boolean {
+  if (!isIosWeb()) return false;
+  if (typeof window === 'undefined') return false;
+  if ((window.navigator as unknown as Record<string, unknown>)['standalone'] === true) return true;
+  try {
+    if (window.matchMedia?.('(display-mode: standalone)').matches) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+/**
+ * Tenta entregar o Blob via Web Share API com arquivo.
+ * Disponível no Safari iOS 15+ e em alguns navegadores Android.
+ * Retorna null se a API não suportar arquivos (iOS < 15 ou canShare=false).
+ */
+async function tentarShareBlob(
+  blob: Blob,
+  filename: string,
+): Promise<SalvarArquivoNaPastaResultado | null> {
+  if (typeof navigator === 'undefined' || !navigator.share || !navigator.canShare) return null;
+  try {
+    const file = new File([blob], filename, { type: blob.type });
+    if (!navigator.canShare({ files: [file] })) return null;
+    await navigator.share({ files: [file], title: filename });
+    return { ok: true, modo: 'compartilhar' };
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      return { ok: false, cancelado: true };
+    }
+    return null;
+  }
 }
 
 /**
@@ -756,3 +809,7 @@ export function mensagemSucessoSalvarNaPasta(
   }
   return 'Escolha “Salvar em Arquivos” / Downloads no menu do sistema para guardar o arquivo.';
 }
+
+
+/** Mensagem exibida ao usuario quando o salvamento e cancelado (seletor de pasta ou share sheet). */
+export const MENSAGEM_SALVAMENTO_CANCELADO = 'Salvamento cancelado. Toque em Salvar PDF para tentar novamente.';

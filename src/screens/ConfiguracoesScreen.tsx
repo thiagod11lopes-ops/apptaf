@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { View, Text, Switch, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, Switch, StyleSheet, ScrollView, Pressable, Alert, TouchableOpacity } from 'react-native';
+import { RefreshCw } from 'lucide-react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { ChevronDown } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -24,6 +25,7 @@ import {
   readCachedDatabaseBankCode,
 } from '../services/supabase/databaseRegistryCloud';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
+import { invalidateHomeResumoCache } from '../utils/homeResumoIndexedDb';
 
 type CollapsibleSectionProps = {
   title: string;
@@ -96,6 +98,7 @@ export default function ConfiguracoesScreen() {
   const [cloudLinkOn, setCloudLinkOn] = useState(isCloudLinkEnabled);
   const [togglingCloud, setTogglingCloud] = useState(false);
   const [syncStatusModalVisible, setSyncStatusModalVisible] = useState(false);
+  const [cacheAtualizado, setCacheAtualizado] = useState(false);
   const [bankCode, setBankCode] = useState<string | null>(() =>
     isAuthenticated ? readCachedDatabaseBankCode(dataOwnerUid) : null,
   );
@@ -127,6 +130,12 @@ export default function ConfiguracoesScreen() {
       setDangerOpen(false);
     }, []),
   );
+
+  const limparCacheResumo = useCallback(() => {
+    invalidateHomeResumoCache('full');
+    setCacheAtualizado(true);
+    setTimeout(() => setCacheAtualizado(false), 3000);
+  }, []);
 
   const openSyncStatus = useCallback(() => {
     setSyncStatusModalVisible(true);
@@ -218,6 +227,36 @@ export default function ConfiguracoesScreen() {
           </View>
         </Card>
 
+        <Card elevated>
+          <View style={styles.row}>
+            <View style={styles.rowText}>
+              <Text style={ts.h2}>Cache dos contadores</Text>
+              <Text style={[ts.caption, styles.gap]}>
+                {cacheAtualizado
+                  ? 'Cache invalidado. Volte à aba Iniciar para ver os valores atualizados.'
+                  : 'Se os números da tela Iniciar estiverem desatualizados após uma atualização do app, toque para forçar o recálculo.'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={limparCacheResumo}
+              accessibilityLabel="Atualizar cache dos contadores"
+              style={[
+                styles.cacheBtn,
+                {
+                  backgroundColor: cacheAtualizado ? theme.gainMuted : theme.accentMuted,
+                  borderColor: cacheAtualizado ? theme.gain : theme.primary,
+                },
+              ]}
+            >
+              <RefreshCw
+                size={18}
+                color={cacheAtualizado ? theme.gain : theme.primary}
+                strokeWidth={2.4}
+              />
+            </TouchableOpacity>
+          </View>
+        </Card>
+
         {showBossSections ? (
           <CollapsibleSettingsSection
             title="E-mails autorizados"
@@ -291,4 +330,13 @@ const styles = StyleSheet.create({
   sectionHint: { marginBottom: 14, lineHeight: 18 },
   dangerStack: { gap: 14 },
   footer: { textAlign: 'center', paddingHorizontal: 8, lineHeight: 20 },
+  cacheBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
 });

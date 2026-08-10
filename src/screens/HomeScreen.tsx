@@ -99,8 +99,9 @@ export default function HomeScreen() {
   const pctConcluidos = useMemo(() => {
     const total = resumo.totalCadastrados;
     if (total <= 0) return 0;
-    return Math.min(100, Math.max(0, (resumo.completos / total) * 100));
-  }, [resumo.completos, resumo.totalCadastrados]);
+    const participantes = resumo.completos + (resumo.parcial ?? 0);
+    return Math.min(100, Math.max(0, (participantes / total) * 100));
+  }, [resumo.completos, resumo.parcial, resumo.totalCadastrados]);
 
   const pctConcluidosLabel = useMemo(() => {
     const rounded = Math.round(pctConcluidos * 10) / 10;
@@ -394,11 +395,11 @@ export default function HomeScreen() {
             now: Math.round(pctConcluidos),
             text: pctConcluidosLabel,
           }}
-          accessibilityLabel={`Conclusão dos testes: ${pctConcluidosLabel}`}
+          accessibilityLabel={`Participação nos testes: ${pctConcluidosLabel}`}
         >
           <View style={styles.progressHeader}>
             <Text style={[styles.progressLabel, { color: theme.textMuted }]}>
-              Conclusão dos testes
+              Participação nos testes
             </Text>
             <Text style={[styles.progressPct, { color: theme.success }]}>
               {pctConcluidosLabel}

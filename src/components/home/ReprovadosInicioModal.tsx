@@ -212,6 +212,7 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
                           >
                             <Text style={[styles.chipText, { color: theme.error }]}>
                               {m.label}: {m.detalhe}
+                              {m.tempo ? ` · ${m.tempo}` : ''}
                               {m.data ? ` · ${m.data}` : ''}
                             </Text>
                           </View>

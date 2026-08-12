@@ -1,16 +1,12 @@
 import type { ReprovadoInicioTafItem } from './resultadoGeralHistorico';
+import { textoModalidadeReprovada } from './resultadoGeralHistorico';
 import { pdfTextoParaJsPdf } from './pdfLayout';
 
 const pdfTexto = pdfTextoParaJsPdf;
 
 function modalidadesTexto(item: ReprovadoInicioTafItem): string {
   if (item.modalidades.length === 0) return 'Reprovado';
-  return item.modalidades
-    .map((m) => {
-      const base = `${m.label}: ${m.detalhe}`;
-      return m.data ? `${base} (${m.data})` : base;
-    })
-    .join(' · ');
+  return item.modalidades.map(textoModalidadeReprovada).join(' · ');
 }
 
 /** PDF A4 paisagem — militares reprovados em pelo menos um teste. */

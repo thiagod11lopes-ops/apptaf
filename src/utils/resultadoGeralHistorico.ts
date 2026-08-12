@@ -107,9 +107,15 @@ function sliceFromResultado(
       rubricaSvg: r.rubricaCandidatoSvg,
     };
   }
+  const modality = tipo === 'natacao' ? 'natacao' : 'corrida';
+  const tempoFmt =
+    typeof r.tempoMs === 'number' && r.tempoMs > 0
+      ? formatMsByModality(modality, r.tempoMs).trim() || undefined
+      : undefined;
   return {
     nota: notaFromResultado(r),
     situacao: situacaoFromResultado(r),
+    ...(tempoFmt ? { tempo: tempoFmt } : {}),
     rubricaSvg: r.rubricaCandidatoSvg,
   };
 }
@@ -772,9 +778,42 @@ export function calcularResumoInicioTafFromHistorico(
 export type ReprovadoInicioModalidade = {
   label: string;
   detalhe: string;
+  /** Tempo da prova (MM:SS ou MM:SS:CS), quando conhecido. */
+  tempo?: string;
   /** Data do teste (DD/MM/AAAA), quando conhecida. */
   data?: string;
 };
+
+/** Texto de chip/coluna: `Corrida: REPROVADO · 12:34 · 15/03/2026`. */
+export function textoModalidadeReprovada(m: ReprovadoInicioModalidade): string {
+  let s = `${m.label}: ${m.detalhe}`;
+  if (m.tempo) s += ` · ${m.tempo}`;
+  if (m.data) s += ` · ${m.data}`;
+  return s;
+}
+
+function primeiroTempo(...vals: Array<string | null | undefined>): string | undefined {
+  for (const v of vals) {
+    const t = (v ?? '').trim();
+    if (t) return t;
+  }
+  return undefined;
+}
+
+function tempoFromResultadoItem(
+  tipo: TipoProvaAplicada,
+  r: ResultadoCorridaItem,
+): string | undefined {
+  if (tipo === 'permanencia') {
+    const t = tempoPermanenciaFromResultado(r).trim();
+    return t || undefined;
+  }
+  if (typeof r.tempoMs === 'number' && r.tempoMs > 0) {
+    const modality = tipo === 'natacao' ? 'natacao' : 'corrida';
+    return formatMsByModality(modality, r.tempoMs).trim() || undefined;
+  }
+  return undefined;
+}
 
 export type ReprovadoInicioTafItem = {
   id: string;
@@ -817,16 +856,20 @@ function pushModalidadeUnica(
   label: string,
   detalhe: string,
   data?: string,
+  tempo?: string,
 ): void {
   const dataNorm = formatDataTesteReprovado(data);
+  const tempoNorm = (tempo ?? '').trim() || undefined;
   const existing = list.find((m) => m.label === label);
   if (existing) {
     if (!existing.data && dataNorm) existing.data = dataNorm;
+    if (!existing.tempo && tempoNorm) existing.tempo = tempoNorm;
     return;
   }
   list.push({
     label,
     detalhe: detalhe.trim() || 'Reprovado',
+    ...(tempoNorm ? { tempo: tempoNorm } : {}),
     ...(dataNorm ? { data: dataNorm } : {}),
   });
 }
@@ -843,6 +886,7 @@ function modalidadesReprovadasDoCadastro(
       'Corrida',
       detalheModalidade(agg.corrida),
       c.dataTafCorrida || agg.corridaSessaoEm,
+      primeiroTempo(agg.corrida.tempo, c.tempoCorrida),
     );
   } else if (isNotaReprovacaoTexto(c.notaCorrida)) {
     pushModalidadeUnica(
@@ -850,6 +894,7 @@ function modalidadesReprovadasDoCadastro(
       'Corrida',
       (c.notaCorrida || '').trim() || 'Reprovado',
       c.dataTafCorrida,
+      primeiroTempo(c.tempoCorrida),
     );
   }
 
@@ -859,6 +904,7 @@ function modalidadesReprovadasDoCadastro(
       'Caminhada',
       detalheModalidade(agg.caminhada),
       c.dataTafCaminhada || agg.caminhadaSessaoEm,
+      primeiroTempo(agg.caminhada.tempo, c.tempoCaminhada),
     );
   } else if (isNotaReprovacaoTexto(c.notaCaminhada)) {
     pushModalidadeUnica(
@@ -866,17 +912,25 @@ function modalidadesReprovadasDoCadastro(
       'Caminhada',
       (c.notaCaminhada || '').trim() || 'Reprovado',
       c.dataTafCaminhada,
+      primeiroTempo(c.tempoCaminhada),
     );
   }
 
   if (agg?.natacao && modalidadeEhReprovada(agg.natacao)) {
-    pushModalidadeUnica(out, 'Natação', detalheModalidade(agg.natacao), c.dataTafNatacao);
+    pushModalidadeUnica(
+      out,
+      'Natação',
+      detalheModalidade(agg.natacao),
+      c.dataTafNatacao,
+      primeiroTempo(agg.natacao.tempo, c.tempoNatacao),
+    );
   } else if (isNotaReprovacaoTexto(c.notaNatacao) || c.resultadoNatacao === 'reprovado') {
     pushModalidadeUnica(
       out,
       'Natação',
       (c.notaNatacao || '').trim() || 'Reprovado',
       c.dataTafNatacao,
+      primeiroTempo(c.tempoNatacao),
     );
   }
 
@@ -886,9 +940,16 @@ function modalidadesReprovadasDoCadastro(
       'Permanência',
       detalheModalidade(agg.permanencia),
       c.dataTafPermanencia,
+      primeiroTempo(agg.permanencia.tempo, c.tempoPermanencia),
     );
   } else if (c.resultadoPermanencia === 'reprovado') {
-    pushModalidadeUnica(out, 'Permanência', 'Reprovado', c.dataTafPermanencia);
+    pushModalidadeUnica(
+      out,
+      'Permanência',
+      'Reprovado',
+      c.dataTafPermanencia,
+      primeiroTempo(c.tempoPermanencia),
+    );
   }
 
   return out;
@@ -931,7 +992,7 @@ function modalidadesReprovadasNasSessoes(
         (r.reprovacaoTexto || '').trim() ||
         (r.notaTexto || r.noraTexto || '').trim() ||
         (r.desistencia ? 'Desistência' : 'Reprovado');
-      pushModalidadeUnica(out, label, detalhe, dataSessao);
+      pushModalidadeUnica(out, label, detalhe, dataSessao, tempoFromResultadoItem(tipo, r));
     }
   }
   return out;
@@ -971,10 +1032,10 @@ export function montarListaReprovadosInicioTaf(
 
     const modalidades: ReprovadoInicioModalidade[] = [];
     for (const m of modalidadesReprovadasDoCadastro(c, agg)) {
-      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data);
+      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data, m.tempo);
     }
     for (const m of modalidadesReprovadasNasSessoes(unificadas, c, index, cadastrosReais)) {
-      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data);
+      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data, m.tempo);
     }
     if (modalidades.length === 0) {
       pushModalidadeUnica(modalidades, 'Teste', 'Reprovado');

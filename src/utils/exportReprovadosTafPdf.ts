@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as Print from 'expo-print';
 import type { ReprovadoInicioTafItem } from './resultadoGeralHistorico';
+import { textoModalidadeReprovada } from './resultadoGeralHistorico';
 import {
   buildPdfLandscapeDocument,
   buildPdfTableHtml,
@@ -23,12 +24,7 @@ function chipsHtml(item: ReprovadoInicioTafItem): string {
     return `<span class="chip">Reprovado</span>`;
   }
   return item.modalidades
-    .map((m) => {
-      const texto = m.data
-        ? `${m.label}: ${m.detalhe} (${m.data})`
-        : `${m.label}: ${m.detalhe}`;
-      return `<span class="chip">${escapeHtmlPdf(texto)}</span>`;
-    })
+    .map((m) => `<span class="chip">${escapeHtmlPdf(textoModalidadeReprovada(m))}</span>`)
     .join(' ');
 }
 
@@ -99,7 +95,6 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
   const dataStr = new Date().toLocaleString('pt-BR');
   const rows = itens.map(
     (r) => `<tr>
-        <td class="mono">${datasHtml(r)}</td>
         <td>${escapeHtmlPdf(r.categoria)}</td>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td class="mono">${escapeHtmlPdf(r.nip)}</td>
@@ -114,7 +109,6 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
     </div>`;
 
   const theadHtml = `<tr>
-          <th>Data do teste</th>
           <th>Categoria</th>
           <th>P/G</th>
           <th>NIP</th>
@@ -126,7 +120,7 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
     tableClass: 'reprovados-taf',
     theadHtml,
     rowHtml: rows,
-    emptyColspan: 6,
+    emptyColspan: 5,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
   });

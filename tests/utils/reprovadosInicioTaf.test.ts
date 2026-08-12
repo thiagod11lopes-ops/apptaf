@@ -14,6 +14,7 @@ describe('montarListaReprovadosInicioTaf', () => {
         categoria: 'Praças',
         praca: 'MN',
         notaCorrida: 'REPROVADO',
+        tempoCorrida: '12:34',
         dataTafCorrida: '15/03/2026',
       },
       {
@@ -31,6 +32,7 @@ describe('montarListaReprovadosInicioTaf', () => {
     expect(lista[0]?.nome).toBe('SILVA JOAO');
     expect(lista[0]?.modalidades.some((m) => m.label === 'Corrida')).toBe(true);
     expect(lista[0]?.modalidades.find((m) => m.label === 'Corrida')?.data).toBe('15/03/2026');
+    expect(lista[0]?.modalidades.find((m) => m.label === 'Corrida')?.tempo).toBe('12:34');
   });
 
   it('lista reprovado via sessão', () => {
@@ -55,7 +57,7 @@ describe('montarListaReprovadosInicioTaf', () => {
             corredor: 1,
             nome: 'ALMEIDA ANA',
             nip: '11.1111.11',
-            tempoMs: 0,
+            tempoMs: 95_450,
             notaTexto: 'REPROVADO',
             reprovacaoTexto: 'Reprovado',
           },
@@ -66,5 +68,6 @@ describe('montarListaReprovadosInicioTaf', () => {
     expect(lista).toHaveLength(1);
     expect(lista[0]?.modalidades.some((m) => m.label === 'Natação')).toBe(true);
     expect(lista[0]?.modalidades.find((m) => m.label === 'Natação')?.data).toBe('20/04/2026');
+    expect(lista[0]?.modalidades.find((m) => m.label === 'Natação')?.tempo).toBe('01:35:45');
   });
 });

@@ -1,6 +1,11 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
+import { tempoMaximoNota50Caminhada4800 } from '../taf/caminhada4800Nota';
+import { tempoMaximoNota50Corrida2400 } from '../taf/corrida2400Nota';
+import { tempoMaximoNota50Corrida3200 } from '../taf/corrida3200Nota';
+import { tempoMaximoNota50Natacao100 } from '../taf/natacao100Nota';
+import { tempoMaximoNota50Natacao } from '../taf/natacaoNota';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import {
   buildCadastroLookupIndex,
@@ -8,6 +13,7 @@ import {
   type CadastroLookupIndex,
 } from './cadastroLookupIndex';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
+import { idadeFromDataNascimento } from './idadeFromDataNascimento';
 import { formatNipInput, nipChaveCadastro, nipDigitos } from './nipFormat';
 import type { PendenciaParcialItem, ResultadoGeralItem, ResultadoTafLinha } from './resultadoTafCadastro';
 import {
@@ -780,14 +786,20 @@ export type ReprovadoInicioModalidade = {
   detalhe: string;
   /** Tempo da prova (MM:SS ou MM:SS:CS), quando conhecido. */
   tempo?: string;
+  /**
+   * Tempo máximo da norma para nota 50 (aprovação mínima), em MM:SS.
+   * Permanência: duração exigida (10:00).
+   */
+  tempoMinimo?: string;
   /** Data do teste (DD/MM/AAAA), quando conhecida. */
   data?: string;
 };
 
-/** Texto de chip/coluna: `Corrida: REPROVADO · 12:34 · 15/03/2026`. */
+/** Texto de chip/coluna: `Corrida: REPROVADO · 12:34 · mín. 14:30 · 15/03/2026`. */
 export function textoModalidadeReprovada(m: ReprovadoInicioModalidade): string {
   let s = `${m.label}: ${m.detalhe}`;
   if (m.tempo) s += ` · ${m.tempo}`;
+  if (m.tempoMinimo) s += ` · mín. ${m.tempoMinimo}`;
   if (m.data) s += ` · ${m.data}`;
   return s;
 }
@@ -796,6 +808,50 @@ function primeiroTempo(...vals: Array<string | null | undefined>): string | unde
   for (const v of vals) {
     const t = (v ?? '').trim();
     if (t) return t;
+  }
+  return undefined;
+}
+
+function cadastroSugereNormaCfn(c: CadastroItemPersist): boolean {
+  return !!(
+    c.notaFlexaoBarra ||
+    c.notaFlexaoSolo ||
+    c.notaAbdominalRemador ||
+    c.notaAbdominalPrancha ||
+    c.repsFlexaoBarra != null ||
+    c.repsFlexaoSolo != null ||
+    c.repsAbdominalRemador != null ||
+    (c.tempoAbdominalPrancha ?? '').trim()
+  );
+}
+
+/** Tempo necessário (limite nota 50 / duração permanência) para aprovação mínima. */
+function tempoMinimoAprovacaoModalidade(
+  label: string,
+  c: CadastroItemPersist,
+  normaCfn?: boolean,
+): string | undefined {
+  if (label === 'Permanência') return '10:00';
+  const idade = idadeFromDataNascimento((c.dataNascimento ?? '').trim());
+  if (idade == null) return undefined;
+  const sexo = c.sexo;
+  const cfn = normaCfn === true || (normaCfn !== false && cadastroSugereNormaCfn(c));
+  if (label === 'Corrida') {
+    return (
+      (cfn
+        ? tempoMaximoNota50Corrida3200(idade, sexo)
+        : tempoMaximoNota50Corrida2400(idade, sexo)) ?? undefined
+    );
+  }
+  if (label === 'Caminhada') {
+    return tempoMaximoNota50Caminhada4800(idade, sexo) ?? undefined;
+  }
+  if (label === 'Natação') {
+    return (
+      (cfn
+        ? tempoMaximoNota50Natacao100(idade, sexo)
+        : tempoMaximoNota50Natacao(idade, sexo)) ?? undefined
+    );
   }
   return undefined;
 }
@@ -857,19 +913,23 @@ function pushModalidadeUnica(
   detalhe: string,
   data?: string,
   tempo?: string,
+  tempoMinimo?: string,
 ): void {
   const dataNorm = formatDataTesteReprovado(data);
   const tempoNorm = (tempo ?? '').trim() || undefined;
+  const tempoMinNorm = (tempoMinimo ?? '').trim() || undefined;
   const existing = list.find((m) => m.label === label);
   if (existing) {
     if (!existing.data && dataNorm) existing.data = dataNorm;
     if (!existing.tempo && tempoNorm) existing.tempo = tempoNorm;
+    if (!existing.tempoMinimo && tempoMinNorm) existing.tempoMinimo = tempoMinNorm;
     return;
   }
   list.push({
     label,
     detalhe: detalhe.trim() || 'Reprovado',
     ...(tempoNorm ? { tempo: tempoNorm } : {}),
+    ...(tempoMinNorm ? { tempoMinimo: tempoMinNorm } : {}),
     ...(dataNorm ? { data: dataNorm } : {}),
   });
 }
@@ -998,6 +1058,42 @@ function modalidadesReprovadasNasSessoes(
   return out;
 }
 
+function sessaoCfnParaModalidade(
+  label: string,
+  sessoes: SessaoAplicacaoTaf[],
+  c: CadastroItemPersist,
+  index: CadastroLookupIndex,
+  cadastros: CadastroItemPersist[],
+): boolean {
+  const tipo =
+    label === 'Natação'
+      ? 'natacao'
+      : label === 'Permanência'
+        ? 'permanencia'
+        : label === 'Caminhada'
+          ? 'caminhada'
+          : label === 'Corrida'
+            ? 'corrida'
+            : null;
+  if (!tipo) return false;
+  const nipC = nipDigitos(c.nip);
+  for (const sessao of sessoes) {
+    if (sessao.tipoProva !== tipo || sessao.normaTaf !== 'cfn') continue;
+    for (const r of sessao.resultados ?? []) {
+      const busca = buscarCadastroIndexed(
+        index,
+        cadastros,
+        (r.nip ?? '').trim() || (r.nome ?? '').trim(),
+      );
+      const match =
+        (busca.kind === 'found' && busca.cadastro.id === c.id) ||
+        (nipC.length >= 8 && nipDigitos(r.nip ?? '') === nipC);
+      if (match) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Lista detalhada dos cadastrados reprovados em pelo menos um teste
  * (mesmo critério do card Reprovados na aba Iniciar).
@@ -1032,13 +1128,18 @@ export function montarListaReprovadosInicioTaf(
 
     const modalidades: ReprovadoInicioModalidade[] = [];
     for (const m of modalidadesReprovadasDoCadastro(c, agg)) {
-      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data, m.tempo);
+      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data, m.tempo, m.tempoMinimo);
     }
     for (const m of modalidadesReprovadasNasSessoes(unificadas, c, index, cadastrosReais)) {
-      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data, m.tempo);
+      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data, m.tempo, m.tempoMinimo);
     }
     if (modalidades.length === 0) {
       pushModalidadeUnica(modalidades, 'Teste', 'Reprovado');
+    }
+    for (const m of modalidades) {
+      const cfn = sessaoCfnParaModalidade(m.label, unificadas, c, index, cadastrosReais);
+      const minimo = tempoMinimoAprovacaoModalidade(m.label, c, cfn);
+      if (minimo) m.tempoMinimo = minimo;
     }
 
     const postoBase =

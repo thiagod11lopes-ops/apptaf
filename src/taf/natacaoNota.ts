@@ -147,6 +147,21 @@ export function textoNotaNatacaoFromCadastro(input: {
   return textoNotaNatacao(tempoMs, idade, input.sexo);
 }
 
+/** Tempo máximo (MM:SS) para atingir a nota mínima (50). */
+export function tempoMaximoNota50Natacao(
+  idadeAnos: number,
+  sexo?: 'M' | 'F',
+): string | null {
+  const faixa = faixaEtariaNatacao(idadeAnos);
+  if (!faixa) return null;
+  const limites = tabelaNatacao(sexo)[faixa];
+  const sec = limites[limites.length - 1];
+  if (sec == null || !Number.isFinite(sec)) return null;
+  const totalMin = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${totalMin.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
 /** @deprecated Use `notaNatacao` / `textoNotaNatacao` */
 export function notaNatacaoFeminina(tempoMs: number, idadeAnos: number): NotaNatacaoResult {
   return notaNatacao(tempoMs, idadeAnos, 'F');

@@ -4,7 +4,7 @@ import type { CadastroItemPersist } from '../../src/services/cadastrosIndexedDb'
 import type { SessaoAplicacaoTaf } from '../../src/services/resultadosAplicadosIndexedDb';
 
 describe('montarListaReprovadosInicioTaf', () => {
-  it('lista cadastrado reprovado na corrida', () => {
+  it('lista cadastrado reprovado na corrida com tempo mínimo da nota 50', () => {
     const cadastros: CadastroItemPersist[] = [
       {
         id: 'c1',
@@ -13,6 +13,7 @@ describe('montarListaReprovadosInicioTaf', () => {
         dataNascimento: '01/01/1990',
         categoria: 'Praças',
         praca: 'MN',
+        sexo: 'M',
         notaCorrida: 'REPROVADO',
         tempoCorrida: '12:34',
         dataTafCorrida: '15/03/2026',
@@ -30,12 +31,14 @@ describe('montarListaReprovadosInicioTaf', () => {
     const lista = montarListaReprovadosInicioTaf([], cadastros, []);
     expect(lista).toHaveLength(1);
     expect(lista[0]?.nome).toBe('SILVA JOAO');
-    expect(lista[0]?.modalidades.some((m) => m.label === 'Corrida')).toBe(true);
-    expect(lista[0]?.modalidades.find((m) => m.label === 'Corrida')?.data).toBe('15/03/2026');
-    expect(lista[0]?.modalidades.find((m) => m.label === 'Corrida')?.tempo).toBe('12:34');
+    const corrida = lista[0]?.modalidades.find((m) => m.label === 'Corrida');
+    expect(corrida?.data).toBe('15/03/2026');
+    expect(corrida?.tempo).toMatch(/^12:34/);
+    // Homem ~36 anos (faixa 34–39): limite nota 50 = 15:30
+    expect(corrida?.tempoMinimo).toBe('15:30');
   });
 
-  it('lista reprovado via sessão', () => {
+  it('lista reprovado via sessão com tempo e mínimo de natação', () => {
     const cadastros: CadastroItemPersist[] = [
       {
         id: 'c3',
@@ -44,6 +47,7 @@ describe('montarListaReprovadosInicioTaf', () => {
         dataNascimento: '03/03/1992',
         categoria: 'Oficiais',
         oficial: '1T',
+        sexo: 'F',
       },
     ];
     const sessoes: SessaoAplicacaoTaf[] = [
@@ -66,8 +70,10 @@ describe('montarListaReprovadosInicioTaf', () => {
     ];
     const lista = montarListaReprovadosInicioTaf(sessoes, cadastros, []);
     expect(lista).toHaveLength(1);
-    expect(lista[0]?.modalidades.some((m) => m.label === 'Natação')).toBe(true);
-    expect(lista[0]?.modalidades.find((m) => m.label === 'Natação')?.data).toBe('20/04/2026');
-    expect(lista[0]?.modalidades.find((m) => m.label === 'Natação')?.tempo).toBe('01:35:45');
+    const natacao = lista[0]?.modalidades.find((m) => m.label === 'Natação');
+    expect(natacao?.data).toBe('20/04/2026');
+    expect(natacao?.tempo).toBe('01:35:45');
+    // Mulher ~34 anos (faixa 31–40): limite nota 50 = 02:25
+    expect(natacao?.tempoMinimo).toBe('02:25');
   });
 });

@@ -95,7 +95,6 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
   const dataStr = new Date().toLocaleString('pt-BR');
   const rows = itens.map(
     (r) => `<tr>
-        <td>${escapeHtmlPdf(r.categoria)}</td>
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td class="mono">${escapeHtmlPdf(r.nip)}</td>
         <td class="col-nome"><strong>${escapeHtmlPdf(r.nome)}</strong></td>
@@ -109,7 +108,6 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
     </div>`;
 
   const theadHtml = `<tr>
-          <th>Categoria</th>
           <th>P/G</th>
           <th>NIP</th>
           <th class="col-nome">Nome</th>
@@ -120,7 +118,7 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
     tableClass: 'reprovados-taf',
     theadHtml,
     rowHtml: rows,
-    emptyColspan: 5,
+    emptyColspan: 4,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
   });

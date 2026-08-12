@@ -129,3 +129,18 @@ export function textoNotaCaminhadaFromCadastro(input: {
   const idade = idadeFromDataNascimento((input.dataNascimento ?? '').trim(), input.refDate);
   return textoNotaCaminhada(tempoMs, idade, input.sexo);
 }
+
+/** Tempo máximo (MM:SS) para atingir a nota mínima (50). */
+export function tempoMaximoNota50Caminhada4800(
+  idadeAnos: number,
+  sexo?: 'M' | 'F',
+): string | null {
+  const faixa = faixaEtariaCorrida2400(idadeAnos);
+  if (!faixa) return null;
+  const limites = tabelaCaminhada4800(sexo)[faixa];
+  const sec = limites[limites.length - 1];
+  if (sec == null || !Number.isFinite(sec)) return null;
+  const totalMin = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${totalMin.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}

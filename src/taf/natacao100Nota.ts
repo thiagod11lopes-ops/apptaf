@@ -106,3 +106,18 @@ export function textoNotaNatacao100FromCadastro(input: {
   const idade = idadeFromDataNascimento((input.dataNascimento ?? '').trim(), input.refDate);
   return textoNotaNatacao100(tempoMs, idade, input.sexo);
 }
+
+/** Tempo máximo (MM:SS) para atingir a nota mínima (50) — natação 100 m (CFN). */
+export function tempoMaximoNota50Natacao100(
+  idadeAnos: number,
+  sexo?: 'M' | 'F',
+): string | null {
+  const faixa = faixaEtariaNatacao(idadeAnos);
+  if (!faixa) return null;
+  const limites = (sexo === 'F' ? FAIXA_TABELA_F : FAIXA_TABELA_M)[faixa];
+  const sec = limites[limites.length - 1];
+  if (sec == null || !Number.isFinite(sec)) return null;
+  const totalMin = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${totalMin.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}

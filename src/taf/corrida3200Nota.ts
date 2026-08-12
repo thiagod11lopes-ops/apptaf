@@ -117,3 +117,19 @@ export function textoNotaCorrida3200FromCadastro(input: {
   const idade = idadeFromDataNascimento((input.dataNascimento ?? '').trim(), input.refDate);
   return textoNotaCorrida3200(tempoMs, idade, input.sexo);
 }
+
+/** Tempo máximo (MM:SS) para atingir a nota mínima (50) — corrida 3200 m (CFN). */
+export function tempoMaximoNota50Corrida3200(
+  idadeAnos: number,
+  sexo?: 'M' | 'F',
+): string | null {
+  const faixa = faixaEtariaFn(idadeAnos);
+  if (!faixa) return null;
+  const tabela = sexo === 'F' ? FAIXA_TABELA_F : FAIXA_TABELA_M;
+  const limites = tabela[faixa];
+  const sec = limites[limites.length - 1];
+  if (sec == null || !Number.isFinite(sec)) return null;
+  const totalMin = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${totalMin.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}

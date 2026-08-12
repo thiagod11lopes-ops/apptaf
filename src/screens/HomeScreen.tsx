@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
+import { ReprovadosInicioModal } from '../components/home/ReprovadosInicioModal';
 import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
 import {
   isHomeResumoCacheWarm,
@@ -83,6 +84,7 @@ export default function HomeScreen() {
   const [cardsPaintReady, setCardsPaintReady] = useState(false);
   const [resumoModalAberto, setResumoModalAberto] = useState(false);
   const [sessoesResumo, setSessoesResumo] = useState<SessaoAplicacaoTaf[]>([]);
+  const [modalReprovadosVisible, setModalReprovadosVisible] = useState(false);
 
   const handleAbrirResumo = useCallback(async () => {
     const cached = peekSessoesListCache({ includeDemo: false });
@@ -284,6 +286,7 @@ export default function HomeScreen() {
   }, [cardsPaintReady, scheduleRecarregarResumo]);
 
   return (
+    <>
     <MobileScreenScaffold scroll={false} style={styles.page} contentContainerStyle={styles.pageContent}>
       <View style={styles.headerBlock}>
         <View style={styles.titleBlock}>
@@ -362,7 +365,8 @@ export default function HomeScreen() {
               label="Reprovados"
               value={(resumo.reprovados ?? 0).toLocaleString('pt-BR')}
               variant="negative"
-              accessibilityLabel={`Reprovados em pelo menos um teste: ${resumo.reprovados ?? 0}`}
+              accessibilityLabel={`Reprovados em pelo menos um teste: ${resumo.reprovados ?? 0}. Abrir lista detalhada.`}
+              onPress={() => setModalReprovadosVisible(true)}
             />
             <StatCard
               label="Restritos"
@@ -464,6 +468,12 @@ export default function HomeScreen() {
         </View>
       </TafGlassPanel>
     </MobileScreenScaffold>
+
+      <ReprovadosInicioModal
+        visible={modalReprovadosVisible}
+        onClose={() => setModalReprovadosVisible(false)}
+      />
+    </>
   );
 }
 

@@ -21,6 +21,7 @@ import { compareByNomePtBr } from './compareNomePtBr';
 import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
 import { cadastroIncompletoNascimentoOuFatores } from './cadastroIncompleto';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
+import { postoGradComVinculo } from './formatNomeComPosto';
 
 type ModalidadeHistorico = {
   nota: string;
@@ -766,4 +767,179 @@ export function calcularResumoInicioTafFromHistorico(
     cadastroIncompleto,
     reprovados,
   };
+}
+
+export type ReprovadoInicioModalidade = {
+  label: string;
+  detalhe: string;
+};
+
+export type ReprovadoInicioTafItem = {
+  id: string;
+  nip: string;
+  nome: string;
+  postoGrad: string;
+  categoria: string;
+  modalidades: ReprovadoInicioModalidade[];
+};
+
+function detalheModalidade(m?: ModalidadeHistorico): string {
+  if (!m) return 'Reprovado';
+  const sit = (m.situacao || '').trim();
+  const nota = (m.nota || '').trim();
+  if (sit && sit !== '—') return sit;
+  if (nota && nota !== '—') return nota;
+  return 'Reprovado';
+}
+
+function pushModalidadeUnica(
+  list: ReprovadoInicioModalidade[],
+  label: string,
+  detalhe: string,
+): void {
+  if (list.some((m) => m.label === label)) return;
+  list.push({ label, detalhe: detalhe.trim() || 'Reprovado' });
+}
+
+function modalidadesReprovadasDoCadastro(
+  c: CadastroItemPersist,
+  agg: AggRow | undefined,
+): ReprovadoInicioModalidade[] {
+  const out: ReprovadoInicioModalidade[] = [];
+
+  if (agg?.corrida && modalidadeEhReprovada(agg.corrida)) {
+    pushModalidadeUnica(out, 'Corrida', detalheModalidade(agg.corrida));
+  } else if (isNotaReprovacaoTexto(c.notaCorrida)) {
+    pushModalidadeUnica(out, 'Corrida', (c.notaCorrida || '').trim() || 'Reprovado');
+  }
+
+  if (agg?.caminhada && modalidadeEhReprovada(agg.caminhada)) {
+    pushModalidadeUnica(out, 'Caminhada', detalheModalidade(agg.caminhada));
+  } else if (isNotaReprovacaoTexto(c.notaCaminhada)) {
+    pushModalidadeUnica(out, 'Caminhada', (c.notaCaminhada || '').trim() || 'Reprovado');
+  }
+
+  if (agg?.natacao && modalidadeEhReprovada(agg.natacao)) {
+    pushModalidadeUnica(out, 'Natação', detalheModalidade(agg.natacao));
+  } else if (isNotaReprovacaoTexto(c.notaNatacao) || c.resultadoNatacao === 'reprovado') {
+    pushModalidadeUnica(
+      out,
+      'Natação',
+      (c.notaNatacao || '').trim() || (c.resultadoNatacao === 'reprovado' ? 'Reprovado' : 'Reprovado'),
+    );
+  }
+
+  if (agg?.permanencia && modalidadeEhReprovada(agg.permanencia)) {
+    pushModalidadeUnica(out, 'Permanência', detalheModalidade(agg.permanencia));
+  } else if (c.resultadoPermanencia === 'reprovado') {
+    pushModalidadeUnica(out, 'Permanência', 'Reprovado');
+  }
+
+  return out;
+}
+
+function modalidadesReprovadasNasSessoes(
+  sessoes: SessaoAplicacaoTaf[],
+  c: CadastroItemPersist,
+  index: CadastroLookupIndex,
+  cadastros: CadastroItemPersist[],
+): ReprovadoInicioModalidade[] {
+  const out: ReprovadoInicioModalidade[] = [];
+  const nipC = nipDigitos(c.nip);
+  for (const sessao of sessoes) {
+    const tipo = sessao.tipoProva;
+    const label =
+      tipo === 'natacao'
+        ? 'Natação'
+        : tipo === 'permanencia'
+          ? 'Permanência'
+          : tipo === 'caminhada'
+            ? 'Caminhada'
+            : tipo === 'corrida'
+              ? 'Corrida'
+              : null;
+    if (!label) continue;
+    for (const r of sessao.resultados ?? []) {
+      if (!resultadoItemEhReprovado(r)) continue;
+      const busca = buscarCadastroIndexed(
+        index,
+        cadastros,
+        (r.nip ?? '').trim() || (r.nome ?? '').trim(),
+      );
+      const match =
+        (busca.kind === 'found' && busca.cadastro.id === c.id) ||
+        (nipC.length >= 8 && nipDigitos(r.nip ?? '') === nipC);
+      if (!match) continue;
+      const detalhe =
+        (r.reprovacaoTexto || '').trim() ||
+        (r.notaTexto || r.noraTexto || '').trim() ||
+        (r.desistencia ? 'Desistência' : 'Reprovado');
+      pushModalidadeUnica(out, label, detalhe);
+    }
+  }
+  return out;
+}
+
+/**
+ * Lista detalhada dos cadastrados reprovados em pelo menos um teste
+ * (mesmo critério do card Reprovados na aba Iniciar).
+ */
+export function montarListaReprovadosInicioTaf(
+  sessoes: SessaoAplicacaoTaf[],
+  cadastros: CadastroItemPersist[],
+  sessoesExcluidas: SessaoAplicacaoTaf[] = [],
+): ReprovadoInicioTafItem[] {
+  const cadastrosReais = cadastros.filter((c) => !isDemoCadastroId(c.id));
+  const sessoesReais = sessoes.filter((s) => !isDemoSessaoId(s.id));
+  const excluidasReais = sessoesExcluidas.filter((s) => !isDemoSessaoId(s.id));
+  const unificadas = unificarSessoesComCadastroRegistrador(
+    sessoesReais,
+    cadastrosReais,
+    excluidasReais,
+  );
+  const aggs = agregarHistoricoPorParticipante(unificadas, cadastrosReais);
+  const chavesReprovados = chavesComReprovacaoEmSessoes(unificadas, cadastrosReais);
+  const index = buildCadastroLookupIndex(cadastrosReais);
+
+  const lista: ReprovadoInicioTafItem[] = [];
+  for (const c of cadastrosReais) {
+    const nipC = nipChaveCadastro(c.nip);
+    const agg = findAggRowForCadastro(aggs, c);
+    const reprovadoEmTeste =
+      cadastroTemReprovacaoDireta(c) ||
+      (agg ? aggTemReprovacao(agg) : false) ||
+      (!!nipC && chavesReprovados.has(nipC)) ||
+      chavesReprovados.has(c.id);
+    if (!reprovadoEmTeste) continue;
+
+    const modalidades: ReprovadoInicioModalidade[] = [];
+    for (const m of modalidadesReprovadasDoCadastro(c, agg)) {
+      pushModalidadeUnica(modalidades, m.label, m.detalhe);
+    }
+    for (const m of modalidadesReprovadasNasSessoes(unificadas, c, index, cadastrosReais)) {
+      pushModalidadeUnica(modalidades, m.label, m.detalhe);
+    }
+    if (modalidades.length === 0) {
+      pushModalidadeUnica(modalidades, 'Teste', 'Reprovado');
+    }
+
+    const postoBase =
+      c.categoria === 'Oficiais'
+        ? (c.oficial || '').trim()
+        : c.categoria === 'Praças'
+          ? (c.praca || '').trim()
+          : (c.oficial || c.praca || '').trim();
+
+    lista.push({
+      id: c.id,
+      nip: formatNipInput(c.nip) || c.nip || '—',
+      nome: (c.nome || '').trim() || '—',
+      postoGrad: postoGradComVinculo(postoBase, c.vinculo) || '—',
+      categoria: c.categoria || '—',
+      modalidades,
+    });
+  }
+
+  lista.sort((a, b) => compareByNomePtBr(a.nome, b.nome));
+  return lista;
 }

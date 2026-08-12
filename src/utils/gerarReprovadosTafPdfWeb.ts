@@ -13,14 +13,6 @@ function modalidadesTexto(item: ReprovadoInicioTafItem): string {
     .join(' · ');
 }
 
-function datasTexto(item: ReprovadoInicioTafItem): string {
-  const datas = item.modalidades
-    .map((m) => m.data)
-    .filter((d): d is string => Boolean(d && d.trim()));
-  if (datas.length === 0) return '—';
-  return [...new Set(datas)].join(' · ');
-}
-
 /** PDF A4 paisagem — militares reprovados em pelo menos um teste. */
 export async function gerarReprovadosTafPdfBlobWeb(
   itens: ReprovadoInicioTafItem[],
@@ -40,12 +32,11 @@ export async function gerarReprovadosTafPdfBlobWeb(
 
   type Col = { title: string; w: number; get: (r: ReprovadoInicioTafItem) => string };
   const cols: Col[] = [
-    { title: 'Data do teste', w: usableW * 0.14, get: datasTexto },
-    { title: 'Categoria', w: usableW * 0.1, get: (r) => r.categoria || '—' },
-    { title: 'P/G', w: usableW * 0.08, get: (r) => r.postoGrad || '—' },
-    { title: 'NIP', w: usableW * 0.12, get: (r) => r.nip || '—' },
-    { title: 'Nome', w: usableW * 0.24, get: (r) => r.nome || '—' },
-    { title: 'Modalidades reprovadas', w: usableW * 0.32, get: modalidadesTexto },
+    { title: 'Categoria', w: usableW * 0.12, get: (r) => r.categoria || '—' },
+    { title: 'P/G', w: usableW * 0.1, get: (r) => r.postoGrad || '—' },
+    { title: 'NIP', w: usableW * 0.14, get: (r) => r.nip || '—' },
+    { title: 'Nome', w: usableW * 0.28, get: (r) => r.nome || '—' },
+    { title: 'Modalidades reprovadas', w: usableW * 0.36, get: modalidadesTexto },
   ];
   const sumW = cols.reduce((a, c) => a + c.w, 0);
   cols.forEach((c) => {

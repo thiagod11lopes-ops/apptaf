@@ -32,15 +32,6 @@ function chipsHtml(item: ReprovadoInicioTafItem): string {
     .join(' ');
 }
 
-function datasHtml(item: ReprovadoInicioTafItem): string {
-  const datas = [
-    ...new Set(
-      item.modalidades.map((m) => m.data).filter((d): d is string => Boolean(d && d.trim())),
-    ),
-  ];
-  return datas.length > 0 ? escapeHtmlPdf(datas.join(' · ')) : '—';
-}
-
 const REPROVADOS_EXTRA_STYLES = `
   table.reprovados-taf {
     width: 100%;

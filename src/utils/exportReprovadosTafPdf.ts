@@ -23,11 +23,22 @@ function chipsHtml(item: ReprovadoInicioTafItem): string {
     return `<span class="chip">Reprovado</span>`;
   }
   return item.modalidades
-    .map(
-      (m) =>
-        `<span class="chip">${escapeHtmlPdf(m.label)}: ${escapeHtmlPdf(m.detalhe)}</span>`,
-    )
+    .map((m) => {
+      const texto = m.data
+        ? `${m.label}: ${m.detalhe} (${m.data})`
+        : `${m.label}: ${m.detalhe}`;
+      return `<span class="chip">${escapeHtmlPdf(texto)}</span>`;
+    })
     .join(' ');
+}
+
+function datasHtml(item: ReprovadoInicioTafItem): string {
+  const datas = [
+    ...new Set(
+      item.modalidades.map((m) => m.data).filter((d): d is string => Boolean(d && d.trim())),
+    ),
+  ];
+  return datas.length > 0 ? escapeHtmlPdf(datas.join(' · ')) : '—';
 }
 
 const REPROVADOS_EXTRA_STYLES = `
@@ -102,6 +113,7 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
         <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td>${escapeHtmlPdf(r.categoria)}</td>
         <td class="chips">${chipsHtml(r)}</td>
+        <td class="mono">${datasHtml(r)}</td>
       </tr>`,
   );
 
@@ -116,13 +128,14 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
           <th>P/G</th>
           <th>Categoria</th>
           <th>Modalidades reprovadas</th>
+          <th>Data do teste</th>
         </tr>`;
 
   const conteudoHtml = buildPdfTableHtml({
     tableClass: 'reprovados-taf',
     theadHtml,
     rowHtml: rows,
-    emptyColspan: 5,
+    emptyColspan: 6,
     emptyMessage: 'Nenhum registro',
     leadingHtml: kpiHtml,
   });

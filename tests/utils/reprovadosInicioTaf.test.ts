@@ -14,6 +14,7 @@ describe('montarListaReprovadosInicioTaf', () => {
         categoria: 'Praças',
         praca: 'MN',
         notaCorrida: 'REPROVADO',
+        dataTafCorrida: '15/03/2026',
       },
       {
         id: 'c2',
@@ -29,6 +30,7 @@ describe('montarListaReprovadosInicioTaf', () => {
     expect(lista).toHaveLength(1);
     expect(lista[0]?.nome).toBe('SILVA JOAO');
     expect(lista[0]?.modalidades.some((m) => m.label === 'Corrida')).toBe(true);
+    expect(lista[0]?.modalidades.find((m) => m.label === 'Corrida')?.data).toBe('15/03/2026');
   });
 
   it('lista reprovado via sessão', () => {
@@ -46,7 +48,7 @@ describe('montarListaReprovadosInicioTaf', () => {
       {
         id: 's1',
         criadoEm: new Date().toISOString(),
-        dataAplicacao: '01/01/2026',
+        dataAplicacao: '20/04/2026',
         tipoProva: 'natacao',
         resultados: [
           {
@@ -63,5 +65,6 @@ describe('montarListaReprovadosInicioTaf', () => {
     const lista = montarListaReprovadosInicioTaf(sessoes, cadastros, []);
     expect(lista).toHaveLength(1);
     expect(lista[0]?.modalidades.some((m) => m.label === 'Natação')).toBe(true);
+    expect(lista[0]?.modalidades.find((m) => m.label === 'Natação')?.data).toBe('20/04/2026');
   });
 });

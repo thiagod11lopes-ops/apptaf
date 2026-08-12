@@ -40,12 +40,12 @@ export async function gerarReprovadosTafPdfBlobWeb(
 
   type Col = { title: string; w: number; get: (r: ReprovadoInicioTafItem) => string };
   const cols: Col[] = [
-    { title: 'NIP', w: usableW * 0.11, get: (r) => r.nip || '—' },
-    { title: 'Nome', w: usableW * 0.24, get: (r) => r.nome || '—' },
-    { title: 'P/G', w: usableW * 0.08, get: (r) => r.postoGrad || '—' },
+    { title: 'Data do teste', w: usableW * 0.14, get: datasTexto },
     { title: 'Categoria', w: usableW * 0.1, get: (r) => r.categoria || '—' },
+    { title: 'P/G', w: usableW * 0.08, get: (r) => r.postoGrad || '—' },
+    { title: 'NIP', w: usableW * 0.12, get: (r) => r.nip || '—' },
+    { title: 'Nome', w: usableW * 0.24, get: (r) => r.nome || '—' },
     { title: 'Modalidades reprovadas', w: usableW * 0.32, get: modalidadesTexto },
-    { title: 'Data do teste', w: usableW * 0.15, get: datasTexto },
   ];
   const sumW = cols.reduce((a, c) => a + c.w, 0);
   cols.forEach((c) => {

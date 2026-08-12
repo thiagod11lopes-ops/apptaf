@@ -108,12 +108,12 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
   const dataStr = new Date().toLocaleString('pt-BR');
   const rows = itens.map(
     (r) => `<tr>
+        <td class="mono">${datasHtml(r)}</td>
+        <td>${escapeHtmlPdf(r.categoria)}</td>
+        <td>${escapeHtmlPdf(r.postoGrad)}</td>
         <td class="mono">${escapeHtmlPdf(r.nip)}</td>
         <td class="col-nome"><strong>${escapeHtmlPdf(r.nome)}</strong></td>
-        <td>${escapeHtmlPdf(r.postoGrad)}</td>
-        <td>${escapeHtmlPdf(r.categoria)}</td>
         <td class="chips">${chipsHtml(r)}</td>
-        <td class="mono">${datasHtml(r)}</td>
       </tr>`,
   );
 
@@ -123,12 +123,12 @@ export function buildReprovadosTafHtml(itens: ReprovadoInicioTafItem[]): string 
     </div>`;
 
   const theadHtml = `<tr>
+          <th>Data do teste</th>
+          <th>Categoria</th>
+          <th>P/G</th>
           <th>NIP</th>
           <th class="col-nome">Nome</th>
-          <th>P/G</th>
-          <th>Categoria</th>
           <th>Modalidades reprovadas</th>
-          <th>Data do teste</th>
         </tr>`;
 
   const conteudoHtml = buildPdfTableHtml({

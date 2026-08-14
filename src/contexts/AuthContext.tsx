@@ -590,6 +590,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Watchdog: se isSessionLoading travar (await nunca resolve), força limpeza após 45s.
+  useEffect(() => {
+    if (!isSessionLoading) return;
+    const id = setTimeout(() => {
+      console.warn('[auth] watchdog: spinner de sessão travado por 45s — forçando limpeza.');
+      finalizingRef.current = false;
+      finalizeInFlightRef.current = null;
+      setIsSessionLoading(false);
+    }, 45_000);
+    return () => clearTimeout(id);
+  }, [isSessionLoading]);
+
   const signInWithEmail = useCallback(
     async (email: string, password: string, options?: { bootstrapBossPassword?: string }) => {
       if (!supabaseEnabled) {

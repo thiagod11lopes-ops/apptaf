@@ -161,12 +161,12 @@ export default function LoginScreen() {
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={theme.primary} />
               <Text style={[ts.caption, { color: theme.textSecondary }]}>
-                {isSessionLoading ? 'Concluindo login…' : 'Sincronizando…'}
+                Concluindo login…
               </Text>
             </View>
           ) : null}
 
-          {showAuthForm ? (
+          {showAuthForm && !aguardandoLogin ? (
             <>
               <EmailPasswordAuthForm
                 forceRecovery={passwordRecoveryPending}

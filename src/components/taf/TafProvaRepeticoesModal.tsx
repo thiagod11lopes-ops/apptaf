@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 import { AppModal } from '../premium/AppModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Trash2 } from 'lucide-react-native';
 import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
@@ -21,6 +21,7 @@ import { getAplicarTafBackdrop, getAplicarTafGlass } from './aplicar/aplicarTafT
 import { useAplicarTafLayout } from './aplicar/useAplicarTafLayout';
 import { LogombWatermark } from '../mobile/LogombWatermark';
 import { formatNipInput } from '../../utils/nipFormat';
+import { ConfirmacaoVoltarIdentificacaoModal } from './aplicar/ConfirmacaoVoltarIdentificacaoModal';
 
 export type TafProvaRepeticoesModalProps = {
   visible: boolean;
@@ -68,6 +69,7 @@ export function TafProvaRepeticoesModal({
   const { isNarrowPhone, isLandscape } = useAplicarTafLayout();
   const ultimoToqueNomeRef = useRef<{ index: number; at: number } | null>(null);
   const singlePressNomeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [confirmarVoltar, setConfirmarVoltar] = useState(false);
 
   const onPressNomeComDuplo = useCallback(
     (index: number) => {
@@ -100,11 +102,21 @@ export function TafProvaRepeticoesModal({
   );
 
   return (
-    <AppModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <>
+    <AppModal visible={visible} animationType="slide" transparent onRequestClose={() => setConfirmarVoltar(true)}>
       <LinearGradient colors={[...backdropColors]} style={styles.backdrop}>
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
           <View style={[styles.sheet, { backgroundColor: glass.bg, borderColor: glass.border }]}>
             <View style={styles.header}>
+              <PressableScale
+                onPress={() => setConfirmarVoltar(true)}
+                style={styles.voltarBtn}
+                accessibilityLabel="Voltar à identificação"
+                accessibilityRole="button"
+              >
+                <ArrowLeft size={20} color={theme.textSecondary} strokeWidth={2.2} />
+                <Text style={[styles.voltarText, { color: theme.textSecondary }]}>Voltar</Text>
+              </PressableScale>
               <View style={styles.headerTextCol}>
                 <Text style={[styles.kicker, { color: theme.primary }]}>TAF NAVAL</Text>
                 <Text style={[styles.title, { color: ui.text }]}>{tituloProva}</Text>
@@ -270,6 +282,16 @@ export function TafProvaRepeticoesModal({
         </SafeAreaView>
       </LinearGradient>
     </AppModal>
+    <ConfirmacaoVoltarIdentificacaoModal
+      visible={confirmarVoltar}
+      provaLabel={tituloProva}
+      onClose={() => setConfirmarVoltar(false)}
+      onConfirm={() => {
+        setConfirmarVoltar(false);
+        onClose();
+      }}
+    />
+    </>
   );
 }
 
@@ -285,13 +307,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: 'column',
     paddingHorizontal: 18,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 10,
-    gap: 12,
+    gap: 8,
   },
+  voltarBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingRight: 8,
+  },
+  voltarText: { fontSize: 14, fontWeight: '700' },
   headerTextCol: { flex: 1, minWidth: 0, gap: 4 },
   kicker: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
   title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.3 },

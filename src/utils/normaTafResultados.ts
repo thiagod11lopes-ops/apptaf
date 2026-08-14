@@ -77,6 +77,14 @@ export function filtrarCadastrosPorNorma(
 
     const nip = (c.nip ?? '').replace(/\D/g, '');
     const noHistorico = nip.length >= 8 && nipsSessao.has(nip);
+
+    // Cadastro com normaTaf explícita: aceita qualquer resultado (CFN ou Armada),
+    // pois o militar pode ter feito corrida/natação mesmo sendo CFN.
+    if (c.normaTaf === norma) {
+      return cadastroTemResultadoCfn(c) || cadastroTemResultadoArmada(c) || noHistorico;
+    }
+
+    // Cadastros sem normaTaf (legados): filtro original por tipo de resultado.
     if (norma === 'cfn') {
       return cadastroTemResultadoCfn(c) || noHistorico;
     }

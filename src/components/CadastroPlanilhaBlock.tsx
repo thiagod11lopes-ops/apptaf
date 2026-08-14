@@ -107,6 +107,7 @@ type ModernCadastroRowProps = {
   onRequestDelete?: (item: CadastroItemPersist) => void;
   onAbrirFatores: (c: CadastroItemPersist) => void | Promise<void>;
   fatoresPreenchidos: boolean;
+  cfnColor: string;
 };
 
 const ModernCadastroRow = memo(function ModernCadastroRow({
@@ -127,7 +128,10 @@ const ModernCadastroRow = memo(function ModernCadastroRow({
   onRequestDelete,
   onAbrirFatores,
   fatoresPreenchidos,
+  cfnColor,
 }: ModernCadastroRowProps) {
+  const normaLabel = c.normaTaf === 'cfn' ? 'CFN' : 'ARMADA';
+  const normaColor = c.normaTaf === 'cfn' ? cfnColor : primary;
   return (
     <View
       style={[
@@ -152,6 +156,14 @@ const ModernCadastroRow = memo(function ModernCadastroRow({
             </View>
             <View style={[styles.modernChip, { borderColor: glassBorder }]}>
               {renderPostoGradCell(c, [styles.modernChipText, { color: textColor }])}
+            </View>
+            <View
+              style={[
+                styles.modernChip,
+                { borderColor: normaColor + '55', backgroundColor: normaColor + '18' },
+              ]}
+            >
+              <Text style={[styles.modernChipText, { color: normaColor }]}>{normaLabel}</Text>
             </View>
           </View>
         </View>
@@ -281,6 +293,7 @@ export function CadastroPlanilhaBlock({
   const { theme } = useTheme();
   const ui = useMemo(() => getUiColors(theme), [theme]);
   const isAplicacaoTaf = variant === 'aplicacaoTaf';
+  const [filtroNorma, setFiltroNorma] = useState<'Todos' | 'armada' | 'cfn'>('Todos');
   const [filtroCategoria, setFiltroCategoria] = useState<'Todos' | Categoria | ''>('Todos');
   const [filtroPostoGrad, setFiltroPostoGrad] = useState<'Todos' | string>('Todos');
   const [filtroBusca, setFiltroBusca] = useState<string>('');
@@ -368,6 +381,10 @@ export function CadastroPlanilhaBlock({
       ) {
         return false;
       }
+      // Filtro de Norma TAF
+      if (filtroNorma === 'cfn' && c.normaTaf !== 'cfn') return false;
+      if (filtroNorma === 'armada' && (c.normaTaf ?? 'armada') !== 'armada') return false;
+
       const categoriaOk = filtroCategoria === 'Todos' || c.categoria === filtroCategoria;
       if (!categoriaOk) return false;
 
@@ -377,6 +394,7 @@ export function CadastroPlanilhaBlock({
     });
   }, [
     cadastros,
+    filtroNorma,
     filtroCategoria,
     filtroPostoGrad,
     isAplicacaoTaf,
@@ -579,6 +597,7 @@ export function CadastroPlanilhaBlock({
   const labelInk = ui.text;
   const segmentInk = (active: boolean) => (active ? '#FFFFFF' : ui.text);
   const glass = getAplicarTafGlass(theme);
+  const CFN_COLOR = '#F59E0B';
   const useModernCadastro = !isAplicacaoTaf;
 
   const renderPostoGradCell = useCallback(
@@ -625,10 +644,12 @@ export function CadastroPlanilhaBlock({
           onRequestDelete={onRequestDelete}
           onAbrirFatores={abrirFatoresRiscoCadastro}
           fatoresPreenchidos={fatoresPreenchidos}
+          cfnColor={CFN_COLOR}
         />
       );
     },
     [
+      CFN_COLOR,
       abrirFatoresRiscoCadastro,
       buscaLower,
       fatoresPorNip,
@@ -730,6 +751,64 @@ export function CadastroPlanilhaBlock({
               </TouchableOpacity>
             </View>
           )}
+
+          {!isAplicacaoTaf ? (
+            <View style={styles.normaFilterRow}>
+              {(
+                [
+                  { id: 'Todos', label: 'Todos' },
+                  { id: 'armada', label: 'ARMADA' },
+                  { id: 'cfn', label: 'CFN' },
+                ] as const
+              ).map(({ id, label }) => {
+                const active = filtroNorma === id;
+                const cor = id === 'cfn' ? CFN_COLOR : theme.primary;
+                const count =
+                  id === 'Todos'
+                    ? cadastros.length
+                    : id === 'cfn'
+                      ? cadastros.filter((c) => c.normaTaf === 'cfn').length
+                      : cadastros.filter((c) => (c.normaTaf ?? 'armada') === 'armada').length;
+                return (
+                  <TouchableOpacity
+                    key={id}
+                    onPress={() => setFiltroNorma(id)}
+                    style={[
+                      styles.normaChip,
+                      {
+                        borderColor: active ? cor : glass.border,
+                        backgroundColor: active ? cor + '22' : glass.highlight,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.normaChipText,
+                        { color: active ? cor : theme.textMuted },
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                    <View
+                      style={[
+                        styles.normaChipBadge,
+                        { backgroundColor: active ? cor : theme.textMuted + '33' },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.normaChipBadgeText,
+                          { color: active ? '#fff' : theme.textMuted },
+                        ]}
+                      >
+                        {count}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
 
           {!isAplicacaoTaf && somenteCadastroIncompleto ? (
             <View style={styles.incompletoBanner}>
@@ -1346,4 +1425,37 @@ const styles = StyleSheet.create({
   iconBtn: { padding: 6, borderRadius: 10, borderWidth: 1 },
   iconBtnEdit: { borderColor: 'rgba(17,24,39,0.12)', backgroundColor: 'rgba(17,24,39,0.04)' },
   iconBtnDelete: { borderColor: 'rgba(220,38,38,0.20)', backgroundColor: 'rgba(220,38,38,0.08)' },
+
+  normaFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  normaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  normaChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  normaChipBadge: {
+    minWidth: 20,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  normaChipBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
 });

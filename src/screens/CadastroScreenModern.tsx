@@ -55,6 +55,8 @@ type CadastroItem = {
   praca?: string;
   /** Carreira | RM2 — exclusivo. */
   vinculo?: 'carreira' | 'rm2';
+  /** Norma TAF do militar (armada padrão / cfn). */
+  normaTaf?: 'armada' | 'cfn';
   tempoCorrida?: string;
   tempoNatacao?: string;
   notaCorrida?: string;
@@ -102,9 +104,14 @@ export default function CadastroScreenModern() {
   const regularFont = fontFamily('regular', fontsLoaded);
   const boldFont = fontFamily('bold', fontsLoaded);
 
+  const [normaTaf, setNormaTaf] = useState<'armada' | 'cfn'>('armada');
   const [categoria, setCategoria] = useState<Categoria | ''>('');
   const [oficialSelecionado, setOficialSelecionado] = useState<string>('');
   const [pracaSelecionada, setPracaSelecionada] = useState<string>('');
+
+  const GRADUACOES_PRACAS = normaTaf === 'cfn'
+    ? ['SD', 'CB', '3°SG', '2°SG', '1°SG', 'SO']
+    : ['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'];
 
   const [nip, setNip] = useState<string>('');
   const [nome, setNome] = useState<string>('');
@@ -166,6 +173,14 @@ export default function CadastroScreenModern() {
   const [modalCadastroAtualizado, setModalCadastroAtualizado] = useState(false);
 
   const datePlaceholder = useMemo(() => '00/00/0000', []);
+
+  function setNormaTafWithReset(next: 'armada' | 'cfn') {
+    // Se a graduação selecionada pertence exclusivamente à norma anterior, limpa
+    const primeiraNova = next === 'cfn' ? 'SD' : 'MN';
+    const primeiraAnterior = next === 'cfn' ? 'MN' : 'SD';
+    if (pracaSelecionada === primeiraAnterior) setPracaSelecionada(primeiraNova);
+    setNormaTaf(next);
+  }
 
   function setCategoriaWithReset(next: Categoria) {
     setOficialSelecionado('');
@@ -230,6 +245,7 @@ export default function CadastroScreenModern() {
       oficial: categoria === 'Oficiais' ? oficialSelecionado : undefined,
       praca: categoria === 'Praças' ? pracaSelecionada : undefined,
       vinculo: vinculo ?? undefined,
+      normaTaf,
     };
 
     const novoCadastro: CadastroItem = isEdicao && anterior
@@ -297,6 +313,7 @@ export default function CadastroScreenModern() {
     setDataNascimento('');
     setSexo('M');
     setVinculo(null);
+    setNormaTaf('armada');
     setOficialSelecionado('');
     setPracaSelecionada('');
     setCategoria('');
@@ -332,6 +349,7 @@ export default function CadastroScreenModern() {
     setDataNascimento(item.dataNascimento || '');
     setSexo(item.sexo === 'F' ? 'F' : 'M');
     setVinculo(item.vinculo === 'rm2' || item.vinculo === 'carreira' ? item.vinculo : null);
+    setNormaTaf(item.normaTaf === 'cfn' ? 'cfn' : 'armada');
   }
 
   async function handleConfirmarExcluir() {
@@ -439,6 +457,50 @@ export default function CadastroScreenModern() {
           {mostrarFormulario ? (
             <TafGlassPanel accent="cyan" style={styles.formCard}>
               <View style={styles.section}>
+                <FieldLabel>Norma TAF</FieldLabel>
+                <View style={[styles.segmented, { borderColor: theme.border }]}>
+                  <TouchableOpacity
+                    onPress={() => setNormaTafWithReset('armada')}
+                    style={[
+                      styles.segmentBtn,
+                      normaTaf === 'armada'
+                        ? { backgroundColor: selectedBgColor }
+                        : { backgroundColor: unselectedBgColor },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        ts.caption,
+                        normaTaf === 'armada' ? { color: selectedTextColor } : { color: unselectedTextColor },
+                        styles.segmentText,
+                      ]}
+                    >
+                      ARMADA
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setNormaTafWithReset('cfn')}
+                    style={[
+                      styles.segmentBtn,
+                      normaTaf === 'cfn'
+                        ? { backgroundColor: selectedBgColor }
+                        : { backgroundColor: unselectedBgColor },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        ts.caption,
+                        normaTaf === 'cfn' ? { color: selectedTextColor } : { color: unselectedTextColor },
+                        styles.segmentText,
+                      ]}
+                    >
+                      CFN
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.section}>
                 <FieldLabel>Categoria</FieldLabel>
 
                 <View style={[styles.segmented, { borderColor: theme.border }]}>
@@ -528,7 +590,7 @@ export default function CadastroScreenModern() {
                 <View style={styles.section}>
                   <FieldLabel>Graduação</FieldLabel>
                   <View style={styles.optionGrid}>
-                    {['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'].map((opt) => {
+                    {GRADUACOES_PRACAS.map((opt) => {
                       const active = pracaSelecionada === opt;
                       return (
                         <TouchableOpacity

@@ -54,6 +54,11 @@ export type CadastroItemPersist = {
   tempoAbdominalPrancha?: string;
   notaAbdominalPrancha?: string;
   dataTafAbdominalPrancha?: string;
+  /**
+   * Norma TAF do militar: 'armada' (padrão) ou 'cfn' (Fuzileiros Navais).
+   * Determina qual conjunto de provas e graduações se aplica.
+   */
+  normaTaf?: 'armada' | 'cfn';
   /** Unix ms — usado na sincronização offline (mais recente prevalece). */
   updatedAt?: number;
 };

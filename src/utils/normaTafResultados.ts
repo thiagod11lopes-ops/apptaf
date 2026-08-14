@@ -49,14 +49,15 @@ export function cadastroTemResultadoArmada(c: CadastroItemPersist): boolean {
   );
 }
 
-/** Mantém cadastros com resultado da norma; inclui quem só aparece no histórico filtrado.
+/**
+ * Mantém cadastros com resultado da norma; inclui quem só aparece no histórico filtrado.
  *
- * Prioridade de norma:
- *  - Se o cadastro tem `normaTaf` explícito, ele só aparece na norma correspondente,
- *    independentemente dos campos de resultado preenchidos.
- *  - Cadastros sem `normaTaf` (legados) seguem o comportamento original: aparecem
- *    na norma cujos campos de resultado estão preenchidos ou cuja sessão filtrada
- *    contém o NIP.
+ * Regra de norma (definitiva):
+ *  - CFN: somente cadastros com `normaTaf === 'cfn'` explícito.
+ *  - ARMADA: cadastros com `normaTaf === 'armada'` ou sem normaTaf (legados).
+ *  Os campos de resultado aceitos para CFN incluem tanto os exclusivos de CFN
+ *  (flexão/abdominal) quanto os comuns (corrida/natação/permanência), pois
+ *  militares CFN também realizam essas provas.
  */
 export function filtrarCadastrosPorNorma(
   cadastros: CadastroItemPersist[],
@@ -72,21 +73,17 @@ export function filtrarCadastrosPorNorma(
   }
 
   return cadastros.filter((c) => {
-    // Norma explícita no cadastro: exclui imediatamente se for a norma errada.
-    if (c.normaTaf && c.normaTaf !== norma) return false;
+    // CFN: exige registro explícito como CFN.
+    if (norma === 'cfn' && c.normaTaf !== 'cfn') return false;
+    // ARMADA: exclui quem foi explicitamente registrado como CFN.
+    if (norma === 'armada' && c.normaTaf === 'cfn') return false;
 
     const nip = (c.nip ?? '').replace(/\D/g, '');
     const noHistorico = nip.length >= 8 && nipsSessao.has(nip);
 
-    // Cadastro com normaTaf explícita: aceita qualquer resultado (CFN ou Armada),
-    // pois o militar pode ter feito corrida/natação mesmo sendo CFN.
-    if (c.normaTaf === norma) {
-      return cadastroTemResultadoCfn(c) || cadastroTemResultadoArmada(c) || noHistorico;
-    }
-
-    // Cadastros sem normaTaf (legados): filtro original por tipo de resultado.
     if (norma === 'cfn') {
-      return cadastroTemResultadoCfn(c) || noHistorico;
+      // Aceita qualquer resultado: CFN exclusivo ou provas comuns (corrida/natação/permanência).
+      return cadastroTemResultadoCfn(c) || cadastroTemResultadoArmada(c) || noHistorico;
     }
     return cadastroTemResultadoArmada(c) || noHistorico;
   });
@@ -98,14 +95,14 @@ export const NORMA_TAF_LABEL: Record<NormaTafVista, string> = {
 };
 
 export function cadastroComResultadoNorma(c: CadastroItemPersist, norma: NormaTafVista): boolean {
-  // Cadastro com norma explícita registrada: exclui se for norma diferente;
-  // aceita qualquer tipo de resultado (CFN ou Armada) para a norma correta.
-  if (c.normaTaf) {
-    if (c.normaTaf !== norma) return false;
+  if (norma === 'cfn') {
+    // CFN: somente cadastros explicitamente registrados como CFN.
+    if (c.normaTaf !== 'cfn') return false;
     return cadastroTemResultadoCfn(c) || cadastroTemResultadoArmada(c);
   }
-  // Cadastros legados (sem normaTaf): filtro original por tipo de campo.
-  return norma === 'cfn' ? cadastroTemResultadoCfn(c) : cadastroTemResultadoArmada(c);
+  // ARMADA: exclui CFN-registrados; aceita legados (sem normaTaf) e Armada explícitos.
+  if (c.normaTaf === 'cfn') return false;
+  return cadastroTemResultadoArmada(c);
 }
 
 /** Sessões e cadastros já unificados/filtrados para a norma escolhida. */

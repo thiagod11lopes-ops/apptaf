@@ -49,7 +49,15 @@ export function cadastroTemResultadoArmada(c: CadastroItemPersist): boolean {
   );
 }
 
-/** Mantém cadastros com resultado da norma; inclui quem só aparece no histórico filtrado. */
+/** Mantém cadastros com resultado da norma; inclui quem só aparece no histórico filtrado.
+ *
+ * Prioridade de norma:
+ *  - Se o cadastro tem `normaTaf` explícito, ele só aparece na norma correspondente,
+ *    independentemente dos campos de resultado preenchidos.
+ *  - Cadastros sem `normaTaf` (legados) seguem o comportamento original: aparecem
+ *    na norma cujos campos de resultado estão preenchidos ou cuja sessão filtrada
+ *    contém o NIP.
+ */
 export function filtrarCadastrosPorNorma(
   cadastros: CadastroItemPersist[],
   norma: NormaTafVista,
@@ -64,6 +72,9 @@ export function filtrarCadastrosPorNorma(
   }
 
   return cadastros.filter((c) => {
+    // Norma explícita no cadastro: exclui imediatamente se for a norma errada.
+    if (c.normaTaf && c.normaTaf !== norma) return false;
+
     const nip = (c.nip ?? '').replace(/\D/g, '');
     const noHistorico = nip.length >= 8 && nipsSessao.has(nip);
     if (norma === 'cfn') {

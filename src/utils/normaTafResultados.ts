@@ -137,6 +137,36 @@ function sessoesParaCfn(
   return result;
 }
 
+/**
+ * Constrói sessões para a visão ARMADA.
+ *
+ * Inclui apenas sessões inferidas como ARMADA, removendo os resultados de
+ * participantes explicitamente cadastrados como CFN (nipsCfn) para evitar que
+ * apareçam duplicados na visão ARMADA.
+ */
+export function sessoesParaArmada(
+  unificadas: SessaoAplicacaoTaf[],
+  nipsCfn: ReadonlySet<string>,
+): SessaoAplicacaoTaf[] {
+  const result: SessaoAplicacaoTaf[] = [];
+  for (const s of unificadas) {
+    if (inferNormaSessao(s) !== 'armada') continue;
+    if (nipsCfn.size === 0) {
+      result.push(s);
+      continue;
+    }
+    // Remove resultados de participantes CFN de sessões mistas.
+    const resultadosArmada = s.resultados.filter((r) => {
+      const nip = (r.nip ?? '').replace(/\D/g, '');
+      return nip.length < 8 || !nipsCfn.has(nip);
+    });
+    if (resultadosArmada.length > 0) {
+      result.push({ ...s, resultados: resultadosArmada });
+    }
+  }
+  return result;
+}
+
 /** Sessões e cadastros já unificados/filtrados para a norma escolhida. */
 export function prepararDadosResultadosNorma(
   sessoes: SessaoAplicacaoTaf[],
@@ -150,20 +180,19 @@ export function prepararDadosResultadosNorma(
     ? sessoesSemDemo
     : unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
 
-  let sessoesBase: SessaoAplicacaoTaf[];
-  if (norma === 'cfn') {
-    // Monta o conjunto de NIPs de cadastros CFN para filtrar as sessões mistas.
-    const nipsCfn = new Set<string>();
-    for (const c of cadastrosSemDemo) {
-      if (c.normaTaf === 'cfn') {
-        const nip = (c.nip ?? '').replace(/\D/g, '');
-        if (nip.length >= 8) nipsCfn.add(nip);
-      }
+  // Monta o conjunto de NIPs CFN — usado em ambas as visões para separar participantes.
+  const nipsCfn = new Set<string>();
+  for (const c of cadastrosSemDemo) {
+    if (c.normaTaf === 'cfn') {
+      const nip = (c.nip ?? '').replace(/\D/g, '');
+      if (nip.length >= 8) nipsCfn.add(nip);
     }
-    sessoesBase = sessoesParaCfn(unificadas, nipsCfn);
-  } else {
-    sessoesBase = filtrarSessoesPorNorma(unificadas, norma);
   }
+
+  const sessoesBase =
+    norma === 'cfn'
+      ? sessoesParaCfn(unificadas, nipsCfn)
+      : sessoesParaArmada(unificadas, nipsCfn);
 
   const sessoesNorma = agruparSessoesHistoricoPorTeste(sessoesBase);
   const cadastrosNorma = filtrarCadastrosPorNorma(cadastrosSemDemo, norma, sessoesNorma);

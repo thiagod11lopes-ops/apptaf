@@ -10,7 +10,7 @@ import {
 import { agregarHistoricoPorParticipante } from './resultadoGeralHistorico';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 import { compareByNomePtBr } from './compareNomePtBr';
-import { filtrarSessoesPorNorma } from './normaTafResultados';
+import { filtrarSessoesPorNorma, sessoesParaArmada } from './normaTafResultados';
 export type FiltroPendenciaTaf = 'total' | 'parcial' | 'corrida' | 'natacao' | 'permanencia';
 
 export type PendenciaTafItem = PendenciaParcialItem & {
@@ -171,7 +171,14 @@ export function montarListaPendenciasTotais(
   const unificadas = opts?.jaUnificadas
     ? sessoesSemDemo
     : unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
-  const sessoesArmada = filtrarSessoesPorNorma(unificadas, 'armada');
+  // Usa sessoesParaArmada para remover participantes CFN de sessões mistas.
+  const nipsCfn = new Set<string>(
+    cadastrosSemDemo
+      .filter((c) => c.normaTaf === 'cfn')
+      .map((c) => (c.nip ?? '').replace(/\D/g, ''))
+      .filter((n) => n.length >= 8),
+  );
+  const sessoesArmada = sessoesParaArmada(unificadas, nipsCfn);
   return filtrarPendenciasTotais(
     montarListaPendencias(sessoesArmada, cadastrosArmada, { jaUnificadas: true }),
   );

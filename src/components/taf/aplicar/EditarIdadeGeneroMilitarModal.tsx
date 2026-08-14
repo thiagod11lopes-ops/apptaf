@@ -15,7 +15,9 @@ import {
 } from './VinculoCarreiraRm2Checks';
 
 const POSTOS_OFICIAIS = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG', 'CALTE'] as const;
-const GRADUACOES_PRACAS = ['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'] as const;
+const GRADUACOES_PRACAS_ARMADA = ['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO'] as const;
+const GRADUACOES_PRACAS_CFN   = ['SD', 'CB', '3°SG', '2°SG', '1°SG', 'SO'] as const;
+const CFN_COLOR = '#F59E0B';
 
 type Categoria = 'Oficiais' | 'Praças';
 
@@ -31,6 +33,7 @@ function formatDateInput(value: string): string {
 
 export type EditarDadosMilitarPayload = {
   nome: string;
+  normaTaf: 'armada' | 'cfn';
   categoria: Categoria;
   oficial?: string;
   praca?: string;
@@ -43,6 +46,7 @@ type Props = {
   visible: boolean;
   nip: string;
   nome: string;
+  normaTaf?: 'armada' | 'cfn';
   categoria?: Categoria;
   postoGrad?: string;
   dataNascimento: string;
@@ -57,6 +61,7 @@ export function EditarIdadeGeneroMilitarModal({
   visible,
   nip,
   nome: nomeInicial,
+  normaTaf: normaTafInicial,
   categoria: categoriaInicial,
   postoGrad: postoInicial,
   dataNascimento: dataInicial,
@@ -66,6 +71,7 @@ export function EditarIdadeGeneroMilitarModal({
   onSalvar,
 }: Props) {
   const { theme } = useTheme();
+  const [normaTaf, setNormaTaf] = useState<'armada' | 'cfn'>(normaTafInicial ?? 'armada');
   const [nome, setNome] = useState(nomeInicial);
   const [categoria, setCategoria] = useState<Categoria>(
     categoriaInicial === 'Oficiais' ? 'Oficiais' : 'Praças',
@@ -81,8 +87,11 @@ export function EditarIdadeGeneroMilitarModal({
 
   useEffect(() => {
     if (!visible) return;
+    const norma: 'armada' | 'cfn' = normaTafInicial === 'cfn' ? 'cfn' : 'armada';
+    setNormaTaf(norma);
     const cat: Categoria = categoriaInicial === 'Oficiais' ? 'Oficiais' : 'Praças';
-    const opcoes = cat === 'Oficiais' ? POSTOS_OFICIAIS : GRADUACOES_PRACAS;
+    const pracasOpcoes = norma === 'cfn' ? GRADUACOES_PRACAS_CFN : GRADUACOES_PRACAS_ARMADA;
+    const opcoes = cat === 'Oficiais' ? POSTOS_OFICIAIS : pracasOpcoes;
     const postoRaw = (postoInicial || '').trim();
     setNome((nomeInicial || '').trim());
     setCategoria(cat);
@@ -91,22 +100,31 @@ export function EditarIdadeGeneroMilitarModal({
         ? postoRaw
         : cat === 'Oficiais'
           ? 'CT'
-          : 'MN',
+          : norma === 'cfn' ? 'SD' : 'MN',
     );
     setDataNascimento(dataInicial);
     setSexo(sexoInicial === 'F' ? 'F' : 'M');
     setVinculo(vinculoInicial === 'carreira' || vinculoInicial === 'rm2' ? vinculoInicial : null);
     setErro('');
     setSalvando(false);
-  }, [visible, nomeInicial, categoriaInicial, postoInicial, dataInicial, sexoInicial, vinculoInicial]);
+  }, [visible, nomeInicial, normaTafInicial, categoriaInicial, postoInicial, dataInicial, sexoInicial, vinculoInicial]);
 
   const idade = useMemo(() => idadeFromDataNascimento(dataNascimento), [dataNascimento]);
   const nipFmt = useMemo(() => formatNipInput(nip), [nip]);
-  const opcoesPosto = categoria === 'Oficiais' ? POSTOS_OFICIAIS : GRADUACOES_PRACAS;
+  const graduacoesPracas = normaTaf === 'cfn' ? GRADUACOES_PRACAS_CFN : GRADUACOES_PRACAS_ARMADA;
+  const opcoesPosto = categoria === 'Oficiais' ? POSTOS_OFICIAIS : graduacoesPracas;
+
+  const setNormaTafComPosto = (next: 'armada' | 'cfn') => {
+    if (categoria === 'Praças') {
+      if (next === 'cfn' && posto === 'MN') setPosto('SD');
+      else if (next === 'armada' && posto === 'SD') setPosto('MN');
+    }
+    setNormaTaf(next);
+  };
 
   const setCategoriaComPosto = (next: Categoria) => {
     setCategoria(next);
-    setPosto(next === 'Oficiais' ? 'CT' : 'MN');
+    setPosto(next === 'Oficiais' ? 'CT' : normaTaf === 'cfn' ? 'SD' : 'MN');
   };
 
   const salvar = async () => {
@@ -133,6 +151,7 @@ export function EditarIdadeGeneroMilitarModal({
     try {
       await onSalvar({
         nome: nomeTrim,
+        normaTaf,
         categoria,
         oficial: categoria === 'Oficiais' ? posto : undefined,
         praca: categoria === 'Praças' ? posto : undefined,
@@ -164,7 +183,34 @@ export function EditarIdadeGeneroMilitarModal({
           <Text style={[styles.nip, { color: theme.textSecondary }]}>NIP {nipFmt}</Text>
         ) : null}
 
-        <Text style={[styles.label, styles.labelFirst, { color: theme.textMuted }]}>Categoria</Text>
+        <Text style={[styles.label, styles.labelFirst, { color: theme.textMuted }]}>Norma TAF</Text>
+        <View style={[styles.segmented, { borderColor: theme.border }]}>
+          {(['armada', 'cfn'] as const).map((n) => {
+            const active = normaTaf === n;
+            const cor = n === 'cfn' ? CFN_COLOR : theme.primary;
+            return (
+              <TouchableOpacity
+                key={n}
+                accessibilityLabel={n === 'cfn' ? 'CFN' : 'ARMADA'}
+                onPress={() => setNormaTafComPosto(n)}
+                style={[
+                  styles.segmentBtn,
+                  {
+                    backgroundColor: active
+                      ? theme.isDark ? cor + '40' : cor + '20'
+                      : theme.backgroundSecondary,
+                  },
+                ]}
+              >
+                <Text style={[styles.segmentText, { color: active ? cor : theme.textSecondary }]}>
+                  {n === 'cfn' ? 'CFN' : 'ARMADA'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.label, { color: theme.textMuted }]}>Categoria</Text>
         <View style={[styles.segmented, { borderColor: theme.border }]}>
           {(['Oficiais', 'Praças'] as const).map((cat) => {
             const active = categoria === cat;

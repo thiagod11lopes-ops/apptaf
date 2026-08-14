@@ -231,6 +231,7 @@ export default function AplicacaoTAFScreen() {
   const salvarEdicaoIdadeGenero = useCallback(
     async (dados: {
       nome: string;
+      normaTaf: 'armada' | 'cfn';
       categoria: 'Oficiais' | 'Praças';
       oficial?: string;
       praca?: string;
@@ -244,6 +245,7 @@ export default function AplicacaoTAFScreen() {
         dataNascimento: dados.dataNascimento,
         sexo: dados.sexo,
         nome: (dados.nome || nome).trim() || cadastro.nome,
+        normaTaf: dados.normaTaf,
         categoria: dados.categoria,
         oficial: dados.categoria === 'Oficiais' ? dados.oficial : undefined,
         praca: dados.categoria === 'Praças' ? dados.praca : undefined,
@@ -853,6 +855,7 @@ export default function AplicacaoTAFScreen() {
       <EditarIdadeGeneroMilitarModal
         visible={modalEditarIdadeGenero && cadastro != null}
         nome={nome || (cadastro?.nome ?? '')}
+        normaTaf={cadastro?.normaTaf ?? 'armada'}
         nip={nip}
         categoria={cadastro?.categoria === 'Oficiais' ? 'Oficiais' : 'Praças'}
         postoGrad={

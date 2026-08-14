@@ -2278,6 +2278,7 @@ export default function AplicarTAFScreen() {
       const atualizado: CadastroItemPersist = {
         ...busca.cadastro,
         nome: dados.nome,
+        normaTaf: dados.normaTaf,
         categoria: dados.categoria,
         oficial: dados.categoria === 'Oficiais' ? dados.oficial : undefined,
         praca: dados.categoria === 'Praças' ? dados.praca : undefined,
@@ -3903,6 +3904,7 @@ export default function AplicarTAFScreen() {
       <EditarIdadeGeneroMilitarModal
         visible={!demoAtivo && modalEditarOk != null}
         nome={modalEditarOk?.nome ?? ''}
+        normaTaf={modalEditarOk?.normaTaf ?? 'armada'}
         categoria={modalEditarOk?.categoria}
         postoGrad={
           modalEditarOk?.categoria === 'Oficiais'

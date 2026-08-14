@@ -3,6 +3,37 @@
  * Ex.: "CT João da Silva", "MN Pedro Souza", "CB RM2 Fulano".
  */
 
+/**
+ * Postos e graduações da Marinha do Brasil (Armada + CFN).
+ * Usado para detectar se um nome já começa com um posto/graduação e evitar duplicação.
+ */
+export const POSTOS_GRADUACOES_CONHECIDOS = new Set([
+  // Praças Armada
+  'MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO',
+  // Praças CFN
+  'SD',
+  // Oficiais
+  'GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG', 'CALTE',
+  // Variações sem símbolo de grau
+  '3SG', '2SG', '1SG', '2TEN', '1TEN',
+]);
+
+/**
+ * Retorna o nome puro sem posto/graduação à esquerda.
+ * Ex.: "MN FABIO APARICIO" → "FABIO APARICIO", "SD JOSE" → "JOSE".
+ */
+export function nomeBareSemPosto(nomeMilitar: string): string {
+  const parts = nomeMilitar.trim().split(/\s+/);
+  if (parts.length < 2) return nomeMilitar.trim();
+  const first = (parts[0] ?? '').toUpperCase();
+  if (!POSTOS_GRADUACOES_CONHECIDOS.has(first)) return nomeMilitar.trim();
+  // Strip posto; se o segundo token for "RM2" (vínculo), strip também.
+  if (parts.length >= 3 && (parts[1] ?? '').toUpperCase() === 'RM2') {
+    return parts.slice(2).join(' ');
+  }
+  return parts.slice(1).join(' ');
+}
+
 export type PessoaComPostoGrad = {
   nome?: string | null;
   categoria?: 'Oficiais' | 'Praças' | string | null;
@@ -49,6 +80,10 @@ export function formatNomeComPostoParts(
   if (!p || p === '—') return n;
   const prefix = `${p} `;
   if (n.toUpperCase().startsWith(prefix.toUpperCase())) return n;
+  // Se o nome já começa com um posto/graduação conhecido (ex: "MN FABIO"),
+  // não adicionar outro posto à esquerda (evita "SD MN FABIO APARICIO").
+  const primeiraWord = (n.split(/\s+/)[0] ?? '').toUpperCase();
+  if (POSTOS_GRADUACOES_CONHECIDOS.has(primeiraWord)) return n;
   return `${p} ${n}`;
 }
 

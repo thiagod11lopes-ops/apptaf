@@ -146,6 +146,7 @@ import {
 } from '../utils/notaReprovacaoTexto';
 import {
   formatNomeComPosto,
+  nomeBareSemPosto,
   primeiroSegundoNomeComPosto,
 } from '../utils/formatNomeComPosto';
 import {
@@ -3080,7 +3081,7 @@ export default function AplicarTAFScreen() {
               tipo: 'ok' as const,
               texto: 'Militar Cadastrado no Sistema.',
               nomeMilitar: p.nomeMilitar,
-              nome: p.nomeMilitar,
+              nome: nomeBareSemPosto(p.nomeMilitar),
               categoria: 'Praças' as const,
               dataNascimento: p.dataNascimento,
               sexo: p.sexo,
@@ -3169,7 +3170,7 @@ export default function AplicarTAFScreen() {
               tipo: 'ok' as const,
               texto: 'Militar Cadastrado no Sistema.',
               nomeMilitar: p.nomeMilitar,
-              nome: p.nomeMilitar,
+              nome: nomeBareSemPosto(p.nomeMilitar),
               categoria: 'Praças' as const,
               dataNascimento: p.dataNascimento,
               sexo: p.sexo,

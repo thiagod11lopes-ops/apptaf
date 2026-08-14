@@ -80,10 +80,12 @@ export function formatNomeComPostoParts(
   if (!p || p === '—') return n;
   const prefix = `${p} `;
   if (n.toUpperCase().startsWith(prefix.toUpperCase())) return n;
-  // Se o nome já começa com um posto/graduação conhecido (ex: "MN FABIO"),
-  // não adicionar outro posto à esquerda (evita "SD MN FABIO APARICIO").
+  // Se o nome começa com um posto/graduação conhecido diferente do atual,
+  // substitui pelo posto correto: "MN FABIO" + postoGrad "SD" → "SD FABIO APARICIO".
   const primeiraWord = (n.split(/\s+/)[0] ?? '').toUpperCase();
-  if (POSTOS_GRADUACOES_CONHECIDOS.has(primeiraWord)) return n;
+  if (POSTOS_GRADUACOES_CONHECIDOS.has(primeiraWord)) {
+    return `${p} ${nomeBareSemPosto(n)}`;
+  }
   return `${p} ${n}`;
 }
 

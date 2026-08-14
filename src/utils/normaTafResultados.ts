@@ -98,6 +98,13 @@ export const NORMA_TAF_LABEL: Record<NormaTafVista, string> = {
 };
 
 export function cadastroComResultadoNorma(c: CadastroItemPersist, norma: NormaTafVista): boolean {
+  // Cadastro com norma explícita registrada: exclui se for norma diferente;
+  // aceita qualquer tipo de resultado (CFN ou Armada) para a norma correta.
+  if (c.normaTaf) {
+    if (c.normaTaf !== norma) return false;
+    return cadastroTemResultadoCfn(c) || cadastroTemResultadoArmada(c);
+  }
+  // Cadastros legados (sem normaTaf): filtro original por tipo de campo.
   return norma === 'cfn' ? cadastroTemResultadoCfn(c) : cadastroTemResultadoArmada(c);
 }
 

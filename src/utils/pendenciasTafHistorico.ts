@@ -166,12 +166,14 @@ export function montarListaPendenciasTotais(
 ): PendenciaTafItem[] {
   const sessoesSemDemo = sessoes.filter((s) => !s.id.startsWith('demo-sess-'));
   const cadastrosSemDemo = cadastros.filter((c) => !c.id.startsWith('demo-cad-'));
+  // Exclui cadastros explicitamente registrados como CFN da visão Armada Total.
+  const cadastrosArmada = cadastrosSemDemo.filter((c) => (c.normaTaf ?? 'armada') !== 'cfn');
   const unificadas = opts?.jaUnificadas
     ? sessoesSemDemo
     : unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
   const sessoesArmada = filtrarSessoesPorNorma(unificadas, 'armada');
   return filtrarPendenciasTotais(
-    montarListaPendencias(sessoesArmada, cadastrosSemDemo, { jaUnificadas: true }),
+    montarListaPendencias(sessoesArmada, cadastrosArmada, { jaUnificadas: true }),
   );
 }
 

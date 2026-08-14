@@ -200,6 +200,8 @@ export function ResultadosConsultaPanel({
       normaTaf,
       { jaUnificadas: true },
     );
+    // Lista completa para o autocomplete de NIP/nome; o gate de resultado
+    // é feito por cadastroComResultadoNorma (que respeita c.normaTaf).
     setTodosCadastros(cadastrosDataset);
     setSessoesHistorico(sessoesNorma);
   }, [cadastrosDataset, sessoesDataset, normaTaf]);

@@ -4,7 +4,7 @@ import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultad
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { compareByNomePtBr } from './compareNomePtBr';
 import { formatNipInput, nipDigitos } from './nipFormat';
-import { prepararDadosResultadosNorma, filtrarSessoesPorNorma } from './normaTafResultados';
+import { prepararDadosResultadosNorma, filtrarSessoesPorNorma, cadastroTemResultadoCfn } from './normaTafResultados';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 import {
   temAvaliacaoCorrida,
@@ -315,7 +315,10 @@ function montarListaCfn<T>(
       ? sessoesSemDemo
       : unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
     sessoesNorma = filtrarSessoesPorNorma(unificadas, 'cfn');
-    cadastrosNorma = cadastrosSemDemo;
+    // Inclui apenas cadastros explicitamente CFN ou legados com campos CFN preenchidos.
+    cadastrosNorma = cadastrosSemDemo.filter(
+      (c) => c.normaTaf === 'cfn' || (!c.normaTaf && cadastroTemResultadoCfn(c)),
+    );
   } else {
     ({ sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(sessoes, cadastros, 'cfn', {
       jaUnificadas: opts?.jaUnificadas,

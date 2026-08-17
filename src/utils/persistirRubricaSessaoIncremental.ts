@@ -1,6 +1,7 @@
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import { putSessaoRubricasLocal } from '../offline-first/db/localDbRubricas';
+import { resolveOwnerUid } from '../offline-first/db/localDb';
 import {
   getCachedDataOwnerUid,
   resolveStorageOwnerUid,
@@ -19,6 +20,10 @@ const PROVAS_SIDE: ReadonlySet<SessaoResultadoRubrica['prova']> = new Set([
   'permanencia',
   'caminhada',
 ]);
+
+async function ownerUidRubricasLocal(): Promise<string> {
+  return resolveOwnerUid(getCachedDataOwnerUid() ?? (await resolveStorageOwnerUid()));
+}
 
 function provaSideTable(
   resultado: ResultadoCorridaItem,
@@ -55,8 +60,7 @@ export async function persistirRubricaCandidatoSessaoSideTable(
   if (!id) return false;
   const row = resultadoParaSessaoRubricaSideTable(resultado, tipoProva);
   if (!row) return false;
-  const ownerUid = getCachedDataOwnerUid() ?? (await resolveStorageOwnerUid());
-  if (!ownerUid) return false;
+  const ownerUid = await ownerUidRubricasLocal();
   await putSessaoRubricasLocal(ownerUid, id, { resultados: [row] });
   return true;
 }
@@ -143,8 +147,7 @@ export async function persistirRubricaAplicadorSessaoSideTable(
   const id = (sessaoId ?? '').trim();
   const svg = aplicadorRubricaParaSideTable(rubricaSvg);
   if (!id || !svg) return false;
-  const ownerUid = getCachedDataOwnerUid() ?? (await resolveStorageOwnerUid());
-  if (!ownerUid) return false;
+  const ownerUid = await ownerUidRubricasLocal();
   await putSessaoRubricasLocal(ownerUid, id, {
     resultados: [],
     aplicadorRubricaSvg: svg,

@@ -1,5 +1,6 @@
 import { nipDigitos } from './nipFormat';
 import { listSessaoRubricasLocal } from '../offline-first/db/localDbRubricas';
+import { ANONYMOUS_OWNER, resolveOwnerUid } from '../offline-first/db/localDb';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
 import { isRubricaImagemDataUrl, preferRubrica } from './rubricaPresence';
 import { yieldToUi } from './yieldToUi';
@@ -11,6 +12,13 @@ export type RubricasPorNip = {
   permanencia?: string;
 };
 
+/** Conta logada + dados criados sem login (`__local__`). Sem login: só `__local__`. */
+export function ownersParaLeituraRubricasLocal(ownerUid?: string | null): string[] {
+  const owner = resolveOwnerUid(ownerUid);
+  if (owner === ANONYMOUS_OWNER) return [ANONYMOUS_OWNER];
+  return [owner, ANONYMOUS_OWNER];
+}
+
 /**
  * Rúbricas das sessões — side table local (imagens reais para PDF).
  * `nipsFiltro`: quando informado, só materializa esses NIPs (sob demanda).
@@ -19,8 +27,7 @@ export async function carregarRubricasDasSessoesPorNip(
   nipsFiltro?: Iterable<string>,
 ): Promise<Map<string, RubricasPorNip>> {
   const map = new Map<string, RubricasPorNip>();
-  const ownerUid = getCachedDataOwnerUid();
-  if (!ownerUid) return map;
+  const owners = ownersParaLeituraRubricasLocal(getCachedDataOwnerUid());
 
   const allowed =
     nipsFiltro != null
@@ -32,7 +39,8 @@ export async function carregarRubricasDasSessoesPorNip(
       : null;
   if (allowed && allowed.size === 0) return map;
 
-  const rows = await listSessaoRubricasLocal(ownerUid);
+  const batches = await Promise.all(owners.map((uid) => listSessaoRubricasLocal(uid)));
+  const rows = batches.flat();
   for (let i = 0; i < rows.length; i += 1) {
     if (i > 0 && i % 24 === 0) await yieldToUi();
     const row = rows[i]!;

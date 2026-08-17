@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ResultadoCorridaItem } from '../../src/navigation/types';
 import { RUBRICADO_DIGITALMENTE } from '../../src/utils/rubricaPresence';
-import { resultadoParaSessaoRubricaSideTable } from '../../src/utils/persistirRubricaSessaoIncremental';
+import { resultadoParaSessaoRubricaSideTable, uriRubricaAposRaster } from '../../src/utils/persistirRubricaSessaoIncremental';
 
 const svg = 'data:image/svg+xml;utf8,%3Csvg%3E';
 
@@ -46,5 +46,21 @@ describe('resultadoParaSessaoRubricaSideTable', () => {
         'corrida',
       ),
     ).toBeNull();
+  });
+});
+
+describe('uriRubricaAposRaster', () => {
+  it('mantém o SVG quando o raster falha ou não é imagem', () => {
+    expect(uriRubricaAposRaster(svg, null)).toBe(svg);
+    expect(uriRubricaAposRaster(svg, '')).toBe(svg);
+    expect(uriRubricaAposRaster(svg, RUBRICADO_DIGITALMENTE)).toBe(svg);
+  });
+
+  it('substitui o SVG só com PNG/WebP/JPEG válido', () => {
+    const webp = 'data:image/webp;base64,AAA';
+    expect(uriRubricaAposRaster(svg, webp)).toBe(webp);
+    expect(uriRubricaAposRaster(svg, 'data:image/png;base64,BBB')).toBe(
+      'data:image/png;base64,BBB',
+    );
   });
 });

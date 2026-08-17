@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ResultadoCorridaItem } from '../../src/navigation/types';
 import { RUBRICADO_DIGITALMENTE } from '../../src/utils/rubricaPresence';
-import { resultadoParaSessaoRubricaSideTable, uriRubricaAposRaster } from '../../src/utils/persistirRubricaSessaoIncremental';
+import {
+  aplicadorRubricaParaSideTable,
+  resultadoParaSessaoRubricaSideTable,
+  uriRubricaAposRaster,
+} from '../../src/utils/persistirRubricaSessaoIncremental';
 
 const svg = 'data:image/svg+xml;utf8,%3Csvg%3E';
 
@@ -62,5 +66,17 @@ describe('uriRubricaAposRaster', () => {
     expect(uriRubricaAposRaster(svg, 'data:image/png;base64,BBB')).toBe(
       'data:image/png;base64,BBB',
     );
+  });
+});
+
+describe('aplicadorRubricaParaSideTable', () => {
+  it('aceita imagem e rejeita marcador/vazio', () => {
+    expect(aplicadorRubricaParaSideTable(svg)).toBe(svg);
+    expect(aplicadorRubricaParaSideTable('data:image/webp;base64,AAA')).toBe(
+      'data:image/webp;base64,AAA',
+    );
+    expect(aplicadorRubricaParaSideTable(RUBRICADO_DIGITALMENTE)).toBeUndefined();
+    expect(aplicadorRubricaParaSideTable('')).toBeUndefined();
+    expect(aplicadorRubricaParaSideTable(undefined)).toBeUndefined();
   });
 });

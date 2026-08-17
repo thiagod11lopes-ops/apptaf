@@ -124,3 +124,58 @@ export async function persistirRubricaCandidatoIncremental(
   }
   return efetivo;
 }
+
+/** Data-URL de imagem do aplicador para a side table da sessão. */
+export function aplicadorRubricaParaSideTable(
+  uri?: string | null,
+): string | undefined {
+  const t = (uri ?? '').trim();
+  return isRubricaImagemDataUrl(t) ? t : undefined;
+}
+
+/**
+ * Grava a rúbrica do aplicador na side table da sessão (une, não apaga candidatos).
+ */
+export async function persistirRubricaAplicadorSessaoSideTable(
+  sessaoId: string | null | undefined,
+  rubricaSvg?: string | null,
+): Promise<boolean> {
+  const id = (sessaoId ?? '').trim();
+  const svg = aplicadorRubricaParaSideTable(rubricaSvg);
+  if (!id || !svg) return false;
+  const ownerUid = getCachedDataOwnerUid() ?? (await resolveStorageOwnerUid());
+  if (!ownerUid) return false;
+  await putSessaoRubricasLocal(ownerUid, id, {
+    resultados: [],
+    aplicadorRubricaSvg: svg,
+  });
+  return true;
+}
+
+/**
+ * Parte 3: SVG do aplicador na side table; raster em seguida.
+ * WebP/PNG ok → substitui. Falha → mantém o SVG. Devolve o data-URL efetivo.
+ */
+export async function persistirRubricaAplicadorIncremental(
+  sessaoId: string | null | undefined,
+  rubricaSvg?: string | null,
+): Promise<string | undefined> {
+  const svgBruto = aplicadorRubricaParaSideTable(rubricaSvg);
+  if (!svgBruto) return undefined;
+
+  await persistirRubricaAplicadorSessaoSideTable(sessaoId, svgBruto);
+  if (isRubricaRasterDataUrl(svgBruto)) return svgBruto;
+
+  let raster: string | undefined;
+  try {
+    raster = (await rubricaParaPersistenciaAsync(svgBruto))?.trim();
+  } catch {
+    raster = undefined;
+  }
+
+  const efetivo = uriRubricaAposRaster(svgBruto, raster);
+  if (efetivo !== svgBruto) {
+    await persistirRubricaAplicadorSessaoSideTable(sessaoId, efetivo);
+  }
+  return efetivo;
+}

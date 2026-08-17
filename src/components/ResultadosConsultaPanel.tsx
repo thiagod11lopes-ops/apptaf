@@ -354,6 +354,7 @@ export function ResultadosConsultaPanel({
       sessoes: sessoesHydrated,
       cadastros: lista,
       rubricasSessoes: rubSessoes,
+      rubricasCadastros: rubCadastros,
       somenteSessoesInformadas: false,
     })
       .map((b) => ({

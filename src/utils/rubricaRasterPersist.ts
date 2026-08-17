@@ -142,7 +142,8 @@ export async function rubricaParaPdfEmbedDataUrl(
     return renderRubricaSvgToRasterDataUrl(raw, widthPx, heightPx, 'image/png');
   }
   if (isRubricaRasterDataUrl(raw)) {
-    return (await rasterDataUrlToPngDataUrlAsync(raw, widthPx, heightPx)) ?? raw;
+    // Nunca devolver WebP/JPEG cru — jsPDF addImage('PNG') falha e a célula fica em branco.
+    return await rasterDataUrlToPngDataUrlAsync(raw, widthPx, heightPx);
   }
   return null;
 }

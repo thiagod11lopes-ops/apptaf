@@ -20,6 +20,22 @@ export function temRubricaPresente(uri?: string | null): boolean {
   return isRubricaImagemDataUrl(raw);
 }
 
+/**
+ * Prefere data-URL de imagem sobre o marcador "Rubricado Digitalmente".
+ * Ordem: primeira imagem válida; senão primeiro marcador/presença.
+ */
+export function preferRubrica(
+  ...vals: Array<string | null | undefined>
+): string | undefined {
+  for (const v of vals) {
+    if (isRubricaImagemDataUrl(v)) return v!.trim();
+  }
+  for (const v of vals) {
+    if (temRubricaPresente(v)) return v!.trim();
+  }
+  return undefined;
+}
+
 /** Substitui imagem por marcador; preserva marcador/vazio. */
 export function paraMarcadorRubrica(uri?: string | null): string | undefined {
   if (!uri?.trim()) return undefined;

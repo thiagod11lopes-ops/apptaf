@@ -1,7 +1,7 @@
 import { nipDigitos } from './nipFormat';
 import { listSessaoRubricasLocal } from '../offline-first/db/localDbRubricas';
 import { getCachedDataOwnerUid } from '../services/firebase/authUid';
-import { isRubricaImagemDataUrl } from './rubricaPresence';
+import { isRubricaImagemDataUrl, preferRubrica } from './rubricaPresence';
 import { yieldToUi } from './yieldToUi';
 
 export type RubricasPorNip = {
@@ -44,10 +44,10 @@ export async function carregarRubricasDasSessoesPorNip(
       if (allowed && !allowed.has(key)) continue;
       const prova = r.prova;
       const atual = map.get(key) ?? {};
-      if (prova === 'natacao') atual.natacao = svg;
-      else if (prova === 'permanencia') atual.permanencia = svg;
-      else if (prova === 'caminhada') atual.caminhada = svg;
-      else atual.corrida = svg;
+      if (prova === 'natacao') atual.natacao = preferRubrica(svg, atual.natacao);
+      else if (prova === 'permanencia') atual.permanencia = preferRubrica(svg, atual.permanencia);
+      else if (prova === 'caminhada') atual.caminhada = preferRubrica(svg, atual.caminhada);
+      else atual.corrida = preferRubrica(svg, atual.corrida);
       map.set(key, atual);
     }
   }
@@ -61,7 +61,7 @@ export function rubricasDoCadastro(c: {
   rubricaNatacaoSvg?: string;
   rubricaPermanenciaSvg?: string;
 }): RubricasPorNip {
-  const pick = (v?: string) => (isRubricaImagemDataUrl(v) ? v : undefined);
+  const pick = (v?: string) => (isRubricaImagemDataUrl(v) ? v!.trim() : undefined);
   return {
     corrida: pick(c.rubricaCorridaSvg),
     caminhada: pick(c.rubricaCaminhadaSvg),
@@ -75,9 +75,9 @@ export function mesclarRubricas(
   sessao?: RubricasPorNip,
 ): RubricasPorNip {
   return {
-    corrida: cadastro.corrida ?? sessao?.corrida,
-    caminhada: cadastro.caminhada ?? sessao?.caminhada,
-    natacao: cadastro.natacao ?? sessao?.natacao,
-    permanencia: cadastro.permanencia ?? sessao?.permanencia,
+    corrida: preferRubrica(sessao?.corrida, cadastro.corrida),
+    caminhada: preferRubrica(sessao?.caminhada, cadastro.caminhada),
+    natacao: preferRubrica(sessao?.natacao, cadastro.natacao),
+    permanencia: preferRubrica(sessao?.permanencia, cadastro.permanencia),
   };
 }

@@ -88,7 +88,8 @@ export function agruparSessoesPorAplicador(
 export function montarBlocosResultadosTafPorAplicador(opts: {
   sessoes: SessaoAplicacaoTaf[];
   cadastros: CadastroItemPersist[];
-  rubricasSessoes?: RubricasPorNip;
+  rubricasSessoes?: Map<string, RubricasPorNip>;
+  rubricasCadastros?: Map<string, RubricasPorNip>;
   somenteSessoesInformadas?: boolean;
 }): ResultadosTafPdfBloco[] {
   const grupos = agruparSessoesPorAplicador(opts.sessoes);
@@ -103,6 +104,7 @@ export function montarBlocosResultadosTafPorAplicador(opts: {
       linhasBase,
       opts.cadastros,
       opts.rubricasSessoes,
+      opts.rubricasCadastros,
     );
     blocos.push({
       linhas,

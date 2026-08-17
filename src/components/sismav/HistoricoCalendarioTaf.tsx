@@ -45,6 +45,7 @@ import { agruparSessoesHistoricoPorTeste } from '../../utils/agruparSessoesHisto
 import { exportResumosSessoesDiaPdf } from '../../utils/exportResumoAplicacaoPdf';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from '../../utils/exportResultadosTafPdf';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
+import { preferRubrica } from '../../utils/rubricaPresence';
 import { formatNomeComPostoParts } from '../../utils/formatNomeComPosto';
 import { postoGradFromCadastro } from '../../utils/resultadoTafCadastro';
 import {
@@ -111,21 +112,20 @@ function rubricaSvgParticipante(
   r: ResultadoCorridaItem,
   cadastros: CadastroItemPersist[],
 ): string | undefined {
-  const svgSessao = r.rubricaCandidatoSvg?.trim();
-  if (svgSessao) return svgSessao;
-
   const busca = buscarCadastroPorNomeOuNip(
     cadastros,
     (r.nip ?? '').trim() || (r.nome ?? '').trim(),
   );
-  if (busca.kind !== 'found') return undefined;
-
   const prova = r.prova ?? tipoProva;
-  const c = busca.cadastro;
-  if (prova === 'caminhada') return c.rubricaCaminhadaSvg;
-  if (prova === 'natacao') return c.rubricaNatacaoSvg;
-  if (prova === 'permanencia') return c.rubricaPermanenciaSvg;
-  return c.rubricaCorridaSvg;
+  let fromCadastro: string | undefined;
+  if (busca.kind === 'found') {
+    const c = busca.cadastro;
+    if (prova === 'caminhada') fromCadastro = c.rubricaCaminhadaSvg;
+    else if (prova === 'natacao') fromCadastro = c.rubricaNatacaoSvg;
+    else if (prova === 'permanencia') fromCadastro = c.rubricaPermanenciaSvg;
+    else fromCadastro = c.rubricaCorridaSvg;
+  }
+  return preferRubrica(r.rubricaCandidatoSvg, fromCadastro);
 }
 
 function temRubricaUi(uri?: string | null): boolean {

@@ -392,17 +392,21 @@ export function HistoricoSessaoDetalheModal({
     setFeedbackPdf(null);
     try {
       const { hydrateSessaoComRubricas } = await import('../../utils/hydrateRubricas');
+      const { preferRubrica, isRubricaImagemDataUrl } = await import('../../utils/rubricaPresence');
       const sessaoHydrated = await hydrateSessaoComRubricas(sessao);
       const byNip = new Map<string, string>();
       for (const r of sessaoHydrated.resultados) {
         const key = nipDigitos(r.nip);
-        if (key && r.rubricaCandidatoSvg?.trim()) byNip.set(key, r.rubricaCandidatoSvg.trim());
+        const img = r.rubricaCandidatoSvg?.trim();
+        if (key && img && isRubricaImagemDataUrl(img)) byNip.set(key, img);
       }
       const resultados = linhas.map((r) => ({
         ...r,
         prova: r.prova ?? sessao.tipoProva,
-        rubricaCandidatoSvg:
-          byNip.get(nipDigitos(r.nip)) ?? r.rubricaCandidatoSvg,
+        rubricaCandidatoSvg: preferRubrica(
+          byNip.get(nipDigitos(r.nip)),
+          r.rubricaCandidatoSvg,
+        ),
       }));
       const msg = await exportResumoAplicacaoPdf(
         resultados,

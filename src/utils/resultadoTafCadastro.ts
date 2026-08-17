@@ -3,6 +3,7 @@ import { nipDigitos } from './nipFormat';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { compareByNomePtBr } from './compareNomePtBr';
 import { mesclarRubricas, rubricasDoCadastro, type RubricasPorNip } from './rubricasDasSessoes';
+import { preferRubrica } from './rubricaPresence';
 import { temRegistroModalidade } from './tafRegistro';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 
@@ -267,10 +268,11 @@ export function mesclarRubricasNaLinha(
 ): ResultadoTafLinha {
   return {
     ...linha,
-    rubricaCorridaSvg: linha.rubricaCorridaSvg ?? rubricas.corrida,
-    rubricaCaminhadaSvg: linha.rubricaCaminhadaSvg ?? rubricas.caminhada,
-    rubricaNatacaoSvg: linha.rubricaNatacaoSvg ?? rubricas.natacao,
-    rubricaPermanenciaSvg: linha.rubricaPermanenciaSvg ?? rubricas.permanencia,
+    // Imagem da side table deve vencer o marcador "Rubricado Digitalmente" na linha.
+    rubricaCorridaSvg: preferRubrica(rubricas.corrida, linha.rubricaCorridaSvg),
+    rubricaCaminhadaSvg: preferRubrica(rubricas.caminhada, linha.rubricaCaminhadaSvg),
+    rubricaNatacaoSvg: preferRubrica(rubricas.natacao, linha.rubricaNatacaoSvg),
+    rubricaPermanenciaSvg: preferRubrica(rubricas.permanencia, linha.rubricaPermanenciaSvg),
   };
 }
 
@@ -290,10 +292,13 @@ export function enriquecerLinhasComRubricas(
   linhas: ResultadoTafLinha[],
   cadastros: CadastroItemPersist[],
   rubricasSessoes?: Map<string, RubricasPorNip>,
+  rubricasCadastros?: Map<string, RubricasPorNip>,
 ): ResultadoTafLinha[] {
   return linhas.map((linha) => {
     const c = cadastroPorLinha(linha, cadastros);
-    const rubCadastro = c ? rubricasDoCadastro(c) : {};
+    const fromSide = rubricasCadastros?.get(linha.id);
+    const fromLight = c ? rubricasDoCadastro(c) : {};
+    const rubCadastro = mesclarRubricas(fromSide ?? {}, fromLight);
     const key = nipDigitos(linha.nip);
     const rubSessao = key && rubricasSessoes ? rubricasSessoes.get(key) : undefined;
     return mesclarRubricasNaLinha(linha, mesclarRubricas(rubCadastro, rubSessao));

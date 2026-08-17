@@ -180,7 +180,12 @@ export function ResultadosGeralPanel({
       const { yieldToUi } = await import('../utils/yieldToUi');
       await yieldToUi();
       const nipsLista = lista.map((l) => l.nip);
-      const rubSessoes = await carregarRubricasDasSessoesPorNip(nipsLista);
+      const idsLista = lista.map((l) => l.id);
+      const { carregarRubricasCadastrosPorIds } = await import('../utils/carregarRubricasCadastro');
+      const [rubSessoes, rubCadastros] = await Promise.all([
+        carregarRubricasDasSessoesPorNip(nipsLista),
+        carregarRubricasCadastrosPorIds(idsLista),
+      ]);
       const { montarBlocosResultadosTafPorAplicador } = await import(
         '../utils/resultadosTafPdfPorAplicador'
       );
@@ -190,6 +195,7 @@ export function ResultadosGeralPanel({
         sessoes: sessoesHydrated,
         cadastros,
         rubricasSessoes: rubSessoes,
+        rubricasCadastros: rubCadastros,
         somenteSessoesInformadas: false,
       });
       if (blocos.length === 0) {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isRubricaImagemDataUrl,
   paraMarcadorRubrica,
+  preferRubrica,
   RUBRICADO_DIGITALMENTE,
   temRubricaPresente,
 } from '../../src/utils/rubricaPresence';
@@ -21,6 +22,17 @@ describe('rubricaPresence', () => {
     expect(paraMarcadorRubrica('data:image/webp;base64,AAA')).toBe(RUBRICADO_DIGITALMENTE);
     expect(paraMarcadorRubrica(RUBRICADO_DIGITALMENTE)).toBe(RUBRICADO_DIGITALMENTE);
     expect(paraMarcadorRubrica(undefined)).toBeUndefined();
+  });
+
+  it('preferRubrica prioriza imagem sobre marcador', () => {
+    expect(preferRubrica(RUBRICADO_DIGITALMENTE, 'data:image/png;base64,AAA')).toBe(
+      'data:image/png;base64,AAA',
+    );
+    expect(preferRubrica('data:image/webp;base64,BBB', RUBRICADO_DIGITALMENTE)).toBe(
+      'data:image/webp;base64,BBB',
+    );
+    expect(preferRubrica(RUBRICADO_DIGITALMENTE, undefined)).toBe(RUBRICADO_DIGITALMENTE);
+    expect(preferRubrica(undefined, undefined)).toBeUndefined();
   });
 
   it('toSessaoLight troca imagens por marcador', () => {

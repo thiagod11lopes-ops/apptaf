@@ -57,7 +57,7 @@ function desenharAssinaturaAplicador(
   const baseY = pageH - marginBottom + 8;
   const cx = marginX + usableW / 2;
   const svg = assinatura.rubricaSvg?.trim();
-  if (svg) {
+  if (svg && isRubricaImagemDataUrl(svg)) {
     const png = pngOf(svg);
     const iw = 56;
     const ih = 22;
@@ -284,18 +284,25 @@ export async function gerarResultadosTafPdfBlobWeb(
       const col = colunas[i]!;
       const w = colWs[i]!;
       const svg = col.rubrica?.(linha)?.trim();
-      if (svg) {
+      if (svg && isRubricaImagemDataUrl(svg)) {
         const png = pngOf(svg);
         const bx = x + (w - rubW) / 2;
         const by = y + (rowH - rubH) / 2;
+        let ok = false;
         if (png) {
           try {
             doc.addImage(png, 'PNG', bx, by, rubW, rubH);
+            ok = true;
           } catch {
-            desenharRubricaJsPdf(doc, svg, bx, by, rubW, rubH);
+            ok = desenharRubricaJsPdf(doc, svg, bx, by, rubW, rubH);
           }
         } else {
-          desenharRubricaJsPdf(doc, svg, bx, by, rubW, rubH);
+          ok = desenharRubricaJsPdf(doc, svg, bx, by, rubW, rubH);
+        }
+        if (!ok) {
+          doc.setTextColor(148, 163, 184);
+          doc.text(pdfTexto('—'), x + w / 2, y + rowH / 2 + 2, { align: 'center' });
+          doc.setTextColor(17, 24, 39);
         }
       } else {
         const text = pdfTexto(col.get(linha) || '—');

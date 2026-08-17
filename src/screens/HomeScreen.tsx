@@ -7,6 +7,7 @@ import { useAuthDataReload } from '../hooks/useAuthDataReload';
 import { TopActionIcons } from '../components/premium/TopActionIcons';
 import { StatCard } from '../components/sismav/StatCard';
 import { ReprovadosInicioModal } from '../components/home/ReprovadosInicioModal';
+import { RestritosInicioModal } from '../components/home/RestritosInicioModal';
 import { type ResumoInicioTafHistorico } from '../utils/resultadoGeralHistorico';
 import {
   isHomeResumoCacheWarm,
@@ -85,6 +86,7 @@ export default function HomeScreen() {
   const [resumoModalAberto, setResumoModalAberto] = useState(false);
   const [sessoesResumo, setSessoesResumo] = useState<SessaoAplicacaoTaf[]>([]);
   const [modalReprovadosVisible, setModalReprovadosVisible] = useState(false);
+  const [modalRestritosVisible, setModalRestritosVisible] = useState(false);
 
   const handleAbrirResumo = useCallback(async () => {
     const cached = peekSessoesListCache({ includeDemo: false });
@@ -372,6 +374,8 @@ export default function HomeScreen() {
               label="Restritos"
               value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
               variant="warning"
+              accessibilityLabel={`Restritos: ${resumo.restritos ?? 0}. Abrir lista detalhada.`}
+              onPress={() => setModalRestritosVisible(true)}
             />
             <StatCard
               label="Fatores de risco"
@@ -472,6 +476,10 @@ export default function HomeScreen() {
       <ReprovadosInicioModal
         visible={modalReprovadosVisible}
         onClose={() => setModalReprovadosVisible(false)}
+      />
+      <RestritosInicioModal
+        visible={modalRestritosVisible}
+        onClose={() => setModalRestritosVisible(false)}
       />
     </>
   );

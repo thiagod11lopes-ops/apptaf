@@ -61,6 +61,14 @@ function resumoInicioEquals(a: ResumoInicioTafHistorico, b: ResumoInicioTafHisto
   );
 }
 
+function formatPctLabel(pct: number): string {
+  const rounded = Math.round(pct * 10) / 10;
+  return `${rounded.toLocaleString('pt-BR', {
+    minimumFractionDigits: rounded % 1 === 0 ? 0 : 1,
+    maximumFractionDigits: 1,
+  })}%`;
+}
+
 /** Parte local do e-mail + "@" — ex.: lopes.thiago.oliveira@marinha.mil.br → lopes.thiago.oliveira@ */
 function emailPrefixoExibicao(email: string | null | undefined): string | null {
   const raw = (email ?? '').trim().toLowerCase();
@@ -79,6 +87,7 @@ export default function HomeScreen() {
     () => peekHomeResumoCache() ?? RESUMO_INICIAL,
   );
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressReprovadosAnim = useRef(new Animated.Value(0)).current;
   const [emailFixoPrefixo, setEmailFixoPrefixo] = useState<string | null>(null);
   /** Só inicia I/O dos cards após o 1º paint. */
   const cardsPaintReadyRef = useRef(false);
@@ -107,13 +116,15 @@ export default function HomeScreen() {
     return Math.min(100, Math.max(0, (participantes / total) * 100));
   }, [resumo.completos, resumo.parcial, resumo.totalCadastrados]);
 
-  const pctConcluidosLabel = useMemo(() => {
-    const rounded = Math.round(pctConcluidos * 10) / 10;
-    return `${rounded.toLocaleString('pt-BR', {
-      minimumFractionDigits: rounded % 1 === 0 ? 0 : 1,
-      maximumFractionDigits: 1,
-    })}%`;
-  }, [pctConcluidos]);
+  const pctConcluidosLabel = useMemo(() => formatPctLabel(pctConcluidos), [pctConcluidos]);
+
+  const pctReprovados = useMemo(() => {
+    const total = resumo.totalCadastrados;
+    if (total <= 0) return 0;
+    return Math.min(100, Math.max(0, ((resumo.reprovados ?? 0) / total) * 100));
+  }, [resumo.reprovados, resumo.totalCadastrados]);
+
+  const pctReprovadosLabel = useMemo(() => formatPctLabel(pctReprovados), [pctReprovados]);
 
   useEffect(() => {
     Animated.spring(progressAnim, {
@@ -124,7 +135,22 @@ export default function HomeScreen() {
     }).start();
   }, [pctConcluidos, progressAnim]);
 
+  useEffect(() => {
+    Animated.spring(progressReprovadosAnim, {
+      toValue: pctReprovados,
+      friction: 9,
+      tension: 48,
+      useNativeDriver: false,
+    }).start();
+  }, [pctReprovados, progressReprovadosAnim]);
+
   const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+    extrapolate: 'clamp',
+  });
+
+  const progressReprovadosWidth = progressReprovadosAnim.interpolate({
     inputRange: [0, 100],
     outputRange: ['0%', '100%'],
     extrapolate: 'clamp',
@@ -451,6 +477,64 @@ export default function HomeScreen() {
             />
           </View>
         </View>
+
+        <View
+          style={styles.progressBlock}
+          accessibilityRole="progressbar"
+          accessibilityValue={{
+            min: 0,
+            max: 100,
+            now: Math.round(pctReprovados),
+            text: pctReprovadosLabel,
+          }}
+          accessibilityLabel={`Reprovados: ${pctReprovadosLabel}`}
+        >
+          <View style={styles.progressHeader}>
+            <Text style={[styles.progressLabel, { color: theme.textMuted }]}>
+              Reprovados
+            </Text>
+            <Text style={[styles.progressPct, { color: theme.error }]}>
+              {pctReprovadosLabel}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.progressTrack,
+              {
+                backgroundColor:
+                  Platform.OS === 'web' ? 'rgba(15, 23, 42, 0.08)' : 'rgba(15, 23, 42, 0.12)',
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <Animated.View style={[styles.progressFillWrap, { width: progressReprovadosWidth }]}>
+              <LinearGradient
+                colors={['#b91c1c', '#dc2626', '#f43f5e', '#fb7185']}
+                locations={[0, 0.35, 0.7, 1]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.progressFill}
+              >
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.45)', 'rgba(255,255,255,0.08)', 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.progressSheen}
+                />
+              </LinearGradient>
+            </Animated.View>
+            <View
+              pointerEvents="none"
+              style={[
+                styles.progressGlowReprovados,
+                {
+                  opacity: pctReprovados > 0 ? 0.55 : 0,
+                  width: `${Math.max(pctReprovados, 0)}%`,
+                },
+              ]}
+            />
+          </View>
+        </View>
       </TafGlassPanel>
 
       <TafGlassPanel accent="violet" style={styles.imagePanel}>
@@ -614,6 +698,23 @@ const styles = StyleSheet.create({
         } as object)
       : {
           shadowColor: '#10b981',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.65,
+          shadowRadius: 8,
+        }),
+  },
+  progressGlowReprovados: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 999,
+    ...(Platform.OS === 'web'
+      ? ({
+          boxShadow: '0 0 18px rgba(220, 38, 38, 0.5), 0 0 4px rgba(251, 113, 133, 0.35)',
+        } as object)
+      : {
+          shadowColor: '#dc2626',
           shadowOffset: { width: 0, height: 0 },
           shadowOpacity: 0.65,
           shadowRadius: 8,

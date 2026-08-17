@@ -41,7 +41,7 @@ export function trialTipoFromProva(tipo: TipoProvaTAF): 'corrida' | 'natacao' | 
   return 'corrida';
 }
 
-/** Pré-cadastro: caminhada usa o limite da prova ao vivo; demais atividades ficam em 15. */
+/** Pré-cadastro e identificação direta: caminhada usa 200; demais provas com cronômetro, 20. */
 export function limiteParticipantesPreCadastro(tipo: TipoProvaTAF | null): number {
   if (tipo === 'caminhada') return MAX_PARTICIPANTES;
   return MAX_PRE_CADASTRO_PARTICIPANTES;

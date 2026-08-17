@@ -12,7 +12,7 @@ import { notifyDataChanged } from '../offline-first/sync/SyncEngine';
 
 import type { TipoProvaTAF } from '../taf/tafProvaTypes';
 
-export const MAX_PRE_CADASTRO_PARTICIPANTES = 15;
+export const MAX_PRE_CADASTRO_PARTICIPANTES = 20;
 
 export type NormaTafPreCadastro = 'armada' | 'cfn';
 

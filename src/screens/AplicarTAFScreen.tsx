@@ -1841,14 +1841,12 @@ export default function AplicarTAFScreen() {
   }, []);
 
   const adicionarParticipanteNip = useCallback(() => {
-    const limite = modoPreCadastro
-      ? limiteParticipantesPreCadastro(tipoProva)
-      : MAX_PARTICIPANTES;
+    const limite = limiteParticipantesPreCadastro(tipoProva);
     if (nipsParticipantes.length >= limite) {
       setErroParticipantes(
-        modoPreCadastro && tipoProva !== 'caminhada'
-          ? `Máximo de ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes no pré-cadastro.`
-          : `Máximo de ${MAX_PARTICIPANTES} participantes.`,
+        tipoProva === 'caminhada'
+          ? `Máximo de ${MAX_PARTICIPANTES} participantes.`
+          : `Máximo de ${MAX_PRE_CADASTRO_PARTICIPANTES} participantes.`,
       );
       return;
     }
@@ -1856,7 +1854,7 @@ export default function AplicarTAFScreen() {
     scrollNipsAposAddRef.current = true;
     setNipsParticipantes((prev) => [...prev, '']);
     setNipFeedbackLinhas((prev) => [...prev, null]);
-  }, [modoPreCadastro, tipoProva, nipsParticipantes.length]);
+  }, [tipoProva, nipsParticipantes.length]);
 
   const rolarParaNovoNip = useCallback(() => {
     nipsScrollRef.current?.scrollToEnd({ animated: true });

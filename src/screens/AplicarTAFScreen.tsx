@@ -113,6 +113,7 @@ import {
   type ProvaAtivaSessionV1,
 } from '../services/provaAtivaSessionStorage';
 import { persistirRubricasNoCadastro } from '../utils/persistirRubricaCadastro';
+import { persistirRubricaCandidatoSessaoSideTable } from '../utils/persistirRubricaSessaoIncremental';
 import {
   isRubricaRasterDataUrl,
   isRubricaSvgDataUrl,
@@ -305,6 +306,8 @@ export default function AplicarTAFScreen() {
   /** Fila de lote: WebP + um write IDB ao abrir o aplicador (não bloqueia UI). */
   const rubricaPersistChainRef = useRef(Promise.resolve());
   const rubricaPersistGeracaoRef = useRef(0);
+  /** Fila da parte 1: SVG na side table a cada confirmação (não cancela com a geração do lote). */
+  const rubricaSideTableChainRef = useRef(Promise.resolve());
   const resultadosPosMilitaresRef = useRef<ResultadoCorridaItem[] | null>(null);
   /** Pré-cadastro que originou a prova ativa (excluído após lançamento confirmado). */
   const preCadastroOrigemIdRef = useRef<string | null>(null);
@@ -1722,9 +1725,23 @@ export default function AplicarTAFScreen() {
       nextSvg[index] = svg;
       rubricasSvgRef.current = nextSvg;
       checkpointRubricaSvgLocal(atualizados);
+
+      const confirmado = atualizados[index];
+      const sessaoId = sessaoAplicacaoIdRef.current;
+      const tipo = tipoProvaRef.current ?? tipoProva;
+      if (confirmado && sessaoId && tipo && !isModoDemonstracaoAtivo()) {
+        rubricaSideTableChainRef.current = rubricaSideTableChainRef.current
+          .then(() =>
+            persistirRubricaCandidatoSessaoSideTable(sessaoId, confirmado, tipo),
+          )
+          .catch(() => {
+            // Prova ativa + checkpoint da sessão ainda cobrem; não bloqueia o próximo militar.
+          });
+      }
+
       return atualizados;
     },
-    [checkpointRubricaSvgLocal],
+    [checkpointRubricaSvgLocal, tipoProva],
   );
 
   const irParaRubricaIndex = useCallback(

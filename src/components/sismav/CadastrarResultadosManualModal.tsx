@@ -163,6 +163,7 @@ export function CadastrarResultadosManualModal({
       tempoCorrida: tempo,
       dataNascimento: dataNascimento.trim(),
       sexo: cadastro?.sexo,
+      normaTaf: cadastro?.normaTaf,
     });
     return nota === '—' ? null : nota;
   }, [tempoCorrida, dataNascimento, cadastro?.sexo]);
@@ -175,6 +176,7 @@ export function CadastrarResultadosManualModal({
       tempoNatacao: tempo,
       dataNascimento: dataNascimento.trim(),
       sexo: cadastro?.sexo,
+      normaTaf: cadastro?.normaTaf,
     });
     return nota === '—' ? null : nota;
   }, [tempoNatacao, dataNascimento, cadastro?.sexo]);

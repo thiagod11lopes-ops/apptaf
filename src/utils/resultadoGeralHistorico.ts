@@ -659,7 +659,10 @@ function resultadoItemEhReprovado(r: ResultadoCorridaItem): boolean {
 }
 
 function cadastroTemReprovacaoDireta(c: CadastroItemPersist): boolean {
-  for (const nota of [c.notaCorrida, c.notaCaminhada, c.notaNatacao]) {
+  for (const nota of [
+    c.notaCorrida, c.notaCaminhada, c.notaNatacao,
+    c.notaFlexaoBarra, c.notaFlexaoSolo, c.notaAbdominalRemador, c.notaAbdominalPrancha,
+  ]) {
     if (isNotaReprovacaoTexto(nota)) return true;
   }
   return c.resultadoPermanencia === 'reprovado' || c.resultadoNatacao === 'reprovado';
@@ -1012,6 +1015,31 @@ function modalidadesReprovadasDoCadastro(
     );
   }
 
+  // Modalidades CFN — 4th param = data (undefined), 5th param = tempo
+  if (agg?.flexaoBarra && modalidadeEhReprovada(agg.flexaoBarra)) {
+    pushModalidadeUnica(out, 'Flexão de Barra', detalheModalidade(agg.flexaoBarra), undefined, agg.flexaoBarra.tempo);
+  } else if (isNotaReprovacaoTexto(c.notaFlexaoBarra)) {
+    pushModalidadeUnica(out, 'Flexão de Barra', (c.notaFlexaoBarra || '').trim() || 'Reprovado');
+  }
+
+  if (agg?.flexaoSolo && modalidadeEhReprovada(agg.flexaoSolo)) {
+    pushModalidadeUnica(out, 'Flexão de Solo', detalheModalidade(agg.flexaoSolo), undefined, agg.flexaoSolo.tempo);
+  } else if (isNotaReprovacaoTexto(c.notaFlexaoSolo)) {
+    pushModalidadeUnica(out, 'Flexão de Solo', (c.notaFlexaoSolo || '').trim() || 'Reprovado');
+  }
+
+  if (agg?.abdominalRemador && modalidadeEhReprovada(agg.abdominalRemador)) {
+    pushModalidadeUnica(out, 'Abdominal Remador', detalheModalidade(agg.abdominalRemador), undefined, agg.abdominalRemador.tempo);
+  } else if (isNotaReprovacaoTexto(c.notaAbdominalRemador)) {
+    pushModalidadeUnica(out, 'Abdominal Remador', (c.notaAbdominalRemador || '').trim() || 'Reprovado');
+  }
+
+  if (agg?.abdominalPrancha && modalidadeEhReprovada(agg.abdominalPrancha)) {
+    pushModalidadeUnica(out, 'Abdominal Prancha', detalheModalidade(agg.abdominalPrancha), undefined, agg.abdominalPrancha.tempo);
+  } else if (isNotaReprovacaoTexto(c.notaAbdominalPrancha)) {
+    pushModalidadeUnica(out, 'Abdominal Prancha', (c.notaAbdominalPrancha || '').trim() || 'Reprovado');
+  }
+
   return out;
 }
 
@@ -1034,7 +1062,15 @@ function modalidadesReprovadasNasSessoes(
             ? 'Caminhada'
             : tipo === 'corrida'
               ? 'Corrida'
-              : null;
+              : tipo === 'flexao_barra'
+                ? 'Flexão de Barra'
+                : tipo === 'flexao_solo'
+                  ? 'Flexão de Solo'
+                  : tipo === 'abdominal_remador'
+                    ? 'Abdominal Remador'
+                    : tipo === 'abdominal_prancha'
+                      ? 'Abdominal Prancha'
+                      : null;
     if (!label) continue;
     const dataSessao = sessao.dataAplicacao || sessao.criadoEm;
     for (const r of sessao.resultados ?? []) {
@@ -1065,6 +1101,18 @@ function sessaoCfnParaModalidade(
   index: CadastroLookupIndex,
   cadastros: CadastroItemPersist[],
 ): boolean {
+  // Militar explicitamente cadastrado como CFN — suas provas de corrida/natação
+  // são sempre avaliadas pelas tabelas CFN (3200 m / 100 m).
+  if (c.normaTaf === 'cfn' && (label === 'Corrida' || label === 'Natação')) return true;
+
+  // Modalidades exclusivas do CFN são sempre norma CFN.
+  if (
+    label === 'Flexão de Barra' ||
+    label === 'Flexão de Solo' ||
+    label === 'Abdominal Remador' ||
+    label === 'Abdominal Prancha'
+  ) return true;
+
   const tipo =
     label === 'Natação'
       ? 'natacao'
@@ -1159,6 +1207,6 @@ export function montarListaReprovadosInicioTaf(
     });
   }
 
-  lista.sort((a, b) => compareByNomePtBr(a.nome, b.nome));
+  lista.sort(compareByNomePtBr);
   return lista;
 }

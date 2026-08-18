@@ -7,6 +7,7 @@
 import { tempoStringParaMsProva } from '../utils/calcularIdade';
 import { msParaSegundosProvaInteiros } from '../utils/formatRaceTime';
 import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
+import { textoNotaCorrida3200FromCadastro } from './corrida3200Nota';
 
 const NOTAS_DESC = [100, 90, 80, 70, 60, 50] as const;
 
@@ -164,13 +165,18 @@ export function notaCorridaParaPersistencia(notaTexto: string): string | undefin
 /**
  * Nota de corrida a partir dos dados do cadastro (fonte única da regra TAF).
  * Sempre recalcula a partir de tempo + nascimento + sexo — não usa `notaCorrida` salva.
+ * Quando `normaTaf === 'cfn'`, usa a tabela da corrida 3200 m (CFN) automaticamente.
  */
 export function textoNotaCorridaFromCadastro(input: {
   tempoCorrida?: string | null;
   dataNascimento?: string | null;
   sexo?: 'M' | 'F';
+  normaTaf?: string | null;
   refDate?: Date;
 }): string {
+  if (input.normaTaf === 'cfn') {
+    return textoNotaCorrida3200FromCadastro(input);
+  }
   const tempo = (input.tempoCorrida ?? '').trim();
   if (!tempo) return '—';
   const tempoMs = tempoStringParaMsProva(tempo);

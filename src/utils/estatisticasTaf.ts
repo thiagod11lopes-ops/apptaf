@@ -264,6 +264,7 @@ function notaFromCadastro(
       tempoCorrida: c.tempoCorrida,
       dataNascimento: c.dataNascimento,
       sexo: c.sexo,
+      normaTaf: c.normaTaf,
     });
   }
   if (mod === 'caminhada') {
@@ -277,6 +278,7 @@ function notaFromCadastro(
     tempoNatacao: c.tempoNatacao,
     dataNascimento: c.dataNascimento,
     sexo: c.sexo,
+    normaTaf: c.normaTaf,
   });
 }
 

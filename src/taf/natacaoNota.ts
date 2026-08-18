@@ -8,6 +8,7 @@ import { tempoStringParaSegundos } from '../utils/calcularIdade';
 import { msParaSegundosProvaInteiros } from '../utils/formatRaceTime';
 import { idadeFromDataNascimento } from '../utils/idadeFromDataNascimento';
 import { parseTafPerformanceInput } from './tafTimeFormat';
+import { textoNotaNatacao100FromCadastro } from './natacao100Nota';
 
 const NOTAS_DESC = [100, 90, 80, 70, 60, 50] as const;
 
@@ -132,13 +133,20 @@ export function notaNatacaoParaPersistencia(notaTexto: string): string | undefin
   return t === '' || t === '—' ? undefined : t;
 }
 
-/** Recalcula nota de natação a partir de tempo + nascimento + sexo. */
+/**
+ * Recalcula nota de natação a partir de tempo + nascimento + sexo.
+ * Quando `normaTaf === 'cfn'`, usa a tabela da natação 100 m (CFN) automaticamente.
+ */
 export function textoNotaNatacaoFromCadastro(input: {
   tempoNatacao?: string | null;
   dataNascimento?: string | null;
   sexo?: 'M' | 'F';
+  normaTaf?: string | null;
   refDate?: Date;
 }): string {
+  if (input.normaTaf === 'cfn') {
+    return textoNotaNatacao100FromCadastro(input);
+  }
   const tempo = (input.tempoNatacao ?? '').trim();
   if (!tempo) return '—';
   const tempoMs = parseTafPerformanceInput('natacao', tempo);

@@ -419,11 +419,13 @@ export function CadastroPlanilhaBlock({
         tempoCorrida: tCorr,
         dataNascimento: c.dataNascimento,
         sexo: c.sexo,
+        normaTaf: c.normaTaf,
       });
       const nNat = textoNotaNatacaoFromCadastro({
         tempoNatacao: tNat,
         dataNascimento: c.dataNascimento,
         sexo: c.sexo,
+        normaTaf: c.normaTaf,
       });
       const perm = permanenciaLabel(c);
       const gen = generoPlanilhaLabel(c);
@@ -1073,6 +1075,7 @@ export function CadastroPlanilhaBlock({
                                 tempoNatacao: tempos.natacao,
                                 dataNascimento: c.dataNascimento,
                                 sexo: c.sexo,
+                                normaTaf: c.normaTaf,
                               });
                               return n === '—' ? '-' : n;
                             })(),

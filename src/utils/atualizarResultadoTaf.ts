@@ -63,6 +63,7 @@ export function aplicarEdicaoNoCadastro(
             tempoCorrida: tc,
             dataNascimento: base.dataNascimento,
             sexo: base.sexo,
+            normaTaf: base.normaTaf,
           }),
         )
       : undefined,
@@ -72,6 +73,7 @@ export function aplicarEdicaoNoCadastro(
             tempoNatacao: tn,
             dataNascimento: base.dataNascimento,
             sexo: base.sexo,
+            normaTaf: base.normaTaf,
           }),
         )
       : undefined,

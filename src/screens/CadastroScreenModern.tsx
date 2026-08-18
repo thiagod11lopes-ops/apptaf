@@ -252,13 +252,14 @@ export default function CadastroScreenModern() {
       ? {
           ...anterior,
           ...camposFormulario,
-          // Recalcula notas de tempo se idade/sexo mudaram e já havia resultado.
+          // Recalcula notas de tempo se idade/sexo/normaTaf mudaram e já havia resultado.
           notaCorrida: tempoCorridaSalvo
             ? notaCorridaParaPersistencia(
                 textoNotaCorridaFromCadastro({
                   tempoCorrida: tempoCorridaSalvo,
                   dataNascimento: dataNasc,
                   sexo,
+                  normaTaf,
                 }),
               )
             : anterior.notaCorrida,
@@ -268,6 +269,7 @@ export default function CadastroScreenModern() {
                   tempoNatacao: tempoNatacaoSalvo,
                   dataNascimento: dataNasc,
                   sexo,
+                  normaTaf,
                 }),
               )
             : anterior.notaNatacao,
@@ -282,6 +284,7 @@ export default function CadastroScreenModern() {
                   tempoCorrida: tempoCorridaSalvo,
                   dataNascimento: dataNasc,
                   sexo,
+                  normaTaf,
                 }),
               )
             : undefined,
@@ -291,6 +294,7 @@ export default function CadastroScreenModern() {
                   tempoNatacao: tempoNatacaoSalvo,
                   dataNascimento: dataNasc,
                   sexo,
+                  normaTaf,
                 }),
               )
             : undefined,

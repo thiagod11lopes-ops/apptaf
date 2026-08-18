@@ -23,7 +23,12 @@ import { ResultadosPendenciaParcialPanel } from '../components/ResultadosPendenc
 import { ResultadosConcluidoPanel } from '../components/ResultadosConcluidoPanel';
 import { ResultadosGeralPanel } from '../components/ResultadosGeralPanel';
 import type { MainTabParamList, RootStackParamList } from '../navigation/types';
-import { getAllCadastros, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import { getAllCadastros, deleteCadastro, type CadastroItemPersist } from '../services/cadastrosIndexedDb';
+import { excluirTodosResultadosTafMilitar } from '../utils/atualizarResultadoTaf';
+import {
+  ConfirmacaoExcluirCadastroModal,
+  type CadastroParaExcluir,
+} from '../components/sismav/ConfirmacaoExcluirCadastroModal';
 import {
   getAllSessoesAplicacao,
   getDeletedSessoesAplicacao,
@@ -116,6 +121,8 @@ export default function ResultadosScreen() {
   const [sessaoDetalhe, setSessaoDetalhe] = useState<SessaoHistoricoAgrupada | null>(null);
   const [excluindo, setExcluindo] = useState(false);
   const [erroExclusao, setErroExclusao] = useState<string | null>(null);
+  const [cadastroParaExcluir, setCadastroParaExcluir] = useState<CadastroParaExcluir | null>(null);
+  const [excluindoCadastro, setExcluindoCadastro] = useState(false);
   const ultimoToqueCardRef = useRef<{ id: string; at: number } | null>(null);
 
   /**
@@ -258,6 +265,25 @@ export default function ResultadosScreen() {
       setExcluindo(false);
     }
   }, [sessaoParaExcluir, carregar]);
+
+  const executarExclusaoCadastro = useCallback(async () => {
+    if (!cadastroParaExcluir) return;
+    setExcluindoCadastro(true);
+    try {
+      const cadastroCompleto = cadastros.find((c) => c.id === cadastroParaExcluir.id);
+      if (cadastroCompleto) {
+        await excluirTodosResultadosTafMilitar(cadastroCompleto);
+      }
+      await deleteCadastro(cadastroParaExcluir.id);
+      setCadastroParaExcluir(null);
+      await carregar();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Não foi possível excluir o militar.';
+      console.warn('[excluirCadastro]', msg);
+    } finally {
+      setExcluindoCadastro(false);
+    }
+  }, [cadastroParaExcluir, cadastros, carregar]);
 
   return (
     <>
@@ -456,6 +482,7 @@ export default function ResultadosScreen() {
             cadastros={cadastros}
             sessoes={sessoesParaPaineis}
             carregandoDataset={carregando}
+            onExcluirCadastro={setCadastroParaExcluir}
           />
         ) : aba === 'pendenciaTotal' ? (
           <ResultadosPendenciaParcialPanel
@@ -464,6 +491,7 @@ export default function ResultadosScreen() {
             cadastros={cadastros}
             sessoes={sessoesParaPaineis}
             carregandoDataset={carregando}
+            onExcluirCadastro={setCadastroParaExcluir}
           />
         ) : (
           <ResultadosPendenciaParcialPanel
@@ -472,6 +500,7 @@ export default function ResultadosScreen() {
             cadastros={cadastros}
             sessoes={sessoesParaPaineis}
             carregandoDataset={carregando}
+            onExcluirCadastro={setCadastroParaExcluir}
           />
         )}
           </>
@@ -496,6 +525,15 @@ export default function ResultadosScreen() {
           setSessaoDetalhe(atualizada);
           carregar();
         }}
+      />
+
+      <ConfirmacaoExcluirCadastroModal
+        militar={cadastroParaExcluir}
+        loading={excluindoCadastro}
+        onClose={() => {
+          if (!excluindoCadastro) setCadastroParaExcluir(null);
+        }}
+        onConfirm={() => void executarExclusaoCadastro()}
       />
     </>
   );

@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CheckCircle2 } from 'lucide-react-native';
+import { CheckCircle2, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
@@ -26,6 +26,7 @@ import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { TafGlassPanel } from './mobile/TafTabChrome';
 import { formatNomeComPostoParts } from '../utils/formatNomeComPosto';
+import type { CadastroParaExcluir } from './sismav/ConfirmacaoExcluirCadastroModal';
 
 function ChipModalidade({ label, ok = true }: { label: string; ok?: boolean }) {
   const { theme } = useTheme();
@@ -51,11 +52,13 @@ export function ResultadosConcluidoPanel({
   cadastros,
   sessoes,
   carregandoDataset = false,
+  onExcluirCadastro,
 }: {
   normaTaf?: NormaTafVista;
   cadastros: CadastroItemPersist[];
   sessoes: SessaoAplicacaoTaf[];
   carregandoDataset?: boolean;
+  onExcluirCadastro?: (item: CadastroParaExcluir) => void;
 }) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
@@ -188,6 +191,16 @@ export function ResultadosConcluidoPanel({
                       Concluído
                     </Text>
                   </View>
+                  {onExcluirCadastro ? (
+                    <TouchableOpacity
+                      onPress={() => onExcluirCadastro({ id: item.id, nome: item.nome, nip: item.nip })}
+                      style={[styles.excluirBtn, { backgroundColor: theme.lossMuted, borderColor: theme.loss }]}
+                      accessibilityLabel="Excluir militar do sistema"
+                      hitSlop={8}
+                    >
+                      <Trash2 size={15} color={theme.loss} strokeWidth={2.4} />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
 
                 <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
@@ -225,6 +238,16 @@ export function ResultadosConcluidoPanel({
                   Concluído
                 </Text>
               </View>
+              {onExcluirCadastro ? (
+                <TouchableOpacity
+                  onPress={() => onExcluirCadastro({ id: item.id, nome: item.nome, nip: item.nip })}
+                  style={[styles.excluirBtn, { backgroundColor: theme.lossMuted, borderColor: theme.loss }]}
+                  accessibilityLabel="Excluir militar do sistema"
+                  hitSlop={8}
+                >
+                  <Trash2 size={15} color={theme.loss} strokeWidth={2.4} />
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <Text style={[ts.label, { color: theme.primary }]}>Nome</Text>
@@ -296,6 +319,15 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
+  },
+  excluirBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   chipsRow: {
     flexDirection: 'row',

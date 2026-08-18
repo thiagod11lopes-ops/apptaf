@@ -2,10 +2,10 @@ import type { ResultadoCorridaItem } from '../navigation/types';
 import type { CadastroItemPersist } from '../services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf, TipoProvaAplicada } from '../services/resultadosAplicadosIndexedDb';
 import { tempoMaximoNota50Caminhada4800 } from '../taf/caminhada4800Nota';
-import { tempoMaximoNota50Corrida2400 } from '../taf/corrida2400Nota';
+import { tempoMaximoNota50Corrida2400, textoNotaCorridaFromCadastro } from '../taf/corrida2400Nota';
 import { tempoMaximoNota50Corrida3200 } from '../taf/corrida3200Nota';
 import { tempoMaximoNota50Natacao100 } from '../taf/natacao100Nota';
-import { tempoMaximoNota50Natacao } from '../taf/natacaoNota';
+import { tempoMaximoNota50Natacao, textoNotaNatacaoFromCadastro } from '../taf/natacaoNota';
 import { formatMsByModality } from '../taf/tafTimeFormat';
 import {
   buildCadastroLookupIndex,
@@ -659,10 +659,37 @@ function resultadoItemEhReprovado(r: ResultadoCorridaItem): boolean {
 }
 
 function cadastroTemReprovacaoDireta(c: CadastroItemPersist): boolean {
-  for (const nota of [
-    c.notaCorrida, c.notaCaminhada, c.notaNatacao,
-    c.notaFlexaoBarra, c.notaFlexaoSolo, c.notaAbdominalRemador, c.notaAbdominalPrancha,
-  ]) {
+  if (c.normaTaf === 'cfn') {
+    // Para militares CFN os campos notaCorrida/notaNatacao/notaCaminhada podem ter sido
+    // calculados com tabelas Armada (dados antigos) — recalcula ao vivo com tabelas CFN
+    // para evitar falso positivo no card Reprovados.
+    const notaCorridaCfn = (c.tempoCorrida ?? '').trim()
+      ? textoNotaCorridaFromCadastro({
+          tempoCorrida: c.tempoCorrida,
+          dataNascimento: c.dataNascimento,
+          sexo: c.sexo,
+          normaTaf: 'cfn',
+        })
+      : null;
+    const notaNatacaoCfn = (c.tempoNatacao ?? '').trim()
+      ? textoNotaNatacaoFromCadastro({
+          tempoNatacao: c.tempoNatacao,
+          dataNascimento: c.dataNascimento,
+          sexo: c.sexo,
+          normaTaf: 'cfn',
+        })
+      : null;
+    for (const nota of [
+      notaCorridaCfn, notaNatacaoCfn,
+      c.notaFlexaoBarra, c.notaFlexaoSolo, c.notaAbdominalRemador, c.notaAbdominalPrancha,
+    ]) {
+      if (isNotaReprovacaoTexto(nota)) return true;
+    }
+    return c.resultadoPermanencia === 'reprovado' || c.resultadoNatacao === 'reprovado';
+  }
+
+  // Militares Armada: usa campos persistidos normalmente.
+  for (const nota of [c.notaCorrida, c.notaCaminhada, c.notaNatacao]) {
     if (isNotaReprovacaoTexto(nota)) return true;
   }
   return c.resultadoPermanencia === 'reprovado' || c.resultadoNatacao === 'reprovado';

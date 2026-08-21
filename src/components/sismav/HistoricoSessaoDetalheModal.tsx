@@ -436,10 +436,11 @@ export function HistoricoSessaoDetalheModal({
       if (!sessao || somenteLeitura) return;
 
       // Antes de salvar/deletar sessões de origem, hidratar rubricas de TODOS os IDs
-      // agrupados. Cada participante pode ter sua rubrica na side table de um ID diferente;
-      // sem isso, as rubricas de sessões extras seriam perdidas ao deletá-las abaixo.
+      // agrupados. Cada participante — e o próprio aplicador — pode ter sua rubrica na
+      // side table de um ID diferente; sem isso seriam perdidas ao deletar as sessões extras.
       const idsOrigem = (sessao as SessaoAplicacaoTaf & { idsOrigem?: string[] }).idsOrigem;
       const todosIds = idsOrigem?.length ? idsOrigem : [sessao.id];
+      let aplicadorSvgFromOrigem: string | undefined;
       try {
         const { getSessaoRubricasLocal } = await import('../../offline-first/db/localDbRubricas');
         const { isRubricaImagemDataUrl } = await import('../../utils/rubricaPresence');
@@ -450,6 +451,10 @@ export function HistoricoSessaoDetalheModal({
             if (!isRubricaImagemDataUrl(r.rubricaCandidatoSvg)) continue;
             const key = `${nipDigitos(r.nip)}:${r.prova}`;
             if (!rubricaMap.has(key)) rubricaMap.set(key, r.rubricaCandidatoSvg);
+          }
+          // Coleta rubrica do aplicador do primeiro ID de origem que a tiver.
+          if (!aplicadorSvgFromOrigem && isRubricaImagemDataUrl(rec?.aplicadorRubricaSvg)) {
+            aplicadorSvgFromOrigem = rec!.aplicadorRubricaSvg!.trim();
           }
         }
         if (rubricaMap.size > 0) {
@@ -466,8 +471,21 @@ export function HistoricoSessaoDetalheModal({
       }
 
       const resultados = renumerar(nextLinhas);
+
+      // Aplica rubrica do aplicador colhida dos IDs de origem, se a sessão atual
+      // ainda só tiver um marcador de texto (não a imagem real).
+      let aplicadorAssinatura = sessao.aplicadorAssinatura;
+      if (
+        aplicadorSvgFromOrigem &&
+        aplicadorAssinatura &&
+        !aplicadorAssinatura.rubricaSvg?.startsWith('data:')
+      ) {
+        aplicadorAssinatura = { ...aplicadorAssinatura, rubricaSvg: aplicadorSvgFromOrigem };
+      }
+
       const atualizada: SessaoAplicacaoTaf = {
         ...sessao,
+        ...(aplicadorAssinatura ? { aplicadorAssinatura } : {}),
         resultados,
         updatedAt: Date.now(),
       };

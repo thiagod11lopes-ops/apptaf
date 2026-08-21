@@ -779,6 +779,36 @@ export function ResultadosConsultaPanel({
           <Search size={18} color={theme.text} strokeWidth={2.2} />
           <Text style={[ts.caption, styles.btnBuscarText, { color: theme.text }]}>Buscar</Text>
         </TouchableOpacity>
+
+        {aviso ? (
+          <Text style={[ts.caption, styles.aviso, { color: theme.loss }]}>{aviso}</Text>
+        ) : null}
+
+        {buscou && mensagemBusca && linhas.length === 0 ? (
+          <View style={[styles.infoBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
+            <Text style={[ts.body, styles.infoText, { color: theme.text }]}>{mensagemBusca}</Text>
+          </View>
+        ) : null}
+
+        {linhas.length > 0 ? (
+          <FlatList
+            data={linhas}
+            keyExtractor={consultaKeyExtractor}
+            renderItem={renderConsultaItem}
+            style={[styles.consultaList, { maxHeight: CONSULTA_LIST_MAX_HEIGHT }]}
+            contentContainerStyle={styles.consultaListContent}
+            ItemSeparatorComponent={ConsultaRowSeparator}
+            getItemLayout={consultaGetItemLayout}
+            initialNumToRender={6}
+            maxToRenderPerBatch={6}
+            updateCellsBatchingPeriod={50}
+            windowSize={7}
+            removeClippedSubviews={Platform.OS !== 'web'}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+          />
+        ) : null}
       </Card>
 
       <HistoricoCalendarioTaf
@@ -811,36 +841,6 @@ export function ResultadosConsultaPanel({
           </>
         )}
       </TouchableOpacity>
-
-      {aviso ? (
-        <Text style={[ts.caption, styles.aviso, { color: theme.loss }]}>{aviso}</Text>
-      ) : null}
-
-      {buscou && mensagemBusca && linhas.length === 0 ? (
-        <View style={[styles.infoBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-          <Text style={[ts.body, styles.infoText, { color: theme.text }]}>{mensagemBusca}</Text>
-        </View>
-      ) : null}
-
-      {linhas.length > 0 ? (
-        <FlatList
-          data={linhas}
-          keyExtractor={consultaKeyExtractor}
-          renderItem={renderConsultaItem}
-          style={[styles.consultaList, { maxHeight: CONSULTA_LIST_MAX_HEIGHT }]}
-          contentContainerStyle={styles.consultaListContent}
-          ItemSeparatorComponent={ConsultaRowSeparator}
-          getItemLayout={consultaGetItemLayout}
-          initialNumToRender={6}
-          maxToRenderPerBatch={6}
-          updateCellsBatchingPeriod={50}
-          windowSize={7}
-          removeClippedSubviews={Platform.OS !== 'web'}
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator
-        />
-      ) : null}
 
       <EditarResultadoTafModal
         visible={!!cadastroEmEdicao}

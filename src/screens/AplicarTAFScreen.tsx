@@ -40,6 +40,7 @@ import {
 import { AplicarTafHomeLauncher } from '../components/taf/aplicar/AplicarTafHomeLauncher';
 import { AplicarTafFatoresRiscoPanel } from '../components/taf/aplicar/AplicarTafFatoresRiscoPanel';
 import { AplicarTafRestritosPanel } from '../components/taf/aplicar/AplicarTafRestritosPanel';
+import { AplicarTafPresencaPanel } from '../components/taf/aplicar/AplicarTafPresencaPanel';
 import {
   FatoresRiscoInfoModal,
 } from '../components/taf/aplicar/FatoresRiscoInfoModal';
@@ -213,6 +214,7 @@ export default function AplicarTAFScreen() {
   const [fatoresRiscoNipInicial, setFatoresRiscoNipInicial] = useState<string | null>(null);
   const [fatoresRiscoNomeInicial, setFatoresRiscoNomeInicial] = useState<string | null>(null);
   const [mostrarRestritos, setMostrarRestritos] = useState(false);
+  const [mostrarPresenca, setMostrarPresenca] = useState(false);
   const [fatoresRiscoPorNip, setFatoresRiscoPorNip] = useState<Record<string, FatoresRiscoRegistro>>(
     {},
   );
@@ -2643,7 +2645,7 @@ export default function AplicarTAFScreen() {
 
   /** Mantém o contador do botão Pré Cadastro atualizado na tela inicial. */
   useEffect(() => {
-    if (mostrarProvas || mostrarListaPreCadastro || mostrarFatoresRisco || mostrarRestritos) {
+    if (mostrarProvas || mostrarListaPreCadastro || mostrarFatoresRisco || mostrarRestritos || mostrarPresenca) {
       return;
     }
     void recarregarListaPreCadastros();
@@ -2652,6 +2654,7 @@ export default function AplicarTAFScreen() {
     mostrarListaPreCadastro,
     mostrarFatoresRisco,
     mostrarRestritos,
+    mostrarPresenca,
     recarregarListaPreCadastros,
   ]);
 
@@ -2660,6 +2663,7 @@ export default function AplicarTAFScreen() {
       setMostrarListaPreCadastro(true);
       setMostrarFatoresRisco(false);
       setMostrarRestritos(false);
+      setMostrarPresenca(false);
       setModoPreCadastro(false);
       setModoTafNaval(false);
       setMostrarProvas(false);
@@ -2680,6 +2684,20 @@ export default function AplicarTAFScreen() {
 
   const abrirRestritos = useCallback(() => {
     setMostrarRestritos(true);
+    setMostrarPresenca(false);
+    setMostrarFatoresRisco(false);
+    setFatoresRiscoOrigem(null);
+    setFatoresRiscoNipInicial(null);
+    setFatoresRiscoNomeInicial(null);
+    setMostrarListaPreCadastro(false);
+    setModoPreCadastro(false);
+    setModoTafNaval(false);
+    setMostrarProvas(false);
+  }, []);
+
+  const abrirPresenca = useCallback(() => {
+    setMostrarPresenca(true);
+    setMostrarRestritos(false);
     setMostrarFatoresRisco(false);
     setFatoresRiscoOrigem(null);
     setFatoresRiscoNipInicial(null);
@@ -2765,6 +2783,7 @@ export default function AplicarTAFScreen() {
     setFatoresRiscoNipInicial(null);
     setFatoresRiscoNomeInicial(null);
     setMostrarRestritos(false);
+    setMostrarPresenca(false);
     setModoPreCadastro(false);
     setModoTafNaval(false);
     setMostrarProvas(false);
@@ -2789,7 +2808,7 @@ export default function AplicarTAFScreen() {
       fecharPainelFatoresRisco();
       return;
     }
-    if (mostrarRestritos || mostrarListaPreCadastro) {
+    if (mostrarRestritos || mostrarListaPreCadastro || mostrarPresenca) {
       voltarInicioAplicarTaf();
       return;
     }
@@ -2811,6 +2830,7 @@ export default function AplicarTAFScreen() {
     mostrarFatoresRisco,
     mostrarRestritos,
     mostrarListaPreCadastro,
+    mostrarPresenca,
     mostrarProvas,
     corridaEtapa,
     modoPreCadastro,
@@ -3288,6 +3308,12 @@ export default function AplicarTAFScreen() {
         subtitle: 'Registre a dispensa pelo NIP ou nome e o período',
       };
     }
+    if (mostrarPresenca) {
+      return {
+        title: 'Presença TFM',
+        subtitle: 'Registre a presença do militar pelo NIP ou nome',
+      };
+    }
     if (mostrarProvas) {
       if (corridaEtapa === 'menu') {
         return {
@@ -3325,6 +3351,7 @@ export default function AplicarTAFScreen() {
     mostrarListaPreCadastro,
     mostrarFatoresRisco,
     mostrarRestritos,
+    mostrarPresenca,
     mostrarProvas,
     corridaEtapa,
     modoPreCadastro,
@@ -3536,7 +3563,7 @@ export default function AplicarTAFScreen() {
         }}
       >
         <View style={styles.centerWrap}>
-          {!mostrarProvas && !mostrarListaPreCadastro && !mostrarFatoresRisco && !mostrarRestritos ? (
+          {!mostrarProvas && !mostrarListaPreCadastro && !mostrarFatoresRisco && !mostrarRestritos && !mostrarPresenca ? (
             <AplicarTafCenteredTabHeader
               title={flowHeader.title}
               subtitle={flowHeader.subtitle}
@@ -3550,13 +3577,14 @@ export default function AplicarTAFScreen() {
             />
           )}
 
-          {!mostrarProvas && !mostrarListaPreCadastro && !mostrarFatoresRisco && !mostrarRestritos ? (
+          {!mostrarProvas && !mostrarListaPreCadastro && !mostrarFatoresRisco && !mostrarRestritos && !mostrarPresenca ? (
             <AplicarTafHomeLauncher
               onIniciarTaf={iniciarTaf}
               onIniciarTafNaval={iniciarTafNaval}
               onPreCadastro={abrirListaPreCadastro}
               onFatoresRisco={abrirFatoresRisco}
               onRestritos={abrirRestritos}
+              onPresenca={abrirPresenca}
               preCadastrosCount={listaPreCadastros.length}
             />
           ) : null}
@@ -3573,6 +3601,10 @@ export default function AplicarTAFScreen() {
 
           {mostrarRestritos ? (
             <AplicarTafRestritosPanel onVoltar={voltarInicioAplicarTaf} />
+          ) : null}
+
+          {mostrarPresenca ? (
+            <AplicarTafPresencaPanel onVoltar={voltarInicioAplicarTaf} />
           ) : null}
 
           {mostrarListaPreCadastro ? (

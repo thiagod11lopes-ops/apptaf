@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ship, ClipboardList, Sparkles, Anchor, ShieldAlert, Ban } from 'lucide-react-native';
+import { Ship, ClipboardList, Sparkles, Anchor, ShieldAlert, Ban, UserCheck } from 'lucide-react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getUiColors } from '../../../theme/uiColors';
 import { PREMIUM } from '../../../theme/premium';
@@ -18,6 +18,7 @@ type Props = {
   onPreCadastro: () => void;
   onFatoresRisco: () => void;
   onRestritos: () => void;
+  onPresenca: () => void;
   /** Quantidade de pré-cadastros já salvos. */
   preCadastrosCount?: number;
 };
@@ -33,6 +34,7 @@ export function AplicarTafHomeLauncher({
   onPreCadastro,
   onFatoresRisco,
   onRestritos,
+  onPresenca,
   preCadastrosCount = 0,
 }: Props) {
   const { theme } = useTheme();
@@ -241,6 +243,52 @@ export function AplicarTafHomeLauncher({
                 </Text>
                 <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
                   Registre dispensas com início e fim
+                </Text>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          accessibilityLabel="Presença TFM"
+          activeOpacity={0.92}
+          onPress={onPresenca}
+          style={styles.tileWrap}
+        >
+          <View
+            style={[
+              styles.tileSecondary,
+              {
+                backgroundColor: glass.bg,
+                borderColor: glass.border,
+              },
+            ]}
+          >
+            <View style={styles.tileBody}>
+              <View
+                style={[
+                  styles.iconRingMuted,
+                  {
+                    backgroundColor: theme.isDark
+                      ? 'rgba(134,239,172,0.15)'
+                      : 'rgba(22,163,74,0.10)',
+                  },
+                ]}
+              >
+                <UserCheck
+                  size={24}
+                  color={theme.isDark ? '#86efac' : '#16a34a'}
+                  strokeWidth={2.2}
+                />
+              </View>
+              <View style={styles.textCol}>
+                <Text
+                  style={[styles.tileTitle, { color: ui.text }, isNarrowPhone ? styles.tileTitleCompact : null]}
+                >
+                  Presença TFM
+                </Text>
+                <Text style={[styles.tileSub, { color: theme.textSecondary }]}>
+                  Registre a presença dos militares nos testes
                 </Text>
               </View>
             </View>

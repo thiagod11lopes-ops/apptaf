@@ -16,6 +16,7 @@ import {
 import { buscarCadastroPorNomeOuNip } from '../../../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput, nipDigitos } from '../../../utils/nipFormat';
 import { dataHojeBr } from '../../../utils/tafRegistro';
+import { formatNomeComPosto } from '../../../utils/formatNomeComPosto';
 import { getAplicarTafGlass } from './aplicarTafTheme';
 import {
   AplicarTafBackLink,
@@ -111,10 +112,12 @@ export function AplicarTafPresencaPanel({ onVoltar }: Props) {
       const resultado = buscarCadastroPorNomeOuNip(cadastros, valor);
       if (resultado.kind === 'found') {
         const nipFmt = formatNipInput(resultado.cadastro.nip ?? '');
+        const nomeFormatado = formatNomeComPosto(resultado.cadastro);
         if (origem === 'nip') {
-          setNome(resultado.cadastro.nome?.trim() ?? '');
+          setNome(nomeFormatado);
         } else {
           setNip(nipFmt);
+          setNome(nomeFormatado);
         }
         void carregarPresencaSalva(nipFmt);
         return;
@@ -234,7 +237,7 @@ export function AplicarTafPresencaPanel({ onVoltar }: Props) {
       setMostrarCadastroRapido(false);
       const nipFmt = formatNipInput(cadastro.nip ?? '');
       setNip(nipFmt);
-      setNome(cadastro.nome?.trim() ?? '');
+      setNome(formatNomeComPosto(cadastro));
       setFeedback('Militar cadastrado. Informe a data e registre a presença.');
       setNipNaoEncontrado(false);
       // Recarrega a lista de cadastros para que buscas futuras encontrem o novo militar

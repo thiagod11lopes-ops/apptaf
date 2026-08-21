@@ -434,6 +434,37 @@ export function HistoricoSessaoDetalheModal({
   const persistirSessao = useCallback(
     async (nextLinhas: ResultadoCorridaItem[], nextMetas: MetaLinha[]) => {
       if (!sessao || somenteLeitura) return;
+
+      // Antes de salvar/deletar sessões de origem, hidratar rubricas de TODOS os IDs
+      // agrupados. Cada participante pode ter sua rubrica na side table de um ID diferente;
+      // sem isso, as rubricas de sessões extras seriam perdidas ao deletá-las abaixo.
+      const idsOrigem = (sessao as SessaoAplicacaoTaf & { idsOrigem?: string[] }).idsOrigem;
+      const todosIds = idsOrigem?.length ? idsOrigem : [sessao.id];
+      try {
+        const { getSessaoRubricasLocal } = await import('../../offline-first/db/localDbRubricas');
+        const { isRubricaImagemDataUrl } = await import('../../utils/rubricaPresence');
+        const rubricaMap = new Map<string, string>(); // "nipDigitos:prova" → svg
+        for (const id of todosIds) {
+          const rec = await getSessaoRubricasLocal(id);
+          for (const r of rec?.resultados ?? []) {
+            if (!isRubricaImagemDataUrl(r.rubricaCandidatoSvg)) continue;
+            const key = `${nipDigitos(r.nip)}:${r.prova}`;
+            if (!rubricaMap.has(key)) rubricaMap.set(key, r.rubricaCandidatoSvg);
+          }
+        }
+        if (rubricaMap.size > 0) {
+          nextLinhas = nextLinhas.map((r) => {
+            if (isRubricaImagemDataUrl(r.rubricaCandidatoSvg)) return r; // recém-capturada
+            const prova = r.prova ?? sessao.tipoProva;
+            const key = `${nipDigitos(r.nip)}:${prova}`;
+            const svg = rubricaMap.get(key);
+            return svg ? { ...r, rubricaCandidatoSvg: svg, rubricaCandidato: 'Rúbrica capturada' } : r;
+          });
+        }
+      } catch {
+        // Falha não crítica: continua sem hidratar rubricas.
+      }
+
       const resultados = renumerar(nextLinhas);
       const atualizada: SessaoAplicacaoTaf = {
         ...sessao,
@@ -444,9 +475,8 @@ export function HistoricoSessaoDetalheModal({
       setErro('');
       try {
         await updateSessaoAplicacao(atualizada);
-        const idsExtra = (sessao as SessaoAplicacaoTaf & { idsOrigem?: string[] }).idsOrigem;
-        if (idsExtra && idsExtra.length > 1) {
-          for (const id of idsExtra) {
+        if (idsOrigem && idsOrigem.length > 1) {
+          for (const id of idsOrigem) {
             if (id === sessao.id) continue;
             try {
               await deleteSessaoAplicacao(id);

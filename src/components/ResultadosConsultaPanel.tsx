@@ -741,15 +741,6 @@ export function ResultadosConsultaPanel({
         resultados individuais.
       </Text>
 
-      <HistoricoCalendarioTaf
-        sessoes={sessoesHistorico}
-        cadastros={todosCadastros}
-        onAviso={setAviso}
-        onResultadosCadastrados={() => {
-          void onDatasetRefresh?.();
-        }}
-      />
-
       <Card elevated style={styles.formCard}>
         <View style={styles.field}>
           <LabelNip color={theme.text} fontSize={14} fontWeight={600} />
@@ -785,6 +776,15 @@ export function ResultadosConsultaPanel({
           <Text style={[ts.caption, styles.btnBuscarText, { color: theme.text }]}>Buscar</Text>
         </TouchableOpacity>
       </Card>
+
+      <HistoricoCalendarioTaf
+        sessoes={sessoesHistorico}
+        cadastros={todosCadastros}
+        onAviso={setAviso}
+        onResultadosCadastrados={() => {
+          void onDatasetRefresh?.();
+        }}
+      />
 
       <TouchableOpacity
         accessibilityLabel="Gerar Resultados"

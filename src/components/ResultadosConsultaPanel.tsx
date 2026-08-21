@@ -10,7 +10,7 @@ import {
   FlatList,
   type ListRenderItem,
 } from 'react-native';
-import { Search, Download, Trash2, Pencil } from 'lucide-react-native';
+import { Search, Download, Trash2, Pencil, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card } from './Card';
 import { LabelNip } from './LabelNip';
@@ -229,6 +229,15 @@ export function ResultadosConsultaPanel({
     },
     [todosCadastros],
   );
+
+  const limparBusca = useCallback(() => {
+    setNip('');
+    setNome('');
+    setLinhas([]);
+    setBuscou(false);
+    setMensagemBusca(null);
+    setAviso(null);
+  }, []);
 
   const onChangeNip = useCallback(
     (texto: string) => {
@@ -771,14 +780,30 @@ export function ResultadosConsultaPanel({
           />
         </View>
 
-        <TouchableOpacity
-          accessibilityLabel="Buscar resultado"
-          onPress={() => void executarBusca()}
-          style={[styles.btnBuscar, { backgroundColor: theme.primary }]}
-        >
-          <Search size={18} color={theme.text} strokeWidth={2.2} />
-          <Text style={[ts.caption, styles.btnBuscarText, { color: theme.text }]}>Buscar</Text>
-        </TouchableOpacity>
+        <View style={styles.botoesRow}>
+          <TouchableOpacity
+            accessibilityLabel="Buscar resultado"
+            onPress={() => void executarBusca()}
+            style={[styles.btnBuscar, { backgroundColor: theme.primary, flex: 1 }]}
+          >
+            <Search size={18} color={theme.text} strokeWidth={2.2} />
+            <Text style={[ts.caption, styles.btnBuscarText, { color: theme.text }]}>Buscar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityLabel="Limpar busca"
+            onPress={limparBusca}
+            style={[
+              styles.btnBuscar,
+              styles.btnLimpar,
+              { borderColor: theme.border, backgroundColor: theme.backgroundSecondary },
+            ]}
+          >
+            <X size={16} color={theme.textSecondary} strokeWidth={2.4} />
+            <Text style={[ts.caption, styles.btnBuscarText, { color: theme.textSecondary }]}>
+              Limpar
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {aviso ? (
           <Text style={[ts.caption, styles.aviso, { color: theme.loss }]}>{aviso}</Text>
@@ -920,6 +945,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
   },
+  botoesRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
   btnBuscar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -927,7 +957,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: PREMIUM.radiusMd,
-    marginTop: 4,
+  },
+  btnLimpar: {
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    flex: 0,
   },
   btnBuscarText: { fontWeight: '800' },
   btnDownload: {

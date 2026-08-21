@@ -51,6 +51,9 @@ export function AplicarTafPresencaPanel({ onVoltar }: Props) {
   const [buscaLista, setBuscaLista] = useState('');
   const [mostrarCadastroRapido, setMostrarCadastroRapido] = useState(false);
   const [nipNaoEncontrado, setNipNaoEncontrado] = useState(false);
+  const [filtroDia, setFiltroDia] = useState('');
+  const [filtroMes, setFiltroMes] = useState('');
+  const [filtroAno, setFiltroAno] = useState('');
 
   const recarregarLista = useCallback(async () => {
     try {
@@ -251,20 +254,55 @@ export function AplicarTafPresencaPanel({ onVoltar }: Props) {
     [],
   );
 
+  const temFiltroData = filtroDia.trim() !== '' || filtroMes.trim() !== '' || filtroAno.trim() !== '';
+
+  /** Retorna apenas as datas do registro que batem com o filtro de dia/mês/ano. */
+  const datasFiltradasDeReg = useCallback(
+    (datas: string[]): string[] => {
+      if (!temFiltroData) return datas;
+      const dia = filtroDia.trim().padStart(2, '0');
+      const mes = filtroMes.trim().padStart(2, '0');
+      const ano = filtroAno.trim();
+      return datas.filter((d) => {
+        // formato DD/MM/AAAA
+        const parts = d.split('/');
+        const dd = parts[0] ?? '';
+        const mm = parts[1] ?? '';
+        const aaaa = parts[2] ?? '';
+        if (filtroDia.trim() && dd !== dia) return false;
+        if (filtroMes.trim() && mm !== mes) return false;
+        if (filtroAno.trim() && !aaaa.startsWith(ano)) return false;
+        return true;
+      });
+    },
+    [temFiltroData, filtroDia, filtroMes, filtroAno],
+  );
+
   const listaFiltrada = useMemo(() => {
     const q = buscaLista.trim().toLowerCase();
-    if (!q) return lista;
     const qDigitos = q.replace(/\D/g, '');
     return lista.filter((reg) => {
-      const nomeOk = (reg.nome || '').toLowerCase().includes(q);
-      const nipOk = qDigitos.length > 0 && nipDigitos(reg.nip).includes(qDigitos);
-      return nomeOk || nipOk;
+      // Filtro por NIP/nome
+      if (q) {
+        const nomeOk = (reg.nome || '').toLowerCase().includes(q);
+        const nipOk = qDigitos.length > 0 && nipDigitos(reg.nip).includes(qDigitos);
+        if (!nomeOk && !nipOk) return false;
+      }
+      // Filtro por data: militar deve ter ao menos uma data correspondente
+      if (temFiltroData) {
+        const datasMatch = datasFiltradasDeReg(reg.datas ?? []);
+        if (datasMatch.length === 0) return false;
+      }
+      return true;
     });
-  }, [lista, buscaLista]);
+  }, [lista, buscaLista, temFiltroData, datasFiltradasDeReg]);
 
   const totalPresencas = useMemo(
-    () => lista.reduce((acc, r) => acc + (r.datas?.length ?? 0), 0),
-    [lista],
+    () =>
+      temFiltroData
+        ? listaFiltrada.reduce((acc, r) => acc + datasFiltradasDeReg(r.datas ?? []).length, 0)
+        : lista.reduce((acc, r) => acc + (r.datas?.length ?? 0), 0),
+    [lista, listaFiltrada, temFiltroData, datasFiltradasDeReg],
   );
 
   return (
@@ -345,14 +383,69 @@ export function AplicarTafPresencaPanel({ onVoltar }: Props) {
           loading={salvando}
         />
 
+        {/* ── Filtro por data ── */}
+        <View style={styles.filtroWrap}>
+          <View style={styles.filtroHeaderRow}>
+            <Text style={[ts.caption, styles.label, { color: ui.label }]}>
+              Filtrar por data
+            </Text>
+            {temFiltroData ? (
+              <TouchableOpacity
+                onPress={() => { setFiltroDia(''); setFiltroMes(''); setFiltroAno(''); }}
+                hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+              >
+                <Text style={[ts.caption, { color: theme.primary, fontWeight: '700' }]}>
+                  Limpar
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          <View style={styles.filtroRow}>
+            <View style={styles.filtroCampoDia}>
+              <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 4 }]}>Dia</Text>
+              <AplicarTafInput
+                value={filtroDia}
+                onChangeText={(t) => setFiltroDia(t.replace(/\D/g, '').slice(0, 2))}
+                placeholder="DD"
+                keyboardType="number-pad"
+                autoCorrect={false}
+                accessibilityLabel="Filtrar por dia"
+              />
+            </View>
+            <View style={styles.filtroCampoMes}>
+              <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 4 }]}>Mês</Text>
+              <AplicarTafInput
+                value={filtroMes}
+                onChangeText={(t) => setFiltroMes(t.replace(/\D/g, '').slice(0, 2))}
+                placeholder="MM"
+                keyboardType="number-pad"
+                autoCorrect={false}
+                accessibilityLabel="Filtrar por mês"
+              />
+            </View>
+            <View style={styles.filtroCampoAno}>
+              <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 4 }]}>Ano</Text>
+              <AplicarTafInput
+                value={filtroAno}
+                onChangeText={(t) => setFiltroAno(t.replace(/\D/g, '').slice(0, 4))}
+                placeholder="AAAA"
+                keyboardType="number-pad"
+                autoCorrect={false}
+                accessibilityLabel="Filtrar por ano"
+              />
+            </View>
+          </View>
+        </View>
+
         {lista.length > 0 ? (
           <View style={styles.listaWrap}>
             <Text style={[ts.label, { color: theme.primary, marginBottom: 8 }]}>
               Presenças registradas —{' '}
-              {buscaLista.trim()
+              {(buscaLista.trim() || temFiltroData)
                 ? `${listaFiltrada.length} de ${lista.length} militar${lista.length !== 1 ? 'es' : ''}`
                 : `${lista.length} militar${lista.length !== 1 ? 'es' : ''}`}{' '}
               · {totalPresencas} registro{totalPresencas !== 1 ? 's' : ''}
+              {temFiltroData ? ' (filtrados)' : ''}
             </Text>
 
             <View style={styles.fieldBlock}>
@@ -368,89 +461,95 @@ export function AplicarTafPresencaPanel({ onVoltar }: Props) {
 
             {listaFiltrada.length === 0 ? (
               <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 8 }]}>
-                Nenhum registro encontrado para "{buscaLista.trim()}".
+                Nenhum registro encontrado{buscaLista.trim() ? ` para "${buscaLista.trim()}"` : ''}{temFiltroData ? ' com a data informada' : ''}.
               </Text>
             ) : (
               <ScrollView style={styles.listaScroll} nestedScrollEnabled>
-                {listaFiltrada.map((reg) => (
-                  <View
-                    key={reg.nip}
-                    style={[
-                      styles.listaItem,
-                      {
-                        borderColor: glass.border,
-                        backgroundColor: theme.isDark
-                          ? 'rgba(2,6,23,0.35)'
-                          : 'rgba(255,255,255,0.55)',
-                      },
-                    ]}
-                  >
-                    <View style={styles.listaItemRow}>
-                      <View style={styles.listaItemText}>
-                        <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>
-                          {reg.nome || 'Sem nome'}
-                        </Text>
-                        <Text style={[ts.caption, { color: theme.textMuted }]}>
-                          NIP {formatNipInput(reg.nip)} ·{' '}
-                          {reg.datas?.length ?? 0} presença{(reg.datas?.length ?? 0) !== 1 ? 's' : ''}
-                        </Text>
+                {listaFiltrada.map((reg) => {
+                  const datasVisiveis = datasFiltradasDeReg(reg.datas ?? []);
+                  return (
+                    <View
+                      key={reg.nip}
+                      style={[
+                        styles.listaItem,
+                        {
+                          borderColor: glass.border,
+                          backgroundColor: theme.isDark
+                            ? 'rgba(2,6,23,0.35)'
+                            : 'rgba(255,255,255,0.55)',
+                        },
+                      ]}
+                    >
+                      <View style={styles.listaItemRow}>
+                        <View style={styles.listaItemText}>
+                          <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]}>
+                            {reg.nome || 'Sem nome'}
+                          </Text>
+                          <Text style={[ts.caption, { color: theme.textMuted }]}>
+                            NIP {formatNipInput(reg.nip)} ·{' '}
+                            {temFiltroData
+                              ? `${datasVisiveis.length} de ${reg.datas?.length ?? 0}`
+                              : reg.datas?.length ?? 0}{' '}
+                            presença{(reg.datas?.length ?? 0) !== 1 ? 's' : ''}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          accessibilityLabel={`Excluir todas as presenças de ${reg.nome || reg.nip}`}
+                          accessibilityRole="button"
+                          onPress={() => void excluirMilitar(reg)}
+                          style={[
+                            styles.acaoBtn,
+                            {
+                              borderColor: theme.loss,
+                              backgroundColor: theme.lossMuted,
+                            },
+                          ]}
+                        >
+                          <Trash2 size={18} color={theme.loss} strokeWidth={2.3} />
+                        </TouchableOpacity>
                       </View>
-                      <TouchableOpacity
-                        accessibilityLabel={`Excluir todas as presenças de ${reg.nome || reg.nip}`}
-                        accessibilityRole="button"
-                        onPress={() => void excluirMilitar(reg)}
-                        style={[
-                          styles.acaoBtn,
-                          {
-                            borderColor: theme.loss,
-                            backgroundColor: theme.lossMuted,
-                          },
-                        ]}
-                      >
-                        <Trash2 size={18} color={theme.loss} strokeWidth={2.3} />
-                      </TouchableOpacity>
-                    </View>
 
-                    {(reg.datas ?? []).length > 0 ? (
-                      <View style={styles.datasWrap}>
-                        {(reg.datas ?? []).map((d) => (
-                          <View
-                            key={d}
-                            style={[
-                              styles.dataChip,
-                              {
-                                backgroundColor: theme.isDark
-                                  ? 'rgba(99,179,237,0.15)'
-                                  : 'rgba(49,130,206,0.10)',
-                                borderColor: theme.isDark
-                                  ? 'rgba(99,179,237,0.35)'
-                                  : 'rgba(49,130,206,0.25)',
-                              },
-                            ]}
-                          >
-                            <Text style={[ts.caption, { color: ui.text, fontWeight: '600' }]}>
-                              {d}
-                            </Text>
-                            <TouchableOpacity
-                              accessibilityLabel={`Remover presença em ${d} de ${reg.nome || reg.nip}`}
-                              onPress={() => void excluirData(reg.nip, d)}
-                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      {datasVisiveis.length > 0 ? (
+                        <View style={styles.datasWrap}>
+                          {datasVisiveis.map((d) => (
+                            <View
+                              key={d}
+                              style={[
+                                styles.dataChip,
+                                {
+                                  backgroundColor: theme.isDark
+                                    ? 'rgba(99,179,237,0.15)'
+                                    : 'rgba(49,130,206,0.10)',
+                                  borderColor: theme.isDark
+                                    ? 'rgba(99,179,237,0.35)'
+                                    : 'rgba(49,130,206,0.25)',
+                                },
+                              ]}
                             >
-                              <Text
-                                style={[
-                                  ts.caption,
-                                  { color: theme.loss, fontWeight: '800', marginLeft: 6 },
-                                ]}
-                              >
-                                ✕
+                              <Text style={[ts.caption, { color: ui.text, fontWeight: '600' }]}>
+                                {d}
                               </Text>
-                            </TouchableOpacity>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                ))}
+                              <TouchableOpacity
+                                accessibilityLabel={`Remover presença em ${d} de ${reg.nome || reg.nip}`}
+                                onPress={() => void excluirData(reg.nip, d)}
+                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              >
+                                <Text
+                                  style={[
+                                    ts.caption,
+                                    { color: theme.loss, fontWeight: '800', marginLeft: 6 },
+                                  ]}
+                                >
+                                  ✕
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
               </ScrollView>
             )}
           </View>
@@ -470,6 +569,17 @@ export function AplicarTafPresencaPanel({ onVoltar }: Props) {
 const styles = StyleSheet.create({
   fieldBlock: { marginBottom: 12, gap: 6 },
   label: { fontWeight: '800', letterSpacing: 0.3 },
+  filtroWrap: { marginTop: 14, marginBottom: 4 },
+  filtroHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  filtroRow: { flexDirection: 'row', gap: 8 },
+  filtroCampoDia: { width: 60 },
+  filtroCampoMes: { width: 60 },
+  filtroCampoAno: { flex: 1 },
   listaWrap: { marginTop: 18 },
   listaScroll: { maxHeight: 320 },
   listaItem: {

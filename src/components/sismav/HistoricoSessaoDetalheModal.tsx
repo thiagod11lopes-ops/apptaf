@@ -531,12 +531,14 @@ export function HistoricoSessaoDetalheModal({
               cad = aplicarResultadoNoCadastro(cad, tipo, {
                 repeticoes: reps,
                 modoTafNaval,
+                dataAplicacaoBr: sessao.dataAplicacao,
               });
             }
           } else if (r.tempoMs > 0) {
             cad = aplicarResultadoNoCadastro(cad, tipo as TipoProvaTAF, {
               tempoMs: r.tempoMs,
               modoTafNaval,
+              dataAplicacaoBr: sessao.dataAplicacao,
             });
           }
           await addCadastro(cad);

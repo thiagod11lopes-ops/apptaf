@@ -618,6 +618,7 @@ export function ResultadosConsultaPanel({
 
           <ProvaComColunaRubrica
             titulo="Corrida"
+            data={r.dataTafCorrida}
             rubricaSvg={r.rubricaCorridaSvg}
             dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'corrida')}
             onPressRubrica={() => abrirEdicaoRubrica(r, 'corrida')}
@@ -644,6 +645,7 @@ export function ResultadosConsultaPanel({
 
           <ProvaComColunaRubrica
             titulo="Caminhada"
+            data={r.dataTafCaminhada}
             rubricaSvg={r.rubricaCaminhadaSvg}
             dispensavel={modalidadeCorridaCaminhadaDispensavel(r, 'caminhada')}
             onPressRubrica={() => abrirEdicaoRubrica(r, 'caminhada')}
@@ -670,6 +672,7 @@ export function ResultadosConsultaPanel({
 
           <ProvaComColunaRubrica
             titulo="Natação"
+            data={r.dataTafNatacao}
             rubricaSvg={r.rubricaNatacaoSvg}
             onPressRubrica={() => abrirEdicaoRubrica(r, 'natacao')}
             headerRight={
@@ -695,6 +698,7 @@ export function ResultadosConsultaPanel({
 
           <ProvaComColunaRubrica
             titulo="Permanência"
+            data={r.dataTafPermanencia}
             rubricaSvg={r.rubricaPermanenciaSvg}
             onPressRubrica={() => abrirEdicaoRubrica(r, 'permanencia')}
             headerRight={

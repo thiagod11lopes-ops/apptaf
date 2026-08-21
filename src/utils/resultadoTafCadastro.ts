@@ -27,12 +27,18 @@ export type ResultadoTafLinha = {
   /** Datas de aplicação (DD/MM/AAAA) para definir corrida × caminhada excludentes. */
   dataTafCorrida?: string;
   dataTafCaminhada?: string;
+  dataTafNatacao?: string;
+  dataTafPermanencia?: string;
   /** TAF Armada: modalidade de distância que prevalece quando corrida e caminhada coexistem. */
   modalidadeDistanciaAtiva?: 'corrida' | 'caminhada';
   /** ISO da sessão do Histórico (desempate quando as datas coincidem). */
   corridaRegistradaEm?: string;
   caminhadaRegistradaEm?: string;
   /** TAF CFN */
+  dataTafFlexaoBarra?: string;
+  dataTafFlexaoSolo?: string;
+  dataTafAbdominalRemador?: string;
+  dataTafAbdominalPrancha?: string;
   notaFlexaoBarra: string;
   situacaoFlexaoBarra: string;
   notaFlexaoSolo: string;
@@ -245,7 +251,13 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
     rubricaPermanenciaSvg: temPerm ? c.rubricaPermanenciaSvg : undefined,
     dataTafCorrida: temCorrida ? (c.dataTafCorrida || '').trim() || undefined : undefined,
     dataTafCaminhada: temCaminhada ? (c.dataTafCaminhada || '').trim() || undefined : undefined,
+    dataTafNatacao: temNatacao ? (c.dataTafNatacao || '').trim() || undefined : undefined,
+    dataTafPermanencia: temPerm ? (c.dataTafPermanencia || '').trim() || undefined : undefined,
     modalidadeDistanciaAtiva: c.modalidadeDistanciaAtiva,
+    dataTafFlexaoBarra: temFlexBarra ? (c.dataTafFlexaoBarra || '').trim() || undefined : undefined,
+    dataTafFlexaoSolo: temFlexSolo ? (c.dataTafFlexaoSolo || '').trim() || undefined : undefined,
+    dataTafAbdominalRemador: temAbdRemador ? (c.dataTafAbdominalRemador || '').trim() || undefined : undefined,
+    dataTafAbdominalPrancha: temAbdPrancha ? (c.dataTafAbdominalPrancha || '').trim() || undefined : undefined,
     notaFlexaoBarra: temFlexBarra ? (c.notaFlexaoBarra || '—').trim() || '—' : '—',
     situacaoFlexaoBarra: situacaoDeNota(c.notaFlexaoBarra, temFlexBarra),
     notaFlexaoSolo: temFlexSolo ? (c.notaFlexaoSolo || '—').trim() || '—' : '—',

@@ -7,6 +7,8 @@ import { temRubricaPresente } from '../utils/rubricaPresence';
 
 type Props = {
   titulo: string;
+  /** Data de realização da prova (DD/MM/AAAA) exibida ao lado do título. */
+  data?: string;
   headerRight?: React.ReactNode;
   children: React.ReactNode;
   rubricaSvg?: string | null;
@@ -21,6 +23,7 @@ type Props = {
 /** Bloco de prova com coluna dedicada "Rúbrica" ao lado dos dados. */
 export function ProvaComColunaRubrica({
   titulo,
+  data,
   headerRight,
   children,
   rubricaSvg,
@@ -100,15 +103,21 @@ export function ProvaComColunaRubrica({
       pointerEvents="box-none"
     >
       <View style={styles.header} pointerEvents="box-none">
-        <Text
-          style={[
-            styles.titulo,
-            { color: dispensavel ? theme.loss : theme.textSecondary },
-          ]}
-          pointerEvents="none"
-        >
-          {titulo}
-        </Text>
+        <View style={styles.headerLeft} pointerEvents="none">
+          <Text
+            style={[
+              styles.titulo,
+              { color: dispensavel ? theme.loss : theme.textSecondary },
+            ]}
+          >
+            {titulo}
+          </Text>
+          {data ? (
+            <Text style={[styles.dataTexto, { color: theme.textMuted }]}>
+              {data}
+            </Text>
+          ) : null}
+        </View>
         {headerRight}
       </View>
       <View style={[styles.grid, dispensavel && styles.gridFaded]} pointerEvents="box-none">
@@ -170,11 +179,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     zIndex: 2,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
   titulo: {
     fontWeight: '800',
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+  },
+  dataTexto: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   grid: {
     flexDirection: 'row',

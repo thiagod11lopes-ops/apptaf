@@ -47,7 +47,7 @@ export const TIPO_TAF_AGENDAMENTO_LABELS: Record<TipoTafAgendamento, string> = {
 };
 
 export const MODALIDADES_POR_TIPO_TAF: Record<TipoTafAgendamento, ModalidadeAgendamento[]> = {
-  armada: ['corrida', 'natacao_permanencia', 'caminhada'],
+  armada: ['corrida', 'natacao_permanencia'],
   cfn: ['flexao_barra', 'flexao_solo', 'abdominal_remador', 'abdominal_prancha'],
 };
 

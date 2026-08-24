@@ -9,7 +9,7 @@ import {
   Linking,
   Platform,
 } from 'react-native';
-import { CalendarDays, ChevronDown, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react-native';
+import { CalendarDays, ChevronDown, ExternalLink, FileText, Pencil, Plus, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
@@ -28,7 +28,13 @@ import {
   type TipoTafAgendamento,
 } from '../../services/agendamentoStorage';
 import { syncMilitarLookupComCadastros } from '../../services/agendamentoMilitarLookup';
-import { contarReservasPorSlot } from '../../services/reservasAgendamentoStorage';
+import {
+  contarReservasPorSlot,
+  getReservasBySlot,
+  syncReservasFromSupabase,
+} from '../../services/reservasAgendamentoStorage';
+import { exportAgendamentoSlotPdf } from '../../utils/exportAgendamentoSlotPdf';
+import { SalvamentoCanceladoError } from '../../utils/salvarArquivoNaPasta';
 import { dataBrParaIso } from '../../utils/tafRegistro';
 
 /** Página HTML standalone (não é a tela interna do app). */
@@ -65,6 +71,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState<string | null>(null);
+  const [gerandoPdfId, setGerandoPdfId] = useState<string | null>(null);
 
   const modalidadesDoTipo = useMemo(
     () => MODALIDADES_POR_TIPO_TAF[tipoTaf],
@@ -186,6 +193,29 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       }
     },
     [editandoId, limparFormulario, recarregar],
+  );
+
+  const gerarPdfSlot = useCallback(
+    async (slot: SlotAgendamento) => {
+      setGerandoPdfId(slot.id);
+      setErro(null);
+      setSucesso(null);
+      try {
+        await syncReservasFromSupabase(slot.id);
+        const reservas = await getReservasBySlot(slot.id);
+        const msg = await exportAgendamentoSlotPdf(slot, reservas);
+        setSucesso(msg);
+      } catch (e) {
+        if (e instanceof SalvamentoCanceladoError) {
+          setSucesso(null);
+        } else {
+          setErro(e instanceof Error ? e.message : 'Não foi possível gerar o PDF.');
+        }
+      } finally {
+        setGerandoPdfId(null);
+      }
+    },
+    [],
   );
 
   // Agrupa slots por data
@@ -513,6 +543,32 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                       </Text>
                     </View>
                     <View style={styles.slotAcoes}>
+                      <TouchableOpacity
+                        onPress={() => void gerarPdfSlot(slot)}
+                        disabled={gerandoPdfId === slot.id}
+                        style={[
+                          styles.acaoBtn,
+                          {
+                            borderColor: theme.isDark ? '#d4af37' : '#b45309',
+                            backgroundColor: theme.isDark
+                              ? 'rgba(212,175,55,0.14)'
+                              : 'rgba(251,191,36,0.16)',
+                          },
+                        ]}
+                        accessibilityLabel={`Gerar PDF — ${MODALIDADE_AGENDAMENTO_LABELS[slot.modalidade]}`}
+                      >
+                        <FileText
+                          size={16}
+                          color={
+                            gerandoPdfId === slot.id
+                              ? theme.textMuted
+                              : theme.isDark
+                                ? '#d4af37'
+                                : '#b45309'
+                          }
+                          strokeWidth={2.3}
+                        />
+                      </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => abrirEdicao(slot)}
                         style={[

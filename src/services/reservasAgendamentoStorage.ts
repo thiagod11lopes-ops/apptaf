@@ -19,6 +19,8 @@ export type ReservaAgendamento = {
   categoria?: string;
   oficial?: string;
   praca?: string;
+  /** Posto/graduação (página pública / lookup). */
+  posto?: string;
   vinculo?: 'carreira' | 'rm2';
   updatedAt: number;
   deleted?: boolean;
@@ -242,6 +244,7 @@ export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
         categoria:  row.categoria as string | undefined,
         oficial:    row.oficial as string | undefined,
         praca:      row.praca as string | undefined,
+        posto:      (row.posto as string | undefined) || (row.oficial as string | undefined) || (row.praca as string | undefined),
         vinculo:    row.vinculo as 'carreira' | 'rm2' | undefined,
         updatedAt:  row.updated_at as number,
         deleted:    row.deleted as boolean,

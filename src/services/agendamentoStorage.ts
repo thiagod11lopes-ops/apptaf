@@ -8,6 +8,7 @@ import { Platform } from 'react-native';
 import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
 import { dataBrParaIso } from '../utils/tafRegistro';
+import { getSupabase } from '../config/supabase';
 
 export type ModalidadeAgendamento =
   | 'corrida'
@@ -190,6 +191,7 @@ export async function saveSlot(input: {
   };
   map[id] = slot;
   await writeMap(map);
+  void syncSlotSupabase(slot);
   return slot;
 }
 
@@ -197,11 +199,68 @@ export async function deleteSlot(id: string): Promise<boolean> {
   const map = await readMap();
   const prev = map[id];
   if (!prev || prev.deleted === true) return false;
-  map[id] = { ...prev, deleted: true, updatedAt: Date.now() };
+  const updated = { ...prev, deleted: true, updatedAt: Date.now() };
+  map[id] = updated;
   await writeMap(map);
+  void syncSlotSupabase(updated);
   return true;
 }
 
 export async function wipeLocalSlots(ownerUid?: string | null): Promise<void> {
   await writeMap({}, ownerUid);
+}
+
+// ── Sincronização com Supabase ────────────────────────────────────────────────
+// Chamada após cada escrita local. Falha silenciosa: o dado já foi salvo localmente.
+
+async function syncSlotSupabase(slot: SlotAgendamento): Promise<void> {
+  try {
+    const sb = getSupabase();
+    if (!sb) return;
+    const ownerUid = resolveOwnerUid() || null;
+    await sb.from('agendamento_slots').upsert({
+      id:               slot.id,
+      data_taf:         slot.data,
+      modalidade:       slot.modalidade,
+      max_participantes: slot.maxParticipantes,
+      updated_at:       slot.updatedAt,
+      deleted:          slot.deleted ?? false,
+      owner_uid:        ownerUid || undefined,
+    });
+  } catch {
+    // silencioso — dado já persistido localmente
+  }
+}
+
+/** Puxa os slots do Supabase e faz merge com os dados locais (para sincronizar entre dispositivos). */
+export async function syncSlotsFromSupabase(ownerUid?: string | null): Promise<void> {
+  try {
+    const sb = getSupabase();
+    if (!sb) return;
+    const owner = resolveOwnerUid(ownerUid);
+    let query = sb.from('agendamento_slots').select('*');
+    if (owner) query = query.eq('owner_uid', owner);
+
+    const { data, error } = await query;
+    if (error || !data?.length) return;
+
+    const map = await readMap(ownerUid);
+    for (const row of data) {
+      const remote: SlotAgendamento = {
+        id:              row.id as string,
+        data:            row.data_taf as string,
+        modalidade:      row.modalidade as ModalidadeAgendamento,
+        maxParticipantes: row.max_participantes as number,
+        updatedAt:       row.updated_at as number,
+        deleted:         row.deleted as boolean,
+      };
+      const local = map[remote.id];
+      if (!local || (remote.updatedAt ?? 0) > (local.updatedAt ?? 0)) {
+        map[remote.id] = remote;
+      }
+    }
+    await writeMap(map, ownerUid);
+  } catch {
+    // silencioso
+  }
 }

@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
 import type { ModalidadeAgendamento } from './agendamentoStorage';
+import { getSupabase } from '../config/supabase';
 
 export type ReservaAgendamento = {
   id: string;
@@ -179,6 +180,7 @@ export async function saveReserva(input: {
   };
   map[id] = reserva;
   await writeMap(map);
+  void syncReservaSupabase(reserva);
   return reserva;
 }
 
@@ -186,7 +188,71 @@ export async function deleteReserva(id: string): Promise<boolean> {
   const map = await readMap();
   const prev = map[id];
   if (!prev || prev.deleted === true) return false;
-  map[id] = { ...prev, deleted: true, updatedAt: Date.now() };
+  const updated = { ...prev, deleted: true, updatedAt: Date.now() };
+  map[id] = updated;
   await writeMap(map);
+  void syncReservaSupabase(updated);
   return true;
+}
+
+// ── Sincronização com Supabase ────────────────────────────────────────────────
+
+async function syncReservaSupabase(reserva: ReservaAgendamento): Promise<void> {
+  try {
+    const sb = getSupabase();
+    if (!sb) return;
+    await sb.from('agendamento_reservas').upsert({
+      id:         reserva.id,
+      slot_id:    reserva.slotId,
+      data_taf:   reserva.data,
+      modalidade: reserva.modalidade,
+      nip:        reserva.nip,
+      nome:       reserva.nome,
+      updated_at: reserva.updatedAt,
+      deleted:    reserva.deleted ?? false,
+    });
+  } catch {
+    // silencioso — dado já persistido localmente
+  }
+}
+
+/**
+ * Busca reservas do Supabase para um slot e faz merge com os dados locais.
+ * Útil para o admin ver inscrições feitas pela página pública.
+ */
+export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
+  try {
+    const sb = getSupabase();
+    if (!sb) return;
+    let query = sb.from('agendamento_reservas').select('*');
+    if (slotId) query = query.eq('slot_id', slotId);
+
+    const { data, error } = await query;
+    if (error || !data?.length) return;
+
+    const map = await readMap();
+    for (const row of data) {
+      const remote: ReservaAgendamento = {
+        id:         row.id as string,
+        slotId:     row.slot_id as string,
+        data:       row.data_taf as string,
+        modalidade: row.modalidade as ModalidadeAgendamento,
+        nip:        row.nip as string,
+        nome:       row.nome as string,
+        categoria:  row.categoria as string | undefined,
+        oficial:    row.oficial as string | undefined,
+        praca:      row.praca as string | undefined,
+        vinculo:    row.vinculo as 'carreira' | 'rm2' | undefined,
+        updatedAt:  row.updated_at as number,
+        deleted:    row.deleted as boolean,
+      };
+      const local = map[remote.id];
+      if (!local || (remote.updatedAt ?? 0) > (local.updatedAt ?? 0)) {
+        map[remote.id] = remote;
+      }
+    }
+    await writeMap(map);
+  } catch {
+    // silencioso
+  }
 }

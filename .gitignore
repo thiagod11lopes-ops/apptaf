@@ -42,3 +42,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Credenciais locais da página de agendamento (geradas pelo CI em produção)
+public/agendamento/config.js

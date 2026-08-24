@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Agendamento do Teste de Aptidão Física — HNMD" />
+  <title>Agendamento TAF — HNMD</title>
+  <link rel="icon" href="../favicon.ico" />
+  <!-- Supabase client via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- Credenciais injetadas pelo CI (gerado em dist/agendamento/config.js). Para
+       desenvolvimento local copie config.example.js → config.js e preencha. -->
+  <script src="./config.js" onerror="window.__configMissing=true"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:        #0f172a;
+      --navy-2:      #1e293b;
+      --navy-3:      #334155;
+      --gold:        #d4af37;
+      --gold-dark:   #b8941c;
+      --text:        #f1f5f9;
+      --text-2:      #cbd5e1;
+      --text-muted:  #94a3b8;
+      --green:       #22c55e;
+      --green-bg:    rgba(34,197,94,.12);
+      --red:         #ef4444;
+      --red-bg:      rgba(239,68,68,.10);
+      --yellow-bg:   rgba(212,175,55,.10);
+      --radius:      14px;
+      --radius-sm:   8px;
+      --shadow:      0 4px 24px rgba(0,0,0,.4);
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                   'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(160deg, #0f172a 0%, #1a2742 50%, #0f172a 100%);
+      color: var(--text);
+      min-height: 100%;
+    }
+
+    .app {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 0 16px 48px;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 28px 0 22px;
+    }
+
+    .back-btn {
+      width: 40px; height: 40px;
+      border: none;
+      background: var(--navy-2);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      font-size: 20px;
+      flex-shrink: 0;
+      transition: background .15s;
+    }
+    .back-btn:hover { background: var(--navy-3); }
+    .back-btn.visible { display: flex; }
+
+    .brand { display: flex; align-items: center; gap: 12px; flex: 1; }
+
+    .brand-badge {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 900; color: var(--navy);
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(212,175,55,.35);
+    }
+
+    .header-title {
+      font-size: 21px; font-weight: 800;
+      color: var(--gold); line-height: 1.2;
+    }
+
+    .header-sub {
+      font-size: 13px; color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Steps ──────────────────────────────────────────────────────────── */
+    #stepsBar {
+      display: flex;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .step-item { display: flex; align-items: center; flex: 1; }
+
+    .step-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.15);
+      flex-shrink: 0;
+      transition: background .25s;
+    }
+    .step-dot.active { background: var(--gold); }
+    .step-dot.done   { background: var(--green); }
+
+    .step-line {
+      flex: 1; height: 2px;
+      background: rgba(255,255,255,.1);
+      margin: 0 4px;
+      transition: background .25s;
+    }
+    .step-line.done { background: var(--green); }
+
+    /* ── Section title ───────────────────────────────────────────────────── */
+    .section-title {
+      font-size: 20px; font-weight: 800; color: var(--text);
+      margin-bottom: 5px;
+    }
+    .section-sub {
+      font-size: 14px; color: var(--text-muted);
+      margin-bottom: 18px; line-height: 1.4;
+    }
+
+    /* ── Cards (clicáveis) ─────────────────────────────────────────────── */
+    .card {
+      background: var(--navy-2);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: var(--radius);
+      padding: 15px 16px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      transition: border-color .2s, transform .12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .card:hover  { border-color: var(--gold); }
+    .card:active { transform: scale(.98); }
+
+    .card-emoji { font-size: 24px; flex-shrink: 0; }
+    .card-texts { flex: 1; }
+
+    .card-title {
+      font-size: 16px; font-weight: 700; color: var(--text);
+    }
+    .card-sub {
+      font-size: 13px; color: var(--text-muted);
+      margin-top: 3px;
+    }
+    .card-arrow { color: var(--text-muted); font-size: 20px; flex-shrink: 0; }
+
+    /* ── Badge de vagas ──────────────────────────────────────────────────── */
+    .badge {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800;
+      flex-shrink: 0;
+    }
+    .badge-green { background: var(--green-bg); color: var(--green); }
+
+    /* ── Empty state ────────────────────────────────────────────────────── */
+    .empty {
+      background: var(--navy-2);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: var(--radius);
+      padding: 40px 20px;
+      text-align: center;
+    }
+    .empty-icon  { font-size: 44px; margin-bottom: 14px; opacity: .7; }
+    .empty-text  { color: var(--text-muted); font-size: 15px; line-height: 1.6; }
+
+    /* ── Formulário ─────────────────────────────────────────────────────── */
+    .field-label {
+      display: block;
+      font-size: 11px; font-weight: 800;
+      letter-spacing: .5px; text-transform: uppercase;
+      color: var(--text-muted);
+      margin: 16px 0 6px;
+    }
+    .field-label:first-child { margin-top: 0; }
+
+    input[type="text"],
+    input[type="tel"] {
+      width: 100%;
+      background: var(--navy-2);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: var(--radius-sm);
+      padding: 13px 14px;
+      font-size: 16px;
+      color: var(--text);
+      outline: none;
+      transition: border-color .2s;
+      -webkit-appearance: none;
+    }
+    input:focus   { border-color: var(--gold); }
+    input::placeholder { color: var(--text-muted); }
+
+    .nip-input {
+      font-size: 24px !important;
+      text-align: center;
+      letter-spacing: 4px;
+      font-weight: 700;
+    }
+
+    /* ── Feedback inline ────────────────────────────────────────────────── */
+    .feedback {
+      font-size: 13px; font-weight: 600;
+      text-align: center;
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+    .feedback-ok   { color: var(--green); background: var(--green-bg); }
+    .feedback-err  { color: var(--red);   background: var(--red-bg); }
+    .feedback-warn { color: var(--gold);  background: var(--yellow-bg); }
+
+    /* ── Resumo (não clicável) ──────────────────────────────────────────── */
+    .summary-card {
+      background: var(--navy-2);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 10px;
+    }
+    .summary-label {
+      font-size: 10px; font-weight: 800;
+      letter-spacing: 1px; text-transform: uppercase;
+      color: var(--text-muted); margin-bottom: 5px;
+    }
+    .summary-value {
+      font-size: 16px; font-weight: 700; color: var(--text);
+    }
+    .summary-sub {
+      font-size: 13px; color: var(--text-muted); margin-top: 3px;
+    }
+
+    /* ── Botões ──────────────────────────────────────────────────────────── */
+    .btn {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 16px; font-weight: 700;
+      cursor: pointer;
+      margin-top: 10px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: opacity .2s, transform .12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn:active:not(:disabled) { transform: scale(.98); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      color: #0f172a;
+      box-shadow: 0 4px 14px rgba(212,175,55,.3);
+    }
+    .btn-primary:hover:not(:disabled) { opacity: .9; }
+
+    .btn-success {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(34,197,94,.25);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1.5px solid var(--gold);
+      color: var(--gold);
+    }
+
+    /* ── Loading ────────────────────────────────────────────────────────── */
+    .loading {
+      display: flex; flex-direction: column;
+      align-items: center; padding: 64px 0; gap: 16px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(255,255,255,.12);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin .75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { color: var(--text-muted); font-size: 14px; }
+
+    /* ── Sucesso ────────────────────────────────────────────────────────── */
+    .success-wrap {
+      display: flex; flex-direction: column;
+      align-items: center; padding: 40px 0;
+      text-align: center;
+    }
+    .success-icon   { font-size: 78px; line-height: 1; margin-bottom: 22px; }
+    .success-title  { font-size: 26px; font-weight: 800; color: var(--green); margin-bottom: 10px; }
+    .success-name   { font-size: 16px; color: var(--text-2); margin-bottom: 5px; }
+    .success-detail { font-size: 15px; color: var(--text); font-weight: 600; }
+    .success-nip    { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    .success-card {
+      background: var(--navy-2);
+      border: 1px solid rgba(34,197,94,.25);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-top: 24px;
+      width: 100%;
+      text-align: left;
+    }
+
+    /* ── Utilitários ────────────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+
+    <!-- Cabeçalho -->
+    <div class="header" id="pageHeader">
+      <button class="back-btn" id="backBtn" onclick="app.voltar()" aria-label="Voltar">&#8592;</button>
+      <div class="brand">
+        <div class="brand-badge">T</div>
+        <div>
+          <div class="header-title">Agendamento TAF</div>
+          <div class="header-sub" id="headerSub">Inscreva-se na sua modalidade</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Indicador de etapas -->
+    <div id="stepsBar">
+      <div class="step-item">
+        <div class="step-dot active" id="dot0"></div>
+        <div class="step-line" id="line0"></div>
+      </div>
+      <div class="step-item">
+        <div class="step-dot" id="dot1"></div>
+        <div class="step-line" id="line1"></div>
+      </div>
+      <div class="step-item">
+        <div class="step-dot" id="dot2"></div>
+        <div class="step-line" id="line2"></div>
+      </div>
+      <div class="step-item">
+        <div class="step-dot" id="dot3"></div>
+      </div>
+    </div>
+
+    <!-- Conteúdo dinâmico -->
+    <div id="content"></div>
+
+  </div><!-- /.app -->
+
+  <script>
+  (function () {
+    'use strict';
+
+    // ── Configuração ─────────────────────────────────────────────────────
+    var URL_SB  = (typeof window.SUPABASE_URL !== 'undefined' && window.SUPABASE_URL) || '';
+    var KEY_SB  = (typeof window.SUPABASE_KEY !== 'undefined' && window.SUPABASE_KEY) || '';
+
+    var LABEL = {
+      corrida:            'Corrida',
+      natacao_permanencia:'Natação + Permanência',
+      caminhada:          'Caminhada',
+      flexao_barra:       'Flexão de Barra (CFN)',
+      flexao_solo:        'Flexão de Solo (CFN)',
+      abdominal_remador:  'Abdominal Remador (CFN)',
+      abdominal_prancha:  'Abdominal Prancha (CFN)',
+    };
+
+    var ICON = {
+      corrida:            '🏃',
+      natacao_permanencia:'🏊',
+      caminhada:          '🚶',
+      flexao_barra:       '💪',
+      flexao_solo:        '🤸',
+      abdominal_remador:  '🚣',
+      abdominal_prancha:  '🧘',
+    };
+
+    // ── Estado ────────────────────────────────────────────────────────────
+    var sb;
+    var etapa = 'data';           // data | modalidade | identificar | confirmar | sucesso
+    var todosSlots   = [];        // registros de agendamento_slots
+    var reservasMap  = {};        // slotId → número de reservas ativas
+    var dataSel      = null;      // data selecionada (DD/MM/AAAA)
+    var slotSel      = null;      // slot selecionado
+    var nipVal       = '';
+    var nomeVal      = '';
+
+    // ── Inicialização ─────────────────────────────────────────────────────
+    function init() {
+      if (!URL_SB || !KEY_SB) {
+        mostrarErroCfg();
+        return;
+      }
+      sb = supabase.createClient(URL_SB, KEY_SB);
+      mostrarLoading();
+      carregarDados();
+    }
+
+    // ── Utilitários de data ───────────────────────────────────────────────
+    function brParaIso(br) {
+      if (!br) return null;
+      var p = br.split('/');
+      if (p.length !== 3 || p[2].length !== 4) return null;
+      return p[2] + '-' + p[1].padStart(2,'0') + '-' + p[0].padStart(2,'0');
+    }
+
+    function hojeIso() {
+      var d = new Date();
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2,'0') + '-' +
+        String(d.getDate()).padStart(2,'0');
+    }
+
+    // ── Carregamento ──────────────────────────────────────────────────────
+    async function carregarDados() {
+      try {
+        var hoje = hojeIso();
+
+        var r1 = await sb.from('agendamento_slots').select('*').eq('deleted', false);
+        if (r1.error) throw r1.error;
+
+        todosSlots = (r1.data || [])
+          .filter(function(s) {
+            var iso = brParaIso(s.data_taf);
+            return iso && iso >= hoje;
+          })
+          .sort(function(a, b) {
+            var ia = brParaIso(a.data_taf) || '';
+            var ib = brParaIso(b.data_taf) || '';
+            if (ia !== ib) return ia < ib ? -1 : 1;
+            return (a.modalidade || '').localeCompare(b.modalidade || '');
+          });
+
+        var r2 = await sb.from('agendamento_reservas').select('slot_id').eq('deleted', false);
+        if (r2.error) throw r2.error;
+
+        reservasMap = {};
+        (r2.data || []).forEach(function(r) {
+          reservasMap[r.slot_id] = (reservasMap[r.slot_id] || 0) + 1;
+        });
+
+        etapa = 'data';
+        render();
+      } catch (e) {
+        mostrarErro('Erro ao carregar disponibilidade. Verifique sua conexão e tente novamente.');
+      }
+    }
+
+    function vagasDisp(slot) {
+      return Math.max(0, slot.max_participantes - (reservasMap[slot.id] || 0));
+    }
+
+    // ── Formatação de NIP ─────────────────────────────────────────────────
+    function formatarNip(raw) {
+      var d = raw.replace(/\D/g, '').slice(0, 8);
+      if (d.length <= 2) return d;
+      if (d.length <= 6) return d.slice(0,2) + '.' + d.slice(2);
+      return d.slice(0,2) + '.' + d.slice(2,6) + '.' + d.slice(6);
+    }
+
+    function nipDigitos(fmt) {
+      return fmt.replace(/\D/g, '');
+    }
+
+    // ── Navegação ─────────────────────────────────────────────────────────
+    function selecionarData(data) {
+      dataSel = data;
+      etapa = 'modalidade';
+      render();
+    }
+
+    function selecionarSlot(id) {
+      slotSel = todosSlots.find(function(s) { return s.id === id; }) || null;
+      if (!slotSel) return;
+      etapa = 'identificar';
+      nipVal  = '';
+      nomeVal = '';
+      render();
+    }
+
+    function voltar() {
+      if (etapa === 'modalidade')  { etapa = 'data';       render(); }
+      else if (etapa === 'identificar') { etapa = 'modalidade'; render(); }
+      else if (etapa === 'confirmar')   { etapa = 'identificar'; render(); }
+    }
+
+    // ── Render principal ──────────────────────────────────────────────────
+    function render() {
+      atualizarHeader();
+      atualizarSteps();
+      var c = document.getElementById('content');
+      if (!c) return;
+
+      document.getElementById('stepsBar').style.display = 'flex';
+
+      if      (etapa === 'data')        c.innerHTML = telaData();
+      else if (etapa === 'modalidade')  c.innerHTML = telaModalidade();
+      else if (etapa === 'identificar') c.innerHTML = telaIdentificar();
+      else if (etapa === 'confirmar')   c.innerHTML = telaConfirmar();
+      else if (etapa === 'sucesso') {
+        document.getElementById('stepsBar').style.display = 'none';
+        c.innerHTML = telaSucesso();
+      }
+
+      if (etapa === 'identificar') {
+        var ni = document.getElementById('nipInput');
+        var nm = document.getElementById('nomeInput');
+        if (ni) { ni.value = nipVal; ni.focus(); }
+        if (nm)   nm.value = nomeVal;
+        atualizarBtnContinuar();
+      }
+    }
+
+    function atualizarHeader() {
+      var btn = document.getElementById('backBtn');
+      var sub = document.getElementById('headerSub');
+      var mostraVoltar = etapa !== 'data' && etapa !== 'sucesso';
+      if (btn) btn.classList.toggle('visible', mostraVoltar);
+
+      var subs = {
+        data:        'Inscreva-se na sua modalidade',
+        modalidade:  dataSel || '',
+        identificar: 'Identificação do militar',
+        confirmar:   'Confirme sua inscrição',
+        sucesso:     'Inscrição realizada',
+      };
+      if (sub) sub.textContent = subs[etapa] || '';
+    }
+
+    function atualizarSteps() {
+      var ordem = ['data', 'modalidade', 'identificar', 'confirmar'];
+      var atual = ordem.indexOf(etapa);
+
+      for (var i = 0; i < 4; i++) {
+        var dot  = document.getElementById('dot'  + i);
+        var line = document.getElementById('line' + i);
+        if (!dot) continue;
+        dot.className = 'step-dot';
+        if      (i < atual) dot.classList.add('done');
+        else if (i === atual) dot.classList.add('active');
+        if (line) {
+          line.className = 'step-line';
+          if (i < atual) line.classList.add('done');
+        }
+      }
+    }
+
+    // ── Tela: datas disponíveis ───────────────────────────────────────────
+    function telaData() {
+      var datas = [];
+      var visto = Object.create(null);
+      todosSlots.forEach(function(s) {
+        if (!visto[s.data_taf] && vagasDisp(s) > 0) {
+          visto[s.data_taf] = true;
+          datas.push(s.data_taf);
+        }
+      });
+
+      var html = '<p class="section-title">Datas disponíveis</p>' +
+        '<p class="section-sub">Selecione a data que deseja realizar o TAF.</p>';
+
+      if (!datas.length) {
+        return html +
+          '<div class="empty">' +
+          '<div class="empty-icon">📅</div>' +
+          '<div class="empty-text">Não há datas disponíveis no momento.<br>Aguarde a abertura das inscrições.</div>' +
+          '</div>';
+      }
+
+      datas.forEach(function(d) {
+        var grupo = todosSlots.filter(function(s) { return s.data_taf === d && vagasDisp(s) > 0; });
+        var tv    = grupo.reduce(function(acc, s) { return acc + vagasDisp(s); }, 0);
+        var nm    = grupo.length;
+        html += '<div class="card" onclick="app.selecionarData(\'' + e(d) + '\')">' +
+          '<span class="card-emoji">📅</span>' +
+          '<div class="card-texts">' +
+          '<div class="card-title">' + e(d) + '</div>' +
+          '<div class="card-sub">' + nm + ' modalidade' + (nm !== 1 ? 's' : '') +
+          ' &middot; ' + tv + ' vaga' + (tv !== 1 ? 's' : '') + '</div>' +
+          '</div>' +
+          '<span class="card-arrow">&#8250;</span>' +
+          '</div>';
+      });
+
+      return html;
+    }
+
+    // ── Tela: modalidades ─────────────────────────────────────────────────
+    function telaModalidade() {
+      var grupo = todosSlots.filter(function(s) { return s.data_taf === dataSel && vagasDisp(s) > 0; });
+
+      var html = '<p class="section-title">Modalidade</p>' +
+        '<p class="section-sub">' + e(dataSel) + ' &mdash; Escolha a modalidade que irá realizar.</p>';
+
+      grupo.forEach(function(s) {
+        var disp  = vagasDisp(s);
+        var label = LABEL[s.modalidade] || s.modalidade;
+        var icon  = ICON[s.modalidade]  || '🏋';
+        html += '<div class="card" onclick="app.selecionarSlot(\'' + e(s.id) + '\')">' +
+          '<span class="card-emoji">' + icon + '</span>' +
+          '<div class="card-texts">' +
+          '<div class="card-title">' + e(label) + '</div>' +
+          '<div class="card-sub">' + disp + ' vaga' + (disp !== 1 ? 's' : '') +
+          ' disponív' + (disp !== 1 ? 'eis' : 'el') +
+          ' &middot; máx. ' + s.max_participantes + '</div>' +
+          '</div>' +
+          '<span class="badge badge-green">' + disp + '</span>' +
+          '</div>';
+      });
+
+      return html;
+    }
+
+    // ── Tela: identificação ───────────────────────────────────────────────
+    function telaIdentificar() {
+      return '<p class="section-title">Identificação</p>' +
+        '<p class="section-sub">Informe seu NIP e nome completo para prosseguir.</p>' +
+
+        '<label class="field-label" for="nipInput">NIP</label>' +
+        '<input id="nipInput" type="tel" class="nip-input" placeholder="00.0000.00" ' +
+        'autocomplete="off" inputmode="numeric" oninput="app.onNip(this.value)" />' +
+
+        '<label class="field-label" for="nomeInput">Nome completo</label>' +
+        '<input id="nomeInput" type="text" placeholder="SEU NOME COMPLETO" ' +
+        'autocomplete="off" style="text-transform:uppercase" ' +
+        'oninput="app.onNome(this.value)" />' +
+
+        '<div id="feedbackIdent" class="feedback" style="display:none"></div>' +
+
+        '<button class="btn btn-primary" id="btnContinuar" onclick="app.avancarConfirmar()" ' +
+        'disabled>Continuar &#8250;</button>';
+    }
+
+    function atualizarBtnContinuar() {
+      var btn = document.getElementById('btnContinuar');
+      if (!btn) return;
+      btn.disabled = !(nipDigitos(nipVal).length >= 8 && nomeVal.trim().length >= 3);
+    }
+
+    // ── Tela: confirmação ─────────────────────────────────────────────────
+    function telaConfirmar() {
+      var label = slotSel ? (LABEL[slotSel.modalidade] || slotSel.modalidade) : '—';
+      return '<p class="section-title">Confirmar inscrição</p>' +
+        '<p class="section-sub">Verifique seus dados antes de confirmar.</p>' +
+
+        '<div class="summary-card">' +
+        '<div class="summary-label">Prova</div>' +
+        '<div class="summary-value">' + e(label) + '</div>' +
+        '<div class="summary-sub">' + e(slotSel ? slotSel.data_taf : '—') + '</div>' +
+        '</div>' +
+
+        '<div class="summary-card">' +
+        '<div class="summary-label">Militar</div>' +
+        '<div class="summary-value">' + e(nomeVal) + '</div>' +
+        '<div class="summary-sub">NIP ' + e(nipVal) + '</div>' +
+        '</div>' +
+
+        '<div id="erroCfm" class="feedback feedback-err" style="display:none"></div>' +
+
+        '<button class="btn btn-success" id="btnConfirmar" onclick="app.confirmar()">' +
+        '&#10003; Confirmar inscrição</button>';
+    }
+
+    // ── Tela: sucesso ─────────────────────────────────────────────────────
+    function telaSucesso() {
+      var label = slotSel ? (LABEL[slotSel.modalidade] || slotSel.modalidade) : '';
+      return '<div class="success-wrap">' +
+        '<div class="success-icon">&#9989;</div>' +
+        '<div class="success-title">Inscrição confirmada!</div>' +
+        '<div class="success-name">' + e(nomeVal) + '</div>' +
+
+        '<div class="success-card">' +
+        '<div class="summary-label">Prova</div>' +
+        '<div class="summary-value">' + e(label) + '</div>' +
+        '<div class="summary-sub">' + e(slotSel ? slotSel.data_taf : '') + '</div>' +
+        '</div>' +
+
+        '<button class="btn btn-primary" style="max-width:300px;margin-top:28px" ' +
+        'onclick="app.novaInscricao()">Nova inscrição</button>' +
+        '</div>';
+    }
+
+    // ── Estados de erro / loading ─────────────────────────────────────────
+    function mostrarErroCfg() {
+      document.getElementById('stepsBar').style.display = 'none';
+      document.getElementById('content').innerHTML =
+        '<div class="empty">' +
+        '<div class="empty-icon">⚠️</div>' +
+        '<div class="empty-text"><strong>Página não configurada</strong><br><br>' +
+        'Esta página ainda não foi configurada pelo administrador do sistema.</div>' +
+        '</div>';
+    }
+
+    function mostrarErro(msg) {
+      document.getElementById('content').innerHTML =
+        '<div class="empty">' +
+        '<div class="empty-icon">⚠️</div>' +
+        '<div class="empty-text">' + e(msg) + '</div>' +
+        '</div>' +
+        '<button class="btn btn-outline" style="margin-top:16px" onclick="location.reload()">&#8635; Tentar novamente</button>';
+    }
+
+    function mostrarLoading() {
+      document.getElementById('content').innerHTML =
+        '<div class="loading">' +
+        '<div class="spinner"></div>' +
+        '<div class="loading-text">Carregando disponibilidade...</div>' +
+        '</div>';
+    }
+
+    // ── Escape HTML ───────────────────────────────────────────────────────
+    function e(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g,  '&amp;')
+        .replace(/</g,  '&lt;')
+        .replace(/>/g,  '&gt;')
+        .replace(/"/g,  '&quot;')
+        .replace(/'/g,  '&#39;');
+    }
+
+    // ── API pública (window.app) ──────────────────────────────────────────
+    window.app = {
+      selecionarData:  selecionarData,
+      selecionarSlot:  selecionarSlot,
+      voltar:          voltar,
+
+      onNip: function(v) {
+        nipVal = formatarNip(v);
+        var el = document.getElementById('nipInput');
+        if (el) el.value = nipVal;
+        atualizarBtnContinuar();
+      },
+
+      onNome: function(v) {
+        nomeVal = v.toUpperCase();
+        var el = document.getElementById('nomeInput');
+        if (el) el.value = nomeVal;
+        atualizarBtnContinuar();
+      },
+
+      avancarConfirmar: function() {
+        if (nipDigitos(nipVal).length < 8 || nomeVal.trim().length < 3) return;
+        etapa = 'confirmar';
+        render();
+      },
+
+      confirmar: async function() {
+        var btn = document.getElementById('btnConfirmar');
+        var err = document.getElementById('erroCfm');
+        if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+        if (err) err.style.display = 'none';
+
+        try {
+          var nipKey = nipDigitos(nipVal);
+
+          // Verifica duplicata
+          var dup = await sb.from('agendamento_reservas')
+            .select('id')
+            .eq('slot_id', slotSel.id)
+            .eq('nip', nipKey)
+            .eq('deleted', false)
+            .maybeSingle();
+
+          if (dup.data) {
+            mostrarFeedback(err, 'Você já está inscrito nesta modalidade nesta data.', 'err', btn);
+            return;
+          }
+
+          var id = Date.now() + '_' + Math.random().toString(16).slice(2, 8);
+
+          var ins = await sb.from('agendamento_reservas').insert({
+            id:         id,
+            slot_id:    slotSel.id,
+            data_taf:   slotSel.data_taf,
+            modalidade: slotSel.modalidade,
+            nip:        nipKey,
+            nome:       nomeVal.trim(),
+            updated_at: Date.now(),
+            deleted:    false,
+          });
+
+          if (ins.error) throw ins.error;
+
+          etapa = 'sucesso';
+          render();
+        } catch (ex) {
+          var msg = (ex && ex.message) ? ex.message : 'Erro ao confirmar. Tente novamente.';
+          mostrarFeedback(err, msg, 'err', btn);
+        }
+      },
+
+      novaInscricao: function() {
+        etapa   = 'data';
+        dataSel = null;
+        slotSel = null;
+        nipVal  = '';
+        nomeVal = '';
+        document.getElementById('stepsBar').style.display = 'flex';
+        mostrarLoading();
+        carregarDados();
+      },
+    };
+
+    function mostrarFeedback(el, msg, tipo, btn) {
+      if (el) {
+        el.textContent = msg;
+        el.className = 'feedback feedback-' + tipo;
+        el.style.display = 'block';
+      }
+      if (btn) { btn.disabled = false; btn.innerHTML = '&#10003; Confirmar inscrição'; }
+    }
+
+    // ── Arranque ──────────────────────────────────────────────────────────
+    init();
+  })();
+  </script>
+</body>
+</html>

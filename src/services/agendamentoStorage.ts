@@ -23,10 +23,10 @@ export const MODALIDADE_AGENDAMENTO_LABELS: Record<ModalidadeAgendamento, string
   corrida: 'Corrida',
   natacao_permanencia: 'Natação + Permanência',
   caminhada: 'Caminhada',
-  flexao_barra: 'Flexão de Barra (CFN)',
-  flexao_solo: 'Flexão de Solo (CFN)',
-  abdominal_remador: 'Abdominal Remador (CFN)',
-  abdominal_prancha: 'Abdominal Prancha (CFN)',
+  flexao_barra: 'Flexão de Barra',
+  flexao_solo: 'Flexão de Solo',
+  abdominal_remador: 'Abdominal Remador',
+  abdominal_prancha: 'Abdominal Prancha',
 };
 
 export const MODALIDADES_AGENDAMENTO: ModalidadeAgendamento[] = [
@@ -38,6 +38,22 @@ export const MODALIDADES_AGENDAMENTO: ModalidadeAgendamento[] = [
   'abdominal_remador',
   'abdominal_prancha',
 ];
+
+export type TipoTafAgendamento = 'armada' | 'cfn';
+
+export const TIPO_TAF_AGENDAMENTO_LABELS: Record<TipoTafAgendamento, string> = {
+  armada: 'TAF Armada',
+  cfn: 'TAF CFN',
+};
+
+export const MODALIDADES_POR_TIPO_TAF: Record<TipoTafAgendamento, ModalidadeAgendamento[]> = {
+  armada: ['corrida', 'natacao_permanencia', 'caminhada'],
+  cfn: ['flexao_barra', 'flexao_solo', 'abdominal_remador', 'abdominal_prancha'],
+};
+
+export function tipoTafDaModalidade(m: ModalidadeAgendamento): TipoTafAgendamento {
+  return (MODALIDADES_POR_TIPO_TAF.cfn as readonly string[]).includes(m) ? 'cfn' : 'armada';
+}
 
 export type SlotAgendamento = {
   /** ID único do slot (timestamp_random). */

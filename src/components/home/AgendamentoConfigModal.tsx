@@ -7,8 +7,9 @@ import {
   TouchableOpacity,
   TextInput,
   Linking,
+  Platform,
 } from 'react-native';
-import { CalendarDays, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react-native';
+import { CalendarDays, ChevronDown, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
@@ -17,11 +18,14 @@ import {
   deleteSlot,
   getAllSlots,
   MODALIDADE_AGENDAMENTO_LABELS,
-  MODALIDADES_AGENDAMENTO,
+  MODALIDADES_POR_TIPO_TAF,
   pushAllSlotsToSupabase,
   saveSlot,
+  tipoTafDaModalidade,
+  TIPO_TAF_AGENDAMENTO_LABELS,
   type ModalidadeAgendamento,
   type SlotAgendamento,
+  type TipoTafAgendamento,
 } from '../../services/agendamentoStorage';
 import { syncMilitarLookupComCadastros } from '../../services/agendamentoMilitarLookup';
 import { dataBrParaIso } from '../../utils/tafRegistro';
@@ -51,12 +55,19 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
 
   // Formulário
   const [data, setData] = useState('');
+  const [tipoTaf, setTipoTaf] = useState<TipoTafAgendamento>('armada');
   const [modalidade, setModalidade] = useState<ModalidadeAgendamento>('corrida');
+  const [modalidadeSelectAberto, setModalidadeSelectAberto] = useState(false);
   const [maxStr, setMaxStr] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState<string | null>(null);
+
+  const modalidadesDoTipo = useMemo(
+    () => MODALIDADES_POR_TIPO_TAF[tipoTaf],
+    [tipoTaf],
+  );
 
   const recarregar = useCallback(async () => {
     try {
@@ -91,17 +102,31 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
 
   const limparFormulario = useCallback(() => {
     setData('');
+    setTipoTaf('armada');
     setModalidade('corrida');
+    setModalidadeSelectAberto(false);
     setMaxStr('');
     setErro(null);
     setSucesso(null);
     setEditandoId(null);
   }, []);
 
+  const selecionarTipoTaf = useCallback((tipo: TipoTafAgendamento) => {
+    setTipoTaf(tipo);
+    const lista = MODALIDADES_POR_TIPO_TAF[tipo];
+    setModalidade(lista[0]!);
+    setModalidadeSelectAberto(false);
+    setErro(null);
+    setSucesso(null);
+  }, []);
+
   const abrirEdicao = useCallback((slot: SlotAgendamento) => {
     setEditandoId(slot.id);
     setData(slot.data);
+    const tipo = tipoTafDaModalidade(slot.modalidade);
+    setTipoTaf(tipo);
     setModalidade(slot.modalidade);
+    setModalidadeSelectAberto(false);
     setMaxStr(String(slot.maxParticipantes));
     setErro(null);
     setSucesso(null);
@@ -247,17 +272,17 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
             accessibilityLabel="Data da disponibilidade"
           />
 
-          {/* Modalidade */}
-          <Text style={[ts.caption, styles.fieldLabel, { color: ui.label }]}>Modalidade</Text>
-          <View style={styles.modalidadesGrid}>
-            {MODALIDADES_AGENDAMENTO.map((m) => {
-              const ativo = modalidade === m;
+          {/* Tipo de TAF */}
+          <Text style={[ts.caption, styles.fieldLabel, { color: ui.label }]}>Tipo de TAF</Text>
+          <View style={styles.tipoTafRow}>
+            {(['armada', 'cfn'] as const).map((tipo) => {
+              const ativo = tipoTaf === tipo;
               return (
                 <TouchableOpacity
-                  key={m}
-                  onPress={() => { setModalidade(m); setErro(null); setSucesso(null); }}
+                  key={tipo}
+                  onPress={() => selecionarTipoTaf(tipo)}
                   style={[
-                    styles.modalidadeChip,
+                    styles.tipoTafBtn,
                     {
                       backgroundColor: ativo
                         ? theme.primary
@@ -267,24 +292,122 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                       borderColor: ativo ? theme.primary : theme.border,
                     },
                   ]}
-                  accessibilityLabel={MODALIDADE_AGENDAMENTO_LABELS[m]}
+                  accessibilityLabel={TIPO_TAF_AGENDAMENTO_LABELS[tipo]}
+                  accessibilityState={{ selected: ativo }}
                 >
                   <Text
                     style={[
                       ts.caption,
                       {
                         color: ativo ? '#fff' : ui.text,
-                        fontWeight: ativo ? '700' : '500',
+                        fontWeight: ativo ? '700' : '600',
                         textAlign: 'center',
                       },
                     ]}
                   >
-                    {MODALIDADE_AGENDAMENTO_LABELS[m]}
+                    {TIPO_TAF_AGENDAMENTO_LABELS[tipo]}
                   </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
+
+          {/* Modalidade (select filtrado pelo tipo) */}
+          <Text style={[ts.caption, styles.fieldLabel, { color: ui.label }]}>Modalidade</Text>
+          {Platform.OS === 'web' ? (
+            // @ts-expect-error select nativo web
+            <select
+              value={modalidade}
+              onChange={(ev: { target: { value: string } }) => {
+                setModalidade(ev.target.value as ModalidadeAgendamento);
+                setErro(null);
+                setSucesso(null);
+              }}
+              style={{
+                width: '100%',
+                height: 44,
+                borderRadius: PREMIUM.radiusMd,
+                borderWidth: 1,
+                borderStyle: 'solid',
+                borderColor: ui.inputBorder,
+                backgroundColor: theme.cardBg,
+                color: ui.text,
+                paddingLeft: 12,
+                paddingRight: 12,
+                fontSize: 14,
+                marginBottom: 12,
+              }}
+              aria-label="Modalidade"
+            >
+              {modalidadesDoTipo.map((m) => (
+                <option key={m} value={m}>
+                  {MODALIDADE_AGENDAMENTO_LABELS[m]}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <View style={{ marginBottom: 12 }}>
+              <TouchableOpacity
+                onPress={() => setModalidadeSelectAberto((v) => !v)}
+                style={[
+                  styles.selectTrigger,
+                  {
+                    backgroundColor: theme.cardBg,
+                    borderColor: ui.inputBorder,
+                  },
+                ]}
+                accessibilityLabel="Selecionar modalidade"
+              >
+                <Text style={[ts.body, { color: ui.text, flex: 1 }]}>
+                  {MODALIDADE_AGENDAMENTO_LABELS[modalidade]}
+                </Text>
+                <ChevronDown size={18} color={theme.textMuted} strokeWidth={2.2} />
+              </TouchableOpacity>
+              {modalidadeSelectAberto ? (
+                <View
+                  style={[
+                    styles.selectList,
+                    { backgroundColor: theme.cardBg, borderColor: theme.border },
+                  ]}
+                >
+                  {modalidadesDoTipo.map((m) => {
+                    const ativo = modalidade === m;
+                    return (
+                      <TouchableOpacity
+                        key={m}
+                        onPress={() => {
+                          setModalidade(m);
+                          setModalidadeSelectAberto(false);
+                          setErro(null);
+                          setSucesso(null);
+                        }}
+                        style={[
+                          styles.selectOption,
+                          ativo
+                            ? {
+                                backgroundColor: theme.isDark
+                                  ? 'rgba(99,179,237,0.15)'
+                                  : 'rgba(49,130,206,0.08)',
+                              }
+                            : null,
+                        ]}
+                        accessibilityLabel={MODALIDADE_AGENDAMENTO_LABELS[m]}
+                      >
+                        <Text
+                          style={[
+                            ts.body,
+                            { color: ui.text, fontWeight: ativo ? '700' : '500' },
+                          ]}
+                        >
+                          {MODALIDADE_AGENDAMENTO_LABELS[m]}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+          )}
 
           {/* Máximo de participantes */}
           <Text style={[ts.caption, styles.fieldLabel, { color: ui.label, marginTop: 12 }]}>
@@ -374,7 +497,9 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                         {MODALIDADE_AGENDAMENTO_LABELS[slot.modalidade]}
                       </Text>
                       <Text style={[ts.caption, { color: theme.textMuted }]}>
-                        Máx.: {slot.maxParticipantes} participante{slot.maxParticipantes !== 1 ? 's' : ''}
+                        {TIPO_TAF_AGENDAMENTO_LABELS[tipoTafDaModalidade(slot.modalidade)]}
+                        {' · '}Máx.: {slot.maxParticipantes} participante
+                        {slot.maxParticipantes !== 1 ? 's' : ''}
                       </Text>
                     </View>
                     <View style={styles.slotAcoes}>
@@ -447,17 +572,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 15,
   },
-  modalidadesGrid: {
+  tipoTafRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 12,
   },
-  modalidadeChip: {
+  tipoTafBtn: {
+    flex: 1,
     borderWidth: 1,
-    borderRadius: 20,
+    borderRadius: PREMIUM.radiusMd,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectTrigger: {
+    height: 44,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectList: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    overflow: 'hidden',
+  },
+  selectOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   formBtns: {
     flexDirection: 'row',

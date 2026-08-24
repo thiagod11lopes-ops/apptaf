@@ -6,13 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  Linking,
 } from 'react-native';
 import { CalendarDays, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import { ModernModal } from '../sismav/ModernModal';
-import { navigateTab } from '../../navigation/navigationRef';
 import {
   deleteSlot,
   getAllSlots,
@@ -25,7 +25,8 @@ import {
 } from '../../services/agendamentoStorage';
 import { dataBrParaIso } from '../../utils/tafRegistro';
 
-const URL_AGENDAMENTO = 'https://thiagod11lopes-ops.github.io/apptaf/agendamento';
+/** Página HTML standalone (não é a tela interna do app). */
+const URL_AGENDAMENTO = 'https://thiagod11lopes-ops.github.io/apptaf/agendamento.html';
 
 function formatDataInput(raw: string): string {
   const digitos = raw.replace(/\D/g, '').slice(0, 8);
@@ -168,9 +169,8 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
   );
 
   const abrirPaginaAgendamento = useCallback(() => {
-    onClose();
-    navigateTab('AgendamentoPublico');
-  }, [onClose]);
+    void Linking.openURL(`${URL_AGENDAMENTO}?v=${Date.now()}`);
+  }, []);
 
   const inputStyle = [
     styles.input,

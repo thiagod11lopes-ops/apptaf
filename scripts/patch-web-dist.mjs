@@ -305,12 +305,15 @@ self.addEventListener('fetch', (event) => {
   if (isNavigation(request)) {
     try {
       const pathname = new URL(url).pathname;
-      // Página standalone de agendamento: nunca usar SPA como fallback.
-      // O service worker passa direto para a rede, sem interceptar.
-      if (pathname === BASE + '/agendamento' ||
-          pathname === BASE + '/agendamento/' ||
-          pathname.startsWith(BASE + '/agendamento?')) {
-        return; // deixa o browser buscar normalmente
+      // Página standalone de agendamento: nunca interceptar (nem cachear).
+      if (
+        pathname === BASE + '/agendamento' ||
+        pathname === BASE + '/agendamento/' ||
+        pathname === BASE + '/agendamento.html' ||
+        pathname.startsWith(BASE + '/agendamento?') ||
+        pathname.startsWith(BASE + '/agendamento.html')
+      ) {
+        return;
       }
     } catch { /* se URL for inválida, deixa seguir o fluxo padrão */ }
 

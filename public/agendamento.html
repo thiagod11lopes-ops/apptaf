@@ -234,8 +234,17 @@
     'use strict';
 
     var cfg = window.__AGENDAMENTO_CFG__ || {};
-    var URL_SB = (cfg.url && cfg.url.indexOf('__SUPABASE_URL__') === -1) ? String(cfg.url).trim() : '';
-    var KEY_SB = (cfg.key && cfg.key.indexOf('__SUPABASE_KEY__') === -1) ? String(cfg.key).trim() : '';
+    function credenciaisOk(url, key) {
+      if (!url || !key) return false;
+      var u = String(url).trim();
+      var k = String(key).trim();
+      if (!u || !k) return false;
+      if (u.indexOf('__SUPABASE') !== -1 || k.indexOf('__SUPABASE') !== -1) return false;
+      if (u.indexOf('http') !== 0) return false;
+      return k.length >= 20;
+    }
+    var URL_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.url).trim() : '';
+    var KEY_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.key).trim() : '';
 
     var LABEL = {
       corrida:'Corrida', natacao_permanencia:'Natação + Permanência',
@@ -266,13 +275,40 @@
       return Promise.all(jobs);
     }
 
+    function forcarRecarregarRede() {
+      try {
+        if (sessionStorage.getItem('agendamento_force_reload') === '1') return false;
+        sessionStorage.setItem('agendamento_force_reload', '1');
+      } catch (e) { /* ignore */ }
+      var base = location.pathname.indexOf('.html') >= 0
+        ? location.pathname
+        : (location.pathname.replace(/\/?$/, '/') + '').replace(/\/agendamento\/?$/, '/agendamento.html');
+      if (base.indexOf('agendamento.html') < 0) {
+        base = (location.pathname.split('/apptaf')[0] || '') + '/apptaf/agendamento.html';
+      }
+      location.replace(base + '?nocache=' + Date.now());
+      return true;
+    }
+
     function init() {
       mostrarLoading();
       limparCacheApp().finally(function () {
+        cfg = window.__AGENDAMENTO_CFG__ || {};
+        URL_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.url).trim() : '';
+        KEY_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.key).trim() : '';
+
         if (!URL_SB || !KEY_SB) {
-          mostrarErroCfg('Credenciais ausentes no HTML publicado. Aguarde o deploy ou limpe o cache do navegador (Ctrl+Shift+R).');
+          if (forcarRecarregarRede()) return;
+          mostrarErroCfg(
+            'Credenciais ausentes neste navegador (cache antigo). Abra em aba anônima: ' +
+            'https://thiagod11lopes-ops.github.io/apptaf/agendamento.html' +
+            ' — build=' + (cfg.build || '?') +
+            ' url=' + (cfg.url || '(vazio)')
+          );
           return;
         }
+        try { sessionStorage.removeItem('agendamento_force_reload'); } catch (e) {}
+
         var lib = (typeof supabase !== 'undefined' && supabase) || window.supabase;
         if (!lib || typeof lib.createClient !== 'function') {
           mostrarErro('Não foi possível carregar a biblioteca do Supabase. Verifique a conexão e tente novamente.');

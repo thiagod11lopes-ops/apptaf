@@ -32,10 +32,8 @@ const BOTTOM_BAR_PADDING = 96;
 
 /**
  * Deep-link / URL routing.
- * A página de agendamento é acessível em:
- *   https://thiagod11lopes-ops.github.io/apptaf/agendamento
- * O Expo strips o baseUrl (/apptaf) antes de repassar ao React Navigation,
- * portanto o path é apenas "agendamento".
+ * A página pública de agendamento NÃO entra no SPA: é um HTML estático
+ * em /apptaf/agendamento.html (militares sem acesso ao sistema).
  */
 const LINKING_CONFIG = {
   prefixes: [
@@ -46,7 +44,6 @@ const LINKING_CONFIG = {
   ],
   config: {
     screens: {
-      AgendamentoPublico: 'agendamento',
       MainTabs: {
         screens: {
           Home: '',

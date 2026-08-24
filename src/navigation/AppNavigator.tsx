@@ -24,10 +24,37 @@ import CadastroAplicadorScreen from '../screens/CadastroAplicadorScreen';
 import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
 import LoginScreen from '../screens/LoginScreen';
 import CadastrarResultadosScreen from '../screens/CadastrarResultadosScreen';
+import AgendamentoPublicoScreen from '../screens/AgendamentoPublicoScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const BOTTOM_BAR_PADDING = 96;
+
+/**
+ * Deep-link / URL routing.
+ * A página de agendamento é acessível em:
+ *   https://thiagod11lopes-ops.github.io/apptaf/agendamento
+ * O Expo strips o baseUrl (/apptaf) antes de repassar ao React Navigation,
+ * portanto o path é apenas "agendamento".
+ */
+const LINKING_CONFIG = {
+  prefixes: [
+    'https://thiagod11lopes-ops.github.io',
+    'http://localhost:8081',
+    'http://localhost:19006',
+    'taf-app://',
+  ],
+  config: {
+    screens: {
+      AgendamentoPublico: 'agendamento',
+      MainTabs: {
+        screens: {
+          Home: '',
+        },
+      },
+    },
+  },
+};
 
 export default function AppNavigator() {
   const { theme, isDark } = useTheme();
@@ -84,6 +111,7 @@ export default function AppNavigator() {
     <NavigationContainer
       ref={navigationRef}
       theme={navTheme}
+      linking={LINKING_CONFIG}
       onReady={handleNavReady}
       onStateChange={syncRoute}
     >
@@ -125,6 +153,13 @@ export default function AppNavigator() {
           <Stack.Screen
             name="Login"
             component={LoginScreen}
+            options={{
+              contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: 'transparent' },
+            }}
+          />
+          <Stack.Screen
+            name="AgendamentoPublico"
+            component={AgendamentoPublicoScreen}
             options={{
               contentStyle: { flex: 1, paddingBottom: 0, paddingTop: 0, backgroundColor: 'transparent' },
             }}

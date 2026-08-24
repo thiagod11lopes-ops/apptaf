@@ -49,6 +49,8 @@ export type RootStackParamList = {
     returnTo?: AppRouteName;
     aplicadorAssinatura?: AplicadorAssinaturaResumo;
   };
+  /** Página pública de agendamento (acessível sem login). */
+  AgendamentoPublico: undefined;
 };
 
 /** Rotas usadas pela chrome (barra/sidebar) e navigateTab. */

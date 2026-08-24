@@ -6,14 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Linking,
-  Platform,
 } from 'react-native';
 import { CalendarDays, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import { ModernModal } from '../sismav/ModernModal';
+import { navigateTab } from '../../navigation/navigationRef';
 import {
   deleteSlot,
   getAllSlots,
@@ -154,16 +153,10 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     [slotsPorData],
   );
 
-  const abrirUrl = useCallback(async () => {
-    try {
-      const canOpen = await Linking.canOpenURL(URL_AGENDAMENTO);
-      if (canOpen || Platform.OS === 'web') {
-        await Linking.openURL(URL_AGENDAMENTO);
-      }
-    } catch {
-      // silencioso
-    }
-  }, []);
+  const abrirPaginaAgendamento = useCallback(() => {
+    onClose();
+    navigateTab('AgendamentoPublico');
+  }, [onClose]);
 
   const inputStyle = [
     styles.input,
@@ -188,9 +181,9 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Link para a página de agendamento */}
+        {/* Botão para abrir a página de agendamento */}
         <TouchableOpacity
-          onPress={() => void abrirUrl()}
+          onPress={abrirPaginaAgendamento}
           style={[
             styles.urlCard,
             {
@@ -201,9 +194,14 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
           accessibilityLabel="Abrir página de agendamento"
         >
           <ExternalLink size={16} color={theme.primary} strokeWidth={2.2} />
-          <Text style={[ts.caption, { color: theme.primary, flex: 1, marginLeft: 8 }]} numberOfLines={1}>
-            {URL_AGENDAMENTO}
-          </Text>
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <Text style={[ts.caption, { color: theme.primary, fontWeight: '700' }]}>
+              Abrir página de agendamento
+            </Text>
+            <Text style={[ts.caption, { color: theme.textMuted, fontSize: 10 }]} numberOfLines={1}>
+              {URL_AGENDAMENTO}
+            </Text>
+          </View>
         </TouchableOpacity>
 
         {/* ── Formulário ── */}

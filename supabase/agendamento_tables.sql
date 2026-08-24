@@ -27,9 +27,23 @@ create table if not exists public.agendamento_reservas (
   deleted    boolean not null default false
 );
 
+-- ─── Privileges (sem isto o PostgREST retorna "permission denied for table") ──
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.agendamento_slots to anon, authenticated;
+grant select, insert, update, delete on public.agendamento_reservas to anon, authenticated;
+
 -- ─── Row Level Security ────────────────────────────────────────────────────────
 alter table public.agendamento_slots    enable row level security;
 alter table public.agendamento_reservas enable row level security;
+
+drop policy if exists "agendamento_slots_select" on public.agendamento_slots;
+drop policy if exists "agendamento_slots_insert" on public.agendamento_slots;
+drop policy if exists "agendamento_slots_update" on public.agendamento_slots;
+drop policy if exists "agendamento_slots_delete" on public.agendamento_slots;
+drop policy if exists "agendamento_reservas_select" on public.agendamento_reservas;
+drop policy if exists "agendamento_reservas_insert" on public.agendamento_reservas;
+drop policy if exists "agendamento_reservas_update" on public.agendamento_reservas;
+drop policy if exists "agendamento_reservas_delete" on public.agendamento_reservas;
 
 -- Slots: leitura pública (página dos militares), escrita apenas para autenticados
 create policy "agendamento_slots_select"

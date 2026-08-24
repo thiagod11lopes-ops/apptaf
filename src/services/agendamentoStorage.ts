@@ -191,7 +191,7 @@ export async function saveSlot(input: {
   };
   map[id] = slot;
   await writeMap(map);
-  void syncSlotSupabase(slot);
+  await syncSlotSupabase(slot);
   return slot;
 }
 
@@ -202,7 +202,7 @@ export async function deleteSlot(id: string): Promise<boolean> {
   const updated = { ...prev, deleted: true, updatedAt: Date.now() };
   map[id] = updated;
   await writeMap(map);
-  void syncSlotSupabase(updated);
+  await syncSlotSupabase(updated);
   return true;
 }
 
@@ -213,35 +213,44 @@ export async function wipeLocalSlots(ownerUid?: string | null): Promise<void> {
 // ── Sincronização com Supabase ────────────────────────────────────────────────
 // Chamada após cada escrita local. Falha silenciosa: o dado já foi salvo localmente.
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 async function syncSlotSupabase(slot: SlotAgendamento): Promise<void> {
-  try {
-    const sb = getSupabase();
-    if (!sb) return;
-    const ownerUid = resolveOwnerUid() || null;
-    await sb.from('agendamento_slots').upsert({
-      id:               slot.id,
-      data_taf:         slot.data,
-      modalidade:       slot.modalidade,
-      max_participantes: slot.maxParticipantes,
-      updated_at:       slot.updatedAt,
-      deleted:          slot.deleted ?? false,
-      owner_uid:        ownerUid || undefined,
-    });
-  } catch {
-    // silencioso — dado já persistido localmente
+  const sb = getSupabase();
+  if (!sb) {
+    throw new Error('Supabase não configurado neste dispositivo.');
+  }
+  const { data: sessionData } = await sb.auth.getSession();
+  if (!sessionData.session) {
+    throw new Error('Faça login no app para publicar as vagas na página pública.');
+  }
+  const ownerUid = resolveOwnerUid() || null;
+  const { error } = await sb.from('agendamento_slots').upsert({
+    id: slot.id,
+    data_taf: slot.data,
+    modalidade: slot.modalidade,
+    max_participantes: slot.maxParticipantes,
+    updated_at: slot.updatedAt,
+    deleted: slot.deleted ?? false,
+    owner_uid: ownerUid && UUID_RE.test(ownerUid) ? ownerUid : null,
+  });
+  if (error) {
+    throw new Error(error.message || 'Falha ao publicar disponibilidade no Supabase.');
   }
 }
 
 /** Envia todos os slots locais ativos para o Supabase (publicação na página pública). */
-export async function pushAllSlotsToSupabase(ownerUid?: string | null): Promise<void> {
-  try {
-    const sb = getSupabase();
-    if (!sb) return;
-    const slots = await getAllSlots(ownerUid);
-    await Promise.all(slots.map((slot) => syncSlotSupabase(slot)));
-  } catch {
-    // silencioso
+export async function pushAllSlotsToSupabase(ownerUid?: string | null): Promise<number> {
+  const sb = getSupabase();
+  if (!sb) {
+    throw new Error('Supabase não configurado neste dispositivo.');
   }
+  const slots = await getAllSlots(ownerUid);
+  for (const slot of slots) {
+    await syncSlotSupabase(slot);
+  }
+  return slots.length;
 }
 
 /** Puxa os slots do Supabase e faz merge com os dados locais (para sincronizar entre dispositivos). */

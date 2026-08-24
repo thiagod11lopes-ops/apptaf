@@ -58,9 +58,21 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
 
   const recarregar = useCallback(async () => {
     try {
-      await pushAllSlotsToSupabase();
       const lista = await getAllSlots();
       setSlots(lista);
+      try {
+        const n = await pushAllSlotsToSupabase();
+        if (n > 0) {
+          setSucesso(`${n} disponibilidade(s) publicada(s) na página pública.`);
+          setErro(null);
+        }
+      } catch (e) {
+        setErro(
+          e instanceof Error
+            ? e.message
+            : 'Não foi possível publicar na página pública. Confira o login e tente novamente.',
+        );
+      }
     } catch {
       setSlots([]);
     }

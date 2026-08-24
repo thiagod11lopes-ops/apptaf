@@ -18,6 +18,7 @@ import {
   getAllSlots,
   MODALIDADE_AGENDAMENTO_LABELS,
   MODALIDADES_AGENDAMENTO,
+  pushAllSlotsToSupabase,
   saveSlot,
   type ModalidadeAgendamento,
   type SlotAgendamento,
@@ -57,6 +58,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
 
   const recarregar = useCallback(async () => {
     try {
+      await pushAllSlotsToSupabase();
       const lista = await getAllSlots();
       setSlots(lista);
     } catch {

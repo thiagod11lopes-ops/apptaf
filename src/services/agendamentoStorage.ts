@@ -232,6 +232,18 @@ async function syncSlotSupabase(slot: SlotAgendamento): Promise<void> {
   }
 }
 
+/** Envia todos os slots locais ativos para o Supabase (publicação na página pública). */
+export async function pushAllSlotsToSupabase(ownerUid?: string | null): Promise<void> {
+  try {
+    const sb = getSupabase();
+    if (!sb) return;
+    const slots = await getAllSlots(ownerUid);
+    await Promise.all(slots.map((slot) => syncSlotSupabase(slot)));
+  } catch {
+    // silencioso
+  }
+}
+
 /** Puxa os slots do Supabase e faz merge com os dados locais (para sincronizar entre dispositivos). */
 export async function syncSlotsFromSupabase(ownerUid?: string | null): Promise<void> {
   try {

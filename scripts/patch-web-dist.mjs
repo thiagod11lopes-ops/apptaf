@@ -172,6 +172,37 @@ fs.writeFileSync(
 // Evita Jekyll no GitHub Pages (senão o README vira a página inicial)
 fs.writeFileSync(path.join(distDir, '.nojekyll'), '');
 
+// Página standalone de agendamento — copia de public/ e injeta credenciais Supabase.
+const agendamentoSrc = path.resolve('public/agendamento.html');
+const agendamentoDest = path.join(distDir, 'agendamento.html');
+if (!fs.existsSync(agendamentoSrc)) {
+  console.error('patch-web-dist: public/agendamento.html não encontrado');
+  process.exit(1);
+}
+let agendamentoHtml = fs.readFileSync(agendamentoSrc, 'utf8');
+const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').trim();
+const supabaseKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+if (supabaseUrl && supabaseKey) {
+  agendamentoHtml = agendamentoHtml
+    .replace(/__SUPABASE_URL__/g, supabaseUrl)
+    .replace(/__SUPABASE_KEY__/g, supabaseKey);
+  console.log('patch-web-dist: credenciais Supabase injetadas em agendamento.html');
+} else if (process.env.CI) {
+  console.error(
+    'patch-web-dist: EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY são obrigatórios no CI',
+  );
+  process.exit(1);
+} else {
+  console.warn('patch-web-dist: credenciais Supabase ausentes — agendamento.html ficará com placeholders (dev local)');
+}
+if (agendamentoHtml.includes('__SUPABASE_URL__') || agendamentoHtml.includes('__SUPABASE_KEY__')) {
+  if (process.env.CI) {
+    console.error('patch-web-dist: placeholders Supabase não substituídos em agendamento.html');
+    process.exit(1);
+  }
+}
+fs.writeFileSync(agendamentoDest, agendamentoHtml);
+
 // SPA no GitHub Pages: rotas profundas (ex. /admin/historico) precisam de HTML.
 const spaIndex = fs.readFileSync(indexPath);
 fs.writeFileSync(path.join(distDir, '404.html'), spaIndex);

@@ -327,6 +327,8 @@
     var camposFaltando = {};
     var feedbackMsg = '';
     var feedbackTipo = 'ok';
+    /** Usuário precisa confirmar o gênero nesta sessão (mesmo com cadastro completo). */
+    var sexoConfirmado = false;
 
     function limparFormularioCadastro() {
       form = { nome: '', dataNascimento: '', sexo: '', categoria: 'Praças', posto: 'MN', vinculo: 'carreira' };
@@ -334,6 +336,7 @@
       cadastroModo = 'idle';
       feedbackMsg = '';
       feedbackTipo = 'ok';
+      sexoConfirmado = false;
     }
 
     function formatarDataInput(raw) {
@@ -367,24 +370,30 @@
 
     function cadastroCompleto() {
       var f = calcularFaltando(false);
-      return Object.keys(f).length === 0;
+      return Object.keys(f).length === 0 && sexoConfirmado;
     }
 
     function aplicarCadastroDaBusca(row) {
       form.nome = String(row.nome || '').trim().toUpperCase();
       form.dataNascimento = String(row.data_nascimento || '').trim();
-      form.sexo = (row.sexo === 'M' || row.sexo === 'F') ? row.sexo : '';
+      // Não pré-confirma o sexo: o militar deve confirmar nesta tela
+      form.sexo = '';
+      sexoConfirmado = false;
       form.categoria = (row.categoria === 'Oficiais' || row.categoria === 'Praças') ? row.categoria : 'Praças';
       form.posto = String(row.posto || '').trim().toUpperCase() || (form.categoria === 'Oficiais' ? 'GM' : 'MN');
       form.vinculo = (row.vinculo === 'carreira' || row.vinculo === 'rm2') ? row.vinculo : '';
       var faltando = calcularFaltando(true);
+      // Sexo sempre exige confirmação — remove do "faltando de cadastro" se o resto estiver ok
+      delete faltando.sexo;
       if (Object.keys(faltando).length === 0) {
         cadastroModo = 'completo';
         camposFaltando = {};
-        setFeedbackIdent('Militar encontrado: ' + nomeExibicao(), 'ok');
+        setFeedbackIdent('Militar encontrado: ' + nomeExibicao() + '. Confirme seu gênero para continuar.', 'ok');
       } else {
         cadastroModo = 'incompleto';
-        setFeedbackIdent('Cadastro incompleto. Complete os campos em destaque (laranja).', 'err');
+        faltando.sexo = true; // também destaca o sexo até confirmar
+        camposFaltando = faltando;
+        setFeedbackIdent('Cadastro incompleto. Complete os campos em destaque e confirme seu gênero.', 'err');
       }
     }
 
@@ -394,8 +403,10 @@
       form.categoria = 'Praças';
       form.posto = 'MN';
       form.vinculo = 'carreira';
+      form.sexo = '';
+      sexoConfirmado = false;
       camposFaltando = {};
-      setFeedbackIdent('NIP não encontrado. Preencha seus dados para continuar.', 'err');
+      setFeedbackIdent('NIP não encontrado. Preencha seus dados e confirme o gênero.', 'err');
     }
 
     function limparCacheApp() {
@@ -579,6 +590,17 @@
       return h + '</div>';
     }
 
+    function blocoConfirmacaoSexoHtml() {
+      var precisaBlink = !sexoConfirmado && (cadastroModo === 'completo' || cadastroModo === 'incompleto' || cadastroModo === 'novo');
+      return '<div class="cadastro-box" id="sexoConfirmBox" style="border-top:none;padding-top:4px;margin-top:8px">'
+        + '<label class="field-label">Confirmação de gênero</label>'
+        + '<div class="hint-sexo"><strong>Atenção:</strong> confirme o gênero correto (Masculino ou Feminino). Essa informação é usada nas tabelas de avaliação do TAF e deve ser selecionada por você nesta tela.</div>'
+        + '<div class="toggle-row' + (precisaBlink ? ' field-blink' : '') + '" id="row_sexo">'
+        + '<button type="button" class="toggle-btn' + (form.sexo === 'M' && sexoConfirmado ? ' active' : '') + '" onclick="app.confirmarSexo(\'M\')">Masculino</button>'
+        + '<button type="button" class="toggle-btn' + (form.sexo === 'F' && sexoConfirmado ? ' active' : '') + '" onclick="app.confirmarSexo(\'F\')">Feminino</button>'
+        + '</div></div>';
+    }
+
     function formularioCadastroHtml() {
       if (cadastroModo !== 'novo' && cadastroModo !== 'incompleto') return '';
       return '<div class="cadastro-box" id="cadastroBox">'
@@ -586,9 +608,6 @@
         + '<input id="nomeInput" type="text" class="' + blinkClass('nome').trim() + '" placeholder="NOME COMPLETO" autocomplete="off" style="text-transform:uppercase" oninput="app.onNome(this.value)" />'
         + '<label class="field-label" for="dnInput">Data de nascimento</label>'
         + '<input id="dnInput" type="tel" class="' + blinkClass('dataNascimento').trim() + '" placeholder="DD/MM/AAAA" inputmode="numeric" autocomplete="off" oninput="app.onDataNasc(this.value)" />'
-        + '<label class="field-label">Sexo</label>'
-        + '<div class="hint-sexo"><strong>Atenção:</strong> selecione o gênero correto (Masculino ou Feminino). Essa informação é usada nas tabelas de avaliação do TAF.</div>'
-        + togglesHtml('sexo', [{v:'M',l:'Masculino'},{v:'F',l:'Feminino'}])
         + '<label class="field-label">Categoria</label>'
         + togglesHtml('categoria', [{v:'Praças',l:'Praças'},{v:'Oficiais',l:'Oficiais'}])
         + '<label class="field-label">Posto / Graduação</label>'
@@ -646,9 +665,11 @@
     }
 
     function telaIdentificar() {
-      var sub = 'Informe seu NIP. Se estiver cadastrado, os dados serão preenchidos automaticamente.';
-      if (cadastroModo === 'novo') sub = 'NIP não encontrado. Preencha todos os campos do cadastro.';
-      if (cadastroModo === 'incompleto') sub = 'Há dados faltando no cadastro. Complete os campos em laranja.';
+      var sub = 'Informe seu NIP. Em seguida, confirme seu gênero para continuar.';
+      if (cadastroModo === 'novo') sub = 'NIP não encontrado. Preencha os dados e confirme o gênero.';
+      if (cadastroModo === 'incompleto') sub = 'Há dados faltando. Complete os campos em laranja e confirme o gênero.';
+      if (cadastroModo === 'completo') sub = 'Cadastro encontrado. Confirme seu gênero para continuar.';
+      var mostrarSexo = cadastroModo === 'novo' || cadastroModo === 'incompleto' || cadastroModo === 'completo';
       return '<p class="section-title">Identificação</p><p class="section-sub">' + sub + '</p>'
         +'<label class="field-label" for="nipInput">NIP</label>'
         +'<input id="nipInput" type="tel" class="nip-input" placeholder="00.0000.00" autocomplete="off" inputmode="numeric" oninput="app.onNip(this.value)" />'
@@ -657,6 +678,7 @@
           : '')
         +'<div id="feedbackIdent" class="feedback' + (feedbackMsg ? (' feedback-' + feedbackTipo) : '') + '" style="' + (feedbackMsg ? '' : 'display:none') + '">' + e(feedbackMsg) + '</div>'
         + formularioCadastroHtml()
+        + (mostrarSexo ? blocoConfirmacaoSexoHtml() : '')
         +'<button class="btn btn-primary" id="btnContinuar" onclick="app.avancarConfirmar()" disabled>Continuar &#8250;</button>';
     }
 
@@ -770,21 +792,38 @@
         if (campo === 'categoria') {
           form.categoria = valor;
           form.posto = valor === 'Oficiais' ? 'GM' : 'MN';
+        } else if (campo === 'sexo') {
+          form.sexo = valor;
+          sexoConfirmado = true;
         } else {
           form[campo] = valor;
         }
         if (cadastroModo === 'incompleto') calcularFaltando(true);
         render();
       },
+      confirmarSexo: function(valor){
+        form.sexo = valor;
+        sexoConfirmado = true;
+        if (cadastroModo === 'incompleto') {
+          calcularFaltando(true);
+          delete camposFaltando.sexo;
+        }
+        render();
+      },
       avancarConfirmar: function(){
         if (nipDigitos(nipVal).length < 8) return;
+        if (!sexoConfirmado || (form.sexo !== 'M' && form.sexo !== 'F')) {
+          setFeedbackIdent('Confirme seu gênero (Masculino ou Feminino) para continuar.', 'err');
+          render();
+          return;
+        }
         if (!cadastroCompleto()) {
           if (cadastroModo === 'novo') {
-            setFeedbackIdent('Preencha todos os campos do cadastro.', 'err');
+            setFeedbackIdent('Preencha todos os campos do cadastro e confirme o gênero.', 'err');
           } else {
             cadastroModo = 'incompleto';
             calcularFaltando(true);
-            setFeedbackIdent('Complete os campos em destaque (laranja).', 'err');
+            setFeedbackIdent('Complete os campos em destaque e confirme o gênero.', 'err');
             render();
           }
           return;

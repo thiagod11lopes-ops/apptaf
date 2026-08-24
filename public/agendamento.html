@@ -258,6 +258,16 @@
       color: #fff; box-shadow: 0 4px 14px rgba(34,197,94,.25);
     }
     .btn-outline { background: transparent; border: 1.5px solid var(--gold); color: var(--gold); }
+    .btn-danger {
+      background: transparent;
+      border: 1.5px solid var(--red);
+      color: #fca5a5;
+    }
+    .btn-danger:hover:not(:disabled) { background: var(--red-bg); }
+    .btn-danger-solid {
+      background: var(--red);
+      color: #fff;
+    }
 
     /* ── Loading ────────────────────────────────────────────────── */
     .loading { display: flex; flex-direction: column; align-items: center; padding: 64px 0; gap: 16px; }
@@ -342,6 +352,9 @@
     var nipBuscaSeq = 0;
     /** Reserva já existente para este NIP nesta prova (bloqueia novo agendamento). */
     var reservaExistente = null;
+    var cancelandoReserva = false;
+    var cancelFeedback = '';
+    var cancelConfirmando = false;
     /** 'idle' | 'completo' | 'incompleto' | 'novo' */
     var cadastroModo = 'idle';
     var form = {
@@ -366,6 +379,9 @@
       feedbackTipo = 'ok';
       sexoConfirmado = false;
       reservaExistente = null;
+      cancelandoReserva = false;
+      cancelFeedback = '';
+      cancelConfirmando = false;
     }
 
     function formatarNipExibicao(digitsOrFmt) {
@@ -419,6 +435,9 @@
 
     function abrirJaAgendado(reserva) {
       reservaExistente = reserva;
+      cancelandoReserva = false;
+      cancelFeedback = '';
+      cancelConfirmando = false;
       etapa = 'jaAgendado';
       cadastroModo = 'idle';
       feedbackMsg = '';
@@ -799,7 +818,7 @@
       var posto = String(r.posto || '').trim().toUpperCase() || '—';
       var cat = r.categoria || '—';
       var nasc = r.data_nascimento || '—';
-      return ''
+      var h = ''
         + '<div class="ja-agendado-banner">'
         +   '<div class="t">Agendamento já realizado</div>'
         +   '<div class="s">Este NIP já possui inscrição nesta prova. Não é permitido agendar novamente com os mesmos dados.</div>'
@@ -814,9 +833,28 @@
         +   '<div class="summary-value">' + e(nomeDaReserva(r)) + '</div>'
         +   '<div class="summary-sub">NIP ' + e(formatarNipExibicao(r.nip || nipVal)) + ' · ' + e(sexoLabel) + ' · Nasc. ' + e(nasc) + '</div>'
         +   '<div class="summary-sub">' + e(cat) + ' · ' + e(posto) + ' · ' + e(vinculoLabelDe(r.vinculo)) + '</div>'
-        + '</div>'
-        + '<button class="btn btn-outline" style="margin-top:8px" onclick="app.voltar()">&#8592; Voltar</button>'
-        + '<button class="btn btn-primary" style="margin-top:10px" onclick="app.novaInscricao()">Nova inscrição</button>';
+        + '</div>';
+
+      if (cancelFeedback) {
+        h += '<div class="feedback feedback-err" style="display:block;margin-top:8px">' + e(cancelFeedback) + '</div>';
+      }
+
+      if (cancelConfirmando) {
+        h += '<div class="feedback feedback-warn" style="display:block;margin-top:12px">'
+          + 'Confirma o cancelamento desta inscrição? A vaga será liberada.'
+          + '</div>'
+          + '<button class="btn btn-danger-solid" id="btnCancelarReserva" onclick="app.confirmarCancelamento()" '
+          + (cancelandoReserva ? 'disabled' : '') + '>'
+          + (cancelandoReserva ? 'Cancelando...' : 'Sim, cancelar agendamento')
+          + '</button>'
+          + '<button class="btn btn-outline" style="margin-top:8px" onclick="app.desistirCancelamento()" '
+          + (cancelandoReserva ? 'disabled' : '') + '>Manter agendamento</button>';
+      } else {
+        h += '<button class="btn btn-danger" style="margin-top:12px" onclick="app.pedirCancelamento()">Cancelar agendamento</button>'
+          + '<button class="btn btn-outline" style="margin-top:8px" onclick="app.voltar()">&#8592; Voltar</button>'
+          + '<button class="btn btn-primary" style="margin-top:10px" onclick="app.novaInscricao()">Nova inscrição</button>';
+      }
+      return h;
     }
 
     function telaIdentificar() {
@@ -910,6 +948,8 @@
         else if(etapa==='identificar'){etapa='modalidade';render();}
         else if(etapa==='jaAgendado'){
           reservaExistente=null;
+          cancelConfirmando=false;
+          cancelFeedback='';
           etapa='identificar';
           nipVal='';
           limparFormularioCadastro();
@@ -917,6 +957,73 @@
           render();
         }
         else if(etapa==='confirmar'){etapa='identificar';render();}
+      },
+      pedirCancelamento: function(){
+        cancelConfirmando = true;
+        cancelFeedback = '';
+        render();
+      },
+      desistirCancelamento: function(){
+        cancelConfirmando = false;
+        cancelFeedback = '';
+        render();
+      },
+      confirmarCancelamento: async function(){
+        if (!reservaExistente || !reservaExistente.id) {
+          cancelFeedback = 'Não foi possível identificar a inscrição.';
+          render();
+          return;
+        }
+        var nipKey = nipDigitos(reservaExistente.nip || nipVal);
+        if (nipKey.length < 8) {
+          cancelFeedback = 'NIP inválido para cancelar.';
+          render();
+          return;
+        }
+        cancelandoReserva = true;
+        cancelFeedback = '';
+        render();
+        try {
+          var res = await sb.rpc('cancelar_agendamento_reserva', {
+            p_nip: nipKey,
+            p_reserva_id: reservaExistente.id,
+          });
+          if (res.error) throw res.error;
+          if (res.data !== true) {
+            throw new Error('Inscrição não encontrada ou já cancelada.');
+          }
+          // Libera vaga no contador local
+          if (reservaExistente.slot_id && reservasMap[reservaExistente.slot_id]) {
+            reservasMap[reservaExistente.slot_id] = Math.max(
+              0,
+              (reservasMap[reservaExistente.slot_id] || 0) - 1,
+            );
+          }
+          var slotCancelado = slotSel;
+          reservaExistente = null;
+          cancelConfirmando = false;
+          cancelandoReserva = false;
+          cancelFeedback = '';
+          etapa = 'identificar';
+          limparFormularioCadastro();
+          // Mantém NIP e prova selecionados para permitir remarcar
+          if (slotCancelado) slotSel = slotCancelado;
+          nipBuscaSeq++;
+          setFeedbackIdent('Agendamento cancelado. Você pode se inscrever novamente.', 'ok');
+          cadastroModo = 'idle';
+          // Recarrega cadastro do NIP para seguir o fluxo normal
+          if (nipDigitos(nipVal).length >= 8) {
+            await buscarNomePorNip(nipVal);
+          } else {
+            render();
+          }
+        } catch (ex) {
+          cancelandoReserva = false;
+          cancelFeedback = (ex && ex.message)
+            ? ex.message
+            : 'Não foi possível cancelar. Tente novamente.';
+          render();
+        }
       },
       onNip: function(v){
         nipVal=formatarNip(v);

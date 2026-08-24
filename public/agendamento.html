@@ -153,6 +153,32 @@
     }
     .feedback-ok  { color: var(--green); background: var(--green-bg); }
     .feedback-err { color: var(--red);   background: var(--red-bg);   }
+    .feedback-warn {
+      color: #fbbf24;
+      background: rgba(251,191,36,.12);
+      border: 1px solid rgba(251,191,36,.28);
+    }
+
+    .ja-agendado-banner {
+      margin: 8px 0 14px;
+      padding: 14px 16px;
+      border-radius: var(--r);
+      background: rgba(251,191,36,.12);
+      border: 1px solid rgba(251,191,36,.35);
+      text-align: center;
+    }
+    .ja-agendado-banner .t {
+      font-size: 17px;
+      font-weight: 800;
+      color: #fbbf24;
+      letter-spacing: .02em;
+    }
+    .ja-agendado-banner .s {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--text-2);
+      line-height: 1.45;
+    }
 
     .cadastro-box {
       margin-top: 14px;
@@ -314,6 +340,8 @@
     var dataSel = null, slotSel = null, nipVal = '';
     var nipBuscaTimer = null;
     var nipBuscaSeq = 0;
+    /** Reserva já existente para este NIP nesta prova (bloqueia novo agendamento). */
+    var reservaExistente = null;
     /** 'idle' | 'completo' | 'incompleto' | 'novo' */
     var cadastroModo = 'idle';
     var form = {
@@ -337,6 +365,64 @@
       feedbackMsg = '';
       feedbackTipo = 'ok';
       sexoConfirmado = false;
+      reservaExistente = null;
+    }
+
+    function formatarNipExibicao(digitsOrFmt) {
+      return formatarNip(String(digitsOrFmt || '').replace(/\D/g, ''));
+    }
+
+    function labelModalidade(mod) {
+      return LABEL[mod] || mod || '—';
+    }
+
+    function vinculoLabelDe(v) {
+      return v === 'rm2' ? 'RM2' : v === 'carreira' ? 'Quadro' : '—';
+    }
+
+    function nomeDaReserva(r) {
+      if (!r) return '—';
+      var n = String(r.nome || '').trim();
+      if (n) return n.toUpperCase();
+      var posto = String(r.posto || '').trim().toUpperCase();
+      var vinculo = String(r.vinculo || '').toLowerCase() === 'rm2' ? ' RM2' : '';
+      return posto ? (posto + vinculo).trim() : '—';
+    }
+
+    /** Busca inscrição ativa deste NIP na prova selecionada (mesmo slot / mesma data+modalidade). */
+    async function buscarReservaExistente(nipFmt) {
+      var digits = nipDigitos(nipFmt);
+      if (!sb || !slotSel || digits.length < 8) return null;
+      var q1 = await sb
+        .from('agendamento_reservas')
+        .select('id,slot_id,data_taf,modalidade,nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at')
+        .eq('nip', digits)
+        .eq('slot_id', slotSel.id)
+        .eq('deleted', false)
+        .maybeSingle();
+      if (q1.error) throw q1.error;
+      if (q1.data) return q1.data;
+
+      var q2 = await sb
+        .from('agendamento_reservas')
+        .select('id,slot_id,data_taf,modalidade,nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at')
+        .eq('nip', digits)
+        .eq('data_taf', slotSel.data_taf)
+        .eq('modalidade', slotSel.modalidade)
+        .eq('deleted', false)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (q2.error) throw q2.error;
+      return q2.data || null;
+    }
+
+    function abrirJaAgendado(reserva) {
+      reservaExistente = reserva;
+      etapa = 'jaAgendado';
+      cadastroModo = 'idle';
+      feedbackMsg = '';
+      render();
     }
 
     function formatarDataInput(raw) {
@@ -542,6 +628,7 @@
       else if (etapa==='modalidade')  c.innerHTML = telaModalidade();
       else if (etapa==='identificar') c.innerHTML = telaIdentificar();
       else if (etapa==='confirmar')   c.innerHTML = telaConfirmar();
+      else if (etapa==='jaAgendado')  c.innerHTML = telaJaAgendado();
       else if (etapa==='sucesso') { document.getElementById('stepsBar').style.display='none'; c.innerHTML=telaSucesso(); }
       if (etapa==='identificar') {
         var ni=document.getElementById('nipInput');
@@ -554,12 +641,20 @@
     function atualizarHeader() {
       var btn=document.getElementById('backBtn'), sub=document.getElementById('headerSub');
       if(btn) btn.classList.toggle('visible', etapa!=='data'&&etapa!=='sucesso');
-      var subs={data:'Inscreva-se na sua modalidade',modalidade:dataSel||'',identificar:'Identificação do militar',confirmar:'Confirme sua inscrição',sucesso:'Inscrição realizada'};
+      var subs={
+        data:'Inscreva-se na sua modalidade',
+        modalidade:dataSel||'',
+        identificar:'Identificação do militar',
+        confirmar:'Confirme sua inscrição',
+        jaAgendado:'Agendamento já realizado',
+        sucesso:'Inscrição realizada'
+      };
       if(sub) sub.textContent=subs[etapa]||'';
     }
 
     function atualizarSteps() {
       var ordem=['data','modalidade','identificar','confirmar'], atual=ordem.indexOf(etapa);
+      if (etapa === 'jaAgendado') atual = 2;
       for(var i=0;i<4;i++){
         var dot=document.getElementById('dot'+i),line=document.getElementById('line'+i);
         if(!dot) continue;
@@ -666,6 +761,13 @@
       var seq = ++nipBuscaSeq;
       setFeedbackIdent('Buscando cadastro...', 'ok');
       try {
+        var reserva = await buscarReservaExistente(nipFmt);
+        if (seq !== nipBuscaSeq) return;
+        if (reserva) {
+          abrirJaAgendado(reserva);
+          return;
+        }
+
         var res = await sb.rpc('buscar_militar_agendamento', { p_nip: digits });
         if (seq !== nipBuscaSeq) return;
         if (res.error) {
@@ -687,6 +789,34 @@
         setFeedbackIdent('Não foi possível consultar o cadastro. Preencha seus dados.', 'err');
         render();
       }
+    }
+
+    function telaJaAgendado() {
+      var r = reservaExistente || {};
+      var label = labelModalidade(r.modalidade || (slotSel && slotSel.modalidade));
+      var data = r.data_taf || (slotSel && slotSel.data_taf) || '—';
+      var sexoLabel = r.sexo === 'F' ? 'Feminino' : r.sexo === 'M' ? 'Masculino' : '—';
+      var posto = String(r.posto || '').trim().toUpperCase() || '—';
+      var cat = r.categoria || '—';
+      var nasc = r.data_nascimento || '—';
+      return ''
+        + '<div class="ja-agendado-banner">'
+        +   '<div class="t">Agendamento já realizado</div>'
+        +   '<div class="s">Este NIP já possui inscrição nesta prova. Não é permitido agendar novamente com os mesmos dados.</div>'
+        + '</div>'
+        + '<div class="summary-card">'
+        +   '<div class="summary-label">Prova</div>'
+        +   '<div class="summary-value">' + e(label) + '</div>'
+        +   '<div class="summary-sub">Data ' + e(data) + '</div>'
+        + '</div>'
+        + '<div class="summary-card">'
+        +   '<div class="summary-label">Militar</div>'
+        +   '<div class="summary-value">' + e(nomeDaReserva(r)) + '</div>'
+        +   '<div class="summary-sub">NIP ' + e(formatarNipExibicao(r.nip || nipVal)) + ' · ' + e(sexoLabel) + ' · Nasc. ' + e(nasc) + '</div>'
+        +   '<div class="summary-sub">' + e(cat) + ' · ' + e(posto) + ' · ' + e(vinculoLabelDe(r.vinculo)) + '</div>'
+        + '</div>'
+        + '<button class="btn btn-outline" style="margin-top:8px" onclick="app.voltar()">&#8592; Voltar</button>'
+        + '<button class="btn btn-primary" style="margin-top:10px" onclick="app.novaInscricao()">Nova inscrição</button>';
     }
 
     function telaIdentificar() {
@@ -778,6 +908,14 @@
       voltar: function(){
         if(etapa==='modalidade'){etapa='data';render();}
         else if(etapa==='identificar'){etapa='modalidade';render();}
+        else if(etapa==='jaAgendado'){
+          reservaExistente=null;
+          etapa='identificar';
+          nipVal='';
+          limparFormularioCadastro();
+          nipBuscaSeq++;
+          render();
+        }
         else if(etapa==='confirmar'){etapa='identificar';render();}
       },
       onNip: function(v){
@@ -842,7 +980,7 @@
         }
         render();
       },
-      avancarConfirmar: function(){
+      avancarConfirmar: async function(){
         if (nipDigitos(nipVal).length < 8) return;
         if (!sexoConfirmado || (form.sexo !== 'M' && form.sexo !== 'F')) {
           setFeedbackIdent('Confirme seu gênero (Masculino ou Feminino) para continuar.', 'err');
@@ -860,6 +998,15 @@
           }
           return;
         }
+        try {
+          var dup = await buscarReservaExistente(nipVal);
+          if (dup) {
+            abrirJaAgendado(dup);
+            return;
+          }
+        } catch (e) {
+          // segue para confirmação; o insert também valida
+        }
         camposFaltando = {};
         etapa = 'confirmar';
         render();
@@ -871,10 +1018,9 @@
         try {
           if (!cadastroCompleto()) throw new Error('Dados do cadastro incompletos.');
           var nipKey=nipDigitos(nipVal);
-          var dup=await sb.from('agendamento_reservas').select('id').eq('slot_id',slotSel.id).eq('nip',nipKey).eq('deleted',false).maybeSingle();
-          if(dup.data){
-            if(err){err.textContent='Você já está inscrito nesta modalidade nesta data.';err.style.display='block';}
-            if(btn){btn.disabled=false;btn.innerHTML='&#10003; Confirmar inscrição';}
+          var dup = await buscarReservaExistente(nipVal);
+          if (dup) {
+            abrirJaAgendado(dup);
             return;
           }
           var salv = await sb.rpc('salvar_militar_agendamento', {
@@ -914,7 +1060,7 @@
       },
       novaInscricao: function(){
         etapa='data'; dataSel=null; slotSel=null; nipVal='';
-        limparFormularioCadastro(); nipBuscaSeq++;
+        limparFormularioCadastro(); nipBuscaSeq++; reservaExistente=null;
         document.getElementById('stepsBar').style.display='flex';
         mostrarLoading(); carregarDados();
       },

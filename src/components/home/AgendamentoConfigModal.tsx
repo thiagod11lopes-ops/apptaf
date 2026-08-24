@@ -23,6 +23,7 @@ import {
   type ModalidadeAgendamento,
   type SlotAgendamento,
 } from '../../services/agendamentoStorage';
+import { pushMilitarLookupToSupabase } from '../../services/agendamentoMilitarLookup';
 import { dataBrParaIso } from '../../utils/tafRegistro';
 
 /** Página HTML standalone (não é a tela interna do app). */
@@ -62,9 +63,13 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       const lista = await getAllSlots();
       setSlots(lista);
       try {
-        const n = await pushAllSlotsToSupabase();
-        if (n > 0) {
-          setSucesso(`${n} disponibilidade(s) publicada(s) na página pública.`);
+        const nSlots = await pushAllSlotsToSupabase();
+        const nCad = await pushMilitarLookupToSupabase();
+        const partes: string[] = [];
+        if (nSlots > 0) partes.push(`${nSlots} disponibilidade(s)`);
+        if (nCad > 0) partes.push(`${nCad} militar(es) para busca por NIP`);
+        if (partes.length > 0) {
+          setSucesso(`${partes.join(' e ')} publicada(s) na página pública.`);
           setErro(null);
         }
       } catch (e) {

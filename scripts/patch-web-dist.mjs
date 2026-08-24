@@ -262,15 +262,28 @@ self.addEventListener('fetch', (event) => {
 
   // HTML: network-first — evita tela antiga sem novos botões (PWA cache)
   if (isNavigation(request)) {
+    try {
+      const pathname = new URL(url).pathname;
+      // Página standalone de agendamento: nunca usar SPA como fallback.
+      // O service worker passa direto para a rede, sem interceptar.
+      if (pathname === BASE + '/agendamento' ||
+          pathname === BASE + '/agendamento/' ||
+          pathname.startsWith(BASE + '/agendamento?')) {
+        return; // deixa o browser buscar normalmente
+      }
+    } catch { /* se URL for inválida, deixa seguir o fluxo padrão */ }
+
     event.respondWith(
       fetch(request)
         .then((response) => {
           if (response && response.ok) {
             const clone = response.clone();
-            caches.open(CACHE).then((cache) => {
-              cache.put(BASE + '/index.html', clone);
-              cache.put(request, response.clone());
-            });
+            // Só atualiza o cache de index.html se for realmente a raiz da SPA.
+            const reqPath = (() => { try { return new URL(url).pathname; } catch { return ''; } })();
+            if (reqPath === BASE + '/' || reqPath === BASE + '/index.html') {
+              caches.open(CACHE).then((cache) => cache.put(BASE + '/index.html', clone));
+            }
+            caches.open(CACHE).then((cache) => cache.put(request, response.clone()));
             return response;
           }
           return shellFallback();

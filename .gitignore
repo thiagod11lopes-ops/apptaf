@@ -43,5 +43,5 @@ yarn-error.*
 /ios
 /android
 
-# Credenciais locais da página de agendamento (geradas pelo CI em produção)
-public/agendamento/config.js
+# agendamento.html local com credenciais (gerado pelo CI em produção)
+public/agendamento.local.html

@@ -194,17 +194,25 @@ export async function getAllCadastros(opts?: {
   return getCadastrosListCached(null, opts, () => getAllCadastrosLocal());
 }
 
+function publicarLookupAgendamento(item: CadastroItemPersist): void {
+  void import('./agendamentoMilitarLookup')
+    .then(({ upsertMilitarLookupFromCadastro }) => upsertMilitarLookupFromCadastro(item))
+    .catch(() => undefined);
+}
+
 export async function addCadastro(item: CadastroItemPersist): Promise<void> {
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
     await dataStore.upsertCadastro(item, uid);
     invalidateCadastrosListCache();
+    publicarLookupAgendamento(item);
     return;
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertCadastroOffline(uid, item);
     invalidateCadastrosListCache();
+    publicarLookupAgendamento(item);
     return;
   }
   try {
@@ -226,6 +234,7 @@ export async function addCadastro(item: CadastroItemPersist): Promise<void> {
     // Sem impedir a funcionalidade da UI.
   }
   invalidateCadastrosListCache();
+  publicarLookupAgendamento(item);
 }
 
 export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<void> {
@@ -234,12 +243,14 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
     const uid = await resolveStorageOwnerUid();
     await dataStore.upsertCadastrosBatch(items, uid);
     invalidateCadastrosListCache();
+    for (const item of items) publicarLookupAgendamento(item);
     return;
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertCadastrosLoteOffline(uid, items);
     invalidateCadastrosListCache();
+    for (const item of items) publicarLookupAgendamento(item);
     return;
   }
   try {
@@ -257,6 +268,7 @@ export async function addCadastrosEmLote(items: CadastroItemPersist[]): Promise<
     // Sem impedir a funcionalidade da UI.
   }
   invalidateCadastrosListCache();
+  for (const item of items) publicarLookupAgendamento(item);
 }
 
 export async function deleteCadastro(id: string): Promise<void> {

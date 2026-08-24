@@ -45,6 +45,48 @@ function postoDoCadastro(c: CadastroItemPersist): string {
   return ((c.categoria === 'Oficiais' ? c.oficial : c.praca) || '').trim();
 }
 
+function cadastroToLookupRow(c: CadastroItemPersist, agora = Date.now()): MilitarLookupRow | null {
+  const nip = nipChaveCadastro(c.nip);
+  if (!nip) return null;
+  const nome =
+    nomeBareSemPosto(c.nome || '').trim().toUpperCase() || (c.nome || '').trim().toUpperCase();
+  if (!nome) return null;
+  return {
+    nip,
+    nome,
+    data_nascimento: (c.dataNascimento || '').trim(),
+    sexo: c.sexo === 'M' || c.sexo === 'F' ? c.sexo : '',
+    categoria: c.categoria === 'Oficiais' || c.categoria === 'Praças' ? c.categoria : '',
+    posto: postoDoCadastro(c).toUpperCase(),
+    vinculo: c.vinculo === 'carreira' || c.vinculo === 'rm2' ? c.vinculo : '',
+    updated_at: c.updatedAt ?? agora,
+    deleted: false,
+  };
+}
+
+/**
+ * Publica um único cadastro na lookup da página de agendamento.
+ * Silencioso se offline / sem sessão — não bloqueia o fluxo de cadastro.
+ */
+export async function upsertMilitarLookupFromCadastro(
+  item: CadastroItemPersist,
+): Promise<boolean> {
+  try {
+    const row = cadastroToLookupRow(item);
+    if (!row) return false;
+    const sb = getSupabase();
+    if (!sb) return false;
+    const { data } = await sb.auth.getSession();
+    if (!data.session) return false;
+    const { error } = await sb.from('agendamento_militar_lookup').upsert(row, {
+      onConflict: 'nip',
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 /** Envia cadastros locais (dados mínimos) para a lookup pública. */
 export async function pushMilitarLookupToSupabase(): Promise<number> {
   const sb = await requireAuthSupabase();
@@ -53,24 +95,11 @@ export async function pushMilitarLookupToSupabase(): Promise<number> {
   const byNip = new Map<string, MilitarLookupRow>();
 
   for (const c of cadastros) {
-    const nip = nipChaveCadastro(c.nip);
-    if (!nip) continue;
-    const nome = nomeBareSemPosto(c.nome || '').trim().toUpperCase() || (c.nome || '').trim().toUpperCase();
-    if (!nome) continue;
-    const posto = postoDoCadastro(c).toUpperCase();
-    const prev = byNip.get(nip);
-    if (!prev || (c.updatedAt ?? 0) >= (prev.updated_at ?? 0)) {
-      byNip.set(nip, {
-        nip,
-        nome,
-        data_nascimento: (c.dataNascimento || '').trim(),
-        sexo: c.sexo === 'M' || c.sexo === 'F' ? c.sexo : '',
-        categoria: c.categoria === 'Oficiais' || c.categoria === 'Praças' ? c.categoria : '',
-        posto,
-        vinculo: c.vinculo === 'carreira' || c.vinculo === 'rm2' ? c.vinculo : '',
-        updated_at: c.updatedAt ?? agora,
-        deleted: false,
-      });
+    const row = cadastroToLookupRow(c, agora);
+    if (!row) continue;
+    const prev = byNip.get(row.nip);
+    if (!prev || (row.updated_at ?? 0) >= (prev.updated_at ?? 0)) {
+      byNip.set(row.nip, row);
     }
   }
 

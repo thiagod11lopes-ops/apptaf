@@ -213,17 +213,17 @@ export default function HomeScreen() {
     };
   }, [authReady, isAuthenticated, dataOwnerUid, user?.uid, cloudLinkOn]);
 
-  /** Importa cadastros feitos pela página pública para o cadastro principal. */
+  /** Lookup pública ↔ cadastro: importa da página e publica NIPs do app no agendamento. */
   useEffect(() => {
     if (!authReady || !isAuthenticated) return;
     let cancelled = false;
     void (async () => {
       try {
-        const { importMilitarLookupIntoCadastros } = await import(
+        const { syncMilitarLookupComCadastros } = await import(
           '../services/agendamentoMilitarLookup'
         );
         if (cancelled) return;
-        await importMilitarLookupIntoCadastros();
+        await syncMilitarLookupComCadastros();
       } catch {
         // silencioso — próxima abertura do modal de agendamento tenta de novo
       }

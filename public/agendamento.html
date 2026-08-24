@@ -259,6 +259,9 @@
 
     var sb, etapa = 'data', slots = [], reservasMap = {};
     var dataSel = null, slotSel = null, nipVal = '', nomeVal = '';
+    var nomeBloqueado = false;
+    var nipBuscaTimer = null;
+    var nipBuscaSeq = 0;
 
     function limparCacheApp() {
       var jobs = [];
@@ -371,7 +374,8 @@
       else if (etapa==='sucesso') { document.getElementById('stepsBar').style.display='none'; c.innerHTML=telaSucesso(); }
       if (etapa==='identificar') {
         var ni=document.getElementById('nipInput'),nm=document.getElementById('nomeInput');
-        if(ni){ni.value=nipVal;ni.focus();} if(nm) nm.value=nomeVal;
+        if(ni){ni.value=nipVal;ni.focus();}
+        atualizarCampoNome();
         atualizarBtnContinuar();
       }
     }
@@ -417,12 +421,75 @@
       return h;
     }
 
+    function formatNomeCadastro(row) {
+      if (!row) return '';
+      var nome = String(row.nome || '').trim().toUpperCase();
+      var posto = String(row.posto || '').trim().toUpperCase();
+      var vinculo = String(row.vinculo || '').toLowerCase() === 'rm2' ? ' RM2' : '';
+      if (posto && nome) return (posto + vinculo + ' ' + nome).trim();
+      return nome;
+    }
+
+    function setFeedbackIdent(msg, tipo) {
+      var el = document.getElementById('feedbackIdent');
+      if (!el) return;
+      if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+      el.style.display = 'block';
+      el.className = 'feedback feedback-' + (tipo || 'ok');
+      el.textContent = msg;
+    }
+
+    function atualizarCampoNome() {
+      var nm = document.getElementById('nomeInput');
+      if (!nm) return;
+      nm.value = nomeVal;
+      nm.readOnly = !!nomeBloqueado;
+      nm.style.opacity = nomeBloqueado ? '0.85' : '1';
+      nm.style.cursor = nomeBloqueado ? 'default' : 'text';
+    }
+
+    async function buscarNomePorNip(nipFmt) {
+      var digits = nipDigitos(nipFmt);
+      if (!sb || digits.length < 8) return;
+      var seq = ++nipBuscaSeq;
+      setFeedbackIdent('Buscando cadastro...', 'ok');
+      try {
+        var res = await sb.rpc('buscar_militar_agendamento', { p_nip: digits });
+        if (seq !== nipBuscaSeq) return;
+        if (res.error) {
+          nomeBloqueado = false;
+          setFeedbackIdent('Não foi possível consultar o cadastro. Digite o nome manualmente.', 'err');
+          atualizarCampoNome();
+          atualizarBtnContinuar();
+          return;
+        }
+        var row = (res.data && res.data[0]) || null;
+        if (row && row.nome) {
+          nomeVal = formatNomeCadastro(row);
+          nomeBloqueado = true;
+          setFeedbackIdent('Militar encontrado: ' + nomeVal, 'ok');
+        } else {
+          if (nomeBloqueado) nomeVal = '';
+          nomeBloqueado = false;
+          setFeedbackIdent('NIP não encontrado no cadastro. Informe o nome completo.', 'err');
+        }
+        atualizarCampoNome();
+        atualizarBtnContinuar();
+      } catch (err) {
+        if (seq !== nipBuscaSeq) return;
+        nomeBloqueado = false;
+        setFeedbackIdent('Não foi possível consultar o cadastro. Digite o nome manualmente.', 'err');
+        atualizarCampoNome();
+        atualizarBtnContinuar();
+      }
+    }
+
     function telaIdentificar() {
-      return '<p class="section-title">Identificação</p><p class="section-sub">Informe seu NIP e nome completo para prosseguir.</p>'
+      return '<p class="section-title">Identificação</p><p class="section-sub">Informe seu NIP. O nome será preenchido automaticamente se estiver cadastrado.</p>'
         +'<label class="field-label" for="nipInput">NIP</label>'
         +'<input id="nipInput" type="tel" class="nip-input" placeholder="00.0000.00" autocomplete="off" inputmode="numeric" oninput="app.onNip(this.value)" />'
         +'<label class="field-label" for="nomeInput">Nome completo</label>'
-        +'<input id="nomeInput" type="text" placeholder="SEU NOME COMPLETO" autocomplete="off" style="text-transform:uppercase" oninput="app.onNome(this.value)" />'
+        +'<input id="nomeInput" type="text" placeholder="Preenchido automaticamente pelo NIP" autocomplete="off" style="text-transform:uppercase" oninput="app.onNome(this.value)" />'
         +'<div id="feedbackIdent" class="feedback" style="display:none"></div>'
         +'<button class="btn btn-primary" id="btnContinuar" onclick="app.avancarConfirmar()" disabled>Continuar &#8250;</button>';
     }
@@ -465,14 +532,36 @@
 
     window.app = {
       selecionarData: function(d){ dataSel=d; etapa='modalidade'; render(); },
-      selecionarSlot: function(id){ slotSel=slots.find(function(s){return s.id===id;})||null; if(!slotSel)return; etapa='identificar'; nipVal=''; nomeVal=''; render(); },
+      selecionarSlot: function(id){ slotSel=slots.find(function(s){return s.id===id;})||null; if(!slotSel)return; etapa='identificar'; nipVal=''; nomeVal=''; nomeBloqueado=false; nipBuscaSeq++; render(); },
       voltar: function(){
         if(etapa==='modalidade'){etapa='data';render();}
         else if(etapa==='identificar'){etapa='modalidade';render();}
         else if(etapa==='confirmar'){etapa='identificar';render();}
       },
-      onNip: function(v){ nipVal=formatarNip(v); var el=document.getElementById('nipInput'); if(el) el.value=nipVal; atualizarBtnContinuar(); },
-      onNome: function(v){ nomeVal=v.toUpperCase(); var el=document.getElementById('nomeInput'); if(el) el.value=nomeVal; atualizarBtnContinuar(); },
+      onNip: function(v){
+        nipVal=formatarNip(v);
+        var el=document.getElementById('nipInput');
+        if(el) el.value=nipVal;
+        var digits=nipDigitos(nipVal);
+        if (digits.length < 8) {
+          if (nipBuscaTimer) { clearTimeout(nipBuscaTimer); nipBuscaTimer=null; }
+          nipBuscaSeq++;
+          if (nomeBloqueado) { nomeVal=''; nomeBloqueado=false; atualizarCampoNome(); }
+          setFeedbackIdent('', '');
+          atualizarBtnContinuar();
+          return;
+        }
+        if (nipBuscaTimer) clearTimeout(nipBuscaTimer);
+        nipBuscaTimer = setTimeout(function(){ buscarNomePorNip(nipVal); }, 280);
+        atualizarBtnContinuar();
+      },
+      onNome: function(v){
+        if (nomeBloqueado) { atualizarCampoNome(); return; }
+        nomeVal=v.toUpperCase();
+        var el=document.getElementById('nomeInput');
+        if(el) el.value=nomeVal;
+        atualizarBtnContinuar();
+      },
       avancarConfirmar: function(){ if(nipDigitos(nipVal).length<8||nomeVal.trim().length<3)return; etapa='confirmar'; render(); },
       confirmar: async function(){
         var btn=document.getElementById('btnConfirmar'), err=document.getElementById('erroCfm');
@@ -497,7 +586,7 @@
         }
       },
       novaInscricao: function(){
-        etapa='data'; dataSel=null; slotSel=null; nipVal=''; nomeVal='';
+        etapa='data'; dataSel=null; slotSel=null; nipVal=''; nomeVal=''; nomeBloqueado=false; nipBuscaSeq++;
         document.getElementById('stepsBar').style.display='flex';
         mostrarLoading(); carregarDados();
       },

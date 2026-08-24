@@ -28,6 +28,7 @@ import {
   type TipoTafAgendamento,
 } from '../../services/agendamentoStorage';
 import { syncMilitarLookupComCadastros } from '../../services/agendamentoMilitarLookup';
+import { contarReservasPorSlot } from '../../services/reservasAgendamentoStorage';
 import { dataBrParaIso } from '../../utils/tafRegistro';
 
 /** Página HTML standalone (não é a tela interna do app). */
@@ -51,6 +52,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
   const ui = useMemo(() => getUiColors(theme), [theme]);
 
   const [slots, setSlots] = useState<SlotAgendamento[]>([]);
+  const [reservadosPorSlot, setReservadosPorSlot] = useState<Record<string, number>>({});
   const [editandoId, setEditandoId] = useState<string | null>(null);
 
   // Formulário
@@ -74,6 +76,12 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       const lista = await getAllSlots();
       setSlots(lista);
       try {
+        const contagem = await contarReservasPorSlot();
+        setReservadosPorSlot(contagem);
+      } catch {
+        setReservadosPorSlot({});
+      }
+      try {
         const nSlots = await pushAllSlotsToSupabase();
         const { importados, publicados } = await syncMilitarLookupComCadastros();
         const partes: string[] = [];
@@ -93,6 +101,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       }
     } catch {
       setSlots([]);
+      setReservadosPorSlot({});
     }
   }, []);
 
@@ -500,6 +509,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                         {TIPO_TAF_AGENDAMENTO_LABELS[tipoTafDaModalidade(slot.modalidade)]}
                         {' · '}Máx.: {slot.maxParticipantes} participante
                         {slot.maxParticipantes !== 1 ? 's' : ''}
+                        {' · '}Agendados: {reservadosPorSlot[slot.id] ?? 0}
                       </Text>
                     </View>
                     <View style={styles.slotAcoes}>

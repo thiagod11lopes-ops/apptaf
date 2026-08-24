@@ -256,3 +256,15 @@ export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
     // silencioso
   }
 }
+
+/** Contagem de reservas ativas por slotId (fonte: Supabase + merge local). */
+export async function contarReservasPorSlot(): Promise<Record<string, number>> {
+  await syncReservasFromSupabase();
+  const all = await getAllReservas();
+  const out: Record<string, number> = {};
+  for (const r of all) {
+    if (!r.slotId) continue;
+    out[r.slotId] = (out[r.slotId] ?? 0) + 1;
+  }
+  return out;
+}

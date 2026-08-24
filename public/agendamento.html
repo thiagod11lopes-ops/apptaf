@@ -7,13 +7,18 @@
   <meta name="description" content="Agendamento do Teste de Aptidão Física — HNMD" />
   <title>Agendamento TAF — HNMD</title>
   <link rel="icon" href="./favicon.png" />
-  <!-- Supabase client via CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <!-- Credenciais injetadas pelo CI (sed em deploy-pages.yml). Placeholders abaixo. -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <!-- Credenciais injetadas pelo CI via scripts/patch-web-dist.mjs -->
   <script>
-    window.SUPABASE_URL = '__SUPABASE_URL__';
-    window.SUPABASE_KEY = '__SUPABASE_KEY__';
+    window.__AGENDAMENTO_CFG__ = {
+      url: "__SUPABASE_URL__",
+      key: "__SUPABASE_KEY__",
+      build: "__BUILD_ID__"
+    };
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -228,8 +233,9 @@
   (function () {
     'use strict';
 
-    var URL_SB = (window.SUPABASE_URL && window.SUPABASE_URL !== '__SUPABASE_URL__') ? window.SUPABASE_URL : '';
-    var KEY_SB = (window.SUPABASE_KEY && window.SUPABASE_KEY !== '__SUPABASE_KEY__') ? window.SUPABASE_KEY : '';
+    var cfg = window.__AGENDAMENTO_CFG__ || {};
+    var URL_SB = (cfg.url && cfg.url.indexOf('__SUPABASE_URL__') === -1) ? String(cfg.url).trim() : '';
+    var KEY_SB = (cfg.key && cfg.key.indexOf('__SUPABASE_KEY__') === -1) ? String(cfg.key).trim() : '';
 
     var LABEL = {
       corrida:'Corrida', natacao_permanencia:'Natação + Permanência',
@@ -245,11 +251,41 @@
     var sb, etapa = 'data', slots = [], reservasMap = {};
     var dataSel = null, slotSel = null, nipVal = '', nomeVal = '';
 
+    function limparCacheApp() {
+      var jobs = [];
+      if (typeof caches !== 'undefined' && caches.keys) {
+        jobs.push(caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }).catch(function () {}));
+      }
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }).catch(function () {}));
+      }
+      return Promise.all(jobs);
+    }
+
     function init() {
-      if (!URL_SB || !KEY_SB) { mostrarErroCfg(); return; }
-      sb = supabase.createClient(URL_SB, KEY_SB);
       mostrarLoading();
-      carregarDados();
+      limparCacheApp().finally(function () {
+        if (!URL_SB || !KEY_SB) {
+          mostrarErroCfg('Credenciais ausentes no HTML publicado. Aguarde o deploy ou limpe o cache do navegador (Ctrl+Shift+R).');
+          return;
+        }
+        var lib = (typeof supabase !== 'undefined' && supabase) || window.supabase;
+        if (!lib || typeof lib.createClient !== 'function') {
+          mostrarErro('Não foi possível carregar a biblioteca do Supabase. Verifique a conexão e tente novamente.');
+          return;
+        }
+        try {
+          sb = lib.createClient(URL_SB, KEY_SB);
+        } catch (err) {
+          mostrarErro('Falha ao iniciar conexão: ' + ((err && err.message) || 'erro desconhecido'));
+          return;
+        }
+        carregarDados();
+      });
     }
 
     function brParaIso(br) {
@@ -375,9 +411,9 @@
         +'<button class="btn btn-primary" style="max-width:300px;margin-top:28px" onclick="app.novaInscricao()">Nova inscrição</button></div>';
     }
 
-    function mostrarErroCfg() {
+    function mostrarErroCfg(msg) {
       document.getElementById('stepsBar').style.display='none';
-      document.getElementById('content').innerHTML='<div class="empty"><div class="empty-icon">⚙️</div><div class="empty-text"><strong>Página em configuração</strong><br><br>Esta página está sendo preparada pelo administrador. Tente novamente em alguns instantes.</div></div>';
+      document.getElementById('content').innerHTML='<div class="empty"><div class="empty-icon">⚙️</div><div class="empty-text"><strong>Página em configuração</strong><br><br>'+e(msg||'Esta página está sendo preparada pelo administrador. Tente novamente em alguns instantes.')+'</div></div><button class="btn btn-outline" style="margin-top:16px" onclick="location.reload(true)">&#8635; Recarregar sem cache</button>';
     }
     function mostrarErro(msg) {
       document.getElementById('content').innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">'+e(msg)+'</div></div><button class="btn btn-outline" style="margin-top:16px" onclick="location.reload()">&#8635; Tentar novamente</button>';

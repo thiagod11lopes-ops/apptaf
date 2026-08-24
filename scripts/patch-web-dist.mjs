@@ -182,11 +182,17 @@ if (!fs.existsSync(agendamentoSrc)) {
 let agendamentoHtml = fs.readFileSync(agendamentoSrc, 'utf8');
 const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').trim();
 const supabaseKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+const buildId = (process.env.GITHUB_SHA || Date.now().toString()).slice(0, 12);
 if (supabaseUrl && supabaseKey) {
+  // Substitui placeholders sem quebrar aspas no JS
   agendamentoHtml = agendamentoHtml
-    .replace(/__SUPABASE_URL__/g, supabaseUrl)
-    .replace(/__SUPABASE_KEY__/g, supabaseKey);
-  console.log('patch-web-dist: credenciais Supabase injetadas em agendamento.html');
+    .replaceAll('"__SUPABASE_URL__"', JSON.stringify(supabaseUrl))
+    .replaceAll('"__SUPABASE_KEY__"', JSON.stringify(supabaseKey))
+    .replaceAll('"__BUILD_ID__"', JSON.stringify(buildId))
+    .replaceAll('__SUPABASE_URL__', supabaseUrl)
+    .replaceAll('__SUPABASE_KEY__', supabaseKey)
+    .replaceAll('__BUILD_ID__', buildId);
+  console.log('patch-web-dist: credenciais Supabase injetadas em agendamento.html', `(build ${buildId})`);
 } else if (process.env.CI) {
   console.error(
     'patch-web-dist: EXPO_PUBLIC_SUPABASE_URL e EXPO_PUBLIC_SUPABASE_ANON_KEY são obrigatórios no CI',
@@ -202,6 +208,10 @@ if (agendamentoHtml.includes('__SUPABASE_URL__') || agendamentoHtml.includes('__
   }
 }
 fs.writeFileSync(agendamentoDest, agendamentoHtml);
+// Também publica /agendamento/ (com barra) para evitar 404 no GitHub Pages
+const agendamentoDir = path.join(distDir, 'agendamento');
+fs.mkdirSync(agendamentoDir, { recursive: true });
+fs.writeFileSync(path.join(agendamentoDir, 'index.html'), agendamentoHtml);
 
 // SPA no GitHub Pages: rotas profundas (ex. /admin/historico) precisam de HTML.
 const spaIndex = fs.readFileSync(indexPath);

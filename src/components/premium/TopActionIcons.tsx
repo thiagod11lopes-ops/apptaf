@@ -3,6 +3,7 @@ import { Platform, StyleSheet, View, ActivityIndicator } from 'react-native';
 import {
   BarChart3,
   BookOpen,
+  CalendarDays,
   ClipboardList,
   Cloud,
   CloudOff,
@@ -65,6 +66,8 @@ type Props = {
   centered?: boolean;
   /** Callback opcional: exibe botão de Resumo à esquerda do login. */
   onResumo?: () => void;
+  /** Callback opcional: exibe botão de configuração de agendamento à esquerda do login. */
+  onAgendamento?: () => void;
 };
 
 function wrapTooltip(
@@ -86,6 +89,7 @@ export function TopActionIcons({
   inline = false,
   centered = false,
   onResumo,
+  onAgendamento,
 }: Props) {
   const { theme } = useTheme();
   const { isAuthenticated, isBoss, firebaseEnabled } = useAuth();
@@ -272,6 +276,20 @@ export function TopActionIcons({
           </React.Fragment>
         );
       })}
+      {onAgendamento
+        ? wrapTooltip(
+            inline,
+            'Agendamento',
+            'Configurar disponibilidade de vagas para o TAF',
+            <PressableScale
+              onPress={onAgendamento}
+              style={btnStyle}
+              accessibilityLabel="Configurar agendamento de vagas"
+            >
+              <CalendarDays size={iconSize} color={tabInk} strokeWidth={strokeWidth} />
+            </PressableScale>,
+          )
+        : null}
       {onResumo
         ? wrapTooltip(
             inline,

@@ -31,6 +31,7 @@ import {
 } from '../offline-first/sync/cloudLinkPreference';
 import { peekSessoesListCache } from '../services/sessoesListCache';
 import { ResultadosResumoModal } from '../components/ResultadosResumoModal';
+import { AgendamentoConfigModal } from '../components/home/AgendamentoConfigModal';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
 const tafImage = require('../../TAF1.png');
 
@@ -96,6 +97,7 @@ export default function HomeScreen() {
   const [sessoesResumo, setSessoesResumo] = useState<SessaoAplicacaoTaf[]>([]);
   const [modalReprovadosVisible, setModalReprovadosVisible] = useState(false);
   const [modalRestritosVisible, setModalRestritosVisible] = useState(false);
+  const [agendamentoModalAberto, setAgendamentoModalAberto] = useState(false);
 
   const handleAbrirResumo = useCallback(async () => {
     const cached = peekSessoesListCache({ includeDemo: false });
@@ -355,13 +357,24 @@ export default function HomeScreen() {
             </Text>
           ) : null}
         </View>
-        <TopActionIcons activeRoute="Home" inline centered onResumo={handleAbrirResumo} />
+        <TopActionIcons
+          activeRoute="Home"
+          inline
+          centered
+          onResumo={handleAbrirResumo}
+          onAgendamento={() => setAgendamentoModalAberto(true)}
+        />
       </View>
 
       <ResultadosResumoModal
         visible={resumoModalAberto}
         onClose={() => setResumoModalAberto(false)}
         sessoes={sessoesResumo}
+      />
+
+      <AgendamentoConfigModal
+        visible={agendamentoModalAberto}
+        onClose={() => setAgendamentoModalAberto(false)}
       />
 
       <TafGlassPanel accent="cyan" style={styles.statsPanel}>

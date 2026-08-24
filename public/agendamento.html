@@ -154,6 +154,56 @@
     .feedback-ok  { color: var(--green); background: var(--green-bg); }
     .feedback-err { color: var(--red);   background: var(--red-bg);   }
 
+    .cadastro-box {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,.08);
+    }
+    .hint-sexo {
+      font-size: 12px;
+      color: #fbbf24;
+      margin: 6px 0 10px;
+      line-height: 1.45;
+      background: rgba(251,191,36,.08);
+      border: 1px solid rgba(251,191,36,.25);
+      border-radius: var(--r-sm);
+      padding: 10px 12px;
+    }
+    .toggle-row, .chip-row {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;
+      padding: 4px; border-radius: var(--r-sm);
+    }
+    .toggle-btn, .chip {
+      border: 1px solid rgba(255,255,255,.12);
+      background: var(--navy-2);
+      color: var(--text);
+      border-radius: var(--r-sm);
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .toggle-btn { flex: 1; text-align: center; }
+    .toggle-btn.active, .chip.active {
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      color: #0f172a;
+      border-color: var(--gold);
+    }
+    .field-blink {
+      animation: blinkOrange 1s ease-in-out infinite;
+      border-color: #f97316 !important;
+      box-shadow: 0 0 0 2px rgba(249,115,22,.35);
+    }
+    .toggle-row.field-blink, .chip-row.field-blink {
+      outline: 2px solid #f97316;
+      box-shadow: 0 0 0 2px rgba(249,115,22,.25);
+    }
+    @keyframes blinkOrange {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(249,115,22,.2); }
+      50% { box-shadow: 0 0 0 5px rgba(249,115,22,.55); }
+    }
+
     /* ── Resumo ─────────────────────────────────────────────────── */
     .summary-card {
       background: var(--navy-2); border: 1px solid rgba(255,255,255,.07);
@@ -257,11 +307,96 @@
       flexao_barra:'💪', flexao_solo:'🤸', abdominal_remador:'🚣', abdominal_prancha:'🧘',
     };
 
+    var GRADUACOES_PRACAS = ['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO', 'SD'];
+    var POSTOS_OFICIAIS = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG', 'CALTE'];
+
     var sb, etapa = 'data', slots = [], reservasMap = {};
-    var dataSel = null, slotSel = null, nipVal = '', nomeVal = '';
-    var nomeBloqueado = false;
+    var dataSel = null, slotSel = null, nipVal = '';
     var nipBuscaTimer = null;
     var nipBuscaSeq = 0;
+    /** 'idle' | 'completo' | 'incompleto' | 'novo' */
+    var cadastroModo = 'idle';
+    var form = {
+      nome: '',
+      dataNascimento: '',
+      sexo: '',
+      categoria: 'Praças',
+      posto: 'MN',
+      vinculo: 'carreira',
+    };
+    var camposFaltando = {};
+    var feedbackMsg = '';
+    var feedbackTipo = 'ok';
+
+    function limparFormularioCadastro() {
+      form = { nome: '', dataNascimento: '', sexo: '', categoria: 'Praças', posto: 'MN', vinculo: 'carreira' };
+      camposFaltando = {};
+      cadastroModo = 'idle';
+      feedbackMsg = '';
+      feedbackTipo = 'ok';
+    }
+
+    function formatarDataInput(raw) {
+      var d = String(raw || '').replace(/\D/g, '').slice(0, 8);
+      if (d.length <= 2) return d;
+      if (d.length <= 4) return d.slice(0, 2) + '/' + d.slice(2);
+      return d.slice(0, 2) + '/' + d.slice(2, 4) + '/' + d.slice(4);
+    }
+
+    function dataNascValida(v) { return /^\d{2}\/\d{2}\/\d{4}$/.test(String(v || '').trim()); }
+
+    function nomeExibicao() {
+      var nome = String(form.nome || '').trim().toUpperCase();
+      var posto = String(form.posto || '').trim().toUpperCase();
+      var vinculo = String(form.vinculo || '').toLowerCase() === 'rm2' ? ' RM2' : '';
+      if (posto && nome) return (posto + vinculo + ' ' + nome).trim();
+      return nome;
+    }
+
+    function calcularFaltando(blink) {
+      var f = {};
+      if (!String(form.nome || '').trim() || String(form.nome).trim().length < 3) f.nome = true;
+      if (!dataNascValida(form.dataNascimento)) f.dataNascimento = true;
+      if (form.sexo !== 'M' && form.sexo !== 'F') f.sexo = true;
+      if (form.categoria !== 'Oficiais' && form.categoria !== 'Praças') f.categoria = true;
+      if (!String(form.posto || '').trim()) f.posto = true;
+      if (form.vinculo !== 'carreira' && form.vinculo !== 'rm2') f.vinculo = true;
+      camposFaltando = blink ? f : {};
+      return f;
+    }
+
+    function cadastroCompleto() {
+      var f = calcularFaltando(false);
+      return Object.keys(f).length === 0;
+    }
+
+    function aplicarCadastroDaBusca(row) {
+      form.nome = String(row.nome || '').trim().toUpperCase();
+      form.dataNascimento = String(row.data_nascimento || '').trim();
+      form.sexo = (row.sexo === 'M' || row.sexo === 'F') ? row.sexo : '';
+      form.categoria = (row.categoria === 'Oficiais' || row.categoria === 'Praças') ? row.categoria : 'Praças';
+      form.posto = String(row.posto || '').trim().toUpperCase() || (form.categoria === 'Oficiais' ? 'GM' : 'MN');
+      form.vinculo = (row.vinculo === 'carreira' || row.vinculo === 'rm2') ? row.vinculo : '';
+      var faltando = calcularFaltando(true);
+      if (Object.keys(faltando).length === 0) {
+        cadastroModo = 'completo';
+        camposFaltando = {};
+        setFeedbackIdent('Militar encontrado: ' + nomeExibicao(), 'ok');
+      } else {
+        cadastroModo = 'incompleto';
+        setFeedbackIdent('Cadastro incompleto. Complete os campos em destaque (laranja).', 'err');
+      }
+    }
+
+    function abrirCadastroNovo() {
+      limparFormularioCadastro();
+      cadastroModo = 'novo';
+      form.categoria = 'Praças';
+      form.posto = 'MN';
+      form.vinculo = 'carreira';
+      camposFaltando = {};
+      setFeedbackIdent('NIP não encontrado. Preencha seus dados para continuar.', 'err');
+    }
 
     function limparCacheApp() {
       var jobs = [];
@@ -373,9 +508,9 @@
       else if (etapa==='confirmar')   c.innerHTML = telaConfirmar();
       else if (etapa==='sucesso') { document.getElementById('stepsBar').style.display='none'; c.innerHTML=telaSucesso(); }
       if (etapa==='identificar') {
-        var ni=document.getElementById('nipInput'),nm=document.getElementById('nomeInput');
+        var ni=document.getElementById('nipInput');
         if(ni){ni.value=nipVal;ni.focus();}
-        atualizarCampoNome();
+        sincronizarFormularioNaTela();
         atualizarBtnContinuar();
       }
     }
@@ -421,31 +556,64 @@
       return h;
     }
 
-    function formatNomeCadastro(row) {
-      if (!row) return '';
-      var nome = String(row.nome || '').trim().toUpperCase();
-      var posto = String(row.posto || '').trim().toUpperCase();
-      var vinculo = String(row.vinculo || '').toLowerCase() === 'rm2' ? ' RM2' : '';
-      if (posto && nome) return (posto + vinculo + ' ' + nome).trim();
-      return nome;
+    function blinkClass(campo) {
+      return (cadastroModo === 'incompleto' && camposFaltando[campo]) ? ' field-blink' : '';
+    }
+
+    function togglesHtml(campo, opcoes) {
+      var h = '<div class="toggle-row' + blinkClass(campo) + '" id="row_' + campo + '">';
+      opcoes.forEach(function(o) {
+        var ativo = form[campo] === o.v ? ' active' : '';
+        h += '<button type="button" class="toggle-btn' + ativo + '" onclick="app.setCampo(\'' + campo + '\',\'' + o.v + '\')">' + e(o.l) + '</button>';
+      });
+      return h + '</div>';
+    }
+
+    function chipsPostoHtml() {
+      var lista = form.categoria === 'Oficiais' ? POSTOS_OFICIAIS : GRADUACOES_PRACAS;
+      var h = '<div class="chip-row' + blinkClass('posto') + '" id="row_posto">';
+      lista.forEach(function(p) {
+        var ativo = form.posto === p ? ' active' : '';
+        h += '<button type="button" class="chip' + ativo + '" onclick="app.setCampo(\'posto\',\'' + p.replace(/'/g, '') + '\')">' + e(p) + '</button>';
+      });
+      return h + '</div>';
+    }
+
+    function formularioCadastroHtml() {
+      if (cadastroModo !== 'novo' && cadastroModo !== 'incompleto') return '';
+      return '<div class="cadastro-box" id="cadastroBox">'
+        + '<label class="field-label" for="nomeInput">Nome completo</label>'
+        + '<input id="nomeInput" type="text" class="' + blinkClass('nome').trim() + '" placeholder="NOME COMPLETO" autocomplete="off" style="text-transform:uppercase" oninput="app.onNome(this.value)" />'
+        + '<label class="field-label" for="dnInput">Data de nascimento</label>'
+        + '<input id="dnInput" type="tel" class="' + blinkClass('dataNascimento').trim() + '" placeholder="DD/MM/AAAA" inputmode="numeric" autocomplete="off" oninput="app.onDataNasc(this.value)" />'
+        + '<label class="field-label">Sexo</label>'
+        + '<div class="hint-sexo"><strong>Atenção:</strong> selecione o gênero correto (Masculino ou Feminino). Essa informação é usada nas tabelas de avaliação do TAF.</div>'
+        + togglesHtml('sexo', [{v:'M',l:'Masculino'},{v:'F',l:'Feminino'}])
+        + '<label class="field-label">Categoria</label>'
+        + togglesHtml('categoria', [{v:'Praças',l:'Praças'},{v:'Oficiais',l:'Oficiais'}])
+        + '<label class="field-label">Posto / Graduação</label>'
+        + chipsPostoHtml()
+        + '<label class="field-label">Vínculo</label>'
+        + togglesHtml('vinculo', [{v:'carreira',l:'Quadro'},{v:'rm2',l:'RM2'}])
+        + '</div>';
+    }
+
+    function sincronizarFormularioNaTela() {
+      var nm = document.getElementById('nomeInput');
+      var dn = document.getElementById('dnInput');
+      if (nm) nm.value = form.nome || '';
+      if (dn) dn.value = form.dataNascimento || '';
     }
 
     function setFeedbackIdent(msg, tipo) {
+      feedbackMsg = msg || '';
+      feedbackTipo = tipo || 'ok';
       var el = document.getElementById('feedbackIdent');
       if (!el) return;
-      if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+      if (!feedbackMsg) { el.style.display = 'none'; el.textContent = ''; return; }
       el.style.display = 'block';
-      el.className = 'feedback feedback-' + (tipo || 'ok');
-      el.textContent = msg;
-    }
-
-    function atualizarCampoNome() {
-      var nm = document.getElementById('nomeInput');
-      if (!nm) return;
-      nm.value = nomeVal;
-      nm.readOnly = !!nomeBloqueado;
-      nm.style.opacity = nomeBloqueado ? '0.85' : '1';
-      nm.style.cursor = nomeBloqueado ? 'default' : 'text';
+      el.className = 'feedback feedback-' + feedbackTipo;
+      el.textContent = feedbackMsg;
     }
 
     async function buscarNomePorNip(nipFmt) {
@@ -457,60 +625,72 @@
         var res = await sb.rpc('buscar_militar_agendamento', { p_nip: digits });
         if (seq !== nipBuscaSeq) return;
         if (res.error) {
-          nomeBloqueado = false;
-          setFeedbackIdent('Não foi possível consultar o cadastro. Digite o nome manualmente.', 'err');
-          atualizarCampoNome();
-          atualizarBtnContinuar();
+          abrirCadastroNovo();
+          setFeedbackIdent('Não foi possível consultar o cadastro. Preencha seus dados.', 'err');
+          render();
           return;
         }
         var row = (res.data && res.data[0]) || null;
-        if (row && row.nome) {
-          nomeVal = formatNomeCadastro(row);
-          nomeBloqueado = true;
-          setFeedbackIdent('Militar encontrado: ' + nomeVal, 'ok');
+        if (row && String(row.nome || '').trim()) {
+          aplicarCadastroDaBusca(row);
         } else {
-          if (nomeBloqueado) nomeVal = '';
-          nomeBloqueado = false;
-          setFeedbackIdent('NIP não encontrado no cadastro. Informe o nome completo.', 'err');
+          abrirCadastroNovo();
         }
-        atualizarCampoNome();
-        atualizarBtnContinuar();
+        render();
       } catch (err) {
         if (seq !== nipBuscaSeq) return;
-        nomeBloqueado = false;
-        setFeedbackIdent('Não foi possível consultar o cadastro. Digite o nome manualmente.', 'err');
-        atualizarCampoNome();
-        atualizarBtnContinuar();
+        abrirCadastroNovo();
+        setFeedbackIdent('Não foi possível consultar o cadastro. Preencha seus dados.', 'err');
+        render();
       }
     }
 
     function telaIdentificar() {
-      return '<p class="section-title">Identificação</p><p class="section-sub">Informe seu NIP. O nome será preenchido automaticamente se estiver cadastrado.</p>'
+      var sub = 'Informe seu NIP. Se estiver cadastrado, os dados serão preenchidos automaticamente.';
+      if (cadastroModo === 'novo') sub = 'NIP não encontrado. Preencha todos os campos do cadastro.';
+      if (cadastroModo === 'incompleto') sub = 'Há dados faltando no cadastro. Complete os campos em laranja.';
+      return '<p class="section-title">Identificação</p><p class="section-sub">' + sub + '</p>'
         +'<label class="field-label" for="nipInput">NIP</label>'
         +'<input id="nipInput" type="tel" class="nip-input" placeholder="00.0000.00" autocomplete="off" inputmode="numeric" oninput="app.onNip(this.value)" />'
-        +'<label class="field-label" for="nomeInput">Nome completo</label>'
-        +'<input id="nomeInput" type="text" placeholder="Preenchido automaticamente pelo NIP" autocomplete="off" style="text-transform:uppercase" oninput="app.onNome(this.value)" />'
-        +'<div id="feedbackIdent" class="feedback" style="display:none"></div>'
+        +(cadastroModo === 'completo'
+          ? ('<div class="summary-card" style="margin-top:12px"><div class="summary-label">Militar</div><div class="summary-value">' + e(nomeExibicao()) + '</div></div>')
+          : '')
+        +'<div id="feedbackIdent" class="feedback' + (feedbackMsg ? (' feedback-' + feedbackTipo) : '') + '" style="' + (feedbackMsg ? '' : 'display:none') + '">' + e(feedbackMsg) + '</div>'
+        + formularioCadastroHtml()
         +'<button class="btn btn-primary" id="btnContinuar" onclick="app.avancarConfirmar()" disabled>Continuar &#8250;</button>';
     }
 
     function atualizarBtnContinuar() {
       var btn=document.getElementById('btnContinuar');
-      if(btn) btn.disabled=!(nipDigitos(nipVal).length>=8 && nomeVal.trim().length>=3);
+      if(!btn) return;
+      var okNip = nipDigitos(nipVal).length >= 8;
+      if (cadastroModo === 'completo') {
+        btn.disabled = !okNip || !cadastroCompleto();
+        return;
+      }
+      if (cadastroModo === 'novo' || cadastroModo === 'incompleto') {
+        btn.disabled = !okNip || !cadastroCompleto();
+        return;
+      }
+      btn.disabled = true;
     }
 
     function telaConfirmar() {
       var label=slotSel?(LABEL[slotSel.modalidade]||slotSel.modalidade):'—';
+      var sexoLabel = form.sexo === 'F' ? 'Feminino' : form.sexo === 'M' ? 'Masculino' : '—';
+      var vinculoLabel = form.vinculo === 'rm2' ? 'RM2' : 'Quadro';
       return '<p class="section-title">Confirmar inscrição</p><p class="section-sub">Verifique seus dados antes de confirmar.</p>'
         +'<div class="summary-card"><div class="summary-label">Prova</div><div class="summary-value">'+e(label)+'</div><div class="summary-sub">'+e(slotSel?slotSel.data_taf:'—')+'</div></div>'
-        +'<div class="summary-card"><div class="summary-label">Militar</div><div class="summary-value">'+e(nomeVal)+'</div><div class="summary-sub">NIP '+e(nipVal)+'</div></div>'
+        +'<div class="summary-card"><div class="summary-label">Militar</div><div class="summary-value">'+e(nomeExibicao())+'</div>'
+        +'<div class="summary-sub">NIP '+e(nipVal)+' · '+e(sexoLabel)+' · Nasc. '+e(form.dataNascimento||'—')+'</div>'
+        +'<div class="summary-sub">'+e(form.categoria||'')+' · '+e(form.posto||'')+' · '+e(vinculoLabel)+'</div></div>'
         +'<div id="erroCfm" class="feedback feedback-err" style="display:none"></div>'
         +'<button class="btn btn-success" id="btnConfirmar" onclick="app.confirmar()">&#10003; Confirmar inscrição</button>';
     }
 
     function telaSucesso() {
       var label=slotSel?(LABEL[slotSel.modalidade]||slotSel.modalidade):'';
-      return '<div class="success-wrap"><div class="success-icon">&#9989;</div><div class="success-title">Inscrição confirmada!</div><div class="success-name">'+e(nomeVal)+'</div><div class="success-detail">'+e(label)+' &middot; '+e(slotSel?slotSel.data_taf:'')+'</div>'
+      return '<div class="success-wrap"><div class="success-icon">&#9989;</div><div class="success-title">Inscrição confirmada!</div><div class="success-name">'+e(nomeExibicao())+'</div><div class="success-detail">'+e(label)+' &middot; '+e(slotSel?slotSel.data_taf:'')+'</div>'
         +'<button class="btn btn-primary" style="max-width:300px;margin-top:28px" onclick="app.novaInscricao()">Nova inscrição</button></div>';
     }
 
@@ -532,7 +712,15 @@
 
     window.app = {
       selecionarData: function(d){ dataSel=d; etapa='modalidade'; render(); },
-      selecionarSlot: function(id){ slotSel=slots.find(function(s){return s.id===id;})||null; if(!slotSel)return; etapa='identificar'; nipVal=''; nomeVal=''; nomeBloqueado=false; nipBuscaSeq++; render(); },
+      selecionarSlot: function(id){
+        slotSel=slots.find(function(s){return s.id===id;})||null;
+        if(!slotSel)return;
+        etapa='identificar';
+        nipVal='';
+        limparFormularioCadastro();
+        nipBuscaSeq++;
+        render();
+      },
       voltar: function(){
         if(etapa==='modalidade'){etapa='data';render();}
         else if(etapa==='identificar'){etapa='modalidade';render();}
@@ -546,8 +734,10 @@
         if (digits.length < 8) {
           if (nipBuscaTimer) { clearTimeout(nipBuscaTimer); nipBuscaTimer=null; }
           nipBuscaSeq++;
-          if (nomeBloqueado) { nomeVal=''; nomeBloqueado=false; atualizarCampoNome(); }
+          limparFormularioCadastro();
           setFeedbackIdent('', '');
+          var box=document.getElementById('cadastroBox');
+          if (box) render();
           atualizarBtnContinuar();
           return;
         }
@@ -556,18 +746,59 @@
         atualizarBtnContinuar();
       },
       onNome: function(v){
-        if (nomeBloqueado) { atualizarCampoNome(); return; }
-        nomeVal=v.toUpperCase();
-        var el=document.getElementById('nomeInput');
-        if(el) el.value=nomeVal;
+        form.nome = String(v || '').toUpperCase();
+        if (cadastroModo === 'incompleto') {
+          calcularFaltando(true);
+          var nm = document.getElementById('nomeInput');
+          if (nm) nm.className = blinkClass('nome').trim();
+        }
         atualizarBtnContinuar();
       },
-      avancarConfirmar: function(){ if(nipDigitos(nipVal).length<8||nomeVal.trim().length<3)return; etapa='confirmar'; render(); },
+      onDataNasc: function(v){
+        form.dataNascimento = formatarDataInput(v);
+        var dn = document.getElementById('dnInput');
+        if (dn) {
+          dn.value = form.dataNascimento;
+          if (cadastroModo === 'incompleto') {
+            calcularFaltando(true);
+            dn.className = blinkClass('dataNascimento').trim();
+          }
+        }
+        atualizarBtnContinuar();
+      },
+      setCampo: function(campo, valor){
+        if (campo === 'categoria') {
+          form.categoria = valor;
+          form.posto = valor === 'Oficiais' ? 'GM' : 'MN';
+        } else {
+          form[campo] = valor;
+        }
+        if (cadastroModo === 'incompleto') calcularFaltando(true);
+        render();
+      },
+      avancarConfirmar: function(){
+        if (nipDigitos(nipVal).length < 8) return;
+        if (!cadastroCompleto()) {
+          if (cadastroModo === 'novo') {
+            setFeedbackIdent('Preencha todos os campos do cadastro.', 'err');
+          } else {
+            cadastroModo = 'incompleto';
+            calcularFaltando(true);
+            setFeedbackIdent('Complete os campos em destaque (laranja).', 'err');
+            render();
+          }
+          return;
+        }
+        camposFaltando = {};
+        etapa = 'confirmar';
+        render();
+      },
       confirmar: async function(){
         var btn=document.getElementById('btnConfirmar'), err=document.getElementById('erroCfm');
         if(btn){btn.disabled=true;btn.textContent='Salvando...';}
         if(err) err.style.display='none';
         try {
+          if (!cadastroCompleto()) throw new Error('Dados do cadastro incompletos.');
           var nipKey=nipDigitos(nipVal);
           var dup=await sb.from('agendamento_reservas').select('id').eq('slot_id',slotSel.id).eq('nip',nipKey).eq('deleted',false).maybeSingle();
           if(dup.data){
@@ -575,8 +806,33 @@
             if(btn){btn.disabled=false;btn.innerHTML='&#10003; Confirmar inscrição';}
             return;
           }
+          var salv = await sb.rpc('salvar_militar_agendamento', {
+            p_nip: nipKey,
+            p_nome: form.nome.trim(),
+            p_data_nascimento: form.dataNascimento.trim(),
+            p_sexo: form.sexo,
+            p_categoria: form.categoria,
+            p_posto: form.posto,
+            p_vinculo: form.vinculo,
+          });
+          if (salv.error) throw salv.error;
+
           var id=Date.now()+'_'+Math.random().toString(16).slice(2,8);
-          var ins=await sb.from('agendamento_reservas').insert({id:id,slot_id:slotSel.id,data_taf:slotSel.data_taf,modalidade:slotSel.modalidade,nip:nipKey,nome:nomeVal.trim(),updated_at:Date.now(),deleted:false});
+          var ins=await sb.from('agendamento_reservas').insert({
+            id:id,
+            slot_id:slotSel.id,
+            data_taf:slotSel.data_taf,
+            modalidade:slotSel.modalidade,
+            nip:nipKey,
+            nome:nomeExibicao(),
+            data_nascimento: form.dataNascimento.trim(),
+            sexo: form.sexo,
+            categoria: form.categoria,
+            posto: form.posto,
+            vinculo: form.vinculo,
+            updated_at:Date.now(),
+            deleted:false
+          });
           if(ins.error) throw ins.error;
           etapa='sucesso'; render();
         } catch(ex){
@@ -586,7 +842,8 @@
         }
       },
       novaInscricao: function(){
-        etapa='data'; dataSel=null; slotSel=null; nipVal=''; nomeVal=''; nomeBloqueado=false; nipBuscaSeq++;
+        etapa='data'; dataSel=null; slotSel=null; nipVal='';
+        limparFormularioCadastro(); nipBuscaSeq++;
         document.getElementById('stepsBar').style.display='flex';
         mostrarLoading(); carregarDados();
       },

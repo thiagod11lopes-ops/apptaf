@@ -1,16 +1,20 @@
 /**
- * Publica NIP + nome de exibição no Supabase para a página de agendamento.
- * Necessário porque `cadastros.data` na nuvem é criptografado (E2E) e não
- * permite busca por NIP via SQL.
+ * Publica NIP + dados de cadastro no Supabase para a página de agendamento.
+ * Necessário porque `cadastros.data` na nuvem é criptografado (E2E).
  */
 import { getSupabase } from '../config/supabase';
 import { getAllCadastros } from './cadastrosIndexedDb';
-import { formatNomeComPosto } from '../utils/formatNomeComPosto';
+import { nomeBareSemPosto } from '../utils/formatNomeComPosto';
 import { nipChaveCadastro } from '../utils/nipFormat';
 
 export type MilitarLookupRow = {
   nip: string;
   nome: string;
+  data_nascimento: string;
+  sexo: string;
+  categoria: string;
+  posto: string;
+  vinculo: string;
   updated_at: number;
   deleted: boolean;
 };
@@ -27,7 +31,7 @@ async function requireAuthSupabase() {
   return sb;
 }
 
-/** Envia todos os cadastros locais ativos (NIP + nome) para a lookup pública. */
+/** Envia cadastros locais (dados mínimos) para a lookup pública. */
 export async function pushMilitarLookupToSupabase(): Promise<number> {
   const sb = await requireAuthSupabase();
   const cadastros = await getAllCadastros();
@@ -37,14 +41,19 @@ export async function pushMilitarLookupToSupabase(): Promise<number> {
   for (const c of cadastros) {
     const nip = nipChaveCadastro(c.nip);
     if (!nip) continue;
-    const nome = formatNomeComPosto(c).trim();
+    const nome = nomeBareSemPosto(c.nome || '').trim().toUpperCase() || (c.nome || '').trim().toUpperCase();
     if (!nome) continue;
+    const posto = ((c.categoria === 'Oficiais' ? c.oficial : c.praca) || '').trim().toUpperCase();
     const prev = byNip.get(nip);
-    // Mantém o mais recente se houver duplicata de NIP
     if (!prev || (c.updatedAt ?? 0) >= (prev.updated_at ?? 0)) {
       byNip.set(nip, {
         nip,
         nome,
+        data_nascimento: (c.dataNascimento || '').trim(),
+        sexo: c.sexo === 'M' || c.sexo === 'F' ? c.sexo : '',
+        categoria: c.categoria === 'Oficiais' || c.categoria === 'Praças' ? c.categoria : '',
+        posto,
+        vinculo: c.vinculo === 'carreira' || c.vinculo === 'rm2' ? c.vinculo : '',
         updated_at: c.updatedAt ?? agora,
         deleted: false,
       });

@@ -213,6 +213,26 @@ export default function HomeScreen() {
     };
   }, [authReady, isAuthenticated, dataOwnerUid, user?.uid, cloudLinkOn]);
 
+  /** Importa cadastros feitos pela página pública para o cadastro principal. */
+  useEffect(() => {
+    if (!authReady || !isAuthenticated) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { importMilitarLookupIntoCadastros } = await import(
+          '../services/agendamentoMilitarLookup'
+        );
+        if (cancelled) return;
+        await importMilitarLookupIntoCadastros();
+      } catch {
+        // silencioso — próxima abertura do modal de agendamento tenta de novo
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, isAuthenticated, dataOwnerUid]);
+
   /** Cards = espelho local (Dexie) com cache SWR. Debounce evita tempestade. */
   const resumoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumoInFlightRef = useRef(false);

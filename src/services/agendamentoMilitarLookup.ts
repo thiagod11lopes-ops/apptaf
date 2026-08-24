@@ -64,6 +64,30 @@ function cadastroToLookupRow(c: CadastroItemPersist, agora = Date.now()): Milita
   };
 }
 
+function preferirTexto(novo: string | null | undefined, antigo: string | null | undefined): string {
+  const n = String(novo ?? '').trim();
+  if (n) return n;
+  return String(antigo ?? '').trim();
+}
+
+function mesclarLookupRow(
+  incoming: MilitarLookupRow,
+  existing: Partial<MilitarLookupRow> | null | undefined,
+): MilitarLookupRow {
+  if (!existing) return incoming;
+  return {
+    nip: incoming.nip,
+    nome: preferirTexto(incoming.nome, existing.nome),
+    data_nascimento: preferirTexto(incoming.data_nascimento, existing.data_nascimento),
+    sexo: preferirTexto(incoming.sexo, existing.sexo),
+    categoria: preferirTexto(incoming.categoria, existing.categoria),
+    posto: preferirTexto(incoming.posto, existing.posto),
+    vinculo: preferirTexto(incoming.vinculo, existing.vinculo),
+    updated_at: Math.max(incoming.updated_at ?? 0, existing.updated_at ?? 0) || Date.now(),
+    deleted: false,
+  };
+}
+
 /**
  * Publica um único cadastro na lookup da página de agendamento.
  * Silencioso se offline / sem sessão — não bloqueia o fluxo de cadastro.
@@ -76,9 +100,17 @@ export async function upsertMilitarLookupFromCadastro(
     if (!row) return false;
     const sb = getSupabase();
     if (!sb) return false;
-    const { data } = await sb.auth.getSession();
-    if (!data.session) return false;
-    const { error } = await sb.from('agendamento_militar_lookup').upsert(row, {
+    const { data: sessionData } = await sb.auth.getSession();
+    if (!sessionData.session) return false;
+
+    const { data: existing } = await sb
+      .from('agendamento_militar_lookup')
+      .select('nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at,deleted')
+      .eq('nip', row.nip)
+      .maybeSingle();
+
+    const merged = mesclarLookupRow(row, existing as MilitarLookupRow | null);
+    const { error } = await sb.from('agendamento_militar_lookup').upsert(merged, {
       onConflict: 'nip',
     });
     return !error;
@@ -103,7 +135,24 @@ export async function pushMilitarLookupToSupabase(): Promise<number> {
     }
   }
 
-  const rows = Array.from(byNip.values());
+  const nips = Array.from(byNip.keys());
+  const existentes = new Map<string, MilitarLookupRow>();
+  const CHUNK_SELECT = 200;
+  for (let i = 0; i < nips.length; i += CHUNK_SELECT) {
+    const slice = nips.slice(i, i + CHUNK_SELECT);
+    const { data } = await sb
+      .from('agendamento_militar_lookup')
+      .select('nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at,deleted')
+      .in('nip', slice);
+    for (const row of data ?? []) {
+      const nip = String((row as MilitarLookupRow).nip || '');
+      if (nip) existentes.set(nip, row as MilitarLookupRow);
+    }
+  }
+
+  const rows = Array.from(byNip.values()).map((row) =>
+    mesclarLookupRow(row, existentes.get(row.nip)),
+  );
   const CHUNK = 200;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK);

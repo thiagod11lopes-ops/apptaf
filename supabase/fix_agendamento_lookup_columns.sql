@@ -13,8 +13,11 @@ alter table public.agendamento_reservas add column if not exists categoria text;
 alter table public.agendamento_reservas add column if not exists posto text;
 alter table public.agendamento_reservas add column if not exists vinculo text;
 
--- Garante as funções atualizadas (busca + salvar)
-create or replace function public.buscar_militar_agendamento(p_nip text)
+-- Garante as funções atualizadas (busca + salvar).
+-- DROP obrigatório: CREATE OR REPLACE não muda o tipo de retorno (campos extras).
+drop function if exists public.buscar_militar_agendamento(text);
+
+create function public.buscar_militar_agendamento(p_nip text)
 returns table (
   nome text,
   data_nascimento text,
@@ -53,7 +56,9 @@ $$;
 revoke all on function public.buscar_militar_agendamento(text) from public;
 grant execute on function public.buscar_militar_agendamento(text) to anon, authenticated;
 
-create or replace function public.salvar_militar_agendamento(
+drop function if exists public.salvar_militar_agendamento(text, text, text, text, text, text, text);
+
+create function public.salvar_militar_agendamento(
   p_nip text,
   p_nome text,
   p_data_nascimento text,

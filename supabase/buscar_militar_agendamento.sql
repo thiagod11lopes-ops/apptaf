@@ -1,10 +1,20 @@
--- Busca pública (somente leitura mínima) de militar por NIP para a página de agendamento.
--- Não expõe a tabela cadastros; retorna só nome/posto/categoria/vinculo.
--- Execute no SQL Editor do Supabase.
+-- Busca pública por NIP para a página de agendamento.
+-- Fonte: agendamento_militar_lookup (cadastros.data é E2E — não usar).
+-- Preferir rodar: fix_buscar_militar_agendamento_completo.sql
 
-create or replace function public.buscar_militar_agendamento(p_nip text)
+alter table public.agendamento_militar_lookup add column if not exists data_nascimento text not null default '';
+alter table public.agendamento_militar_lookup add column if not exists sexo text not null default '';
+alter table public.agendamento_militar_lookup add column if not exists categoria text not null default '';
+alter table public.agendamento_militar_lookup add column if not exists posto text not null default '';
+alter table public.agendamento_militar_lookup add column if not exists vinculo text not null default '';
+
+drop function if exists public.buscar_militar_agendamento(text);
+
+create function public.buscar_militar_agendamento(p_nip text)
 returns table (
   nome text,
+  data_nascimento text,
+  sexo text,
   categoria text,
   posto text,
   vinculo text
@@ -22,17 +32,16 @@ begin
 
   return query
   select
-    nullif(trim(c.data->>'nome'), '')::text as nome,
-    nullif(trim(c.data->>'categoria'), '')::text as categoria,
-    coalesce(
-      nullif(trim(c.data->>'oficial'), ''),
-      nullif(trim(c.data->>'praca'), '')
-    )::text as posto,
-    nullif(trim(c.data->>'vinculo'), '')::text as vinculo
-  from public.cadastros c
-  where coalesce(c.deleted, false) = false
-    and regexp_replace(coalesce(c.data->>'nip', ''), '\D', '', 'g') = digits
-  order by c.updated_at desc nulls last
+    coalesce(l.nome, '')::text,
+    coalesce(l.data_nascimento, '')::text,
+    coalesce(l.sexo, '')::text,
+    coalesce(l.categoria, '')::text,
+    coalesce(l.posto, '')::text,
+    coalesce(l.vinculo, '')::text
+  from public.agendamento_militar_lookup l
+  where l.deleted = false
+    and l.nip = digits
+  order by l.updated_at desc nulls last
   limit 1;
 end;
 $$;

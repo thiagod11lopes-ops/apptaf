@@ -1,38 +1,14 @@
--- Lookup de militar para agendamento (campos necessários ao cadastro público).
--- Execute no SQL Editor do Supabase (pode rodar de novo com segurança).
+-- Corrige a busca pública por NIP: devolve TODOS os campos da lookup.
+-- IMPORTANTE: CREATE OR REPLACE NÃO altera o tipo de retorno — é obrigatório DROP.
+-- Cole no SQL Editor do Supabase e clique em Run.
 
-create table if not exists public.agendamento_militar_lookup (
-  nip              text    primary key,  -- 8 dígitos
-  nome             text    not null default '',
-  data_nascimento  text    not null default '',
-  sexo             text    not null default '',  -- M | F
-  categoria        text    not null default '',  -- Oficiais | Praças
-  posto            text    not null default '',
-  vinculo          text    not null default '',  -- carreira | rm2
-  updated_at       bigint  not null default 0,
-  deleted          boolean not null default false
-);
-
--- Colunas extras se a tabela já existia (versão só com nip/nome)
 alter table public.agendamento_militar_lookup add column if not exists data_nascimento text not null default '';
 alter table public.agendamento_militar_lookup add column if not exists sexo text not null default '';
 alter table public.agendamento_militar_lookup add column if not exists categoria text not null default '';
 alter table public.agendamento_militar_lookup add column if not exists posto text not null default '';
 alter table public.agendamento_militar_lookup add column if not exists vinculo text not null default '';
 
-alter table public.agendamento_militar_lookup enable row level security;
-
-grant usage on schema public to anon, authenticated;
-grant select, insert, update, delete on public.agendamento_militar_lookup to authenticated;
-
-drop policy if exists "agendamento_militar_lookup_auth_all" on public.agendamento_militar_lookup;
-create policy "agendamento_militar_lookup_auth_all"
-  on public.agendamento_militar_lookup
-  for all to authenticated
-  using (true)
-  with check (true);
-
--- Busca por NIP (página pública). DROP: CREATE OR REPLACE não muda RETURNS TABLE.
+-- Remove qualquer overload antiga (ex.: só nome / sem data_nascimento / lendo cadastros E2E)
 drop function if exists public.buscar_militar_agendamento(text);
 
 create function public.buscar_militar_agendamento(p_nip text)
@@ -74,7 +50,7 @@ $$;
 revoke all on function public.buscar_militar_agendamento(text) from public;
 grant execute on function public.buscar_militar_agendamento(text) to anon, authenticated;
 
--- Upsert público ao completar cadastro na página de agendamento
+-- Upsert público (página de agendamento) — também com DROP para evitar overload
 drop function if exists public.salvar_militar_agendamento(text, text, text, text, text, text, text);
 
 create function public.salvar_militar_agendamento(
@@ -116,11 +92,26 @@ begin
   )
   on conflict (nip) do update set
     nome = excluded.nome,
-    data_nascimento = excluded.data_nascimento,
-    sexo = excluded.sexo,
-    categoria = excluded.categoria,
-    posto = excluded.posto,
-    vinculo = excluded.vinculo,
+    data_nascimento = case
+      when nullif(trim(excluded.data_nascimento), '') is not null then excluded.data_nascimento
+      else t.data_nascimento
+    end,
+    sexo = case
+      when nullif(trim(excluded.sexo), '') is not null then excluded.sexo
+      else t.sexo
+    end,
+    categoria = case
+      when nullif(trim(excluded.categoria), '') is not null then excluded.categoria
+      else t.categoria
+    end,
+    posto = case
+      when nullif(trim(excluded.posto), '') is not null then excluded.posto
+      else t.posto
+    end,
+    vinculo = case
+      when nullif(trim(excluded.vinculo), '') is not null then excluded.vinculo
+      else t.vinculo
+    end,
     updated_at = excluded.updated_at,
     deleted = false;
 end;
@@ -128,10 +119,3 @@ $$;
 
 revoke all on function public.salvar_militar_agendamento(text, text, text, text, text, text, text) from public;
 grant execute on function public.salvar_militar_agendamento(text, text, text, text, text, text, text) to anon, authenticated;
-
--- Colunas extras nas reservas (opcional, para o admin ver os dados)
-alter table public.agendamento_reservas add column if not exists data_nascimento text;
-alter table public.agendamento_reservas add column if not exists sexo text;
-alter table public.agendamento_reservas add column if not exists categoria text;
-alter table public.agendamento_reservas add column if not exists posto text;
-alter table public.agendamento_reservas add column if not exists vinculo text;

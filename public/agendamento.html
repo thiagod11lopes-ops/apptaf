@@ -374,26 +374,51 @@
     }
 
     function aplicarCadastroDaBusca(row) {
-      form.nome = String(row.nome || '').trim().toUpperCase();
-      form.dataNascimento = String(row.data_nascimento || '').trim();
-      // Não pré-confirma o sexo: o militar deve confirmar nesta tela
+      var nome = String(row.nome || '').trim().toUpperCase();
+      var dataNascimento = String(
+        row.data_nascimento || row.dataNascimento || '',
+      ).trim();
+      if (dataNascimento && !dataNascValida(dataNascimento)) {
+        dataNascimento = formatarDataInput(dataNascimento);
+      }
+      var categoria = row.categoria === 'Oficiais' || row.categoria === 'Praças'
+        ? row.categoria
+        : '';
+      var posto = String(row.posto || row.oficial || row.praca || '')
+        .trim()
+        .toUpperCase();
+      var vinculo = row.vinculo === 'carreira' || row.vinculo === 'rm2' ? row.vinculo : '';
+
+      form.nome = nome;
+      form.dataNascimento = dataNascimento;
       form.sexo = '';
       sexoConfirmado = false;
-      form.categoria = (row.categoria === 'Oficiais' || row.categoria === 'Praças') ? row.categoria : 'Praças';
-      form.posto = String(row.posto || '').trim().toUpperCase() || (form.categoria === 'Oficiais' ? 'GM' : 'MN');
-      form.vinculo = (row.vinculo === 'carreira' || row.vinculo === 'rm2') ? row.vinculo : '';
+      form.categoria = categoria || 'Praças';
+      form.posto = posto || (form.categoria === 'Oficiais' ? 'GM' : 'MN');
+      form.vinculo = vinculo;
+
       var faltando = calcularFaltando(true);
-      // Sexo sempre exige confirmação — remove do "faltando de cadastro" se o resto estiver ok
       delete faltando.sexo;
+      // Se posto veio só do default (MN/GM) e a busca não trouxe posto, marca incompleto
+      if (!posto) faltando.posto = true;
+      if (!categoria) faltando.categoria = true;
+      if (!vinculo) faltando.vinculo = true;
+
       if (Object.keys(faltando).length === 0) {
         cadastroModo = 'completo';
         camposFaltando = {};
-        setFeedbackIdent('Militar encontrado: ' + nomeExibicao() + '. Confirme seu gênero para continuar.', 'ok');
+        setFeedbackIdent(
+          'Militar encontrado: ' + nomeExibicao() + '. Confirme seu gênero para continuar.',
+          'ok',
+        );
       } else {
         cadastroModo = 'incompleto';
-        faltando.sexo = true; // também destaca o sexo até confirmar
+        faltando.sexo = true;
         camposFaltando = faltando;
-        setFeedbackIdent('Cadastro incompleto. Complete os campos em destaque e confirme seu gênero.', 'err');
+        setFeedbackIdent(
+          'Cadastro incompleto. Complete os campos em destaque e confirme seu gênero.',
+          'err',
+        );
       }
     }
 
@@ -674,7 +699,14 @@
         +'<label class="field-label" for="nipInput">NIP</label>'
         +'<input id="nipInput" type="tel" class="nip-input" placeholder="00.0000.00" autocomplete="off" inputmode="numeric" oninput="app.onNip(this.value)" />'
         +(cadastroModo === 'completo'
-          ? ('<div class="summary-card" style="margin-top:12px"><div class="summary-label">Militar</div><div class="summary-value">' + e(nomeExibicao()) + '</div></div>')
+          ? ('<div class="summary-card" style="margin-top:12px">'
+            + '<div class="summary-label">Militar</div>'
+            + '<div class="summary-value">' + e(nomeExibicao()) + '</div>'
+            + '<div class="summary-sub">Nasc. ' + e(form.dataNascimento || '—')
+            + ' · ' + e(form.categoria || '—')
+            + ' · ' + e(form.posto || '—')
+            + ' · ' + e(form.vinculo === 'rm2' ? 'RM2' : form.vinculo === 'carreira' ? 'Quadro' : '—')
+            + '</div></div>')
           : '')
         +'<div id="feedbackIdent" class="feedback' + (feedbackMsg ? (' feedback-' + feedbackTipo) : '') + '" style="' + (feedbackMsg ? '' : 'display:none') + '">' + e(feedbackMsg) + '</div>'
         + formularioCadastroHtml()

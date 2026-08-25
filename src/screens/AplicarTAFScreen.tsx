@@ -73,6 +73,7 @@ import {
   type ModalModalidadeExcludenteInfo,
 } from '../components/sismav/ModalModalidadeExcludente';
 import { ConfirmacaoExcluirPreCadastroModal } from '../components/sismav/ConfirmacaoExcluirPreCadastroModal';
+import { SelecaoNadadoresPreCadastroModal } from '../components/taf/aplicar/SelecaoNadadoresPreCadastroModal';
 import { FluxoAssinaturaAplicadorModal } from '../components/sismav/FluxoAssinaturaAplicadorModal';
 import { AplicarTafRubricaCandidatoModal } from './aplicarTaf/AplicarTafRubricaCandidatoModal';
 import {
@@ -178,6 +179,7 @@ import {
 } from './aplicarTafTrialReducer';
 import {
   addPreCadastroTaf,
+  consumirParticipantesPreCadastroTaf,
   getAllPreCadastrosTaf,
   idsPreCadastroPareados,
   isNomeCodigoPreCadastro,
@@ -185,6 +187,7 @@ import {
   nomesCodigoDisponiveis,
   removePreCadastroTaf,
   type NomeCodigoPreCadastro,
+  type PreCadastroParticipante,
   type PreCadastroTaf,
 } from '../services/preCadastroTafStorage';
 import {
@@ -242,6 +245,10 @@ export default function AplicarTAFScreen() {
   const [listaPreCadastros, setListaPreCadastros] = useState<PreCadastroTaf[]>([]);
   const [preCadastroParaExcluir, setPreCadastroParaExcluir] = useState<PreCadastroTaf | null>(null);
   const [excluindoPreCadastro, setExcluindoPreCadastro] = useState(false);
+  /** Pré-cadastro de natação aguardando escolha de quem entra na bateria. */
+  const [preCadastroNatacaoSelecao, setPreCadastroNatacaoSelecao] = useState<PreCadastroTaf | null>(
+    null,
+  );
   const [preCadastroEditando, setPreCadastroEditando] = useState<PreCadastroTaf | null>(null);
   /** Nome OTAN do pré-cadastro (Alfa…Zulu) ou `Nenhum` (só numeração). */
   const [nomeCodigoPreCadastro, setNomeCodigoPreCadastro] = useState<
@@ -1077,10 +1084,11 @@ export default function AplicarTAFScreen() {
       assinatura?: AplicadorAssinaturaResumo,
     ) => {
       const preCadastroId = preCadastroOrigemIdRef.current;
+      const nipsDaProva = [...nipsParticipantes];
       preCadastroOrigemIdRef.current = null;
       if (preCadastroId) {
         try {
-          await removePreCadastroTaf(preCadastroId);
+          await consumirParticipantesPreCadastroTaf(preCadastroId, nipsDaProva);
           const lista = await getAllPreCadastrosTaf();
           setListaPreCadastros(lista);
         } catch {
@@ -1098,7 +1106,7 @@ export default function AplicarTAFScreen() {
         });
       }
     },
-    [navigation, limparBufferAplicacao, limparSessaoProvaAtiva],
+    [navigation, limparBufferAplicacao, limparSessaoProvaAtiva, nipsParticipantes],
   );
 
   const iniciarFinalizacaoComAssinaturaAplicador = useCallback(
@@ -3004,11 +3012,19 @@ export default function AplicarTAFScreen() {
   ]);
 
   const iniciarProvaFromPreCadastro = useCallback(
-    (pre: PreCadastroTaf) => {
+    (pre: PreCadastroTaf, participantesOverride?: PreCadastroParticipante[]) => {
       void (async () => {
         const tipo = pre.tipoProva;
-        const n = pre.participantes.length;
+        const participantes = participantesOverride ?? pre.participantes;
+        const n = participantes.length;
         if (n < 1) return;
+
+        // Natação: escolher quem entra na bateria antes do cronômetro.
+        if (tipo === 'natacao' && !participantesOverride) {
+          setPreCadastroNatacaoSelecao(pre);
+          return;
+        }
+
         const normaCfn = (pre.normaTaf ?? 'armada') === 'cfn';
 
         let lista: CadastroItemPersist[] = [];
@@ -3027,9 +3043,9 @@ export default function AplicarTAFScreen() {
         setMostrarRestritos(false);
         setMostrarProvas(true);
         preCadastroOrigemIdRef.current = pre.id;
-        setNipsParticipantes(pre.participantes.map((p) => p.nip));
+        setNipsParticipantes(participantes.map((p) => p.nip));
         setNipFeedbackLinhas(
-          pre.participantes.map((p) => {
+          participantes.map((p) => {
             const busca = buscarCadastroPorNomeOuNip(lista, p.nip);
             if (busca.kind === 'found') {
               const campos = camposCadastroParaFeedback(busca.cadastro);
@@ -3468,6 +3484,16 @@ export default function AplicarTAFScreen() {
           if (!excluindoPreCadastro) setPreCadastroParaExcluir(null);
         }}
         onConfirm={() => void executarExclusaoPreCadastro()}
+      />
+
+      <SelecaoNadadoresPreCadastroModal
+        preCadastro={preCadastroNatacaoSelecao}
+        onClose={() => setPreCadastroNatacaoSelecao(null)}
+        onConfirm={(selecionados) => {
+          const pre = preCadastroNatacaoSelecao;
+          setPreCadastroNatacaoSelecao(null);
+          if (pre) iniciarProvaFromPreCadastro(pre, selecionados);
+        }}
       />
 
       <AppModal

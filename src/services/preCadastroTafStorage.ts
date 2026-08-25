@@ -278,6 +278,39 @@ export async function removePreCadastroTaf(id: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Remove da lista os NIPs que já foram para a prova.
+ * Se sobrar ninguém, exclui o pré-cadastro (e o par natação↔permanência).
+ * Se sobrar gente, atualiza o card e espelha na permanência quando for natação.
+ */
+export async function consumirParticipantesPreCadastroTaf(
+  id: string,
+  nipsConsumidos: readonly string[],
+): Promise<void> {
+  const set = new Set(
+    nipsConsumidos.map((n) => n.replace(/\D/g, '')).filter((d) => d.length > 0),
+  );
+  if (set.size === 0) return;
+
+  const ownerUid = await resolveOwnerUid();
+  const userId = getCachedLoginUid();
+  const rows = await listPreCadastros(ownerUid);
+  const alvo = rows.find((r) => r.id === id);
+  if (!alvo) return;
+
+  const pre = preCadastroRecordToTaf(alvo);
+  const restantes = pre.participantes.filter(
+    (p) => !set.has((p.nip || '').replace(/\D/g, '')),
+  );
+
+  if (restantes.length === 0) {
+    await removePreCadastroTaf(id);
+    return;
+  }
+
+  await addPreCadastroTaf({ ...pre, participantes: restantes });
+}
+
 export async function clearAllPreCadastrosTaf(): Promise<void> {
   try {
     const uid = getCachedDataOwnerUid();

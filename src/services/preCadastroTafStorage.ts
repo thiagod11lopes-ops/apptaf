@@ -279,9 +279,9 @@ export async function removePreCadastroTaf(id: string): Promise<boolean> {
 }
 
 /**
- * Remove da lista os NIPs que já foram para a prova.
- * Se sobrar ninguém, exclui o pré-cadastro (e o par natação↔permanência).
- * Se sobrar gente, atualiza o card e espelha na permanência quando for natação.
+ * Remove da lista os NIPs que já realizaram a prova neste pré-cadastro.
+ * Se sobrar ninguém, exclui só este card.
+ * Natação: NÃO altera a permanência vinculada (quem nadou continua nela).
  */
 export async function consumirParticipantesPreCadastroTaf(
   id: string,
@@ -304,11 +304,14 @@ export async function consumirParticipantesPreCadastroTaf(
   );
 
   if (restantes.length === 0) {
-    await removePreCadastroTaf(id);
+    // Só este pré-cadastro — não remove o par natação↔permanência.
+    await softDeletePreCadastroRecord(id, ownerUid, userId);
+    notifyDataChanged('preCadastros');
     return;
   }
 
-  await addPreCadastroTaf({ ...pre, participantes: restantes });
+  await savePreCadastroRecord({ ...pre, participantes: restantes }, ownerUid, userId);
+  notifyDataChanged('preCadastros');
 }
 
 export async function clearAllPreCadastrosTaf(): Promise<void> {

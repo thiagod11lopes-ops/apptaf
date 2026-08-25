@@ -889,6 +889,14 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      <ConfirmacaoExcluirSlotAgendamentoModal
+        slot={slotParaExcluir}
+        loading={!!excluindo && excluindo === slotParaExcluir?.id}
+        onClose={() => {
+          if (!excluindo) setSlotParaExcluir(null);
+        }}
+        onConfirm={confirmarExclusao}
+      />
     </ModernModal>
   );
 }

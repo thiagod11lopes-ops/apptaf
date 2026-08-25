@@ -267,6 +267,11 @@ export async function removePreCadastroTaf(id: string): Promise<boolean> {
     if (rows.some((r) => r.id === pairId)) {
       await softDeletePreCadastroRecord(pairId, ownerUid, userId);
     }
+  } else {
+    const natacaoId = idPreCadastroNatacaoDePermanenciaPareada(id);
+    if (natacaoId && rows.some((r) => r.id === natacaoId)) {
+      await softDeletePreCadastroRecord(natacaoId, ownerUid, userId);
+    }
   }
 
   notifyDataChanged('preCadastros');

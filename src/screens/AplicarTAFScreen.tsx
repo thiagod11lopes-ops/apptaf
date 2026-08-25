@@ -3462,6 +3462,7 @@ export default function AplicarTAFScreen() {
 
       <ConfirmacaoExcluirPreCadastroModal
         preCadastro={preCadastroParaExcluir}
+        existentesIds={listaPreCadastros.map((p) => p.id)}
         loading={excluindoPreCadastro}
         onClose={() => {
           if (!excluindoPreCadastro) setPreCadastroParaExcluir(null);

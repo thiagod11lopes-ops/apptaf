@@ -5,16 +5,62 @@ import { Trash2, AlertTriangle } from 'lucide-react-native';
 import { ModernModal } from './ModernModal';
 import { PressableScale } from '../premium/PressableScale';
 import { useTheme } from '../../contexts/ThemeContext';
-import type { PreCadastroTaf } from '../../services/preCadastroTafStorage';
+import {
+  idPreCadastroNatacaoDePermanenciaPareada,
+  idPreCadastroPermanenciaPareada,
+  type PreCadastroTaf,
+} from '../../services/preCadastroTafStorage';
+
+const LABEL_TIPO: Record<string, string> = {
+  corrida: 'Corrida',
+  natacao: 'Natação',
+  permanencia: 'Permanência',
+  caminhada: 'Caminhada',
+  flexao_barra: 'Flexão de Barra',
+  flexao_solo: 'Flexão de Solo',
+  abdominal_remador: 'Abdominal Remador',
+  abdominal_prancha: 'Abdominal Prancha',
+};
 
 function labelTipoProva(tipo: PreCadastroTaf['tipoProva']): string {
-  if (tipo === 'natacao') return 'Natação';
-  if (tipo === 'permanencia') return 'Permanência';
-  return 'Corrida';
+  return LABEL_TIPO[tipo] || String(tipo);
+}
+
+/**
+ * True quando existe o par natação↔permanência que também será removido.
+ * Se `existentesIds` for informado, exige que o outro ID esteja na lista.
+ */
+export function preCadastroTemVinculoNatacaoPermanencia(
+  pre: PreCadastroTaf,
+  existentesIds?: ReadonlySet<string> | readonly string[],
+): boolean {
+  const hasId = (id: string): boolean => {
+    if (!existentesIds) return true;
+    if (existentesIds instanceof Set) return existentesIds.has(id);
+    return existentesIds.includes(id);
+  };
+
+  if (pre.tipoProva === 'natacao') {
+    return hasId(idPreCadastroPermanenciaPareada(pre.id));
+  }
+  if (pre.tipoProva === 'permanencia') {
+    const natacaoId = idPreCadastroNatacaoDePermanenciaPareada(pre.id);
+    return !!natacaoId && hasId(natacaoId);
+  }
+  return false;
+}
+
+function labelVinculoOutro(pre: PreCadastroTaf): string {
+  if (pre.tipoProva === 'natacao') return 'Permanência';
+  return 'Natação';
 }
 
 type Props = {
   preCadastro: PreCadastroTaf | null;
+  /** IDs ativos — usado para confirmar se o par vinculado existe. */
+  existentesIds?: ReadonlySet<string> | readonly string[];
+  /** Força o aviso de exclusão do par (opcional). */
+  excluirVinculado?: boolean;
   loading?: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -22,6 +68,8 @@ type Props = {
 
 export function ConfirmacaoExcluirPreCadastroModal({
   preCadastro,
+  existentesIds,
+  excluirVinculado = false,
   loading = false,
   onClose,
   onConfirm,
@@ -29,6 +77,12 @@ export function ConfirmacaoExcluirPreCadastroModal({
   const { theme } = useTheme();
   const t = theme.tokens;
   const visible = !!preCadastro;
+  const tipo = preCadastro ? labelTipoProva(preCadastro.tipoProva) : '';
+  const nomeCodigo = (preCadastro?.nomeCodigo || '').trim();
+  const n = preCadastro?.participantes.length ?? 0;
+  const vinculado =
+    !!preCadastro &&
+    (excluirVinculado || preCadastroTemVinculoNatacaoPermanencia(preCadastro, existentesIds));
 
   const footer = (
     <View style={styles.footerRow}>
@@ -71,6 +125,7 @@ export function ConfirmacaoExcluirPreCadastroModal({
       title="Excluir pré-cadastro?"
       icon={<AlertTriangle size={20} color="#FFFFFF" strokeWidth={2.2} />}
       footer={footer}
+      dismissable={!loading}
     >
       {preCadastro ? (
         <View style={styles.bodyInner}>
@@ -78,10 +133,35 @@ export function ConfirmacaoExcluirPreCadastroModal({
             <Trash2 size={28} color={theme.loss} strokeWidth={2} />
           </View>
           <Text style={[styles.message, { color: theme.text }]}>
-            O pré-cadastro de <Text style={styles.strong}>{labelTipoProva(preCadastro.tipoProva)}</Text>{' '}
-            com <Text style={styles.strong}>{preCadastro.participantes.length}</Text> participante
-            {preCadastro.participantes.length !== 1 ? 's' : ''} será removido permanentemente.
+            O pré-cadastro de <Text style={styles.strong}>{tipo}</Text>
+            {nomeCodigo ? (
+              <>
+                {' '}
+                (<Text style={styles.strong}>{nomeCodigo}</Text>)
+              </>
+            ) : null}{' '}
+            com <Text style={styles.strong}>{n}</Text> participante{n !== 1 ? 's' : ''} será removido
+            permanentemente.
           </Text>
+          {vinculado ? (
+            <View
+              style={[
+                styles.vinculoBox,
+                {
+                  backgroundColor: theme.isDark
+                    ? 'rgba(251,191,36,0.12)'
+                    : 'rgba(251,191,36,0.16)',
+                  borderColor: theme.isDark ? 'rgba(251,191,36,0.35)' : 'rgba(180,83,9,0.35)',
+                },
+              ]}
+            >
+              <Text style={[styles.vinculoText, { color: theme.isDark ? '#fbbf24' : '#92400e' }]}>
+                O pré-cadastro vinculado de{' '}
+                <Text style={styles.strong}>{labelVinculoOutro(preCadastro)}</Text> também será
+                excluído.
+              </Text>
+            </View>
+          ) : null}
           <Text style={[styles.hint, { color: theme.textMuted }]}>
             Esta ação não pode ser desfeita.
           </Text>
@@ -148,5 +228,18 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: 13,
     textAlign: 'center',
+  },
+  vinculoBox: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: '100%',
+  },
+  vinculoText: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });

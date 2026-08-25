@@ -12,7 +12,10 @@ import { useAplicarTafLayout } from './useAplicarTafLayout';
 type Props = {
   /** Número de ordem do card (1-based), exibido no topo à direita. */
   numero: number;
-  titulo: string;
+  /** Nome de código (Alfa…Zulu); opcional. */
+  titulo?: string | null;
+  /** Nome da modalidade (Natação, Corrida…), colorido. */
+  modalidadeLabel: string;
   meta: string;
   nomesPreview: string;
   onIniciar: () => void;
@@ -24,6 +27,7 @@ type Props = {
 export function AplicarTafPreCadastroCard({
   numero,
   titulo,
+  modalidadeLabel,
   meta,
   nomesPreview,
   onIniciar,
@@ -37,6 +41,8 @@ export function AplicarTafPreCadastroCard({
   const { isNativeMobile, isNarrowPhone } = useAplicarTafLayout();
   const stackActions = isNativeMobile || isNarrowPhone;
   const numLabel = String(Math.max(1, Math.floor(numero)));
+  const nomeCard = (titulo || '').trim();
+  const modalidadeColor = accentColors[0];
 
   return (
     <View
@@ -53,7 +59,27 @@ export function AplicarTafPreCadastroCard({
       <View style={styles.body}>
         <View style={styles.headerRow}>
           <View style={styles.headerTextCol}>
-            <Text style={[styles.titulo, { color: ui.text }]}>{titulo}</Text>
+            <View style={styles.titleRow}>
+              {nomeCard ? (
+                <Text style={[styles.titulo, { color: ui.text }]} numberOfLines={1}>
+                  {nomeCard}
+                </Text>
+              ) : null}
+              <Text
+                style={[
+                  styles.modalidade,
+                  {
+                    color: modalidadeColor,
+                    backgroundColor: theme.isDark
+                      ? `${modalidadeColor}33`
+                      : `${modalidadeColor}18`,
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {modalidadeLabel}
+              </Text>
+            </View>
             <Text style={[styles.meta, { color: theme.textSecondary }]}>{meta}</Text>
           </View>
           <View style={styles.orbArea}>
@@ -144,6 +170,12 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: 4,
   },
+  titleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
   orbArea: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -185,6 +217,17 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '900',
     letterSpacing: -0.2,
+    flexShrink: 1,
+  },
+  modalidade: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    overflow: 'hidden',
+    maxWidth: '100%',
   },
   meta: {
     fontSize: 12,
@@ -218,13 +261,14 @@ const styles = StyleSheet.create({
   },
 });
 
+/** Cores distintas por modalidade (stripe, badge e orb). */
 export const PRE_CADASTRO_ACCENTS: Record<string, [string, string]> = {
   corrida: ['#2563eb', '#38bdf8'],
-  natacao: ['#0891b2', '#6366f1'],
-  permanencia: ['#7c3aed', '#4f46e5'],
+  natacao: ['#0891b2', '#06b6d4'],
+  permanencia: ['#7c3aed', '#a78bfa'],
   caminhada: ['#059669', '#14b8a6'],
-  flexao_barra: ['#3a4d28', '#5a6b42'],
-  flexao_solo: ['#4a5530', '#7a6344'],
-  abdominal_remador: ['#2a3320', '#556B2F'],
-  abdominal_prancha: ['#3d4a28', '#6b5842'],
+  flexao_barra: ['#b45309', '#d97706'],
+  flexao_solo: ['#c2410c', '#ea580c'],
+  abdominal_remador: ['#4d7c0f', '#65a30d'],
+  abdominal_prancha: ['#0f766e', '#14b8a6'],
 };

@@ -209,12 +209,12 @@ export function BackupTafCsvBlock() {
       </TouchableOpacity>
 
       <Text style={[ts.caption, styles.hint, { color: theme.textSecondary }]}>
-        Exporta e restaura cadastros, resultados, aplicadores, pré-cadastros, e-mails autorizados, fila de
-        sync e metadados em um único arquivo CSV, e baixa também o PDF de Resultados do histórico (mesmo
-        formato de “Gerar Resultados do dia”, com assinaturas quando existirem). Ao carregar, o sistema usa a
-        mesma regra do disquete: em conflito pelo mesmo registro, prevalece o updatedAt mais recente (o
-        aparelho não perde edições mais novas). “Backup em CSV” salva na pasta Downloads; “Salvar backup na
-        pasta…” escolhe outra pasta.
+        Exporta e restaura cadastros, resultados, aplicadores, pré-cadastros, agendamento (vagas e
+        reservas), e-mails autorizados, fila de sync e metadados em um único arquivo CSV, e baixa também o
+        PDF de Resultados do histórico (mesmo formato de “Gerar Resultados do dia”, com assinaturas quando
+        existirem). Ao carregar, o sistema usa a mesma regra do disquete: em conflito pelo mesmo registro,
+        prevalece o updatedAt mais recente (o aparelho não perde edições mais novas). “Backup em CSV” salva
+        na pasta Downloads; “Salvar backup na pasta…” escolhe outra pasta.
         {isAuthenticated ? ' Com login ativo, os dados são gravados na nuvem.' : ''}
         {' '}
         Se um backup antigo (Firebase) não mostrar cadastros, carregue o CSV de novo após atualizar o app — a sessão
@@ -237,7 +237,9 @@ export function BackupTafCsvBlock() {
             {importResult.cadastrosImportados.toLocaleString('pt-BR')} cadastros,{' '}
             {importResult.sessoesImportadas.toLocaleString('pt-BR')} sessões,{' '}
             {importResult.aplicadoresImportados.toLocaleString('pt-BR')} aplicadores,{' '}
-            {importResult.preCadastrosImportados.toLocaleString('pt-BR')} pré-cadastros
+            {importResult.preCadastrosImportados.toLocaleString('pt-BR')} pré-cadastros,{' '}
+            {importResult.agendamentoSlotsImportados.toLocaleString('pt-BR')} vagas,{' '}
+            {importResult.agendamentoReservasImportadas.toLocaleString('pt-BR')} reservas
             {importResult.mantidosLocais > 0
               ? ` (${importResult.mantidosLocais.toLocaleString('pt-BR')} mantidos por já estarem mais novos neste aparelho)`
               : ''}

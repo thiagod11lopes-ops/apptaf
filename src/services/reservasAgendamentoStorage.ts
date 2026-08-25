@@ -130,6 +130,36 @@ export async function getAllReservas(
   return Object.values(onlyActive(await readMap(ownerUid)));
 }
 
+/** Todas as reservas (inclui soft-deleted) para backup CSV. */
+export async function listReservasForBackup(
+  ownerUid?: string | null,
+): Promise<ReservaAgendamento[]> {
+  return Object.values(await readMap(ownerUid));
+}
+
+/**
+ * Restaura reserva a partir do CSV (LWW por updatedAt), preservando o id do backup.
+ */
+export async function upsertReservaFromBackup(
+  reserva: ReservaAgendamento,
+  ownerUid?: string | null,
+): Promise<'imported' | 'kept_local'> {
+  const map = await readMap(ownerUid);
+  const local = map[reserva.id];
+  if (local && (local.updatedAt ?? 0) >= (reserva.updatedAt ?? 0)) {
+    return 'kept_local';
+  }
+  const next: ReservaAgendamento = {
+    ...reserva,
+    updatedAt: reserva.updatedAt ?? Date.now(),
+    deleted: reserva.deleted === true,
+  };
+  map[reserva.id] = next;
+  await writeMap(map, ownerUid);
+  void syncReservaSupabase(next).catch(() => undefined);
+  return 'imported';
+}
+
 /** Reservas ativas para um slot específico. */
 export async function getReservasBySlot(slotId: string): Promise<ReservaAgendamento[]> {
   const all = await getAllReservas();

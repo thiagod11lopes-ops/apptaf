@@ -13,6 +13,8 @@ const emptyPayload = (): SystemBackupPayload => ({
   sessoes: [],
   aplicadores: [],
   preCadastros: [],
+  agendamentoSlots: [],
+  agendamentoReservas: [],
   authorizedEmails: [],
   syncQueue: [],
   appMeta: [],

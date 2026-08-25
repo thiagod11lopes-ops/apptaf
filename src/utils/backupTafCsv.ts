@@ -6,6 +6,16 @@ import type { AplicadorItemPersist } from '../services/aplicadoresIndexedDb';
 import { addAplicador } from '../services/aplicadoresIndexedDb';
 import type { PreCadastroTaf } from '../services/preCadastroTafStorage';
 import { addPreCadastroTaf } from '../services/preCadastroTafStorage';
+import {
+  MODALIDADES_AGENDAMENTO,
+  upsertSlotFromBackup,
+  type ModalidadeAgendamento,
+  type SlotAgendamento,
+} from '../services/agendamentoStorage';
+import {
+  upsertReservaFromBackup,
+  type ReservaAgendamento,
+} from '../services/reservasAgendamentoStorage';
 import type { ResultadoCorridaItem } from '../navigation/types';
 import type { LocalAuthorizedEmail } from '../offline-first/repositories/AuthorizedEmailRepository';
 import type { SyncQueueEntry } from '../offline-first/types';
@@ -26,12 +36,14 @@ import { migrateLegacyFirebaseOwnersToCloudUid, reconcileOrphanOwnersToSession }
 import { readUpdatedAt } from '../offline-first/sync/recordMeta';
 import {
   gatherSystemBackupData,
+  isAgendamentoAppMetaKey,
   type AppMetaBackupEntry,
   type SystemBackupPayload,
 } from './gatherSystemBackupData';
 import { csvRow, parseCsvRecords, recordsToObjects } from './csvText';
 import { buildBackupApptafFilename, buildBackupResultadosHistoricoPdfFilename } from './backupNaming';
 import { buildResumosHistoricoPdfBytes } from './exportResumoAplicacaoPdf';
+import { normalizarFechamentoAntecedencia, normalizarHoraInicio } from './agendamentoFechamento';
 
 const BACKUP_VERSION = '2';
 const RESULTADOS_PDF_MIME = 'application/pdf';
@@ -60,6 +72,7 @@ const SKIP_APP_META_PREFIXES = [
 
 function shouldSkipAppMetaRestore(key: string): boolean {
   if (SKIP_APP_META_EXACT.has(key)) return true;
+  if (isAgendamentoAppMetaKey(key)) return true;
   return SKIP_APP_META_PREFIXES.some((prefix) => key.startsWith(prefix));
 }
 
@@ -76,6 +89,8 @@ type BackupSection =
   | 'SESSOES'
   | 'APLICADORES'
   | 'PRE_CADASTROS'
+  | 'AGENDAMENTO_SLOTS'
+  | 'AGENDAMENTO_RESERVAS'
   | 'EMAILS_AUTORIZADOS'
   | 'SYNC_QUEUE'
   | 'APP_META';
@@ -183,6 +198,33 @@ const PRE_CADASTRO_COLUMNS = [
   'participantesJson',
 ] as const;
 
+const AGENDAMENTO_SLOT_COLUMNS = [
+  'id',
+  'data',
+  'modalidade',
+  'maxParticipantes',
+  'horaInicio',
+  'fechamentoAntecedenciaHoras',
+  'updatedAt',
+  'deleted',
+] as const;
+
+const AGENDAMENTO_RESERVA_COLUMNS = [
+  'id',
+  'slotId',
+  'data',
+  'modalidade',
+  'nip',
+  'nome',
+  'categoria',
+  'oficial',
+  'praca',
+  'posto',
+  'vinculo',
+  'updatedAt',
+  'deleted',
+] as const;
+
 const EMAIL_AUTORIZADO_COLUMNS = [
   'id',
   'ownerUid',
@@ -213,6 +255,8 @@ export type ResultadoImportacaoBackupCsv = {
   sessoesImportadas: number;
   aplicadoresImportados: number;
   preCadastrosImportados: number;
+  agendamentoSlotsImportados: number;
+  agendamentoReservasImportadas: number;
   emailsAutorizadosImportados: number;
   syncQueueImportados: number;
   appMetaImportados: number;
@@ -556,6 +600,104 @@ function rowToPreCadastro(row: Record<string, string>): PreCadastroTaf | null {
   };
 }
 
+const MODALIDADES_AGENDAMENTO_SET = new Set<string>(MODALIDADES_AGENDAMENTO);
+
+function isModalidadeAgendamento(value: string): value is ModalidadeAgendamento {
+  return MODALIDADES_AGENDAMENTO_SET.has(value);
+}
+
+function slotAgendamentoToRow(item: SlotAgendamento): string {
+  return csvRow([
+    item.id,
+    item.data,
+    item.modalidade,
+    item.maxParticipantes,
+    item.horaInicio,
+    item.fechamentoAntecedenciaHoras == null ? '' : String(item.fechamentoAntecedenciaHoras),
+    item.updatedAt,
+    item.deleted === true ? 'true' : 'false',
+  ]);
+}
+
+function rowToSlotAgendamento(row: Record<string, string>): SlotAgendamento | null {
+  const id = row.id?.trim();
+  const data = row.data?.trim();
+  const modalidade = row.modalidade?.trim();
+  const maxParticipantes = optionalNumber(row.maxParticipantes ?? '');
+  const updatedAt = optionalNumber(row.updatedAt ?? '');
+  if (!id || !data || !modalidade || !isModalidadeAgendamento(modalidade)) return null;
+  if (maxParticipantes == null || maxParticipantes < 1 || updatedAt == null) return null;
+
+  const deletedRaw = row.deleted?.trim().toLowerCase();
+  const deleted = deletedRaw === 'true' || deletedRaw === '1';
+  const fechamentoRaw = row.fechamentoAntecedenciaHoras?.trim();
+
+  return {
+    id,
+    data,
+    modalidade,
+    maxParticipantes: Math.floor(maxParticipantes),
+    horaInicio: normalizarHoraInicio(optionalNumber(row.horaInicio ?? ''), 8),
+    fechamentoAntecedenciaHoras: normalizarFechamentoAntecedencia(
+      fechamentoRaw === '' ? null : optionalNumber(fechamentoRaw ?? ''),
+    ),
+    updatedAt,
+    deleted,
+  };
+}
+
+function reservaAgendamentoToRow(item: ReservaAgendamento): string {
+  return csvRow([
+    item.id,
+    item.slotId,
+    item.data,
+    item.modalidade,
+    item.nip,
+    item.nome,
+    item.categoria ?? '',
+    item.oficial ?? '',
+    item.praca ?? '',
+    item.posto ?? '',
+    item.vinculo ?? '',
+    item.updatedAt,
+    item.deleted === true ? 'true' : 'false',
+  ]);
+}
+
+function rowToReservaAgendamento(row: Record<string, string>): ReservaAgendamento | null {
+  const id = row.id?.trim();
+  const slotId = row.slotId?.trim();
+  const data = row.data?.trim();
+  const modalidade = row.modalidade?.trim();
+  const nip = row.nip?.trim();
+  const nome = row.nome?.trim();
+  const updatedAt = optionalNumber(row.updatedAt ?? '');
+  if (!id || !slotId || !data || !modalidade || !isModalidadeAgendamento(modalidade)) return null;
+  if (!nip || !nome || updatedAt == null) return null;
+
+  const deletedRaw = row.deleted?.trim().toLowerCase();
+  const deleted = deletedRaw === 'true' || deletedRaw === '1';
+  const vinculoRaw = row.vinculo?.trim();
+  const vinculo =
+    vinculoRaw === 'carreira' || vinculoRaw === 'rm2' ? vinculoRaw : undefined;
+
+  return {
+    id,
+    slotId,
+    data,
+    modalidade,
+    nip,
+    nome,
+    categoria: optionalField(row.categoria ?? ''),
+    oficial: optionalField(row.oficial ?? ''),
+    praca: optionalField(row.praca ?? ''),
+    posto: optionalField(row.posto ?? ''),
+    vinculo,
+    updatedAt,
+    deleted,
+  };
+}
+
 function authorizedEmailToRow(item: LocalAuthorizedEmail): string {
   return csvRow([
     item.id,
@@ -678,6 +820,8 @@ function emptyPayload(cadastros: CadastroItemPersist[], sessoes: SessaoAplicacao
     sessoes,
     aplicadores: [],
     preCadastros: [],
+    agendamentoSlots: [],
+    agendamentoReservas: [],
     authorizedEmails: [],
     syncQueue: [],
     appMeta: [],
@@ -712,6 +856,12 @@ export function buildBackupCsvContent(
     `# SECTION_PRE_CADASTROS`,
     csvRow([...PRE_CADASTRO_COLUMNS]),
     ...payload.preCadastros.map(preCadastroToRow),
+    `# SECTION_AGENDAMENTO_SLOTS`,
+    csvRow([...AGENDAMENTO_SLOT_COLUMNS]),
+    ...(payload.agendamentoSlots ?? []).map(slotAgendamentoToRow),
+    `# SECTION_AGENDAMENTO_RESERVAS`,
+    csvRow([...AGENDAMENTO_RESERVA_COLUMNS]),
+    ...(payload.agendamentoReservas ?? []).map(reservaAgendamentoToRow),
     `# SECTION_EMAILS_AUTORIZADOS`,
     csvRow([...EMAIL_AUTORIZADO_COLUMNS]),
     ...payload.authorizedEmails.map(authorizedEmailToRow),
@@ -899,6 +1049,8 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
   const sessoesSection = extractSection(text, 'SESSOES');
   const aplicadoresSection = extractSection(text, 'APLICADORES');
   const preCadastrosSection = extractSection(text, 'PRE_CADASTROS');
+  const agendamentoSlotsSection = extractSection(text, 'AGENDAMENTO_SLOTS');
+  const agendamentoReservasSection = extractSection(text, 'AGENDAMENTO_RESERVAS');
   const emailsSection = extractSection(text, 'EMAILS_AUTORIZADOS');
   const syncQueueSection = extractSection(text, 'SYNC_QUEUE');
   const appMetaSection = extractSection(text, 'APP_META');
@@ -908,6 +1060,8 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
     !sessoesSection &&
     !aplicadoresSection &&
     !preCadastrosSection &&
+    !agendamentoSlotsSection &&
+    !agendamentoReservasSection &&
     !emailsSection &&
     !syncQueueSection &&
     !appMetaSection
@@ -966,6 +1120,42 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
     }
   }
 
+  const agendamentoSlots: SlotAgendamento[] = [];
+  if (agendamentoSlotsSection) {
+    const { rows } = recordsToObjects<Record<string, string>>(
+      parseCsvRecords(agendamentoSlotsSection),
+    );
+    for (const row of rows) {
+      const item = rowToSlotAgendamento(row);
+      if (!item) {
+        if (row.id) {
+          erros.push(`Slot de agendamento ignorado (dados inválidos): ${row.id}`);
+        }
+        continue;
+      }
+      agendamentoSlots.push(item);
+    }
+  }
+
+  const agendamentoReservas: ReservaAgendamento[] = [];
+  if (agendamentoReservasSection) {
+    const { rows } = recordsToObjects<Record<string, string>>(
+      parseCsvRecords(agendamentoReservasSection),
+    );
+    for (const row of rows) {
+      const item = rowToReservaAgendamento(row);
+      if (!item) {
+        if (row.id || row.nip) {
+          erros.push(
+            `Reserva de agendamento ignorada (dados inválidos): ${row.id || row.nip || '—'}`,
+          );
+        }
+        continue;
+      }
+      agendamentoReservas.push(item);
+    }
+  }
+
   const authorizedEmails: LocalAuthorizedEmail[] = [];
   if (emailsSection) {
     const { rows } = recordsToObjects<Record<string, string>>(parseCsvRecords(emailsSection));
@@ -1012,6 +1202,8 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
   let sessoesImportadas = 0;
   let aplicadoresImportados = 0;
   let preCadastrosImportados = 0;
+  let agendamentoSlotsImportados = 0;
+  let agendamentoReservasImportadas = 0;
   let emailsAutorizadosImportados = 0;
   let mantidosLocais = 0;
 
@@ -1054,6 +1246,18 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
       }
       await addPreCadastroTaf(preCadastro);
       preCadastrosImportados += 1;
+    }
+
+    for (const slot of agendamentoSlots) {
+      const result = await upsertSlotFromBackup(slot);
+      if (result === 'kept_local') mantidosLocais += 1;
+      else agendamentoSlotsImportados += 1;
+    }
+
+    for (const reserva of agendamentoReservas) {
+      const result = await upsertReservaFromBackup(reserva);
+      if (result === 'kept_local') mantidosLocais += 1;
+      else agendamentoReservasImportadas += 1;
     }
 
     for (const email of authorizedEmails) {
@@ -1105,6 +1309,16 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
     for (const preCadastro of preCadastros) {
       await addPreCadastroTaf(preCadastro);
       preCadastrosImportados += 1;
+    }
+    for (const slot of agendamentoSlots) {
+      const result = await upsertSlotFromBackup(slot);
+      if (result === 'kept_local') mantidosLocais += 1;
+      else agendamentoSlotsImportados += 1;
+    }
+    for (const reserva of agendamentoReservas) {
+      const result = await upsertReservaFromBackup(reserva);
+      if (result === 'kept_local') mantidosLocais += 1;
+      else agendamentoReservasImportadas += 1;
     }
     emailsAutorizadosImportados = authorizedEmails.length;
   }
@@ -1173,6 +1387,8 @@ export async function importarBackupTafCsv(text: string): Promise<ResultadoImpor
     sessoesImportadas,
     aplicadoresImportados,
     preCadastrosImportados,
+    agendamentoSlotsImportados,
+    agendamentoReservasImportadas,
     emailsAutorizadosImportados,
     syncQueueImportados: syncQueueEntries.length,
     appMetaImportados: appMetaEntries.length,

@@ -288,6 +288,52 @@ export async function wipeLocalSlots(ownerUid?: string | null): Promise<void> {
   await writeMap({}, ownerUid);
 }
 
+/** Todos os slots (inclui soft-deleted) para backup CSV. */
+export async function listSlotsForBackup(
+  ownerUid?: string | null,
+): Promise<SlotAgendamento[]> {
+  return Object.values(await readMap(ownerUid)).sort((a, b) => {
+    const ia = dataBrParaIso(a.data) ?? '';
+    const ib = dataBrParaIso(b.data) ?? '';
+    if (ia !== ib) return ia.localeCompare(ib);
+    return a.modalidade.localeCompare(b.modalidade);
+  });
+}
+
+/**
+ * Restaura slot a partir do CSV (LWW por updatedAt).
+ * Não remove a permanência/reservas; apenas upsert do slot.
+ */
+export async function upsertSlotFromBackup(
+  slot: SlotAgendamento,
+  ownerUid?: string | null,
+): Promise<'imported' | 'kept_local'> {
+  const map = await readMap(ownerUid);
+  const local = map[slot.id];
+  if (local && (local.updatedAt ?? 0) >= (slot.updatedAt ?? 0)) {
+    return 'kept_local';
+  }
+  const next: SlotAgendamento = {
+    ...slot,
+    data: slot.data.trim(),
+    maxParticipantes: Math.max(1, Math.floor(slot.maxParticipantes)),
+    horaInicio: normalizarHoraInicio(slot.horaInicio, 8),
+    fechamentoAntecedenciaHoras: normalizarFechamentoAntecedencia(
+      slot.fechamentoAntecedenciaHoras,
+    ),
+    updatedAt: slot.updatedAt ?? Date.now(),
+    deleted: slot.deleted === true,
+  };
+  map[slot.id] = next;
+  await writeMap(map, ownerUid);
+  try {
+    await syncSlotSupabase(next);
+  } catch {
+    // local já salvo; republish na próxima sync
+  }
+  return 'imported';
+}
+
 // ── Sincronização com Supabase ────────────────────────────────────────────────
 // Chamada após cada escrita local. Falha silenciosa: o dado já foi salvo localmente.
 

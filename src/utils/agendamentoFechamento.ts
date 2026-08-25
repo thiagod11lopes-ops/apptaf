@@ -35,11 +35,10 @@ export function normalizarFechamentoAntecedencia(
   return null;
 }
 
-/** Timestamp (ms) em que a agenda deste slot fecha. */
-export function horarioFechamentoAgendaMs(input: {
+/** Timestamp (ms) do início dos testes do slot. */
+export function horarioInicioProvaMs(input: {
   data: string;
   horaInicio?: number | null;
-  fechamentoAntecedenciaHoras?: number | null;
 }): number | null {
   const iso = dataBrParaIso(input.data);
   if (!iso) return null;
@@ -49,7 +48,17 @@ export function horarioFechamentoAgendaMs(input: {
   const d = Number(ds);
   if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
   const hora = normalizarHoraInicio(input.horaInicio, 8);
-  const inicioProva = new Date(y, m - 1, d, hora, 0, 0, 0).getTime();
+  return new Date(y, m - 1, d, hora, 0, 0, 0).getTime();
+}
+
+/** Timestamp (ms) em que a agenda deste slot fecha. */
+export function horarioFechamentoAgendaMs(input: {
+  data: string;
+  horaInicio?: number | null;
+  fechamentoAntecedenciaHoras?: number | null;
+}): number | null {
+  const inicioProva = horarioInicioProvaMs(input);
+  if (inicioProva == null) return null;
   const ant = normalizarFechamentoAntecedencia(input.fechamentoAntecedenciaHoras);
   if (ant != null) return inicioProva - ant * 60 * 60 * 1000;
   return inicioProva;
@@ -68,4 +77,17 @@ export function agendaSlotFinalizada(input: {
   const fechamento = horarioFechamentoAgendaMs(input);
   if (fechamento == null) return false;
   return (input.agoraMs ?? Date.now()) >= fechamento;
+}
+
+/** 12h após o início dos testes — slot deve ser removido da disponibilidade. */
+export const HORAS_EXPIRACAO_APOS_INICIO = 12;
+
+export function slotExpiradoAposProva(input: {
+  data: string;
+  horaInicio?: number | null;
+  agoraMs?: number;
+}): boolean {
+  const inicio = horarioInicioProvaMs(input);
+  if (inicio == null) return false;
+  return (input.agoraMs ?? Date.now()) >= inicio + HORAS_EXPIRACAO_APOS_INICIO * 60 * 60 * 1000;
 }

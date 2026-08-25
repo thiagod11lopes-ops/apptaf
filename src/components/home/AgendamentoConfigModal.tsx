@@ -19,6 +19,7 @@ import {
   getAllSlots,
   MODALIDADE_AGENDAMENTO_LABELS,
   MODALIDADES_POR_TIPO_TAF,
+  purgeSlotsExpiradosAposProva,
   pushAllSlotsToSupabase,
   saveSlot,
   tipoTafDaModalidade,
@@ -37,6 +38,7 @@ import { exportAgendamentoSlotPdf } from '../../utils/exportAgendamentoSlotPdf';
 import { SalvamentoCanceladoError } from '../../utils/salvarArquivoNaPasta';
 import { dataBrParaIso } from '../../utils/tafRegistro';
 import {
+  agendaSlotFinalizada,
   FECHAMENTO_ANTECEDENCIA_OPCOES,
   HORAS_INICIO_DIA,
   type FechamentoAntecedenciaHoras,
@@ -91,6 +93,12 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
 
   const recarregar = useCallback(async () => {
     try {
+      let expirados = 0;
+      try {
+        expirados = await purgeSlotsExpiradosAposProva();
+      } catch {
+        expirados = 0;
+      }
       const lista = await getAllSlots();
       setSlots(lista);
       try {
@@ -103,6 +111,11 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
         const nSlots = await pushAllSlotsToSupabase();
         const { importados, publicados } = await syncMilitarLookupComCadastros();
         const partes: string[] = [];
+        if (expirados > 0) {
+          partes.push(
+            `${expirados} disponibilidade(s) removida(s) (12h após o início)`,
+          );
+        }
         if (nSlots > 0) partes.push(`${nSlots} disponibilidade(s)`);
         if (importados > 0) partes.push(`${importados} militar(es) importado(s) ao cadastro`);
         if (publicados > 0) partes.push(`${publicados} militar(es) na busca pública`);
@@ -743,6 +756,13 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
               {(slotsPorData[d] ?? []).map((slot) => {
                 const isEditing = editandoId === slot.id;
                 const isExcluindo = excluindo === slot.id;
+                const finalizada = agendaSlotFinalizada({
+                  data: slot.data,
+                  horaInicio: slot.horaInicio,
+                  fechamentoAntecedenciaHoras: slot.fechamentoAntecedenciaHoras,
+                  maxParticipantes: slot.maxParticipantes,
+                  reservados: reservadosPorSlot[slot.id] ?? 0,
+                });
                 return (
                   <View
                     key={slot.id}
@@ -757,9 +777,16 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                             ? 'rgba(255,255,255,0.04)'
                             : 'rgba(0,0,0,0.03)',
                         borderColor: isEditing ? theme.primary : theme.border,
+                        opacity: finalizada ? 0.55 : 1,
+                        overflow: 'hidden',
                       },
                     ]}
                   >
+                    {finalizada ? (
+                      <View style={styles.tarjaFinalizada} pointerEvents="none">
+                        <Text style={styles.tarjaFinalizadaText}>Agenda Finalizada</Text>
+                      </View>
+                    ) : null}
                     <View style={styles.slotInfo}>
                       <Text style={[ts.body, { color: ui.text, fontWeight: '600' }]}>
                         {MODALIDADE_AGENDAMENTO_LABELS[slot.modalidade]}
@@ -942,6 +969,30 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     padding: 10,
     marginBottom: 6,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  tarjaFinalizada: {
+    position: 'absolute',
+    left: -14,
+    right: -14,
+    top: '40%',
+    zIndex: 2,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(15, 23, 42, 0.88)',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(212,175,55,0.55)',
+    transform: [{ rotate: '-8deg' }],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tarjaFinalizadaText: {
+    color: '#fbbf24',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
   },
   slotInfo: {
     flex: 1,

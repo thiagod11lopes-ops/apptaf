@@ -219,6 +219,14 @@ export default function HomeScreen() {
     let cancelled = false;
     void (async () => {
       try {
+        const { purgeSlotsExpiradosAposProva } = await import(
+          '../services/agendamentoStorage'
+        );
+        if (!cancelled) await purgeSlotsExpiradosAposProva();
+      } catch {
+        // silencioso
+      }
+      try {
         const { syncMilitarLookupComCadastros } = await import(
           '../services/agendamentoMilitarLookup'
         );

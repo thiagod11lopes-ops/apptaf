@@ -648,7 +648,11 @@
         var hoje = hojeIso();
         var r1 = await sb.from('agendamento_slots').select('*').eq('deleted', false);
         if (r1.error) throw r1.error;
-        slots = (r1.data || []).filter(function(s) { var iso = brParaIso(s.data_taf); return iso && iso >= hoje; })
+        slots = (r1.data || []).filter(function(s) {
+          if (slotExpiradoAposProva(s)) return false;
+          var iso = brParaIso(s.data_taf);
+          return !!iso;
+        })
           .sort(function(a,b) { var ia=brParaIso(a.data_taf)||'',ib=brParaIso(b.data_taf)||''; return ia<ib?-1:ia>ib?1:a.modalidade.localeCompare(b.modalidade); });
         var r2 = await sb.from('agendamento_reservas').select('slot_id').eq('deleted', false);
         if (r2.error) throw r2.error;
@@ -693,6 +697,16 @@
       if (slotLotado(s)) return true;
       var fech = horarioFechamentoSlot(s);
       return fech != null && Date.now() >= fech;
+    }
+
+    function slotExpiradoAposProva(s) {
+      var iso = brParaIso(s && s.data_taf);
+      if (!iso) return false;
+      var p = iso.split('-');
+      var y = Number(p[0]), m = Number(p[1]), d = Number(p[2]);
+      if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return false;
+      var inicio = new Date(y, m - 1, d, horaInicioSlot(s), 0, 0, 0).getTime();
+      return Date.now() >= inicio + 12 * 60 * 60 * 1000;
     }
 
     function slotAberto(s) {

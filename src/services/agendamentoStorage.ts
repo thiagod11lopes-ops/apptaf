@@ -12,6 +12,7 @@ import { getSupabase } from '../config/supabase';
 import {
   normalizarFechamentoAntecedencia,
   normalizarHoraInicio,
+  slotExpiradoAposProva,
   type FechamentoAntecedenciaHoras,
 } from '../utils/agendamentoFechamento';
 
@@ -255,6 +256,32 @@ export async function deleteSlot(id: string): Promise<boolean> {
   await writeMap(map);
   await syncSlotSupabase(updated);
   return true;
+}
+
+/**
+ * Remove slots cuja prova começou há 12h ou mais (soft-delete local + Supabase).
+ * Retorna quantos foram excluídos.
+ */
+export async function purgeSlotsExpiradosAposProva(
+  ownerUid?: string | null,
+): Promise<number> {
+  const map = await readMap(ownerUid);
+  const agora = Date.now();
+  let n = 0;
+  for (const [id, slot] of Object.entries(map)) {
+    if (slot.deleted === true) continue;
+    if (!slotExpiradoAposProva({ ...slot, agoraMs: agora })) continue;
+    const updated = { ...slot, deleted: true, updatedAt: agora };
+    map[id] = updated;
+    n += 1;
+    try {
+      await syncSlotSupabase(updated);
+    } catch {
+      // mantém exclusão local; republish tenta de novo
+    }
+  }
+  if (n > 0) await writeMap(map, ownerUid);
+  return n;
 }
 
 export async function wipeLocalSlots(ownerUid?: string | null): Promise<void> {

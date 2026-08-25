@@ -182,7 +182,7 @@ export async function saveReserva(input: {
   };
   map[id] = reserva;
   await writeMap(map);
-  void syncReservaSupabase(reserva);
+  void syncReservaSupabase(reserva).catch(() => undefined);
   return reserva;
 }
 
@@ -193,28 +193,30 @@ export async function deleteReserva(id: string): Promise<boolean> {
   const updated = { ...prev, deleted: true, updatedAt: Date.now() };
   map[id] = updated;
   await writeMap(map);
-  void syncReservaSupabase(updated);
+  await syncReservaSupabase(updated);
   return true;
 }
 
 // ── Sincronização com Supabase ────────────────────────────────────────────────
 
 async function syncReservaSupabase(reserva: ReservaAgendamento): Promise<void> {
-  try {
-    const sb = getSupabase();
-    if (!sb) return;
-    await sb.from('agendamento_reservas').upsert({
-      id:         reserva.id,
-      slot_id:    reserva.slotId,
-      data_taf:   reserva.data,
-      modalidade: reserva.modalidade,
-      nip:        reserva.nip,
-      nome:       reserva.nome,
-      updated_at: reserva.updatedAt,
-      deleted:    reserva.deleted ?? false,
-    });
-  } catch {
-    // silencioso — dado já persistido localmente
+  const sb = getSupabase();
+  if (!sb) return;
+  const { error } = await sb.from('agendamento_reservas').upsert({
+    id: reserva.id,
+    slot_id: reserva.slotId,
+    data_taf: reserva.data,
+    modalidade: reserva.modalidade,
+    nip: reserva.nip,
+    nome: reserva.nome,
+    categoria: reserva.categoria,
+    posto: reserva.posto || reserva.oficial || reserva.praca,
+    vinculo: reserva.vinculo,
+    updated_at: reserva.updatedAt,
+    deleted: reserva.deleted ?? false,
+  });
+  if (error) {
+    throw new Error(error.message || 'Falha ao sincronizar reserva no Supabase.');
   }
 }
 

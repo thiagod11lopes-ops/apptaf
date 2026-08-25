@@ -32,12 +32,9 @@ import {
 import { syncMilitarLookupComCadastros } from '../../services/agendamentoMilitarLookup';
 import {
   contarReservasPorSlot,
-  getReservasBySlot,
-  syncReservasFromSupabase,
 } from '../../services/reservasAgendamentoStorage';
 import { ConfirmacaoExcluirSlotAgendamentoModal } from './ConfirmacaoExcluirSlotAgendamentoModal';
-import { exportAgendamentoSlotPdf } from '../../utils/exportAgendamentoSlotPdf';
-import { SalvamentoCanceladoError } from '../../utils/salvarArquivoNaPasta';
+import { AgendamentoRelacaoModal } from './AgendamentoRelacaoModal';
 import { dataBrParaIso } from '../../utils/tafRegistro';
 import {
   agendaSlotFinalizada,
@@ -87,7 +84,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [slotParaExcluir, setSlotParaExcluir] = useState<SlotAgendamento | null>(null);
-  const [gerandoPdfId, setGerandoPdfId] = useState<string | null>(null);
+  const [slotRelacao, setSlotRelacao] = useState<SlotAgendamento | null>(null);
 
   const modalidadesDoTipo = useMemo(
     () => MODALIDADES_POR_TIPO_TAF[tipoTaf],
@@ -262,29 +259,6 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     void excluir(slotParaExcluir.id);
   }, [slotParaExcluir, excluir]);
 
-  const gerarPdfSlot = useCallback(
-    async (slot: SlotAgendamento) => {
-      setGerandoPdfId(slot.id);
-      setErro(null);
-      setSucesso(null);
-      try {
-        await syncReservasFromSupabase(slot.id);
-        const reservas = await getReservasBySlot(slot.id);
-        const msg = await exportAgendamentoSlotPdf(slot, reservas);
-        setSucesso(msg);
-      } catch (e) {
-        if (e instanceof SalvamentoCanceladoError) {
-          setSucesso(null);
-        } else {
-          setErro(e instanceof Error ? e.message : 'Não foi possível gerar o PDF.');
-        }
-      } finally {
-        setGerandoPdfId(null);
-      }
-    },
-    [],
-  );
-
   // Agrupa slots por data
   const slotsPorData = useMemo(() => {
     const map: Record<string, SlotAgendamento[]> = {};
@@ -341,6 +315,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     `${String(horaInicio).padStart(2, '0')}h`;
 
   return (
+    <>
     <ModernModal
       visible={visible}
       onClose={onClose}
@@ -829,8 +804,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                     </View>
                     <View style={styles.slotAcoes}>
                       <TouchableOpacity
-                        onPress={() => void gerarPdfSlot(slot)}
-                        disabled={gerandoPdfId === slot.id}
+                        onPress={() => setSlotRelacao(slot)}
                         style={[
                           styles.acaoBtn,
                           {
@@ -840,17 +814,11 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                               : 'rgba(251,191,36,0.16)',
                           },
                         ]}
-                        accessibilityLabel={`Gerar PDF — ${MODALIDADE_AGENDAMENTO_LABELS[slot.modalidade]}`}
+                        accessibilityLabel={`Relação de agendados — ${MODALIDADE_AGENDAMENTO_LABELS[slot.modalidade]}`}
                       >
                         <FileText
                           size={16}
-                          color={
-                            gerandoPdfId === slot.id
-                              ? theme.textMuted
-                              : theme.isDark
-                                ? '#d4af37'
-                                : '#b45309'
-                          }
+                          color={theme.isDark ? '#d4af37' : '#b45309'}
                           strokeWidth={2.3}
                         />
                       </TouchableOpacity>
@@ -898,6 +866,17 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
         onConfirm={confirmarExclusao}
       />
     </ModernModal>
+    <AgendamentoRelacaoModal
+      visible={!!slotRelacao}
+      slot={slotRelacao}
+      onClose={() => setSlotRelacao(null)}
+      onReservasAlteradas={() => {
+        void contarReservasPorSlot()
+          .then(setReservadosPorSlot)
+          .catch(() => undefined);
+      }}
+    />
+    </>
   );
 }
 

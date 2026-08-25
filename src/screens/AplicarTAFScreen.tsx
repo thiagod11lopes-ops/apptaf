@@ -179,6 +179,7 @@ import {
 import {
   addPreCadastroTaf,
   getAllPreCadastrosTaf,
+  idsPreCadastroPareados,
   isNomeCodigoPreCadastro,
   MAX_PRE_CADASTRO_PARTICIPANTES,
   nomesCodigoDisponiveis,
@@ -2917,9 +2918,12 @@ export default function AplicarTAFScreen() {
         );
         return;
       }
+      const idsIgnorar = new Set(
+        preCadastroEditando ? idsPreCadastroPareados(preCadastroEditando) : [],
+      );
       const nomeJaUsado = listaPreCadastros.some(
         (p) =>
-          p.id !== preCadastroEditando?.id &&
+          !idsIgnorar.has(p.id) &&
           (p.nomeCodigo || '').trim() === nomeCodigoPreCadastro,
       );
       if (nomeJaUsado) {
@@ -2980,8 +2984,12 @@ export default function AplicarTAFScreen() {
     Alert.alert(
       editando ? 'Pré-cadastro atualizado' : 'Pré-cadastro salvo',
       editando
-        ? 'As alterações foram salvas com sucesso.'
-        : 'Os participantes foram salvos. Use "Iniciar Prova" quando for aplicar o TAF.',
+        ? tipoProva === 'natacao'
+          ? 'As alterações foram salvas. O pré-cadastro de Permanência correspondente também foi atualizado.'
+          : 'As alterações foram salvas com sucesso.'
+        : tipoProva === 'natacao'
+          ? 'Os participantes foram salvos na Natação e também na Permanência. Use "Iniciar Prova" quando for aplicar o TAF.'
+          : 'Os participantes foram salvos. Use "Iniciar Prova" quando for aplicar o TAF.',
     );
   }, [
     tipoProva,
@@ -3403,9 +3411,10 @@ export default function AplicarTAFScreen() {
   }, []);
 
   const opcoesNomeCodigoPreCadastro = useMemo(() => {
-    const listaParaDisponiveis = preCadastroEditando
-      ? listaPreCadastros.filter((p) => p.id !== preCadastroEditando.id)
-      : listaPreCadastros;
+    const idsIgnorar = new Set(
+      preCadastroEditando ? idsPreCadastroPareados(preCadastroEditando) : [],
+    );
+    const listaParaDisponiveis = listaPreCadastros.filter((p) => !idsIgnorar.has(p.id));
     return ['Nenhum', ...nomesCodigoDisponiveis(listaParaDisponiveis)] as const;
   }, [listaPreCadastros, preCadastroEditando]);
 

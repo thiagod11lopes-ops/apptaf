@@ -107,6 +107,35 @@ export function sortPreCadastrosPorNumero<T extends { numero?: number; criadoEm:
   });
 }
 
+/** Sufixo do pré-cadastro de permanência espelhado a partir da natação. */
+export const PRE_CADASTRO_PERMANENCIA_PAIR_SUFFIX = '__permanencia';
+
+export function idPreCadastroPermanenciaPareada(natacaoId: string): string {
+  return `${natacaoId}${PRE_CADASTRO_PERMANENCIA_PAIR_SUFFIX}`;
+}
+
+export function idPreCadastroNatacaoDePermanenciaPareada(
+  permanenciaId: string,
+): string | null {
+  if (!permanenciaId.endsWith(PRE_CADASTRO_PERMANENCIA_PAIR_SUFFIX)) return null;
+  return permanenciaId.slice(0, -PRE_CADASTRO_PERMANENCIA_PAIR_SUFFIX.length);
+}
+
+/** IDs do próprio item e do par natação↔permanência (se houver). */
+export function idsPreCadastroPareados(pre: {
+  id: string;
+  tipoProva?: TipoProvaTAF | null;
+}): string[] {
+  const ids = [pre.id];
+  if (pre.tipoProva === 'natacao') {
+    ids.push(idPreCadastroPermanenciaPareada(pre.id));
+  } else {
+    const natacaoId = idPreCadastroNatacaoDePermanenciaPareada(pre.id);
+    if (natacaoId) ids.push(natacaoId);
+  }
+  return ids;
+}
+
 /** Próximo número: max dos existentes + 1, ou 1 se a lista estiver vazia. */
 export function proximoNumeroPreCadastro(
   existentes: ReadonlyArray<{ numero?: number }>,
@@ -193,7 +222,34 @@ export async function addPreCadastroTaf(item: PreCadastroTaf): Promise<void> {
     typeof item.numero === 'number' && item.numero > 0
       ? item.numero
       : proximoNumeroPreCadastro(comNumeros);
-  await savePreCadastroRecord({ ...item, numero }, ownerUid, userId);
+  const salvo: PreCadastroTaf = { ...item, numero };
+  await savePreCadastroRecord(salvo, ownerUid, userId);
+
+  // Natação e permanência usam o mesmo grupo: espelha participantes na permanência.
+  if (salvo.tipoProva === 'natacao') {
+    const pairId = idPreCadastroPermanenciaPareada(salvo.id);
+    const pairExistente = existentes.find((p) => p.id === pairId);
+    const existentesAposNatacao = [
+      ...comNumeros.filter((p) => p.id !== salvo.id),
+      salvo,
+    ];
+    const numeroPar =
+      pairExistente && typeof pairExistente.numero === 'number' && pairExistente.numero > 0
+        ? pairExistente.numero
+        : proximoNumeroPreCadastro(existentesAposNatacao);
+    await savePreCadastroRecord(
+      {
+        ...salvo,
+        id: pairId,
+        tipoProva: 'permanencia',
+        numero: numeroPar,
+        criadoEm: pairExistente?.criadoEm ?? salvo.criadoEm,
+      },
+      ownerUid,
+      userId,
+    );
+  }
+
   notifyDataChanged('preCadastros');
 }
 
@@ -201,8 +257,18 @@ export async function removePreCadastroTaf(id: string): Promise<boolean> {
   const ownerUid = await resolveOwnerUid();
   const userId = getCachedLoginUid();
   const rows = await listPreCadastros(ownerUid, true);
-  if (!rows.some((r) => r.id === id)) return false;
+  const alvo = rows.find((r) => r.id === id);
+  if (!alvo) return false;
   await softDeletePreCadastroRecord(id, ownerUid, userId);
+
+  const taf = preCadastroRecordToTaf(alvo);
+  if (taf.tipoProva === 'natacao') {
+    const pairId = idPreCadastroPermanenciaPareada(id);
+    if (rows.some((r) => r.id === pairId)) {
+      await softDeletePreCadastroRecord(pairId, ownerUid, userId);
+    }
+  }
+
   notifyDataChanged('preCadastros');
   return true;
 }

@@ -3661,15 +3661,9 @@ export default function AplicarTAFScreen() {
                   <AplicarTafPreCadastroCard
                     key={pre.id}
                     numero={pre.numero > 0 ? pre.numero : 1}
-                    titulo={
-                      (pre.nomeCodigo || '').trim() ||
-                      labelTipoProvaPreCadastro(pre)
-                    }
-                    meta={
-                      (pre.nomeCodigo || '').trim()
-                        ? `${labelTipoProvaPreCadastro(pre)} · ${metaPreCadastro(pre)}`
-                        : metaPreCadastro(pre)
-                    }
+                    titulo={(pre.nomeCodigo || '').trim() || null}
+                    modalidadeLabel={labelTipoProvaPreCadastro(pre)}
+                    meta={metaPreCadastro(pre)}
                     nomesPreview={pre.participantes.map((p) => p.nomeMilitar).join(', ')}
                     accentColors={PRE_CADASTRO_ACCENTS[pre.tipoProva] ?? PRE_CADASTRO_ACCENTS.corrida}
                     onIniciar={() => iniciarProvaFromPreCadastro(pre)}

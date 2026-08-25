@@ -107,6 +107,35 @@
     }
     .card:hover  { border-color: var(--gold); }
     .card:active { transform: scale(.98); }
+    .card.finalizada {
+      opacity: .52;
+      cursor: default;
+      position: relative;
+      overflow: hidden;
+      pointer-events: none;
+      border-color: rgba(255,255,255,.08);
+    }
+    .card.finalizada:hover { border-color: rgba(255,255,255,.08); }
+    .card.finalizada:active { transform: none; }
+    .tarja-finalizada {
+      position: absolute;
+      left: -8%;
+      top: 42%;
+      width: 116%;
+      padding: 7px 0;
+      background: rgba(15, 23, 42, 0.88);
+      border-top: 1px solid rgba(212,175,55,.55);
+      border-bottom: 1px solid rgba(212,175,55,.55);
+      color: #fbbf24;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      text-align: center;
+      transform: rotate(-8deg);
+      z-index: 2;
+      pointer-events: none;
+    }
 
     .card-emoji { font-size: 24px; flex-shrink: 0; }
     .card-texts { flex: 1; }
@@ -629,7 +658,58 @@
       } catch(e) { mostrarErro('Erro ao carregar disponibilidade. Verifique sua conexão e tente novamente.'); }
     }
 
-    function vagas(s) { return Math.max(0, s.max_participantes - (reservasMap[s.id]||0)); }
+    function vagas(s) { return Math.max(0, (s.max_participantes||0) - (reservasMap[s.id]||0)); }
+
+    function horaInicioSlot(s) {
+      var n = parseInt(s && s.hora_inicio, 10);
+      if (!Number.isFinite(n)) n = 8;
+      return Math.min(23, Math.max(0, n));
+    }
+
+    function fechamentoAntecedenciaSlot(s) {
+      var n = parseInt(s && s.fechamento_antecedencia_horas, 10);
+      if (n === 12 || n === 24 || n === 48) return n;
+      return null;
+    }
+
+    /** Timestamp ms em que a agenda do slot fecha (hora local). */
+    function horarioFechamentoSlot(s) {
+      var iso = brParaIso(s && s.data_taf);
+      if (!iso) return null;
+      var p = iso.split('-');
+      var y = Number(p[0]), m = Number(p[1]), d = Number(p[2]);
+      if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+      var inicio = new Date(y, m - 1, d, horaInicioSlot(s), 0, 0, 0).getTime();
+      var ant = fechamentoAntecedenciaSlot(s);
+      if (ant != null) return inicio - ant * 60 * 60 * 1000;
+      return inicio;
+    }
+
+    function slotLotado(s) {
+      return vagas(s) <= 0;
+    }
+
+    function slotAgendaFinalizada(s) {
+      if (slotLotado(s)) return true;
+      var fech = horarioFechamentoSlot(s);
+      return fech != null && Date.now() >= fech;
+    }
+
+    function slotAberto(s) {
+      return !slotAgendaFinalizada(s);
+    }
+
+    function motivoFinalizacao(s) {
+      if (slotLotado(s)) return 'Vagas esgotadas';
+      var ant = fechamentoAntecedenciaSlot(s);
+      if (ant != null) return 'Inscrições encerradas (' + ant + 'h antes)';
+      return 'Inscrições encerradas (hora da prova)';
+    }
+
+    function cardFinalizadoHtml(inner) {
+      return '<div class="card finalizada">' + inner
+        + '<div class="tarja-finalizada">Agenda Finalizada</div></div>';
+    }
 
     function formatarNip(raw) {
       var d = raw.replace(/\D/g,'').slice(0,8);
@@ -684,24 +764,58 @@
     }
 
     function telaData() {
-      var datas=[],visto=Object.create(null);
-      slots.forEach(function(s){if(!visto[s.data_taf]&&vagas(s)>0){visto[s.data_taf]=true;datas.push(s.data_taf);}});
+      var datas=[], visto=Object.create(null);
+      slots.forEach(function(s){
+        if (!s || !s.data_taf || visto[s.data_taf]) return;
+        visto[s.data_taf]=true;
+        datas.push(s.data_taf);
+      });
       var h='<p class="section-title">Datas disponíveis</p><p class="section-sub">Selecione a data que deseja realizar o TAF.</p>';
       if(!datas.length) return h+'<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Não há datas disponíveis no momento.<br>Aguarde a abertura das inscrições.</div></div>';
       datas.forEach(function(d){
-        var grupo=slots.filter(function(s){return s.data_taf===d&&vagas(s)>0;});
-        var tv=grupo.reduce(function(a,s){return a+vagas(s);},0), nm=grupo.length;
-        h+='<div class="card" onclick="app.selecionarData(\''+e(d)+'\')">'+'<span class="card-emoji">📅</span>'+'<div class="card-texts"><div class="card-title">'+e(d)+'</div><div class="card-sub">'+nm+' modalidade'+(nm!==1?'s':'')+' &middot; '+tv+' vaga'+(tv!==1?'s':'')+'</div></div>'+'<span class="card-arrow">&#8250;</span></div>';
+        var grupo=slots.filter(function(s){return s.data_taf===d;});
+        var abertos=grupo.filter(slotAberto);
+        var tv=abertos.reduce(function(a,s){return a+vagas(s);},0);
+        var nm=abertos.length;
+        var finalizada=abertos.length===0;
+        var inner='<span class="card-emoji">📅</span>'
+          +'<div class="card-texts"><div class="card-title">'+e(d)+'</div>'
+          +'<div class="card-sub">'
+          +(finalizada
+            ? 'Agenda finalizada para esta data'
+            : (nm+' modalidade'+(nm!==1?'s':'')+' &middot; '+tv+' vaga'+(tv!==1?'s':'')))
+          +'</div></div>';
+        if (finalizada) {
+          h += cardFinalizadoHtml(inner + '<span class="card-arrow">&#8250;</span>');
+        } else {
+          h+='<div class="card" onclick="app.selecionarData(\''+e(d)+'\')">'+inner+'<span class="card-arrow">&#8250;</span></div>';
+        }
       });
       return h;
     }
 
     function telaModalidade() {
-      var grupo=slots.filter(function(s){return s.data_taf===dataSel&&vagas(s)>0;});
+      var grupo=slots.filter(function(s){return s.data_taf===dataSel;});
       var h='<p class="section-title">Modalidade</p><p class="section-sub">'+e(dataSel)+' &mdash; Escolha a modalidade que irá realizar.</p>';
+      if (!grupo.length) {
+        return h+'<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nenhuma modalidade nesta data.</div></div>';
+      }
       grupo.forEach(function(s){
         var d=vagas(s), label=LABEL[s.modalidade]||s.modalidade, icon=ICON[s.modalidade]||'🏋';
-        h+='<div class="card" onclick="app.selecionarSlot(\''+e(s.id)+'\')"><span class="card-emoji">'+icon+'</span><div class="card-texts"><div class="card-title">'+e(label)+'</div><div class="card-sub">'+d+' vaga'+(d!==1?'s':'')+' disponív'+(d!==1?'eis':'el')+' &middot; máx. '+s.max_participantes+'</div></div><span class="badge badge-green">'+d+'</span></div>';
+        var hora=String(horaInicioSlot(s)).padStart(2,'0')+'h';
+        var finalizada=slotAgendaFinalizada(s);
+        var sub=finalizada
+          ? (motivoFinalizacao(s)+' &middot; início '+hora)
+          : (d+' vaga'+(d!==1?'s':'')+' disponív'+(d!==1?'eis':'el')+' &middot; máx. '+s.max_participantes+' &middot; início '+hora);
+        var inner='<span class="card-emoji">'+icon+'</span>'
+          +'<div class="card-texts"><div class="card-title">'+e(label)+'</div>'
+          +'<div class="card-sub">'+sub+'</div></div>'
+          +(finalizada ? '' : '<span class="badge badge-green">'+d+'</span>');
+        if (finalizada) {
+          h += cardFinalizadoHtml(inner);
+        } else {
+          h+='<div class="card" onclick="app.selecionarSlot(\''+e(s.id)+'\')">'+inner+'</div>';
+        }
       });
       return h;
     }
@@ -933,10 +1047,19 @@
     }
 
     window.app = {
-      selecionarData: function(d){ dataSel=d; etapa='modalidade'; render(); },
+      selecionarData: function(d){
+        var abertos=slots.filter(function(s){return s.data_taf===d&&slotAberto(s);});
+        if(!abertos.length) return;
+        dataSel=d; etapa='modalidade'; render();
+      },
       selecionarSlot: function(id){
         slotSel=slots.find(function(s){return s.id===id;})||null;
         if(!slotSel)return;
+        if(slotAgendaFinalizada(slotSel)){
+          etapa='modalidade';
+          render();
+          return;
+        }
         etapa='identificar';
         nipVal='';
         limparFormularioCadastro();
@@ -1111,6 +1234,12 @@
             abrirJaAgendado(dup);
             return;
           }
+          if (!slotSel || slotAgendaFinalizada(slotSel)) {
+            setFeedbackIdent('Agenda finalizada para esta prova.', 'err');
+            etapa = 'modalidade';
+            render();
+            return;
+          }
         } catch (e) {
           // segue para confirmação; o insert também valida
         }
@@ -1124,6 +1253,9 @@
         if(err) err.style.display='none';
         try {
           if (!cadastroCompleto()) throw new Error('Dados do cadastro incompletos.');
+          if (!slotSel || slotAgendaFinalizada(slotSel)) {
+            throw new Error('Agenda finalizada para esta prova. Não é possível confirmar a inscrição.');
+          }
           var nipKey=nipDigitos(nipVal);
           var dup = await buscarReservaExistente(nipVal);
           if (dup) {

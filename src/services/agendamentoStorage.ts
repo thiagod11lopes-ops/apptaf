@@ -9,6 +9,13 @@ import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
 import { dataBrParaIso } from '../utils/tafRegistro';
 import { getSupabase } from '../config/supabase';
+import {
+  normalizarFechamentoAntecedencia,
+  normalizarHoraInicio,
+  type FechamentoAntecedenciaHoras,
+} from '../utils/agendamentoFechamento';
+
+export type { FechamentoAntecedenciaHoras };
 
 export type ModalidadeAgendamento =
   | 'corrida'
@@ -63,6 +70,13 @@ export type SlotAgendamento = {
   modalidade: ModalidadeAgendamento;
   /** Número máximo de participantes para este slot. */
   maxParticipantes: number;
+  /** Hora local de início dos testes (0–23). */
+  horaInicio: number;
+  /**
+   * Fecha a agenda N horas antes do início.
+   * `null` = sem limite antecipado (fecha na hora da prova).
+   */
+  fechamentoAntecedenciaHoras: FechamentoAntecedenciaHoras | null;
   updatedAt: number;
   deleted?: boolean;
 };
@@ -84,11 +98,26 @@ function webLsKey(ownerUid?: string | null): string {
   return o ? `@taf-agendamento-v1:${o}` : WEB_LS_KEY_LEGACY;
 }
 
+function normalizeSlot(raw: SlotAgendamento): SlotAgendamento {
+  return {
+    ...raw,
+    horaInicio: normalizarHoraInicio(raw.horaInicio, 8),
+    fechamentoAntecedenciaHoras: normalizarFechamentoAntecedencia(
+      raw.fechamentoAntecedenciaHoras,
+    ),
+  };
+}
+
 function parseMap(raw: string | null | undefined): Record<string, SlotAgendamento> {
   if (!raw?.trim()) return {};
   try {
     const parsed = JSON.parse(raw) as Record<string, SlotAgendamento>;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, SlotAgendamento> = {};
+    for (const [id, slot] of Object.entries(parsed)) {
+      if (slot && typeof slot === 'object') out[id] = normalizeSlot(slot);
+    }
+    return out;
   } catch {
     return {};
   }
@@ -183,6 +212,8 @@ export async function saveSlot(input: {
   data: string;
   modalidade: ModalidadeAgendamento;
   maxParticipantes: number;
+  horaInicio?: number | null;
+  fechamentoAntecedenciaHoras?: number | null | '';
 }): Promise<SlotAgendamento> {
   if (!dataBrParaIso(input.data)) {
     throw new Error('Informe a data no formato DD/MM/AAAA.');
@@ -202,6 +233,10 @@ export async function saveSlot(input: {
     data: input.data.trim(),
     modalidade: input.modalidade,
     maxParticipantes: Math.floor(input.maxParticipantes),
+    horaInicio: normalizarHoraInicio(input.horaInicio, 8),
+    fechamentoAntecedenciaHoras: normalizarFechamentoAntecedencia(
+      input.fechamentoAntecedenciaHoras,
+    ),
     updatedAt: Date.now(),
     deleted: false,
   };
@@ -247,6 +282,8 @@ async function syncSlotSupabase(slot: SlotAgendamento): Promise<void> {
     data_taf: slot.data,
     modalidade: slot.modalidade,
     max_participantes: slot.maxParticipantes,
+    hora_inicio: normalizarHoraInicio(slot.horaInicio, 8),
+    fechamento_antecedencia_horas: slot.fechamentoAntecedenciaHoras,
     updated_at: slot.updatedAt,
     deleted: slot.deleted ?? false,
     owner_uid: ownerUid && UUID_RE.test(ownerUid) ? ownerUid : null,
@@ -284,12 +321,16 @@ export async function syncSlotsFromSupabase(ownerUid?: string | null): Promise<v
     const map = await readMap(ownerUid);
     for (const row of data) {
       const remote: SlotAgendamento = {
-        id:              row.id as string,
-        data:            row.data_taf as string,
-        modalidade:      row.modalidade as ModalidadeAgendamento,
+        id: row.id as string,
+        data: row.data_taf as string,
+        modalidade: row.modalidade as ModalidadeAgendamento,
         maxParticipantes: row.max_participantes as number,
-        updatedAt:       row.updated_at as number,
-        deleted:         row.deleted as boolean,
+        horaInicio: normalizarHoraInicio(row.hora_inicio, 8),
+        fechamentoAntecedenciaHoras: normalizarFechamentoAntecedencia(
+          row.fechamento_antecedencia_horas,
+        ),
+        updatedAt: row.updated_at as number,
+        deleted: row.deleted as boolean,
       };
       const local = map[remote.id];
       if (!local || (remote.updatedAt ?? 0) > (local.updatedAt ?? 0)) {

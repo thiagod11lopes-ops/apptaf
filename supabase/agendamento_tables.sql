@@ -10,10 +10,17 @@ create table if not exists public.agendamento_slots (
   data_taf          text        not null,          -- formato DD/MM/AAAA
   modalidade        text        not null,
   max_participantes integer     not null default 10,
+  hora_inicio       integer     not null default 8, -- 0-23
+  fechamento_antecedencia_horas integer,           -- 12|24|48 ou null
   updated_at        bigint      not null default 0,
   deleted           boolean     not null default false,
   owner_uid         uuid        references auth.users(id) on delete set null
 );
+
+alter table public.agendamento_slots
+  add column if not exists hora_inicio integer not null default 8;
+alter table public.agendamento_slots
+  add column if not exists fechamento_antecedencia_horas integer;
 
 -- ─── Reservas ─────────────────────────────────────────────────────────────────
 create table if not exists public.agendamento_reservas (

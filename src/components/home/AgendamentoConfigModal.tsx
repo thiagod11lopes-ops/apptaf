@@ -36,6 +36,11 @@ import {
 import { exportAgendamentoSlotPdf } from '../../utils/exportAgendamentoSlotPdf';
 import { SalvamentoCanceladoError } from '../../utils/salvarArquivoNaPasta';
 import { dataBrParaIso } from '../../utils/tafRegistro';
+import {
+  FECHAMENTO_ANTECEDENCIA_OPCOES,
+  HORAS_INICIO_DIA,
+  type FechamentoAntecedenciaHoras,
+} from '../../utils/agendamentoFechamento';
 
 /** Página HTML standalone (não é a tela interna do app). */
 const URL_AGENDAMENTO = 'https://thiagod11lopes-ops.github.io/apptaf/agendamento.html';
@@ -67,6 +72,12 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
   const [modalidade, setModalidade] = useState<ModalidadeAgendamento>('corrida');
   const [modalidadeSelectAberto, setModalidadeSelectAberto] = useState(false);
   const [maxStr, setMaxStr] = useState('');
+  const [horaInicio, setHoraInicio] = useState(8);
+  const [fechamentoAntecedencia, setFechamentoAntecedencia] = useState<
+    FechamentoAntecedenciaHoras | ''
+  >('');
+  const [horaSelectAberto, setHoraSelectAberto] = useState(false);
+  const [fechamentoSelectAberto, setFechamentoSelectAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -122,6 +133,10 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     setModalidade('corrida');
     setModalidadeSelectAberto(false);
     setMaxStr('');
+    setHoraInicio(8);
+    setFechamentoAntecedencia('');
+    setHoraSelectAberto(false);
+    setFechamentoSelectAberto(false);
     setErro(null);
     setSucesso(null);
     setEditandoId(null);
@@ -144,6 +159,10 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     setModalidade(slot.modalidade);
     setModalidadeSelectAberto(false);
     setMaxStr(String(slot.maxParticipantes));
+    setHoraInicio(slot.horaInicio ?? 8);
+    setFechamentoAntecedencia(slot.fechamentoAntecedenciaHoras ?? '');
+    setHoraSelectAberto(false);
+    setFechamentoSelectAberto(false);
     setErro(null);
     setSucesso(null);
   }, []);
@@ -167,6 +186,8 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
         data: data.trim(),
         modalidade,
         maxParticipantes: max,
+        horaInicio,
+        fechamentoAntecedenciaHoras: fechamentoAntecedencia,
       });
       setSucesso(editandoId ? 'Disponibilidade atualizada.' : 'Disponibilidade adicionada.');
       limparFormulario();
@@ -176,7 +197,16 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     } finally {
       setSalvando(false);
     }
-  }, [data, modalidade, maxStr, editandoId, limparFormulario, recarregar]);
+  }, [
+    data,
+    modalidade,
+    maxStr,
+    horaInicio,
+    fechamentoAntecedencia,
+    editandoId,
+    limparFormulario,
+    recarregar,
+  ]);
 
   const excluir = useCallback(
     async (id: string) => {
@@ -250,6 +280,28 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       color: ui.text,
     },
   ];
+
+  const selectWebStyle = {
+    width: '100%' as const,
+    height: 44,
+    borderRadius: PREMIUM.radiusMd,
+    borderWidth: 1,
+    borderStyle: 'solid' as const,
+    borderColor: ui.inputBorder,
+    backgroundColor: theme.cardBg,
+    color: ui.text,
+    paddingLeft: 12,
+    paddingRight: 12,
+    fontSize: 14,
+    marginBottom: 12,
+  };
+
+  const labelFechamento =
+    FECHAMENTO_ANTECEDENCIA_OPCOES.find((o) => o.value === fechamentoAntecedencia)?.label ??
+    FECHAMENTO_ANTECEDENCIA_OPCOES[0]!.label;
+  const labelHora =
+    HORAS_INICIO_DIA.find((o) => o.value === horaInicio)?.label ??
+    `${String(horaInicio).padStart(2, '0')}h`;
 
   return (
     <ModernModal
@@ -462,6 +514,183 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
             accessibilityLabel="Máximo de participantes"
           />
 
+          {/* Hora de início */}
+          <Text style={[ts.caption, styles.fieldLabel, { color: ui.label }]}>
+            Hora de início dos testes
+          </Text>
+          {Platform.OS === 'web' ? (
+            // @ts-expect-error select nativo web
+            <select
+              value={String(horaInicio)}
+              onChange={(ev: { target: { value: string } }) => {
+                setHoraInicio(parseInt(ev.target.value, 10) || 0);
+                setErro(null);
+                setSucesso(null);
+              }}
+              style={selectWebStyle}
+              aria-label="Hora de início dos testes"
+            >
+              {HORAS_INICIO_DIA.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <View style={{ marginBottom: 12 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setHoraSelectAberto((v) => !v);
+                  setFechamentoSelectAberto(false);
+                  setModalidadeSelectAberto(false);
+                }}
+                style={[
+                  styles.selectTrigger,
+                  { backgroundColor: theme.cardBg, borderColor: ui.inputBorder },
+                ]}
+                accessibilityLabel="Selecionar hora de início"
+              >
+                <Text style={[ts.body, { color: ui.text, flex: 1 }]}>{labelHora}</Text>
+                <ChevronDown size={18} color={theme.textMuted} strokeWidth={2.2} />
+              </TouchableOpacity>
+              {horaSelectAberto ? (
+                <View
+                  style={[
+                    styles.selectList,
+                    { backgroundColor: theme.cardBg, borderColor: theme.border, maxHeight: 220 },
+                  ]}
+                >
+                  <ScrollView nestedScrollEnabled>
+                    {HORAS_INICIO_DIA.map((o) => {
+                      const ativo = horaInicio === o.value;
+                      return (
+                        <TouchableOpacity
+                          key={o.value}
+                          onPress={() => {
+                            setHoraInicio(o.value);
+                            setHoraSelectAberto(false);
+                            setErro(null);
+                            setSucesso(null);
+                          }}
+                          style={[
+                            styles.selectOption,
+                            ativo
+                              ? {
+                                  backgroundColor: theme.isDark
+                                    ? 'rgba(99,179,237,0.15)'
+                                    : 'rgba(49,130,206,0.08)',
+                                }
+                              : null,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              ts.body,
+                              { color: ui.text, fontWeight: ativo ? '700' : '500' },
+                            ]}
+                          >
+                            {o.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
+            </View>
+          )}
+
+          {/* Fechamento da agenda */}
+          <Text style={[ts.caption, styles.fieldLabel, { color: ui.label }]}>
+            Fechar agenda
+          </Text>
+          {Platform.OS === 'web' ? (
+            // @ts-expect-error select nativo web
+            <select
+              value={fechamentoAntecedencia === '' ? '' : String(fechamentoAntecedencia)}
+              onChange={(ev: { target: { value: string } }) => {
+                const v = ev.target.value;
+                setFechamentoAntecedencia(
+                  v === '12' || v === '24' || v === '48'
+                    ? (Number(v) as FechamentoAntecedenciaHoras)
+                    : '',
+                );
+                setErro(null);
+                setSucesso(null);
+              }}
+              style={selectWebStyle}
+              aria-label="Fechar agenda"
+            >
+              {FECHAMENTO_ANTECEDENCIA_OPCOES.map((o) => (
+                <option key={String(o.value)} value={o.value === '' ? '' : String(o.value)}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <View style={{ marginBottom: 12 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setFechamentoSelectAberto((v) => !v);
+                  setHoraSelectAberto(false);
+                  setModalidadeSelectAberto(false);
+                }}
+                style={[
+                  styles.selectTrigger,
+                  { backgroundColor: theme.cardBg, borderColor: ui.inputBorder },
+                ]}
+                accessibilityLabel="Selecionar fechamento da agenda"
+              >
+                <Text style={[ts.body, { color: ui.text, flex: 1 }]} numberOfLines={2}>
+                  {labelFechamento}
+                </Text>
+                <ChevronDown size={18} color={theme.textMuted} strokeWidth={2.2} />
+              </TouchableOpacity>
+              {fechamentoSelectAberto ? (
+                <View
+                  style={[
+                    styles.selectList,
+                    { backgroundColor: theme.cardBg, borderColor: theme.border },
+                  ]}
+                >
+                  {FECHAMENTO_ANTECEDENCIA_OPCOES.map((o) => {
+                    const ativo = fechamentoAntecedencia === o.value;
+                    return (
+                      <TouchableOpacity
+                        key={String(o.value)}
+                        onPress={() => {
+                          setFechamentoAntecedencia(o.value);
+                          setFechamentoSelectAberto(false);
+                          setErro(null);
+                          setSucesso(null);
+                        }}
+                        style={[
+                          styles.selectOption,
+                          ativo
+                            ? {
+                                backgroundColor: theme.isDark
+                                  ? 'rgba(99,179,237,0.15)'
+                                  : 'rgba(49,130,206,0.08)',
+                              }
+                            : null,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            ts.body,
+                            { color: ui.text, fontWeight: ativo ? '700' : '500' },
+                          ]}
+                        >
+                          {o.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+          )}
+
           {erro ? (
             <Text style={[ts.caption, { color: theme.error, marginBottom: 8 }]}>{erro}</Text>
           ) : null}
@@ -540,6 +769,11 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                         {' · '}Máx.: {slot.maxParticipantes} participante
                         {slot.maxParticipantes !== 1 ? 's' : ''}
                         {' · '}Agendados: {reservadosPorSlot[slot.id] ?? 0}
+                        {' · '}Início: {String(slot.horaInicio ?? 8).padStart(2, '0')}h
+                        {' · '}Fecha:{' '}
+                        {slot.fechamentoAntecedenciaHoras
+                          ? `${slot.fechamentoAntecedenciaHoras}h antes`
+                          : 'na hora da prova'}
                       </Text>
                     </View>
                     <View style={styles.slotAcoes}>

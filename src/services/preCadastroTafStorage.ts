@@ -222,10 +222,18 @@ export async function addPreCadastroTaf(item: PreCadastroTaf): Promise<void> {
     typeof item.numero === 'number' && item.numero > 0
       ? item.numero
       : proximoNumeroPreCadastro(comNumeros);
-  const salvo: PreCadastroTaf = { ...item, numero };
+  const salvo: PreCadastroTaf = {
+    ...item,
+    numero,
+    participantes: item.participantes.map((p) => ({ ...p })),
+  };
   await savePreCadastroRecord(salvo, ownerUid, userId);
 
-  // Natação e permanência usam o mesmo grupo: espelha participantes na permanência.
+  /**
+   * Natação cria/atualiza um card de permanência vinculado.
+   * Provas são independentes: nunca remover militar da permanência porque
+   * saiu da natação (consumo de prova ou edição).
+   */
   if (salvo.tipoProva === 'natacao') {
     const pairId = idPreCadastroPermanenciaPareada(salvo.id);
     const pairExistente = existentes.find((p) => p.id === pairId);
@@ -237,13 +245,32 @@ export async function addPreCadastroTaf(item: PreCadastroTaf): Promise<void> {
       pairExistente && typeof pairExistente.numero === 'number' && pairExistente.numero > 0
         ? pairExistente.numero
         : proximoNumeroPreCadastro(existentesAposNatacao);
+
+    let participantesPermanencia: PreCadastroParticipante[];
+    if (!pairExistente) {
+      participantesPermanencia = salvo.participantes.map((p) => ({ ...p }));
+    } else {
+      const porNip = new Map<string, PreCadastroParticipante>();
+      for (const p of pairExistente.participantes) {
+        const key = (p.nip || '').replace(/\D/g, '');
+        if (key) porNip.set(key, { ...p });
+      }
+      for (const p of salvo.participantes) {
+        const key = (p.nip || '').replace(/\D/g, '');
+        if (key && !porNip.has(key)) porNip.set(key, { ...p });
+      }
+      participantesPermanencia = [...porNip.values()];
+    }
+
     await savePreCadastroRecord(
       {
-        ...salvo,
         id: pairId,
-        tipoProva: 'permanencia',
-        numero: numeroPar,
         criadoEm: pairExistente?.criadoEm ?? salvo.criadoEm,
+        numero: numeroPar,
+        nomeCodigo: salvo.nomeCodigo ?? pairExistente?.nomeCodigo,
+        tipoProva: 'permanencia',
+        normaTaf: salvo.normaTaf ?? pairExistente?.normaTaf ?? 'armada',
+        participantes: participantesPermanencia,
       },
       ownerUid,
       userId,
@@ -281,7 +308,7 @@ export async function removePreCadastroTaf(id: string): Promise<boolean> {
 /**
  * Remove da lista os NIPs que já realizaram a prova neste pré-cadastro.
  * Se sobrar ninguém, exclui só este card.
- * Natação: NÃO altera a permanência vinculada (quem nadou continua nela).
+ * Natação e permanência são provas distintas: nunca altera o card vinculado.
  */
 export async function consumirParticipantesPreCadastroTaf(
   id: string,
@@ -299,18 +326,30 @@ export async function consumirParticipantesPreCadastroTaf(
   if (!alvo) return;
 
   const pre = preCadastroRecordToTaf(alvo);
-  const restantes = pre.participantes.filter(
-    (p) => !set.has((p.nip || '').replace(/\D/g, '')),
-  );
+  const restantes = pre.participantes
+    .filter((p) => !set.has((p.nip || '').replace(/\D/g, '')))
+    .map((p) => ({ ...p }));
 
   if (restantes.length === 0) {
-    // Só este pré-cadastro — não remove o par natação↔permanência.
+    // Só este pré-cadastro — o par (natação↔permanência) permanece intacto.
     await softDeletePreCadastroRecord(id, ownerUid, userId);
     notifyDataChanged('preCadastros');
     return;
   }
 
-  await savePreCadastroRecord({ ...pre, participantes: restantes }, ownerUid, userId);
+  await savePreCadastroRecord(
+    {
+      id: pre.id,
+      criadoEm: pre.criadoEm,
+      numero: pre.numero,
+      nomeCodigo: pre.nomeCodigo,
+      tipoProva: pre.tipoProva,
+      normaTaf: pre.normaTaf,
+      participantes: restantes,
+    },
+    ownerUid,
+    userId,
+  );
   notifyDataChanged('preCadastros');
 }
 

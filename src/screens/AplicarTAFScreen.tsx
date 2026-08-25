@@ -2993,10 +2993,10 @@ export default function AplicarTAFScreen() {
       editando ? 'Pré-cadastro atualizado' : 'Pré-cadastro salvo',
       editando
         ? tipoProva === 'natacao'
-          ? 'As alterações foram salvas. O pré-cadastro de Permanência correspondente também foi atualizado.'
+          ? 'As alterações foram salvas na Natação. A Permanência vinculada mantém quem já estava nela; novos nomes foram incluídos lá também.'
           : 'As alterações foram salvas com sucesso.'
         : tipoProva === 'natacao'
-          ? 'Os participantes foram salvos na Natação e também na Permanência. Use "Iniciar Prova" quando for aplicar o TAF.'
+          ? 'Os participantes foram salvos na Natação e também na Permanência. Ao aplicar a Natação, o militar sai só dela — a Permanência continua com ele.'
           : 'Os participantes foram salvos. Use "Iniciar Prova" quando for aplicar o TAF.',
     );
   }, [

@@ -645,7 +645,6 @@
 
     async function carregarDados() {
       try {
-        var hoje = hojeIso();
         var r1 = await sb.from('agendamento_slots').select('*').eq('deleted', false);
         if (r1.error) throw r1.error;
         slots = (r1.data || []).filter(function(s) {

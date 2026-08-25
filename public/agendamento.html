@@ -482,7 +482,7 @@
     }
 
     function vinculoLabelDe(v) {
-      return v === 'rm2' ? 'RM2' : v === 'carreira' ? 'Quadro' : '—';
+      return v === 'rm2' ? 'RM2' : v === 'carreira' ? 'Carreira' : '—';
     }
 
     function nomeDaReserva(r) {
@@ -940,7 +940,7 @@
         + '<label class="field-label">Posto / Graduação</label>'
         + chipsPostoHtml()
         + '<label class="field-label">Vínculo</label>'
-        + togglesHtml('vinculo', [{v:'carreira',l:'Quadro'},{v:'rm2',l:'RM2'}])
+        + togglesHtml('vinculo', [{v:'carreira',l:'Carreira'},{v:'rm2',l:'RM2'}])
         + '</div>';
     }
 
@@ -1077,7 +1077,7 @@
             + '<div class="summary-sub">Nasc. ' + e(form.dataNascimento || '—')
             + ' · ' + e(form.categoria || '—')
             + ' · ' + e(form.posto || '—')
-            + ' · ' + e(form.vinculo === 'rm2' ? 'RM2' : form.vinculo === 'carreira' ? 'Quadro' : '—')
+            + ' · ' + e(form.vinculo === 'rm2' ? 'RM2' : form.vinculo === 'carreira' ? 'Carreira' : '—')
             + '</div></div>')
           : '')
         +'<div id="feedbackIdent" class="feedback' + (feedbackMsg ? (' feedback-' + feedbackTipo) : '') + '" style="' + (feedbackMsg ? '' : 'display:none') + '">' + e(feedbackMsg) + '</div>'

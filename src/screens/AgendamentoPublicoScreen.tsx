@@ -562,7 +562,7 @@ export default function AgendamentoPublicoScreen() {
 
       <Text style={[ts.caption, styles.fieldLabel, { color: ui.label }]}>Vínculo</Text>
       <View style={[styles.toggleRow, { marginBottom: 16 }]}>
-        {([['carreira', 'Quadro'], ['rm2', 'RM2']] as const).map(([v, label]) => (
+        {([['carreira', 'Carreira'], ['rm2', 'RM2']] as const).map(([v, label]) => (
           <TouchableOpacity
             key={v}
             onPress={() => setNovoVinculo(v)}

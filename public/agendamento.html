@@ -298,6 +298,52 @@
       color: #fff;
     }
 
+    /* ── Modal confirmação cancelamento ──────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(2, 6, 23, 0.72);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      align-items: center;
+      justify-content: center;
+      padding: 20px 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--navy-2);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: var(--r);
+      padding: 22px 18px 16px;
+      box-shadow: 0 24px 48px rgba(0,0,0,.45);
+    }
+    .modal-icon {
+      width: 56px; height: 56px; border-radius: 14px;
+      margin: 0 auto 14px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--red-bg);
+      border: 1px solid rgba(239,68,68,.35);
+      font-size: 26px;
+    }
+    .modal-title {
+      font-size: 18px; font-weight: 800; text-align: center;
+      color: var(--text); margin-bottom: 8px;
+    }
+    .modal-text {
+      font-size: 14px; line-height: 1.5; text-align: center;
+      color: var(--text-2); margin-bottom: 6px;
+    }
+    .modal-hint {
+      font-size: 12px; text-align: center; color: var(--text-m);
+      margin-bottom: 16px;
+    }
+    .modal-actions { display: flex; flex-direction: column; gap: 8px; }
+    .modal-actions .btn { margin-top: 0; }
+
     /* ── Loading ────────────────────────────────────────────────── */
     .loading { display: flex; flex-direction: column; align-items: center; padding: 64px 0; gap: 16px; }
     .spinner {
@@ -342,6 +388,20 @@
 
     <div id="content"></div>
 
+  </div>
+
+  <div class="modal-overlay" id="modalCancelar" role="dialog" aria-modal="true" aria-labelledby="modalCancelarTitle" onclick="app.onModalOverlayClick(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-icon">⚠</div>
+      <div class="modal-title" id="modalCancelarTitle">Cancelar agendamento?</div>
+      <div class="modal-text" id="modalCancelarTexto">Confirma o cancelamento desta inscrição? A vaga será liberada.</div>
+      <div class="modal-hint">Esta ação não pode ser desfeita.</div>
+      <div id="modalCancelarErro" class="feedback feedback-err" style="display:none;margin-bottom:10px"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger-solid" id="btnModalConfirmarCancel" onclick="app.confirmarCancelamento()">Sim, cancelar agendamento</button>
+        <button type="button" class="btn btn-outline" id="btnModalManterAgendamento" onclick="app.desistirCancelamento()">Manter agendamento</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -748,6 +808,7 @@
         sincronizarFormularioNaTela();
         atualizarBtnContinuar();
       }
+      atualizarModalCancelamento();
     }
 
     function atualizarHeader() {
@@ -937,6 +998,40 @@
       }
     }
 
+    function atualizarModalCancelamento() {
+      var overlay = document.getElementById('modalCancelar');
+      if (!overlay) return;
+      var aberto = etapa === 'jaAgendado' && cancelConfirmando;
+      overlay.classList.toggle('open', aberto);
+      if (!aberto) return;
+
+      var r = reservaExistente || {};
+      var label = labelModalidade(r.modalidade || (slotSel && slotSel.modalidade));
+      var data = r.data_taf || (slotSel && slotSel.data_taf) || '—';
+      var texto = document.getElementById('modalCancelarTexto');
+      if (texto) {
+        texto.textContent =
+          'Confirma o cancelamento de ' + label + ' em ' + data + '? A vaga será liberada.';
+      }
+      var err = document.getElementById('modalCancelarErro');
+      if (err) {
+        if (cancelFeedback) {
+          err.style.display = 'block';
+          err.textContent = cancelFeedback;
+        } else {
+          err.style.display = 'none';
+          err.textContent = '';
+        }
+      }
+      var btnOk = document.getElementById('btnModalConfirmarCancel');
+      var btnNo = document.getElementById('btnModalManterAgendamento');
+      if (btnOk) {
+        btnOk.disabled = !!cancelandoReserva;
+        btnOk.textContent = cancelandoReserva ? 'Cancelando...' : 'Sim, cancelar agendamento';
+      }
+      if (btnNo) btnNo.disabled = !!cancelandoReserva;
+    }
+
     function telaJaAgendado() {
       var r = reservaExistente || {};
       var label = labelModalidade(r.modalidade || (slotSel && slotSel.modalidade));
@@ -945,7 +1040,7 @@
       var posto = String(r.posto || '').trim().toUpperCase() || '—';
       var cat = r.categoria || '—';
       var nasc = r.data_nascimento || '—';
-      var h = ''
+      return ''
         + '<div class="ja-agendado-banner">'
         +   '<div class="t">Agendamento já realizado</div>'
         +   '<div class="s">Este NIP já possui inscrição nesta prova. Não é permitido agendar novamente com os mesmos dados.</div>'
@@ -960,28 +1055,10 @@
         +   '<div class="summary-value">' + e(nomeDaReserva(r)) + '</div>'
         +   '<div class="summary-sub">NIP ' + e(formatarNipExibicao(r.nip || nipVal)) + ' · ' + e(sexoLabel) + ' · Nasc. ' + e(nasc) + '</div>'
         +   '<div class="summary-sub">' + e(cat) + ' · ' + e(posto) + ' · ' + e(vinculoLabelDe(r.vinculo)) + '</div>'
-        + '</div>';
-
-      if (cancelFeedback) {
-        h += '<div class="feedback feedback-err" style="display:block;margin-top:8px">' + e(cancelFeedback) + '</div>';
-      }
-
-      if (cancelConfirmando) {
-        h += '<div class="feedback feedback-warn" style="display:block;margin-top:12px">'
-          + 'Confirma o cancelamento desta inscrição? A vaga será liberada.'
-          + '</div>'
-          + '<button class="btn btn-danger-solid" id="btnCancelarReserva" onclick="app.confirmarCancelamento()" '
-          + (cancelandoReserva ? 'disabled' : '') + '>'
-          + (cancelandoReserva ? 'Cancelando...' : 'Sim, cancelar agendamento')
-          + '</button>'
-          + '<button class="btn btn-outline" style="margin-top:8px" onclick="app.desistirCancelamento()" '
-          + (cancelandoReserva ? 'disabled' : '') + '>Manter agendamento</button>';
-      } else {
-        h += '<button class="btn btn-danger" style="margin-top:12px" onclick="app.pedirCancelamento()">Cancelar agendamento</button>'
-          + '<button class="btn btn-outline" style="margin-top:8px" onclick="app.voltar()">&#8592; Voltar</button>'
-          + '<button class="btn btn-primary" style="margin-top:10px" onclick="app.novaInscricao()">Nova inscrição</button>';
-      }
-      return h;
+        + '</div>'
+        + '<button class="btn btn-danger" style="margin-top:12px" onclick="app.pedirCancelamento()">Cancelar agendamento</button>'
+        + '<button class="btn btn-outline" style="margin-top:8px" onclick="app.voltar()">&#8592; Voltar</button>'
+        + '<button class="btn btn-primary" style="margin-top:10px" onclick="app.novaInscricao()">Nova inscrição</button>';
     }
 
     function telaIdentificar() {
@@ -1097,28 +1174,35 @@
       pedirCancelamento: function(){
         cancelConfirmando = true;
         cancelFeedback = '';
-        render();
+        atualizarModalCancelamento();
       },
       desistirCancelamento: function(){
+        if (cancelandoReserva) return;
         cancelConfirmando = false;
         cancelFeedback = '';
-        render();
+        atualizarModalCancelamento();
+      },
+      onModalOverlayClick: function(ev){
+        if (cancelandoReserva) return;
+        if (ev && ev.target && ev.target.id === 'modalCancelar') {
+          app.desistirCancelamento();
+        }
       },
       confirmarCancelamento: async function(){
         if (!reservaExistente || !reservaExistente.id) {
           cancelFeedback = 'Não foi possível identificar a inscrição.';
-          render();
+          atualizarModalCancelamento();
           return;
         }
         var nipKey = nipDigitos(reservaExistente.nip || nipVal);
         if (nipKey.length < 8) {
           cancelFeedback = 'NIP inválido para cancelar.';
-          render();
+          atualizarModalCancelamento();
           return;
         }
         cancelandoReserva = true;
         cancelFeedback = '';
-        render();
+        atualizarModalCancelamento();
         try {
           var res = await sb.rpc('cancelar_agendamento_reserva', {
             p_nip: nipKey,
@@ -1140,6 +1224,7 @@
           cancelConfirmando = false;
           cancelandoReserva = false;
           cancelFeedback = '';
+          atualizarModalCancelamento();
           etapa = 'identificar';
           limparFormularioCadastro();
           // Mantém NIP e prova selecionados para permitir remarcar
@@ -1158,7 +1243,7 @@
           cancelFeedback = (ex && ex.message)
             ? ex.message
             : 'Não foi possível cancelar. Tente novamente.';
-          render();
+          atualizarModalCancelamento();
         }
       },
       onNip: function(v){

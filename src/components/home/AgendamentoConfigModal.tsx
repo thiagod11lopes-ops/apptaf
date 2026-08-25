@@ -35,6 +35,7 @@ import {
   getReservasBySlot,
   syncReservasFromSupabase,
 } from '../../services/reservasAgendamentoStorage';
+import { ConfirmacaoExcluirSlotAgendamentoModal } from './ConfirmacaoExcluirSlotAgendamentoModal';
 import { exportAgendamentoSlotPdf } from '../../utils/exportAgendamentoSlotPdf';
 import { SalvamentoCanceladoError } from '../../utils/salvarArquivoNaPasta';
 import { dataBrParaIso } from '../../utils/tafRegistro';
@@ -85,6 +86,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState<string | null>(null);
+  const [slotParaExcluir, setSlotParaExcluir] = useState<SlotAgendamento | null>(null);
   const [gerandoPdfId, setGerandoPdfId] = useState<string | null>(null);
 
   const modalidadesDoTipo = useMemo(
@@ -243,6 +245,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       try {
         await deleteSlot(id);
         if (editandoId === id) limparFormulario();
+        setSlotParaExcluir(null);
         setSucesso('Disponibilidade removida.');
         await recarregar();
       } catch {
@@ -253,6 +256,11 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     },
     [editandoId, limparFormulario, recarregar],
   );
+
+  const confirmarExclusao = useCallback(() => {
+    if (!slotParaExcluir) return;
+    void excluir(slotParaExcluir.id);
+  }, [slotParaExcluir, excluir]);
 
   const gerarPdfSlot = useCallback(
     async (slot: SlotAgendamento) => {
@@ -857,7 +865,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                         <Pencil size={16} color={theme.primary} strokeWidth={2.3} />
                       </TouchableOpacity>
                       <TouchableOpacity
-                        onPress={() => void excluir(slot.id)}
+                        onPress={() => setSlotParaExcluir(slot)}
                         disabled={isExcluindo}
                         style={[
                           styles.acaoBtn,

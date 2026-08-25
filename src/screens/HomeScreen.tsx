@@ -219,9 +219,10 @@ export default function HomeScreen() {
     let cancelled = false;
     void (async () => {
       try {
-        const { purgeSlotsExpiradosAposProva } = await import(
+        const { purgeSlotsExpiradosAposProva, syncSlotsFromSupabase } = await import(
           '../services/agendamentoStorage'
         );
+        if (!cancelled) await syncSlotsFromSupabase();
         if (!cancelled) await purgeSlotsExpiradosAposProva();
       } catch {
         // silencioso

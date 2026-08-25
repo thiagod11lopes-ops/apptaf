@@ -22,6 +22,7 @@ import {
   purgeSlotsExpiradosAposProva,
   pushAllSlotsToSupabase,
   saveSlot,
+  syncSlotsFromSupabase,
   tipoTafDaModalidade,
   TIPO_TAF_AGENDAMENTO_LABELS,
   type ModalidadeAgendamento,
@@ -93,6 +94,16 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
 
   const recarregar = useCallback(async () => {
     try {
+      try {
+        await syncSlotsFromSupabase();
+      } catch (e) {
+        setErro(
+          e instanceof Error
+            ? e.message
+            : 'Não foi possível baixar as disponibilidades deste dispositivo.',
+        );
+      }
+
       let expirados = 0;
       try {
         expirados = await purgeSlotsExpiradosAposProva();
@@ -111,12 +122,17 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
         const nSlots = await pushAllSlotsToSupabase();
         const { importados, publicados } = await syncMilitarLookupComCadastros();
         const partes: string[] = [];
+        if (lista.length > 0) {
+          partes.push(`${lista.length} disponibilidade(s) sincronizada(s)`);
+        }
         if (expirados > 0) {
           partes.push(
             `${expirados} disponibilidade(s) removida(s) (12h após o início)`,
           );
         }
-        if (nSlots > 0) partes.push(`${nSlots} disponibilidade(s)`);
+        if (nSlots > 0 && nSlots !== lista.length) {
+          partes.push(`${nSlots} publicada(s)`);
+        }
         if (importados > 0) partes.push(`${importados} militar(es) importado(s) ao cadastro`);
         if (publicados > 0) partes.push(`${publicados} militar(es) na busca pública`);
         if (partes.length > 0) {

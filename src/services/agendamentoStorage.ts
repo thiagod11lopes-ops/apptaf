@@ -334,38 +334,41 @@ export async function pushAllSlotsToSupabase(ownerUid?: string | null): Promise<
 }
 
 /** Puxa os slots do Supabase e faz merge com os dados locais (para sincronizar entre dispositivos). */
-export async function syncSlotsFromSupabase(ownerUid?: string | null): Promise<void> {
-  try {
-    const sb = getSupabase();
-    if (!sb) return;
-    const owner = resolveOwnerUid(ownerUid);
-    let query = sb.from('agendamento_slots').select('*');
-    if (owner) query = query.eq('owner_uid', owner);
+export async function syncSlotsFromSupabase(ownerUid?: string | null): Promise<number> {
+  const sb = getSupabase();
+  if (!sb) return 0;
+  const { data: sessionData } = await sb.auth.getSession();
+  if (!sessionData.session) return 0;
 
-    const { data, error } = await query;
-    if (error || !data?.length) return;
-
-    const map = await readMap(ownerUid);
-    for (const row of data) {
-      const remote: SlotAgendamento = {
-        id: row.id as string,
-        data: row.data_taf as string,
-        modalidade: row.modalidade as ModalidadeAgendamento,
-        maxParticipantes: row.max_participantes as number,
-        horaInicio: normalizarHoraInicio(row.hora_inicio, 8),
-        fechamentoAntecedenciaHoras: normalizarFechamentoAntecedencia(
-          row.fechamento_antecedencia_horas,
-        ),
-        updatedAt: row.updated_at as number,
-        deleted: row.deleted as boolean,
-      };
-      const local = map[remote.id];
-      if (!local || (remote.updatedAt ?? 0) > (local.updatedAt ?? 0)) {
-        map[remote.id] = remote;
-      }
-    }
-    await writeMap(map, ownerUid);
-  } catch {
-    // silencioso
+  // Agenda pública é compartilhada entre dispositivos da equipe: baixa todos os slots.
+  // (Filtro só por owner_uid falhava quando owner_uid era null ou divergia entre aparelhos.)
+  const { data, error } = await sb.from('agendamento_slots').select('*');
+  if (error) {
+    throw new Error(error.message || 'Falha ao baixar disponibilidades do Supabase.');
   }
+  if (!data?.length) return 0;
+
+  const map = await readMap(ownerUid);
+  let merged = 0;
+  for (const row of data) {
+    const remote: SlotAgendamento = {
+      id: row.id as string,
+      data: row.data_taf as string,
+      modalidade: row.modalidade as ModalidadeAgendamento,
+      maxParticipantes: row.max_participantes as number,
+      horaInicio: normalizarHoraInicio(row.hora_inicio, 8),
+      fechamentoAntecedenciaHoras: normalizarFechamentoAntecedencia(
+        row.fechamento_antecedencia_horas,
+      ),
+      updatedAt: row.updated_at as number,
+      deleted: row.deleted as boolean,
+    };
+    const local = map[remote.id];
+    if (!local || (remote.updatedAt ?? 0) >= (local.updatedAt ?? 0)) {
+      map[remote.id] = remote;
+      merged += 1;
+    }
+  }
+  await writeMap(map, ownerUid);
+  return merged;
 }

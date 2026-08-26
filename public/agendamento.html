@@ -1247,17 +1247,13 @@
           atualizarModalCancelamento();
           etapa = 'identificar';
           limparFormularioCadastro();
-          // Mantém NIP e prova selecionados para permitir remarcar
+          // Mantém a prova selecionada; NIP limpo para nova inscrição
           if (slotCancelado) slotSel = slotCancelado;
+          nipVal = '';
           nipBuscaSeq++;
-          setFeedbackIdent('Agendamento cancelado. Você pode se inscrever novamente.', 'ok');
           cadastroModo = 'idle';
-          // Recarrega cadastro do NIP para seguir o fluxo normal
-          if (nipDigitos(nipVal).length >= 8) {
-            await buscarNomePorNip(nipVal);
-          } else {
-            render();
-          }
+          setFeedbackIdent('Agendamento cancelado. Informe o NIP para se inscrever novamente.', 'ok');
+          render({ focusNip: true });
         } catch (ex) {
           cancelandoReserva = false;
           var rawMsg = (ex && ex.message) ? String(ex.message) : '';

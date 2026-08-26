@@ -1,17 +1,91 @@
 -- =============================================================================
--- Segurança máxima do agendamento: NIP/nome criptografados + acesso só via RPC.
+-- Segurança máxima do agendamento — SCRIPT ÚNICO (rode tudo de uma vez).
 --
--- COMO EXECUTAR (Supabase → SQL Editor → New query):
---   1. Database → Extensions → ative "pgcrypto"
+-- Supabase → SQL Editor → New query:
+--   1. Database → Extensions → ative "pgcrypto" (se ainda não estiver)
 --   2. Copie e cole TODO O CONTEÚDO DESTE ARQUIVO (não o caminho do arquivo)
 --   3. Altere o segredo em agendamento_crypto_pepper() abaixo
---   4. Run → deve aparecer "Success. No rows returned"
+--   4. Run → "Success. No rows returned"
 --
--- Se falhar na 2ª tentativa: rode fix_agendamento_nip_nullable.sql e depois fix_agendamento_seguranca_reexec.sql
+-- Pode rodar de novo com segurança (idempotente). Não precisa de scripts auxiliares.
 -- =============================================================================
 
 -- pgcrypto no Supabase fica em extensions (não em public).
 create extension if not exists pgcrypto with schema extensions;
+
+-- ─── Tabelas base (se ainda não existirem) ────────────────────────────────────
+
+create table if not exists public.agendamento_slots (
+  id                            text    primary key,
+  data_taf                      text    not null,
+  modalidade                    text    not null,
+  max_participantes             integer not null default 10,
+  hora_inicio                   integer not null default 8,
+  fechamento_antecedencia_horas integer,
+  updated_at                    bigint  not null default 0,
+  deleted                       boolean not null default false,
+  owner_uid                     uuid    references auth.users(id) on delete set null
+);
+
+alter table public.agendamento_slots
+  add column if not exists hora_inicio integer not null default 8;
+alter table public.agendamento_slots
+  add column if not exists fechamento_antecedencia_horas integer;
+
+create table if not exists public.agendamento_reservas (
+  id         text    primary key,
+  slot_id    text    not null,
+  data_taf   text    not null,
+  modalidade text    not null,
+  nip        text    not null,
+  nome       text    not null,
+  updated_at bigint  not null default 0,
+  deleted    boolean not null default false
+);
+
+create table if not exists public.agendamento_militar_lookup (
+  nip              text    primary key,
+  nome             text    not null default '',
+  data_nascimento  text    not null default '',
+  sexo             text    not null default '',
+  categoria        text    not null default '',
+  posto            text    not null default '',
+  vinculo          text    not null default '',
+  updated_at       bigint  not null default 0,
+  deleted          boolean not null default false
+);
+
+alter table public.agendamento_militar_lookup add column if not exists data_nascimento text not null default '';
+alter table public.agendamento_militar_lookup add column if not exists sexo text not null default '';
+alter table public.agendamento_militar_lookup add column if not exists categoria text not null default '';
+alter table public.agendamento_militar_lookup add column if not exists posto text not null default '';
+alter table public.agendamento_militar_lookup add column if not exists vinculo text not null default '';
+
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.agendamento_slots to anon, authenticated;
+grant select, insert, update, delete on public.agendamento_reservas to anon, authenticated;
+grant select, insert, update, delete on public.agendamento_militar_lookup to authenticated;
+
+alter table public.agendamento_slots enable row level security;
+alter table public.agendamento_reservas enable row level security;
+alter table public.agendamento_militar_lookup enable row level security;
+
+-- Slots: leitura pública
+drop policy if exists "agendamento_slots_select" on public.agendamento_slots;
+create policy "agendamento_slots_select"
+  on public.agendamento_slots for select using (true);
+
+drop policy if exists "agendamento_slots_insert" on public.agendamento_slots;
+create policy "agendamento_slots_insert"
+  on public.agendamento_slots for insert with check (auth.uid() is not null);
+
+drop policy if exists "agendamento_slots_update" on public.agendamento_slots;
+create policy "agendamento_slots_update"
+  on public.agendamento_slots for update using (auth.uid() is not null);
+
+drop policy if exists "agendamento_slots_delete" on public.agendamento_slots;
+create policy "agendamento_slots_delete"
+  on public.agendamento_slots for delete using (auth.uid() is not null);
 
 -- ─── Segredo interno (ALTERE antes de produção) ───────────────────────────────
 create or replace function public.agendamento_crypto_pepper()
@@ -125,7 +199,7 @@ $$;
 
 revoke all on function public.agendamento_decrypt_json(text) from public;
 
--- ─── Colunas criptografadas ───────────────────────────────────────────────────
+-- ─── Migração idempotente (ordem correta, uma única execução) ─────────────────
 
 alter table public.agendamento_reservas
   add column if not exists nip_hash text,
@@ -140,103 +214,113 @@ alter table public.agendamento_militar_lookup
   add column if not exists nip_hash text,
   add column if not exists payload_enc text;
 
--- CRÍTICO: reservas usa PK em id — nip pode ficar nullable já aqui.
--- lookup ainda tem PK em nip; migrar para nip_hash antes de zerar nip (ver abaixo).
-alter table public.agendamento_reservas alter column nip drop not null;
-alter table public.agendamento_reservas alter column nome drop not null;
+do $$
+declare
+  pk_col name;
+begin
+  -- 1) Reservas: nip não é PK — pode ficar nullable
+  begin
+    alter table public.agendamento_reservas alter column nip drop not null;
+  exception when others then null;
+  end;
+  begin
+    alter table public.agendamento_reservas alter column nome drop not null;
+  exception when others then null;
+  end;
 
--- Migra reservas legadas (texto plano → cifrado)
-update public.agendamento_reservas r
-set
-  nip_hash = coalesce(r.nip_hash, public.agendamento_nip_hash(r.nip)),
-  payload_enc = coalesce(
-    r.payload_enc,
-    public.agendamento_encrypt_json(
-      jsonb_strip_nulls(
-        jsonb_build_object(
-          'nip', r.nip,
-          'nome', r.nome,
-          'data_nascimento', coalesce(r.data_nascimento, ''),
-          'sexo', coalesce(r.sexo, ''),
-          'categoria', coalesce(r.categoria, ''),
-          'posto', coalesce(r.posto, ''),
-          'vinculo', coalesce(r.vinculo, '')
+  -- 2) Cifrar dados legados (mantém nip legível até PK do lookup migrar)
+  update public.agendamento_reservas r
+  set
+    nip_hash = coalesce(r.nip_hash, public.agendamento_nip_hash(r.nip)),
+    payload_enc = coalesce(
+      r.payload_enc,
+      public.agendamento_encrypt_json(
+        jsonb_strip_nulls(
+          jsonb_build_object(
+            'nip', r.nip,
+            'nome', r.nome,
+            'data_nascimento', coalesce(r.data_nascimento, ''),
+            'sexo', coalesce(r.sexo, ''),
+            'categoria', coalesce(r.categoria, ''),
+            'posto', coalesce(r.posto, ''),
+            'vinculo', coalesce(r.vinculo, '')
+          )
         )
       )
     )
-  )
-where coalesce(r.payload_enc, '') = ''
-  and coalesce(r.nip, '') <> '';
+  where coalesce(r.payload_enc, '') = ''
+    and coalesce(r.nip, '') <> '';
 
--- Migra lookup legado
-update public.agendamento_militar_lookup l
-set
-  nip_hash = coalesce(l.nip_hash, public.agendamento_nip_hash(l.nip)),
-  payload_enc = coalesce(
-    l.payload_enc,
-    public.agendamento_encrypt_json(
-      jsonb_strip_nulls(
-        jsonb_build_object(
-          'nip', l.nip,
-          'nome', l.nome,
-          'data_nascimento', coalesce(l.data_nascimento, ''),
-          'sexo', coalesce(l.sexo, ''),
-          'categoria', coalesce(l.categoria, ''),
-          'posto', coalesce(l.posto, ''),
-          'vinculo', coalesce(l.vinculo, '')
+  update public.agendamento_militar_lookup l
+  set
+    nip_hash = coalesce(l.nip_hash, public.agendamento_nip_hash(l.nip)),
+    payload_enc = coalesce(
+      l.payload_enc,
+      public.agendamento_encrypt_json(
+        jsonb_strip_nulls(
+          jsonb_build_object(
+            'nip', l.nip,
+            'nome', l.nome,
+            'data_nascimento', coalesce(l.data_nascimento, ''),
+            'sexo', coalesce(l.sexo, ''),
+            'categoria', coalesce(l.categoria, ''),
+            'posto', coalesce(l.posto, ''),
+            'vinculo', coalesce(l.vinculo, '')
+          )
         )
       )
     )
-  )
-where coalesce(l.payload_enc, '') = ''
-  and coalesce(l.nip, '') <> '';
+  where coalesce(l.payload_enc, '') = ''
+    and coalesce(l.nip, '') <> '';
 
--- Lookup: PK por hash (nip ainda é PK legada — trocar ANTES de nip = null)
-alter table public.agendamento_militar_lookup drop constraint if exists agendamento_militar_lookup_pkey;
+  -- 3) Lookup: PK legada em nip → trocar para nip_hash ANTES de nip = null
+  select a.attname
+  into pk_col
+  from pg_constraint c
+  join pg_class t on t.oid = c.conrelid
+  join pg_attribute a on a.attrelid = t.oid and a.attnum = any(c.conkey)
+  where t.relname = 'agendamento_militar_lookup'
+    and c.contype = 'p'
+  limit 1;
 
-update public.agendamento_militar_lookup l
-set nip_hash = coalesce(l.nip_hash, public.agendamento_nip_hash(l.nip))
-where l.nip_hash is null
-  and coalesce(l.nip, '') <> '';
+  update public.agendamento_militar_lookup l
+  set nip_hash = coalesce(l.nip_hash, public.agendamento_nip_hash(l.nip))
+  where l.nip_hash is null
+    and coalesce(l.nip, '') <> '';
 
-delete from public.agendamento_militar_lookup where nip_hash is null;
-
-do $$
-begin
-  if exists (
-    select 1
-    from information_schema.columns
-    where table_schema = 'public'
-      and table_name = 'agendamento_militar_lookup'
-      and column_name = 'nip_hash'
-  ) then
-    alter table public.agendamento_militar_lookup alter column nip_hash set not null;
-  end if;
-exception
-  when others then
-    raise notice 'agendamento_militar_lookup.nip_hash: %', sqlerrm;
-end $$;
-
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conrelid = 'public.agendamento_militar_lookup'::regclass
-      and contype = 'p'
-  ) then
+  if pk_col is distinct from 'nip_hash' then
     alter table public.agendamento_militar_lookup
-      add constraint agendamento_militar_lookup_pkey primary key (nip_hash);
-  end if;
-end $$;
+      drop constraint if exists agendamento_militar_lookup_pkey;
 
--- Remove texto plano (PII) — lookup já não usa nip como PK
-do $$
-begin
-  alter table public.agendamento_reservas alter column nip drop not null;
-  alter table public.agendamento_reservas alter column nome drop not null;
-  alter table public.agendamento_militar_lookup alter column nip drop not null;
-  alter table public.agendamento_militar_lookup alter column nome drop not null;
+    delete from public.agendamento_militar_lookup where nip_hash is null;
+
+    begin
+      alter table public.agendamento_militar_lookup
+        alter column nip_hash set not null;
+    exception when others then
+      raise notice 'lookup nip_hash set not null: %', sqlerrm;
+    end;
+
+    if not exists (
+      select 1
+      from pg_constraint
+      where conrelid = 'public.agendamento_militar_lookup'::regclass
+        and contype = 'p'
+    ) then
+      alter table public.agendamento_militar_lookup
+        add constraint agendamento_militar_lookup_pkey primary key (nip_hash);
+    end if;
+  end if;
+
+  -- 4) Agora sim: remover texto plano (PII)
+  begin
+    alter table public.agendamento_militar_lookup alter column nip drop not null;
+  exception when others then null;
+  end;
+  begin
+    alter table public.agendamento_militar_lookup alter column nome drop not null;
+  exception when others then null;
+  end;
 
   update public.agendamento_reservas r
   set nip_hash = coalesce(r.nip_hash, public.agendamento_nip_hash(r.nip))

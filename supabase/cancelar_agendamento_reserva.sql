@@ -1,9 +1,14 @@
--- Permite cancelar inscrição pública (soft-delete) validando NIP + id da reserva.
--- Cole no SQL Editor do Supabase e clique em Run.
+-- =============================================================================
+-- Cancelar inscrição pública (soft-delete) validando NIP + id da reserva.
+--
+-- OBRIGATÓRIO: cole este script no SQL Editor do Supabase e clique em Run.
+-- Sem isso, a página pública mostra:
+--   "Could not find the function public.cancelar_agendamento_reserva..."
+-- =============================================================================
 
 drop function if exists public.cancelar_agendamento_reserva(text, text);
 
-create function public.cancelar_agendamento_reserva(
+create or replace function public.cancelar_agendamento_reserva(
   p_nip text,
   p_reserva_id text
 )
@@ -39,3 +44,6 @@ $$;
 
 revoke all on function public.cancelar_agendamento_reserva(text, text) from public;
 grant execute on function public.cancelar_agendamento_reserva(text, text) to anon, authenticated;
+
+-- Atualiza o cache do PostgREST (API) para enxergar a função imediatamente.
+notify pgrst, 'reload schema';

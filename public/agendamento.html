@@ -1260,9 +1260,13 @@
           }
         } catch (ex) {
           cancelandoReserva = false;
-          cancelFeedback = (ex && ex.message)
-            ? ex.message
-            : 'Não foi possível cancelar. Tente novamente.';
+          var rawMsg = (ex && ex.message) ? String(ex.message) : '';
+          if (/cancelar_agendamento_reserva|schema cache|Could not find the function/i.test(rawMsg)) {
+            cancelFeedback =
+              'Cancelamento indisponível: a função ainda não foi instalada no banco. No Supabase → SQL Editor, execute o arquivo cancelar_agendamento_reserva.sql e tente de novo.';
+          } else {
+            cancelFeedback = rawMsg || 'Não foi possível cancelar. Tente novamente.';
+          }
           atualizarModalCancelamento();
         }
       },

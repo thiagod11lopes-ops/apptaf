@@ -217,16 +217,19 @@ alter table public.agendamento_militar_lookup
 do $$
 declare
   pk_col name;
+  pii_col name;
+  pii_cols name[] := array['nip', 'nome', 'data_nascimento', 'sexo', 'categoria', 'posto', 'vinculo'];
 begin
-  -- 1) Reservas: nip não é PK — pode ficar nullable
-  begin
-    alter table public.agendamento_reservas alter column nip drop not null;
-  exception when others then null;
-  end;
-  begin
-    alter table public.agendamento_reservas alter column nome drop not null;
-  exception when others then null;
-  end;
+  -- 1) Colunas PII nullable (lookup tinha NOT NULL em data_nascimento, sexo, etc.)
+  foreach pii_col in array pii_cols loop
+    begin
+      execute format(
+        'alter table public.agendamento_reservas alter column %I drop not null',
+        pii_col
+      );
+    exception when others then null;
+    end;
+  end loop;
 
   -- 2) Cifrar dados legados (mantém nip legível até PK do lookup migrar)
   update public.agendamento_reservas r
@@ -312,15 +315,23 @@ begin
     end if;
   end if;
 
-  -- 4) Agora sim: remover texto plano (PII)
-  begin
-    alter table public.agendamento_militar_lookup alter column nip drop not null;
-  exception when others then null;
-  end;
-  begin
-    alter table public.agendamento_militar_lookup alter column nome drop not null;
-  exception when others then null;
-  end;
+  -- 4) Remover texto plano (PII) — todas as colunas legíveis nullable
+  foreach pii_col in array pii_cols loop
+    begin
+      execute format(
+        'alter table public.agendamento_militar_lookup alter column %I drop not null',
+        pii_col
+      );
+    exception when others then null;
+    end;
+    begin
+      execute format(
+        'alter table public.agendamento_reservas alter column %I drop not null',
+        pii_col
+      );
+    exception when others then null;
+    end;
+  end loop;
 
   update public.agendamento_reservas r
   set nip_hash = coalesce(r.nip_hash, public.agendamento_nip_hash(r.nip))

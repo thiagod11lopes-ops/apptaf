@@ -23,9 +23,8 @@ alter table public.agendamento_militar_lookup
   add column if not exists payload_enc text;
 
 alter table public.agendamento_reservas alter column nip drop not null;
-alter table public.agendamento_militar_lookup alter column nip drop not null;
 
--- Rehash se ainda faltar
+-- Rehash se ainda faltar (lookup: PK ainda pode estar em nip)
 update public.agendamento_reservas r
 set nip_hash = public.agendamento_nip_hash(r.nip)
 where r.nip_hash is null and coalesce(r.nip, '') <> '';
@@ -34,7 +33,7 @@ update public.agendamento_militar_lookup l
 set nip_hash = public.agendamento_nip_hash(l.nip)
 where l.nip_hash is null and coalesce(l.nip, '') <> '';
 
--- PK lookup (idempotente)
+-- PK lookup: nip → nip_hash (obrigatório antes de nip = null)
 alter table public.agendamento_militar_lookup drop constraint if exists agendamento_militar_lookup_pkey;
 delete from public.agendamento_militar_lookup where nip_hash is null;
 

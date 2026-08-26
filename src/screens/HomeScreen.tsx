@@ -346,6 +346,7 @@ export default function HomeScreen() {
   return (
     <>
     <MobileScreenScaffold scroll={false} style={styles.page} contentContainerStyle={styles.pageContent}>
+      <View style={styles.mainColumn}>
       <View style={styles.headerBlock}>
         <View style={styles.titleBlock}>
           <Text
@@ -402,7 +403,7 @@ export default function HomeScreen() {
         onClose={() => setAgendamentoModalAberto(false)}
       />
 
-      <TafGlassPanel accent="cyan" style={styles.statsPanel}>
+      <TafGlassPanel accent="cyan" fill style={styles.statsPanel}>
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
             <StatCard
@@ -584,6 +585,7 @@ export default function HomeScreen() {
         </View>
         </View>
       </TafGlassPanel>
+      </View>
     </MobileScreenScaffold>
 
       <ReprovadosInicioModal
@@ -607,8 +609,13 @@ const styles = StyleSheet.create({
     flex: 1,
     flexGrow: 1,
     paddingTop: 4,
-    gap: 10,
     minHeight: 0,
+  },
+  mainColumn: {
+    flex: 1,
+    minHeight: 0,
+    width: '100%',
+    gap: 10,
   },
   headerBlock: {
     width: '100%',

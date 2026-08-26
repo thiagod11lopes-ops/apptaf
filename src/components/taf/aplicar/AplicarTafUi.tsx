@@ -158,10 +158,13 @@ export function AplicarTafGlassPanel({
   children,
   style,
   accent,
+  fill,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
   accent?: 'cyan' | 'violet' | 'none';
+  /** Preenche altura disponível do pai (ex.: aba Iniciar). */
+  fill?: boolean;
 }) {
   const { theme } = useTheme();
   const glass = getAplicarTafGlass(theme);
@@ -178,7 +181,7 @@ export function AplicarTafGlassPanel({
         : 'transparent';
 
   return (
-    <View style={[styles.panelOuter, style]}>
+    <View style={[styles.panelOuter, fill && styles.panelOuterFill, style]}>
       {accent && accent !== 'none' && Platform.OS !== 'web' ? (
         <LinearGradient
           colors={[accentColor, 'transparent']}
@@ -190,6 +193,7 @@ export function AplicarTafGlassPanel({
       <View
         style={[
           styles.panelInner,
+          fill && styles.panelInnerFill,
           { padding: isNativeMobile ? 14 : 18 },
           {
             backgroundColor: glass.bg,
@@ -466,6 +470,11 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusLg + 4,
     overflow: 'hidden',
   },
+  panelOuterFill: {
+    flex: 1,
+    minHeight: 0,
+    marginBottom: 0,
+  },
   panelAccent: {
     position: 'absolute',
     top: 0,
@@ -478,6 +487,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: PREMIUM.radiusLg + 4,
     gap: 4,
+  },
+  panelInnerFill: {
+    flex: 1,
+    minHeight: 0,
+    gap: 12,
   },
   sectionHeader: {
     gap: 4,

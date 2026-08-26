@@ -584,7 +584,17 @@
       if (!q2.error && q2.data && q2.data.length > 0) return q2.data[0];
       if (q2.error && !rpcAusente(q2.error)) throw q2.error;
 
-      return buscarReservaLegacy(digits, slotSel.id, slotSel.data_taf, slotSel.modalidade);
+      return null;
+    }
+
+    async function carregarContagemReservas() {
+      var map = {};
+      var r2 = await sb.rpc('contar_reservas_por_slot');
+      if (r2.error) throw new Error(erroAmigavel(r2.error));
+      (r2.data || []).forEach(function (r) {
+        map[r.slot_id] = Number(r.total) || 0;
+      });
+      return map;
     }
 
     function abrirJaAgendado(reserva) {
@@ -776,52 +786,18 @@
         || m.indexOf('42883') !== -1;
     }
 
-    var COLS_RESERVA = 'id,slot_id,data_taf,modalidade,nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at';
-
-    async function carregarContagemReservas() {
-      var map = {};
-      var r2 = await sb.rpc('contar_reservas_por_slot');
-      if (!r2.error && r2.data) {
-        (r2.data || []).forEach(function (r) {
-          map[r.slot_id] = Number(r.total) || 0;
-        });
-        return map;
+    function erroAmigavel(err) {
+      var m = String((err && err.message) || err || '').toLowerCase();
+      if (m.indexOf('permission denied') !== -1) {
+        return 'Versão antiga da página em cache. Feche a aba e abra de novo (ou aba anônima): '
+          + 'https://thiagod11lopes-ops.github.io/apptaf/agendamento.html?nocache=' + Date.now();
       }
-      if (!rpcAusente(r2.error)) throw r2.error;
-      var leg = await sb.from('agendamento_reservas').select('slot_id').eq('deleted', false);
-      if (leg.error) throw leg.error;
-      (leg.data || []).forEach(function (r) {
-        map[r.slot_id] = (map[r.slot_id] || 0) + 1;
-      });
-      return map;
+      if (rpcAusente(err)) {
+        return 'Agendamento indisponível: o banco ainda não foi atualizado. Avise o administrador.';
+      }
+      return (err && err.message) ? err.message : String(err || 'Erro desconhecido');
     }
 
-    async function buscarReservaLegacy(digits, slotId, dataTaf, modalidade) {
-      if (slotId) {
-        var q1 = await sb.from('agendamento_reservas')
-          .select(COLS_RESERVA)
-          .eq('nip', digits)
-          .eq('slot_id', slotId)
-          .eq('deleted', false)
-          .maybeSingle();
-        if (q1.error) throw q1.error;
-        if (q1.data) return q1.data;
-      }
-      if (dataTaf && modalidade) {
-        var q2 = await sb.from('agendamento_reservas')
-          .select(COLS_RESERVA)
-          .eq('nip', digits)
-          .eq('data_taf', dataTaf)
-          .eq('modalidade', modalidade)
-          .eq('deleted', false)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (q2.error) throw q2.error;
-        return q2.data || null;
-      }
-      return null;
-    }
 
     async function carregarDados() {
       try {
@@ -837,7 +813,7 @@
         etapa = 'data'; render();
       } catch(e) {
         console.error('[agendamento] carregarDados:', e);
-        mostrarErro('Erro ao carregar disponibilidade. Verifique sua conexão e tente novamente.');
+        mostrarErro(erroAmigavel(e) || 'Erro ao carregar disponibilidade. Verifique sua conexão e tente novamente.');
       }
     }
 
@@ -1607,27 +1583,10 @@
             p_posto: form.posto,
             p_vinculo: form.vinculo,
           });
-          if (ins.error && rpcAusente(ins.error)) {
-            ins = await sb.from('agendamento_reservas').insert({
-              id: id,
-              slot_id: slotSel.id,
-              data_taf: slotSel.data_taf,
-              modalidade: slotSel.modalidade,
-              nip: nipKey,
-              nome: nomeExibicao(),
-              data_nascimento: form.dataNascimento.trim(),
-              sexo: form.sexo,
-              categoria: form.categoria,
-              posto: form.posto,
-              vinculo: form.vinculo,
-              updated_at: Date.now(),
-              deleted: false,
-            });
-          }
-          if(ins.error) throw ins.error;
+          if (ins.error) throw ins.error;
           etapa='sucesso'; render();
         } catch(ex){
-          var msg=(ex&&ex.message)?ex.message:'Erro ao confirmar. Tente novamente.';
+          var msg=erroAmigavel(ex);
           if(err){err.textContent=msg;err.style.display='block';}
           if(btn){btn.disabled=false;btn.innerHTML='&#10003; Confirmar inscrição';}
         }

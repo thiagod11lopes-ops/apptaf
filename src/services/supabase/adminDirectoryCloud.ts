@@ -38,7 +38,7 @@ export async function adminDatabaseSizeBytes(): Promise<number> {
   return Math.floor(n);
 }
 
-/** Lista e-mails chefe (RPC security definer — painel /admin/historico). */
+/** Lista e-mails chefe (RPC security definer — registro de bancos / app). */
 export async function adminListBossEmails(): Promise<AdminBossRow[]> {
   const sb = requireSupabase();
   const { data, error } = await sb.rpc('admin_list_boss_emails');

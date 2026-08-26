@@ -213,12 +213,9 @@ const agendamentoDir = path.join(distDir, 'agendamento');
 fs.mkdirSync(agendamentoDir, { recursive: true });
 fs.writeFileSync(path.join(agendamentoDir, 'index.html'), agendamentoHtml);
 
-// SPA no GitHub Pages: rotas profundas (ex. /admin/historico) precisam de HTML.
+// SPA no GitHub Pages: 404.html serve o index para rotas profundas.
 const spaIndex = fs.readFileSync(indexPath);
 fs.writeFileSync(path.join(distDir, '404.html'), spaIndex);
-const adminHistoricoDir = path.join(distDir, 'admin', 'historico');
-fs.mkdirSync(adminHistoricoDir, { recursive: true });
-fs.writeFileSync(path.join(adminHistoricoDir, 'index.html'), spaIndex);
 
 function walkDistFiles(dir, relBase = '') {
   const out = [];

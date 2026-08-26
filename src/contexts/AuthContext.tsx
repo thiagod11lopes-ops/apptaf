@@ -10,7 +10,6 @@ import React, {
 } from 'react';
 import { Platform } from 'react-native';
 import { isSupabaseConfigured, getSupabase } from '../config/supabase';
-import { isAdminHistoricoAccess } from '../utils/adminHistoricoAccess';
 import { setCloudAuthUser } from '../config/firebase';
 import {
   mapSupabaseUser,
@@ -331,18 +330,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         finalizingRef.current = true;
         finalizedUidRef.current = mapped.uid;
         try {
-          // Painel /admin/historico: só autenticação leve (sem termos/E2E/sync do app).
-          if (Platform.OS === 'web' && isAdminHistoricoAccess()) {
-            setCloudAuthUser({ uid: mapped.uid, email: mapped.email });
-            setUser(mapped);
-            setDataOwnerUid(mapped.uid);
-            setIsAuthorizedMember(false);
-            setAuthUidState(mapped.uid, mapped.uid, true);
-            setAuthReady(true);
-            setIsSessionLoading(false);
-            return true;
-          }
-
           try {
             await assertSystemAccessAllowed(mapped.uid, mapped.email);
           } catch (error) {

@@ -1,3 +1,2 @@
-# SPA — permite /admin/historico em hospedagem estática (Netlify, etc.)
-/admin/historico  /index.html  200
-/*                /index.html  200
+# SPA — fallback para hospedagem estática (Netlify, etc.)
+/*  /index.html  200

@@ -15,8 +15,6 @@ import { TabletFrameShell } from './src/components/premium/TabletFrameShell';
 import { DailyBackupGate } from './src/components/DailyBackupGate';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import AppNavigator from './src/navigation/AppNavigator';
-import { AdminHistoricoApp } from './src/admin/AdminHistoricoApp';
-import { isAdminHistoricoAccess } from './src/utils/adminHistoricoAccess';
 import { useAppFonts } from './src/hooks/useAppFonts';
 import { PREMIUM } from './src/theme/premium';
 import { lockWebViewportZoom } from './src/utils/lockWebViewportZoom';
@@ -32,7 +30,6 @@ if (Platform.OS === 'web') {
 
 function AppRoot() {
   const { isDark, theme, themeMode } = useTheme();
-  const adminHistorico = Platform.OS === 'web' && isAdminHistoricoAccess();
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -70,15 +67,6 @@ function AppRoot() {
     html.classList.toggle('dark', isDark);
     return unlockZoom;
   }, [isDark, themeMode, theme.tokens.bg]);
-
-  if (adminHistorico) {
-    return (
-      <View style={[styles.appRoot, { backgroundColor: 'transparent' }]}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <AdminHistoricoApp />
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.appRoot, { backgroundColor: 'transparent' }]}>

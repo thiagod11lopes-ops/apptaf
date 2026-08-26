@@ -1,5 +1,5 @@
 -- =============================================================================
--- TAF — Painel Admin de e-mails (/admin/historico)
+-- TAF — RPCs de diretório admin (e-mails chefe / autorizados)
 -- Cole TODO este arquivo no SQL Editor do Supabase e clique em Run.
 -- Pode executar mais de uma vez sem erro (idempotente).
 -- NÃO substitui o schema.sql completo — só cria/atualiza as funções do admin.

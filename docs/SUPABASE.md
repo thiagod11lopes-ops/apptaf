@@ -70,13 +70,7 @@ Isso cria a tabela `database_registry` e a função `ensure_database_bank_code`,
 Defina secrets `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` no repositório Actions. Sem isso o login na PWA publicada fica desabilitado.
 
 ## 8. Vercel (`apptaf.vercel.app`)
-O `.env` local **não** vai para a Vercel. Em **Project → Settings → Environment Variables**, adicione as mesmas chaves `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Production + Preview) e faça **Redeploy**. Sem isso, o painel Admin e o login na nuvem ficam desabilitados no deploy.
+O `.env` local **não** vai para a Vercel. Em **Project → Settings → Environment Variables**, adicione as mesmas chaves `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Production + Preview) e faça **Redeploy**. Sem isso, o login na nuvem fica desabilitado no deploy.
 
-## 9. Painel Admin (e-mails chefe / autorizados)
-URLs que abrem o painel (após o deploy do GitHub Pages):
-
-- `https://thiagod11lopes-ops.github.io/apptaf/admin/historico`
-- `https://thiagod11lopes-ops.github.io/apptaf/?admin=historico`
-- `https://thiagod11lopes-ops.github.io/apptaf/#/admin/historico`
-
-No SQL Editor do Supabase, execute também `supabase/admin_directory.sql`.
+## 9. E-mails autorizados (chefe / membros)
+Gerencie membros autorizados pelo app principal (Configurações), após login do chefe. No SQL Editor do Supabase, execute `supabase/admin_directory.sql` se ainda não rodou o script de diretório admin.

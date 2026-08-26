@@ -5,7 +5,8 @@
 -- Antes de produção, altere o segredo em agendamento_crypto_pepper() abaixo.
 -- =============================================================================
 
-create extension if not exists pgcrypto;
+-- pgcrypto no Supabase fica em extensions (não em public).
+create extension if not exists pgcrypto with schema extensions;
 
 -- ─── Segredo interno (ALTERE antes de produção) ───────────────────────────────
 create or replace function public.agendamento_crypto_pepper()
@@ -25,9 +26,12 @@ returns bytea
 language sql
 immutable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
-  select digest(public.agendamento_crypto_pepper() || ':aes-key-v1', 'sha256');
+  select extensions.digest(
+    public.agendamento_crypto_pepper() || ':aes-key-v1',
+    'sha256'::text
+  );
 $$;
 
 revoke all on function public.agendamento_crypto_key() from public;
@@ -45,10 +49,13 @@ returns text
 language sql
 immutable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select encode(
-    digest(public.agendamento_nip_digits(p_nip) || ':' || public.agendamento_crypto_pepper(), 'sha256'),
+    extensions.digest(
+      public.agendamento_nip_digits(p_nip) || ':' || public.agendamento_crypto_pepper(),
+      'sha256'::text
+    ),
     'hex'
   )
   where length(public.agendamento_nip_digits(p_nip)) >= 8;
@@ -61,17 +68,17 @@ create or replace function public.agendamento_encrypt_json(p_payload jsonb)
 returns text
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
-  iv bytea := gen_random_bytes(16);
+  iv bytea := extensions.gen_random_bytes(16);
   ct bytea;
 begin
-  ct := encrypt_iv(
+  ct := extensions.encrypt_iv(
     convert_to(coalesce(p_payload, '{}'::jsonb)::text, 'UTF8'),
     public.agendamento_crypto_key(),
     iv,
-    'aes'
+    'aes'::text
   );
   return encode(iv || ct, 'base64');
 end;
@@ -83,7 +90,7 @@ create or replace function public.agendamento_decrypt_json(p_enc text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   raw bytea;
@@ -101,7 +108,7 @@ begin
   iv := substring(raw from 1 for 16);
   ct := substring(raw from 17);
   plain := convert_from(
-    decrypt_iv(ct, public.agendamento_crypto_key(), iv, 'aes'),
+    extensions.decrypt_iv(ct, public.agendamento_crypto_key(), iv, 'aes'::text),
     'UTF8'
   );
   return plain::jsonb;

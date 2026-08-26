@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Image, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, Platform, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,7 +33,6 @@ import { peekSessoesListCache } from '../services/sessoesListCache';
 import { ResultadosResumoModal } from '../components/ResultadosResumoModal';
 import { AgendamentoConfigModal } from '../components/home/AgendamentoConfigModal';
 import type { SessaoAplicacaoTaf } from '../services/resultadosAplicadosIndexedDb';
-const tafImage = require('../../TAF1.png');
 
 const RESUMO_INICIAL: ResumoInicioTafHistorico = {
   totalCadastrados: 0,
@@ -578,25 +577,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </TafGlassPanel>
-
-      <TafGlassPanel accent="violet" style={styles.imagePanel}>
-        <View
-          style={[
-            styles.imageFrame,
-            {
-              backgroundColor: theme.cardBg,
-              borderColor: theme.border,
-            },
-          ]}
-        >
-          <Image
-            source={tafImage}
-            style={styles.tafImage}
-            resizeMode="cover"
-            accessibilityLabel="TAF"
-          />
-        </View>
-      </TafGlassPanel>
     </MobileScreenScaffold>
 
       <ReprovadosInicioModal
@@ -761,22 +741,5 @@ const styles = StyleSheet.create({
           shadowOpacity: 0.65,
           shadowRadius: 8,
         }),
-  },
-  imagePanel: {
-    flex: 1,
-    minHeight: Platform.OS === 'web' ? 380 : 220,
-  },
-  imageFrame: {
-    flex: 1,
-    minHeight: Platform.OS === 'web' ? 340 : 180,
-    width: '100%',
-    borderWidth: 1,
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  tafImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
   },
 });

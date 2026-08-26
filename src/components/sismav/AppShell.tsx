@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { SidebarNav } from './SidebarNav';
 import type { AppRouteName } from '../../navigation/types';
@@ -18,10 +19,11 @@ type Props = {
  */
 export function AppShell({ children, activeRoute, fullWidth }: Props) {
   const { theme } = useTheme();
+  const { authReady, isAuthenticated } = useAuth();
   const { useSidebarShell } = useDeviceLayout();
   const t = theme.tokens;
 
-  if (!useSidebarShell) {
+  if (!useSidebarShell || (authReady && !isAuthenticated)) {
     return <>{children}</>;
   }
 

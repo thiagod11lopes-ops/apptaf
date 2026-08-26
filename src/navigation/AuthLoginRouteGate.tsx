@@ -3,33 +3,43 @@ import { useAuth } from '../contexts/AuthContext';
 import { hasPendingAuthCallback } from '../services/firebase/googleAuth';
 import { getCurrentRouteName, navigateTab, navigationRef } from '../navigation/navigationRef';
 
+const PUBLIC_ROUTES = new Set(['Login', 'AgendamentoPublico']);
+
 /**
- * Após login confirmado (sessão pronta), vai automaticamente para a Home.
- * Recuperação de senha / callback de e-mail mantém a tela Conta.
+ * Exige login antes do app (Iniciar e demais abas).
+ * Após autenticação confirmada, redireciona para a Home.
  */
 export function AuthLoginRouteGate() {
-  const { isAuthenticated, isSessionLoading, passwordRecoveryPending } = useAuth();
+  const { authReady, isAuthenticated, isSessionLoading, passwordRecoveryPending } = useAuth();
   const wasAuthenticatedRef = useRef<boolean | null>(null);
   const goHomeWhenSessionReadyRef = useRef(false);
 
   useEffect(() => {
-    if (!navigationRef.isReady()) return;
+    if (!navigationRef.isReady() || !authReady) return;
 
-    // Recuperação / link de e-mail: fica em Conta.
+    const route = getCurrentRouteName();
+
     if (passwordRecoveryPending || hasPendingAuthCallback()) {
       goHomeWhenSessionReadyRef.current = false;
-      if (getCurrentRouteName() !== 'Login') {
+      if (route !== 'Login') {
         navigateTab('Login');
       }
       wasAuthenticatedRef.current = isAuthenticated;
       return;
     }
 
-    // Primeira observação: se o login já confirmou enquanto a sessão ainda prepara
-    // (perfil hidratado / evento SIGNED_IN antes do gate ver "deslogado"), marca para ir à Home.
+    if (!isAuthenticated) {
+      goHomeWhenSessionReadyRef.current = false;
+      wasAuthenticatedRef.current = false;
+      if (!PUBLIC_ROUTES.has(route)) {
+        navigateTab('Login');
+      }
+      return;
+    }
+
     if (wasAuthenticatedRef.current === null) {
-      wasAuthenticatedRef.current = isAuthenticated;
-      if (isAuthenticated && isSessionLoading) {
+      wasAuthenticatedRef.current = true;
+      if (isSessionLoading) {
         goHomeWhenSessionReadyRef.current = true;
       }
       return;
@@ -37,24 +47,19 @@ export function AuthLoginRouteGate() {
 
     const wasAuthenticated = wasAuthenticatedRef.current;
 
-    // Login acabou de confirmar — espera a sessão preparar e então vai à Home.
-    if (isAuthenticated && !wasAuthenticated) {
+    if (!wasAuthenticated) {
       goHomeWhenSessionReadyRef.current = true;
-    }
-
-    if (!isAuthenticated) {
-      goHomeWhenSessionReadyRef.current = false;
-      wasAuthenticatedRef.current = false;
-      return;
     }
 
     wasAuthenticatedRef.current = true;
 
     if (goHomeWhenSessionReadyRef.current && !isSessionLoading) {
       goHomeWhenSessionReadyRef.current = false;
-      navigateTab('Home');
+      if (route === 'Login' || route === 'MainTabs') {
+        navigateTab('Home');
+      }
     }
-  }, [isAuthenticated, isSessionLoading, passwordRecoveryPending]);
+  }, [authReady, isAuthenticated, isSessionLoading, passwordRecoveryPending]);
 
   return null;
 }

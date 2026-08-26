@@ -50,7 +50,7 @@ export default function LoginScreen() {
   const statusConta = useMemo(() => {
     if (isSessionLoading) return 'Preparando conta…';
     if (passwordRecoveryPending) return 'Defina uma nova senha para continuar';
-    if (!isAuthenticated) return 'Modo offline · dados locais';
+    if (!isAuthenticated) return 'Informe e-mail e senha cadastrados pelo chefe';
     if (appMode !== 'OFFLINE') return statusHint ?? 'Atualizando com a nuvem…';
     if (pendingCount > 0) {
       return `Conectado · ${pendingCount} alteração(ões) serão enviadas ao voltar online`;

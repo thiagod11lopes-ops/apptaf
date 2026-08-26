@@ -14,7 +14,7 @@ export function getSupabase(): SupabaseClient | null {
   if (!client) {
     client = createClient(url, anonKey, {
       auth: {
-        persistSession: true,
+        persistSession: false,
         autoRefreshToken: true,
         detectSessionInUrl: typeof window !== 'undefined',
       },

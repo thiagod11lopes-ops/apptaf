@@ -25,6 +25,7 @@ import ConfiguracoesScreen from '../screens/ConfiguracoesScreen';
 import LoginScreen from '../screens/LoginScreen';
 import CadastrarResultadosScreen from '../screens/CadastrarResultadosScreen';
 import AgendamentoPublicoScreen from '../screens/AgendamentoPublicoScreen';
+import { useAuth } from '../contexts/AuthContext';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -55,9 +56,11 @@ const LINKING_CONFIG = {
 
 export default function AppNavigator() {
   const { theme, isDark } = useTheme();
+  const { authReady, isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
   const { useSidebarShell } = useDeviceLayout();
-  const [activeRoute, setActiveRoute] = useState<AppRouteName>('Home');
+  const [activeRoute, setActiveRoute] = useState<AppRouteName>('Login');
+  const showAppChrome = authReady && isAuthenticated;
   const topChromeExtra =
     isMainTabRoute(activeRoute) ||
     activeRoute === 'Normas' ||
@@ -80,10 +83,14 @@ export default function AppNavigator() {
       navigateTab('Login');
       return;
     }
+    if (!authReady || !isAuthenticated) {
+      navigateTab('Login');
+      return;
+    }
     if (peekProvaAtivaSession()) {
       navigateTab('AplicarTAF');
     }
-  }, [syncRoute]);
+  }, [syncRoute, authReady, isAuthenticated]);
 
   const navTheme = {
     ...DefaultTheme,
@@ -117,7 +124,7 @@ export default function AppNavigator() {
         <View style={styles.shellForeground}>
         <AppShell activeRoute={activeRoute} fullWidth={fullWidth}>
           <Stack.Navigator
-            initialRouteName="MainTabs"
+            initialRouteName="Login"
             screenOptions={{
               headerShown: false,
               contentStyle: {
@@ -163,8 +170,8 @@ export default function AppNavigator() {
           />
           </Stack.Navigator>
         </AppShell>
-        <SettingsTopButton activeRoute={activeRoute} />
-        <GlassBottomBar activeRoute={activeRoute} />
+        {showAppChrome ? <SettingsTopButton activeRoute={activeRoute} /> : null}
+        {showAppChrome ? <GlassBottomBar activeRoute={activeRoute} /> : null}
         </View>
       </View>
     </NavigationContainer>

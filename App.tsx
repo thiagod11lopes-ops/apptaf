@@ -81,16 +81,15 @@ function AppRoot() {
 }
 
 function AppWithDataStore({ children }: { children: React.ReactNode }) {
-  const { authReady, user } = useAuth();
+  const { authReady, user, isAuthenticated } = useAuth();
   const [sessionReady, setSessionReady] = useState(false);
-  const [ownerUid, setOwnerUid] = useState<string | null>(() => getCachedDataOwnerUid());
+  const [ownerUid, setOwnerUid] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       await hydrateAppStorageFromIndexedDb();
       if (cancelled) return;
-      setOwnerUid(getCachedDataOwnerUid());
       setSessionReady(true);
     })();
     return () => {
@@ -100,10 +99,10 @@ function AppWithDataStore({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!authReady) return;
-    setOwnerUid(getCachedDataOwnerUid());
-  }, [authReady, user?.uid]);
+    setOwnerUid(isAuthenticated ? getCachedDataOwnerUid() : null);
+  }, [authReady, isAuthenticated, user?.uid]);
 
-  if (!sessionReady && !ownerUid) {
+  if (!sessionReady || !authReady) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={PREMIUM.accentLight} />

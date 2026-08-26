@@ -418,9 +418,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!sb) {
       void (async () => {
         await hydrateAppStorageFromIndexedDb();
-        const owner = getCachedDataOwnerUid();
-        setDataOwnerUid(owner);
-        setAuthUidState(null, owner, true);
+        setUser(null);
+        setDataOwnerUid(null);
+        setAuthUidState(null, null, false);
         setAuthReady(true);
       })();
       return;
@@ -437,15 +437,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     };
 
-    const applyLocalOfflineSession = (): void => {
-      const owner = getCachedDataOwnerUid();
-      const profile = readPersistedAuthProfile();
-      const loginUid = profile?.uid ?? getCachedLoginUid();
-      setUser(profile);
-      setIsAuthorizedMember(Boolean(loginUid && owner && loginUid !== owner));
-      setDataOwnerUid(owner);
-      setAuthUidState(loginUid, owner, true);
-      void systemState.setOfflineMode();
+    const applyLoggedOutState = (): void => {
+      setUser(null);
+      setIsAuthorizedMember(false);
+      setCloudAuthUser(null);
+      setIsSessionLoading(false);
+      setRecoveryPending(false);
+      syncManager.setAuthAvailable(false);
       setAuthReady(true);
     };
 
@@ -458,31 +456,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         finalizedUidRef.current = null;
         finalizingRef.current = false;
         finalizeInFlightRef.current = null;
-        setIsSessionLoading(false);
-        setRecoveryPending(false);
-
-        const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-        const owner = getCachedDataOwnerUid();
-        const profile = readPersistedAuthProfile();
-        if (offline && (owner || profile)) {
-          setUser(profile);
-          const loginUid = profile?.uid ?? getCachedLoginUid();
-          setIsAuthorizedMember(Boolean(loginUid && owner && loginUid !== owner));
-          setDataOwnerUid(owner);
-          setAuthUidState(loginUid, owner, true);
-          void systemState.setOfflineMode();
-          setAuthReady(true);
-          return;
-        }
-
-        applyLocalOfflineSession();
+        applyLoggedOutState();
       })();
     };
 
     void (async () => {
       await hydrateAppStorageFromIndexedDb();
-      const owner = getCachedDataOwnerUid();
-      setDataOwnerUid(owner);
 
       const windowError = parseAuthErrorFromWindow();
       if (windowError) {
@@ -490,12 +469,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearFirebaseAuthParamsFromWindow();
       }
 
+      const recoveryCallback = isPasswordRecoveryCallback();
+      const authRedirect = isFirebaseAuthRedirectReturn();
+      if (!recoveryCallback && !authRedirect) {
+        await sb.auth.signOut();
+      }
+
       const { data } = await sb.auth.getSession();
       authInitializedRef.current = true;
       if (cancelled) return;
 
       if (data.session?.user) {
-        if (isPasswordRecoveryCallback()) {
+        if (recoveryCallback) {
           setRecoveryPending(true);
           setCloudAuthUser({
             uid: data.session.user.id,
@@ -511,20 +496,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         }
         clearFirebaseAuthParamsFromWindow();
-      } else if (isFirebaseAuthRedirectReturn()) {
+      } else if (authRedirect) {
         setAuthReady(true);
-      } else if (owner) {
-        const profile = readPersistedAuthProfile();
-        const loginUid = profile?.uid ?? getCachedLoginUid();
-        setUser(profile);
-        setIsAuthorizedMember(Boolean(loginUid && owner && loginUid !== owner));
-        setAuthUidState(loginUid, owner, true);
-        setAuthReady(true);
-        void restoreE2eForOwner(owner, profile?.email ?? null);
-        await syncManager.bindSession(owner);
-        syncManager.setAuthAvailable(Boolean(data.session?.user));
       } else {
-        applyLocalOfflineSession();
+        applyLoggedOutState();
       }
     })();
 

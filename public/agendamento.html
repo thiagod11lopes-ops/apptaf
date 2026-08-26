@@ -76,7 +76,20 @@
     }
 
     .header-title { font-size: 21px; font-weight: 800; color: var(--gold); line-height: 1.2; }
+    .header-title-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
     .header-sub   { font-size: 13px; color: var(--text-m); margin-top: 2px; }
+
+    .qr-icon-btn {
+      width: 36px; height: 36px; border: 1px solid rgba(212,175,55,.4);
+      background: rgba(212,175,55,.12); border-radius: 10px;
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      color: var(--gold); flex-shrink: 0; transition: background .15s, border-color .15s;
+      padding: 0;
+    }
+    .qr-icon-btn:hover { background: rgba(212,175,55,.22); border-color: var(--gold); }
+    .qr-icon-btn svg { width: 20px; height: 20px; display: block; }
 
     /* ── Steps ──────────────────────────────────────────────────── */
     #stepsBar { display: flex; align-items: center; margin-bottom: 24px; }
@@ -344,6 +357,27 @@
     .modal-actions { display: flex; flex-direction: column; gap: 8px; }
     .modal-actions .btn { margin-top: 0; }
 
+    .modal-qr-frame {
+      width: 260px; height: 260px; margin: 8px auto 12px;
+      background: #fff; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 12px;
+    }
+    .modal-qr-frame canvas,
+    .modal-qr-frame img {
+      width: 236px; height: 236px; display: block;
+    }
+    .modal-qr-url {
+      font-size: 11px; text-align: center; color: var(--text-m);
+      word-break: break-all; margin-bottom: 4px; font-weight: 600;
+    }
+    .modal-icon.qr {
+      background: rgba(212,175,55,.12);
+      border-color: rgba(212,175,55,.35);
+      color: var(--gold);
+      font-size: 22px;
+    }
+
     /* ── Loading ────────────────────────────────────────────────── */
     .loading { display: flex; flex-direction: column; align-items: center; padding: 64px 0; gap: 16px; }
     .spinner {
@@ -373,7 +407,21 @@
       <div class="brand">
         <div class="brand-badge">T</div>
         <div>
-          <div class="header-title">Agendamento TAF</div>
+          <div class="header-title-row">
+            <div class="header-title">Agendamento TAF</div>
+            <button type="button" class="qr-icon-btn" id="btnQrCode" onclick="app.abrirQrCode()" aria-label="Gerar QR Code do agendamento" title="QR Code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                <path d="M14 14h3v3h-3z"></path>
+                <path d="M20 14h1v1"></path>
+                <path d="M14 20h1v1"></path>
+                <path d="M17 17h1v1"></path>
+                <path d="M20 17h1v3h-3v-1"></path>
+              </svg>
+            </button>
+          </div>
           <div class="header-sub" id="headerSub">Inscreva-se na sua modalidade</div>
         </div>
       </div>
@@ -404,6 +452,23 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="modalQrCode" role="dialog" aria-modal="true" aria-labelledby="modalQrTitle" onclick="app.onQrOverlayClick(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-icon qr" aria-hidden="true">▣</div>
+      <div class="modal-title" id="modalQrTitle">QR Code — Agendamento</div>
+      <div class="modal-text">Escaneie para abrir a página online de agendamento do TAF.</div>
+      <div class="modal-qr-frame" id="modalQrFrame">
+        <div class="spinner" aria-label="Gerando QR Code"></div>
+      </div>
+      <div class="modal-qr-url" id="modalQrUrl"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" id="btnCompartilharQr" onclick="app.compartilharQrCode()">Compartilhar</button>
+        <button type="button" class="btn btn-outline" onclick="app.fecharQrCode()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
   <script>
   (function () {
     'use strict';
@@ -420,6 +485,9 @@
     }
     var URL_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.url).trim() : '';
     var KEY_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.key).trim() : '';
+    var URL_AGENDAMENTO_PUBLICO = 'https://thiagod11lopes-ops.github.io/apptaf/agendamento';
+    var qrDataUrlCache = null;
+    var compartilhandoQr = false;
 
     var LABEL = {
       corrida:'Corrida', natacao_permanencia:'Natação + Permanência',
@@ -1201,6 +1269,88 @@
         cancelConfirmando = false;
         cancelFeedback = '';
         atualizarModalCancelamento();
+      },
+      abrirQrCode: function(){
+        var overlay = document.getElementById('modalQrCode');
+        var frame = document.getElementById('modalQrFrame');
+        var urlEl = document.getElementById('modalQrUrl');
+        if (urlEl) urlEl.textContent = URL_AGENDAMENTO_PUBLICO;
+        if (overlay) overlay.classList.add('open');
+        if (!frame) return;
+        frame.innerHTML = '<div class="spinner" aria-label="Gerando QR Code"></div>';
+        qrDataUrlCache = null;
+        function pintar(dataUrl) {
+          qrDataUrlCache = dataUrl;
+          frame.innerHTML = '';
+          var img = document.createElement('img');
+          img.src = dataUrl;
+          img.alt = 'QR Code do agendamento TAF';
+          frame.appendChild(img);
+        }
+        function fallbackHttp() {
+          var src = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=12&data='
+            + encodeURIComponent(URL_AGENDAMENTO_PUBLICO);
+          pintar(src);
+        }
+        if (window.QRCode && typeof window.QRCode.toDataURL === 'function') {
+          window.QRCode.toDataURL(URL_AGENDAMENTO_PUBLICO, {
+            width: 320,
+            margin: 2,
+            errorCorrectionLevel: 'M',
+          }).then(pintar).catch(fallbackHttp);
+        } else {
+          fallbackHttp();
+        }
+      },
+      fecharQrCode: function(){
+        var overlay = document.getElementById('modalQrCode');
+        if (overlay) overlay.classList.remove('open');
+      },
+      onQrOverlayClick: function(ev){
+        if (ev && ev.target && ev.target.id === 'modalQrCode') {
+          app.fecharQrCode();
+        }
+      },
+      compartilharQrCode: async function(){
+        if (compartilhandoQr) return;
+        compartilhandoQr = true;
+        var btn = document.getElementById('btnCompartilharQr');
+        if (btn) { btn.disabled = true; btn.textContent = 'Preparando...'; }
+        var title = 'Agendamento TAF';
+        var text = 'Acesse o agendamento do TAF:\n' + URL_AGENDAMENTO_PUBLICO;
+        try {
+          var dataUrl = qrDataUrlCache;
+          if (!dataUrl && window.QRCode && typeof window.QRCode.toDataURL === 'function') {
+            dataUrl = await window.QRCode.toDataURL(URL_AGENDAMENTO_PUBLICO, {
+              width: 320, margin: 2, errorCorrectionLevel: 'M',
+            });
+            qrDataUrlCache = dataUrl;
+          }
+          if (dataUrl && dataUrl.indexOf('data:') === 0 && navigator.share) {
+            var res = await fetch(dataUrl);
+            var blob = await res.blob();
+            var file = new File([blob], 'agendamento-taf-qrcode.png', { type: 'image/png' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({ files: [file], title: title, text: text, url: URL_AGENDAMENTO_PUBLICO });
+              return;
+            }
+          }
+          if (navigator.share) {
+            await navigator.share({ title: title, text: text, url: URL_AGENDAMENTO_PUBLICO });
+            return;
+          }
+          window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+          try {
+            window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
+          } catch (e2) {
+            alert(text);
+          }
+        } finally {
+          compartilhandoQr = false;
+          if (btn) { btn.disabled = false; btn.textContent = 'Compartilhar'; }
+        }
       },
       onModalOverlayClick: function(ev){
         if (cancelandoReserva) return;

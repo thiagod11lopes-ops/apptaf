@@ -21,11 +21,12 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, CalendarDays, CheckCircle2, ChevronRight, User } from 'lucide-react-native';
+import { ArrowLeft, CalendarDays, CheckCircle2, ChevronRight, QrCode, User } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { getUiColors } from '../theme/uiColors';
 import { PREMIUM } from '../theme/premium';
+import { AgendamentoQrCodeModal } from '../components/home/AgendamentoQrCodeModal';
 import {
   getAllSlots,
   MODALIDADE_AGENDAMENTO_LABELS,
@@ -111,6 +112,7 @@ export default function AgendamentoPublicoScreen() {
   // Confirmação
   const [salvando, setSalvando] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
+  const [qrModalVisible, setQrModalVisible] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -691,7 +693,19 @@ export default function AgendamentoPublicoScreen() {
             </TouchableOpacity>
           ) : null}
           <View style={styles.headerTexts}>
-            <Text style={[ts.title, { color: ui.text, fontSize: 22 }]}>Agendamento TAF</Text>
+            <View style={styles.titleRow}>
+              <Text style={[ts.title, { color: ui.text, fontSize: 22, flexShrink: 1 }]}>
+                Agendamento TAF
+              </Text>
+              <TouchableOpacity
+                onPress={() => setQrModalVisible(true)}
+                style={styles.qrIconBtn}
+                accessibilityLabel="Gerar QR Code do agendamento"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <QrCode size={22} color="#b8941c" strokeWidth={2.3} />
+              </TouchableOpacity>
+            </View>
             <Text style={[ts.caption, { color: theme.textSecondary }]}>
               Inscreva-se na sua modalidade
             </Text>
@@ -741,6 +755,10 @@ export default function AgendamentoPublicoScreen() {
           </>
         )}
       </ScrollView>
+      <AgendamentoQrCodeModal
+        visible={qrModalVisible}
+        onClose={() => setQrModalVisible(false)}
+      />
     </LinearGradient>
   );
 }
@@ -768,6 +786,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTexts: { flex: 1 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  qrIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'center',

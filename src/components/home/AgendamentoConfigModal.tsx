@@ -9,7 +9,7 @@ import {
   Linking,
   Platform,
 } from 'react-native';
-import { CalendarDays, ChevronDown, ExternalLink, FileText, Pencil, Plus, Trash2, X } from 'lucide-react-native';
+import { CalendarDays, ChevronDown, ExternalLink, FileText, Pencil, Plus, QrCode, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
@@ -35,6 +35,8 @@ import {
 } from '../../services/reservasAgendamentoStorage';
 import { ConfirmacaoExcluirSlotAgendamentoModal } from './ConfirmacaoExcluirSlotAgendamentoModal';
 import { AgendamentoRelacaoModal } from './AgendamentoRelacaoModal';
+import { AgendamentoQrCodeModal } from './AgendamentoQrCodeModal';
+import { URL_AGENDAMENTO_PUBLICO } from '../../constants/agendamentoPublico';
 import { dataBrParaIso } from '../../utils/tafRegistro';
 import {
   agendaSlotFinalizada,
@@ -43,8 +45,8 @@ import {
   type FechamentoAntecedenciaHoras,
 } from '../../utils/agendamentoFechamento';
 
-/** Página HTML standalone (não é a tela interna do app). */
-const URL_AGENDAMENTO = 'https://thiagod11lopes-ops.github.io/apptaf/agendamento.html';
+/** Página pública de agendamento. */
+const URL_AGENDAMENTO = URL_AGENDAMENTO_PUBLICO;
 
 function formatDataInput(raw: string): string {
   const digitos = raw.replace(/\D/g, '').slice(0, 8);
@@ -85,6 +87,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [slotParaExcluir, setSlotParaExcluir] = useState<SlotAgendamento | null>(null);
   const [slotRelacao, setSlotRelacao] = useState<SlotAgendamento | null>(null);
+  const [qrModalVisible, setQrModalVisible] = useState(false);
 
   const modalidadesDoTipo = useMemo(
     () => MODALIDADES_POR_TIPO_TAF[tipoTaf],
@@ -329,28 +332,44 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Botão para abrir a página de agendamento */}
-        <TouchableOpacity
-          onPress={abrirPaginaAgendamento}
-          style={[
-            styles.urlCard,
-            {
-              backgroundColor: theme.isDark ? 'rgba(99,179,237,0.12)' : 'rgba(49,130,206,0.08)',
-              borderColor: theme.isDark ? 'rgba(99,179,237,0.3)' : 'rgba(49,130,206,0.25)',
-            },
-          ]}
-          accessibilityLabel="Abrir página de agendamento"
-        >
-          <ExternalLink size={16} color={theme.primary} strokeWidth={2.2} />
-          <View style={{ flex: 1, marginLeft: 8 }}>
-            <Text style={[ts.caption, { color: theme.primary, fontWeight: '700' }]}>
-              Abrir página de agendamento
-            </Text>
-            <Text style={[ts.caption, { color: theme.textMuted, fontSize: 10 }]} numberOfLines={1}>
-              {URL_AGENDAMENTO}
-            </Text>
-          </View>
-        </TouchableOpacity>
+        {/* Botão para abrir a página de agendamento + QR */}
+        <View style={styles.urlRow}>
+          <TouchableOpacity
+            onPress={abrirPaginaAgendamento}
+            style={[
+              styles.urlCard,
+              {
+                flex: 1,
+                backgroundColor: theme.isDark ? 'rgba(99,179,237,0.12)' : 'rgba(49,130,206,0.08)',
+                borderColor: theme.isDark ? 'rgba(99,179,237,0.3)' : 'rgba(49,130,206,0.25)',
+              },
+            ]}
+            accessibilityLabel="Abrir página de agendamento"
+          >
+            <ExternalLink size={16} color={theme.primary} strokeWidth={2.2} />
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={[ts.caption, { color: theme.primary, fontWeight: '700' }]}>
+                Abrir página de agendamento
+              </Text>
+              <Text style={[ts.caption, { color: theme.textMuted, fontSize: 10 }]} numberOfLines={1}>
+                {URL_AGENDAMENTO}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setQrModalVisible(true)}
+            style={[
+              styles.qrBtn,
+              {
+                backgroundColor: theme.isDark ? 'rgba(212,175,55,0.14)' : 'rgba(212,175,55,0.12)',
+                borderColor: theme.isDark ? 'rgba(212,175,55,0.35)' : 'rgba(184,148,28,0.35)',
+              },
+            ]}
+            accessibilityLabel="Gerar QR Code do agendamento"
+          >
+            <QrCode size={22} color="#b8941c" strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
 
         {/* ── Formulário ── */}
         <View
@@ -876,6 +895,10 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
           .catch(() => undefined);
       }}
     />
+    <AgendamentoQrCodeModal
+      visible={qrModalVisible}
+      onClose={() => setQrModalVisible(false)}
+    />
     </>
   );
 }
@@ -890,7 +913,19 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  urlRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
     marginBottom: 16,
+  },
+  qrBtn: {
+    width: 48,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   formCard: {
     borderWidth: 1,

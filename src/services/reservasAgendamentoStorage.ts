@@ -232,18 +232,23 @@ export async function deleteReserva(id: string): Promise<boolean> {
 async function syncReservaSupabase(reserva: ReservaAgendamento): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  const { error } = await sb.from('agendamento_reservas').upsert({
-    id: reserva.id,
-    slot_id: reserva.slotId,
-    data_taf: reserva.data,
-    modalidade: reserva.modalidade,
-    nip: reserva.nip,
-    nome: reserva.nome,
-    categoria: reserva.categoria,
-    posto: reserva.posto || reserva.oficial || reserva.praca,
-    vinculo: reserva.vinculo,
-    updated_at: reserva.updatedAt,
-    deleted: reserva.deleted ?? false,
+  const { data: sessionData } = await sb.auth.getSession();
+  if (!sessionData.session) return;
+
+  const { error } = await sb.rpc('upsert_reserva_agendamento_admin', {
+    p_id: reserva.id,
+    p_slot_id: reserva.slotId,
+    p_data_taf: reserva.data,
+    p_modalidade: reserva.modalidade,
+    p_nip: reserva.nip,
+    p_nome: reserva.nome,
+    p_data_nascimento: '',
+    p_sexo: '',
+    p_categoria: reserva.categoria ?? '',
+    p_posto: reserva.posto || reserva.oficial || reserva.praca || '',
+    p_vinculo: reserva.vinculo ?? '',
+    p_deleted: reserva.deleted ?? false,
+    p_updated_at: reserva.updatedAt,
   });
   if (error) {
     throw new Error(error.message || 'Falha ao sincronizar reserva no Supabase.');
@@ -258,28 +263,32 @@ export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
   try {
     const sb = getSupabase();
     if (!sb) return;
-    let query = sb.from('agendamento_reservas').select('*');
-    if (slotId) query = query.eq('slot_id', slotId);
+    const { data: sessionData } = await sb.auth.getSession();
+    if (!sessionData.session) return;
 
-    const { data, error } = await query;
+    const { data, error } = await sb.rpc('listar_reservas_agendamento_admin');
     if (error || !data?.length) return;
 
     const map = await readMap();
     for (const row of data) {
+      if (slotId && (row.slot_id as string) !== slotId) continue;
       const remote: ReservaAgendamento = {
-        id:         row.id as string,
-        slotId:     row.slot_id as string,
-        data:       row.data_taf as string,
+        id: row.id as string,
+        slotId: row.slot_id as string,
+        data: row.data_taf as string,
         modalidade: row.modalidade as ModalidadeAgendamento,
-        nip:        row.nip as string,
-        nome:       row.nome as string,
-        categoria:  row.categoria as string | undefined,
-        oficial:    row.oficial as string | undefined,
-        praca:      row.praca as string | undefined,
-        posto:      (row.posto as string | undefined) || (row.oficial as string | undefined) || (row.praca as string | undefined),
-        vinculo:    row.vinculo as 'carreira' | 'rm2' | undefined,
-        updatedAt:  row.updated_at as number,
-        deleted:    row.deleted as boolean,
+        nip: row.nip as string,
+        nome: row.nome as string,
+        categoria: row.categoria as string | undefined,
+        oficial: row.oficial as string | undefined,
+        praca: row.praca as string | undefined,
+        posto:
+          (row.posto as string | undefined) ||
+          (row.oficial as string | undefined) ||
+          (row.praca as string | undefined),
+        vinculo: row.vinculo as 'carreira' | 'rm2' | undefined,
+        updatedAt: row.updated_at as number,
+        deleted: row.deleted as boolean,
       };
       const local = map[remote.id];
       if (!local || (remote.updatedAt ?? 0) > (local.updatedAt ?? 0)) {

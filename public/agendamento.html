@@ -566,28 +566,23 @@
     async function buscarReservaExistente(nipFmt) {
       var digits = nipDigitos(nipFmt);
       if (!sb || !slotSel || digits.length < 8) return null;
-      var q1 = await sb
-        .from('agendamento_reservas')
-        .select('id,slot_id,data_taf,modalidade,nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at')
-        .eq('nip', digits)
-        .eq('slot_id', slotSel.id)
-        .eq('deleted', false)
-        .maybeSingle();
+      var q1 = await sb.rpc('buscar_reserva_agendamento', {
+        p_nip: digits,
+        p_slot_id: slotSel.id,
+        p_data_taf: null,
+        p_modalidade: null,
+      });
       if (q1.error) throw q1.error;
-      if (q1.data) return q1.data;
+      if (q1.data && q1.data.length > 0) return q1.data[0];
 
-      var q2 = await sb
-        .from('agendamento_reservas')
-        .select('id,slot_id,data_taf,modalidade,nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at')
-        .eq('nip', digits)
-        .eq('data_taf', slotSel.data_taf)
-        .eq('modalidade', slotSel.modalidade)
-        .eq('deleted', false)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      var q2 = await sb.rpc('buscar_reserva_agendamento', {
+        p_nip: digits,
+        p_slot_id: null,
+        p_data_taf: slotSel.data_taf,
+        p_modalidade: slotSel.modalidade,
+      });
       if (q2.error) throw q2.error;
-      return q2.data || null;
+      return (q2.data && q2.data.length > 0) ? q2.data[0] : null;
     }
 
     function abrirJaAgendado(reserva) {
@@ -781,10 +776,10 @@
           return !!iso;
         })
           .sort(function(a,b) { var ia=brParaIso(a.data_taf)||'',ib=brParaIso(b.data_taf)||''; return ia<ib?-1:ia>ib?1:a.modalidade.localeCompare(b.modalidade); });
-        var r2 = await sb.from('agendamento_reservas').select('slot_id').eq('deleted', false);
+        var r2 = await sb.rpc('contar_reservas_por_slot');
         if (r2.error) throw r2.error;
         reservasMap = {};
-        (r2.data||[]).forEach(function(r) { reservasMap[r.slot_id] = (reservasMap[r.slot_id]||0)+1; });
+        (r2.data||[]).forEach(function(r) { reservasMap[r.slot_id] = Number(r.total)||0; });
         etapa = 'data'; render();
       } catch(e) { mostrarErro('Erro ao carregar disponibilidade. Verifique sua conexão e tente novamente.'); }
     }
@@ -1542,20 +1537,18 @@
           if (salv.error) throw salv.error;
 
           var id=Date.now()+'_'+Math.random().toString(16).slice(2,8);
-          var ins=await sb.from('agendamento_reservas').insert({
-            id:id,
-            slot_id:slotSel.id,
-            data_taf:slotSel.data_taf,
-            modalidade:slotSel.modalidade,
-            nip:nipKey,
-            nome:nomeExibicao(),
-            data_nascimento: form.dataNascimento.trim(),
-            sexo: form.sexo,
-            categoria: form.categoria,
-            posto: form.posto,
-            vinculo: form.vinculo,
-            updated_at:Date.now(),
-            deleted:false
+          var ins=await sb.rpc('inscrever_agendamento_reserva', {
+            p_id: id,
+            p_slot_id: slotSel.id,
+            p_data_taf: slotSel.data_taf,
+            p_modalidade: slotSel.modalidade,
+            p_nip: nipKey,
+            p_nome: nomeExibicao(),
+            p_data_nascimento: form.dataNascimento.trim(),
+            p_sexo: form.sexo,
+            p_categoria: form.categoria,
+            p_posto: form.posto,
+            p_vinculo: form.vinculo,
           });
           if(ins.error) throw ins.error;
           etapa='sucesso'; render();

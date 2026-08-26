@@ -103,15 +103,16 @@ export async function upsertMilitarLookupFromCadastro(
     const { data: sessionData } = await sb.auth.getSession();
     if (!sessionData.session) return false;
 
-    const { data: existing } = await sb
-      .from('agendamento_militar_lookup')
-      .select('nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at,deleted')
-      .eq('nip', row.nip)
-      .maybeSingle();
-
-    const merged = mesclarLookupRow(row, existing as MilitarLookupRow | null);
-    const { error } = await sb.from('agendamento_militar_lookup').upsert(merged, {
-      onConflict: 'nip',
+    const { error } = await sb.rpc('upsert_militar_lookup_admin', {
+      p_nip: row.nip,
+      p_nome: row.nome,
+      p_data_nascimento: row.data_nascimento,
+      p_sexo: row.sexo,
+      p_categoria: row.categoria,
+      p_posto: row.posto,
+      p_vinculo: row.vinculo,
+      p_deleted: row.deleted,
+      p_updated_at: row.updated_at,
     });
     return !error;
   } catch {
@@ -135,29 +136,30 @@ export async function pushMilitarLookupToSupabase(): Promise<number> {
     }
   }
 
-  const nips = Array.from(byNip.keys());
   const existentes = new Map<string, MilitarLookupRow>();
-  const CHUNK_SELECT = 200;
-  for (let i = 0; i < nips.length; i += CHUNK_SELECT) {
-    const slice = nips.slice(i, i + CHUNK_SELECT);
-    const { data } = await sb
-      .from('agendamento_militar_lookup')
-      .select('nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at,deleted')
-      .in('nip', slice);
-    for (const row of data ?? []) {
-      const nip = String((row as MilitarLookupRow).nip || '');
-      if (nip) existentes.set(nip, row as MilitarLookupRow);
-    }
+  const { data: remoto, error: listError } = await sb.rpc('listar_militar_lookup_admin');
+  if (listError) {
+    throw new Error(listError.message || 'Falha ao ler lookup de agendamento.');
+  }
+  for (const row of remoto ?? []) {
+    const nip = nipChaveCadastro(String((row as MilitarLookupRow).nip || ''));
+    if (nip) existentes.set(nip, row as MilitarLookupRow);
   }
 
   const rows = Array.from(byNip.values()).map((row) =>
     mesclarLookupRow(row, existentes.get(row.nip)),
   );
-  const CHUNK = 200;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const chunk = rows.slice(i, i + CHUNK);
-    const { error } = await sb.from('agendamento_militar_lookup').upsert(chunk, {
-      onConflict: 'nip',
+  for (const row of rows) {
+    const { error } = await sb.rpc('upsert_militar_lookup_admin', {
+      p_nip: row.nip,
+      p_nome: row.nome,
+      p_data_nascimento: row.data_nascimento,
+      p_sexo: row.sexo,
+      p_categoria: row.categoria,
+      p_posto: row.posto,
+      p_vinculo: row.vinculo,
+      p_deleted: row.deleted,
+      p_updated_at: row.updated_at,
     });
     if (error) {
       throw new Error(error.message || 'Falha ao publicar cadastros para agendamento.');
@@ -173,15 +175,12 @@ export async function pushMilitarLookupToSupabase(): Promise<number> {
  */
 export async function importMilitarLookupIntoCadastros(): Promise<number> {
   const sb = await requireAuthSupabase();
-  const { data, error } = await sb
-    .from('agendamento_militar_lookup')
-    .select('nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at,deleted')
-    .eq('deleted', false);
+  const { data, error } = await sb.rpc('listar_militar_lookup_admin');
   if (error) {
     throw new Error(error.message || 'Falha ao buscar cadastros do agendamento.');
   }
 
-  const rows = (data ?? []) as MilitarLookupRow[];
+  const rows = ((data ?? []) as MilitarLookupRow[]).filter((r) => r.deleted !== true);
   if (rows.length === 0) return 0;
 
   const locais = await getAllCadastros();

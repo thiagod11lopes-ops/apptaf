@@ -409,21 +409,25 @@ export default function HomeScreen() {
               label="Cadastrados"
               value={resumo.totalCadastrados.toLocaleString('pt-BR')}
               variant="primary"
+              stretch
             />
             <StatCard
               label="Pendentes"
               value={resumo.semTeste.toLocaleString('pt-BR')}
               variant="negative"
+              stretch
             />
             <StatCard
               label="Concluídos"
               value={resumo.completos.toLocaleString('pt-BR')}
               variant="positive"
+              stretch
             />
             <StatCard
               label="Parcial"
               value={resumo.parcial.toLocaleString('pt-BR')}
               variant="warning"
+              stretch
             />
           </View>
           <View style={styles.statsRow}>
@@ -431,6 +435,7 @@ export default function HomeScreen() {
               label="Reprovados"
               value={(resumo.reprovados ?? 0).toLocaleString('pt-BR')}
               variant="negative"
+              stretch
               accessibilityLabel={`Reprovados em pelo menos um teste: ${resumo.reprovados ?? 0}. Abrir lista detalhada.`}
               onPress={() => setModalReprovadosVisible(true)}
             />
@@ -438,6 +443,7 @@ export default function HomeScreen() {
               label="Restritos"
               value={(resumo.restritos ?? 0).toLocaleString('pt-BR')}
               variant="warning"
+              stretch
               accessibilityLabel={`Restritos: ${resumo.restritos ?? 0}. Abrir lista detalhada.`}
               onPress={() => setModalRestritosVisible(true)}
             />
@@ -445,11 +451,13 @@ export default function HomeScreen() {
               label="Fatores de risco"
               value={(resumo.fatoresRisco ?? 0).toLocaleString('pt-BR')}
               variant="negative"
+              stretch
             />
             <StatCard
-              label="CADAS. INCOMP"
+              label="Cad. incompletos"
               value={(resumo.cadastroIncompleto ?? 0).toLocaleString('pt-BR')}
               variant="warning"
+              stretch
               accessibilityLabel={`Cadastros incompletos: ${resumo.cadastroIncompleto ?? 0}. Abrir planilha filtrada.`}
               onPress={() =>
                 navigateTab('Cadastro', { abrirPlanilhaIncompletos: true })
@@ -458,8 +466,9 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View
-          style={styles.progressBlock}
+        <View style={styles.progressSection}>
+          <View
+            style={styles.progressBlock}
           accessibilityRole="progressbar"
           accessibilityValue={{
             min: 0,
@@ -573,6 +582,7 @@ export default function HomeScreen() {
             />
           </View>
         </View>
+        </View>
       </TafGlassPanel>
     </MobileScreenScaffold>
 
@@ -594,9 +604,11 @@ const styles = StyleSheet.create({
     minHeight: Platform.OS === 'web' ? ('100%' as unknown as number) : 0,
   },
   pageContent: {
+    flex: 1,
     flexGrow: 1,
-    paddingTop: 6,
-    gap: 12,
+    paddingTop: 4,
+    gap: 10,
+    minHeight: 0,
   },
   headerBlock: {
     width: '100%',
@@ -640,22 +652,35 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   statsPanel: {
-    flexShrink: 0,
-    gap: 12,
+    flex: 1,
+    minHeight: 0,
+    gap: 14,
+    justifyContent: 'space-between',
   },
   statsGrid: {
+    flex: 1,
     width: '100%',
-    gap: 10,
+    minHeight: 0,
+    gap: 12,
+    justifyContent: 'space-between',
   },
   statsRow: {
+    flex: 1,
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     width: '100%',
+    minHeight: 0,
+    alignItems: 'stretch',
+  },
+  progressSection: {
+    width: '100%',
+    flexShrink: 0,
+    gap: 10,
+    paddingTop: 4,
   },
   progressBlock: {
     width: '100%',
-    gap: 8,
-    paddingTop: 2,
+    gap: 6,
   },
   progressHeader: {
     flexDirection: 'row',

@@ -60,14 +60,26 @@ export function StatCard({
       ) : null}
       <View style={[styles.content, stretch && styles.contentStretch]}>
         <Text
-          style={[styles.label, compactGrid && styles.labelCompact, { color: theme.textMuted }]}
+          style={[
+            styles.label,
+            compactGrid && !stretch && styles.labelCompact,
+            stretch && styles.labelStretch,
+            { color: theme.textMuted },
+          ]}
           numberOfLines={stretch ? 2 : 1}
           adjustsFontSizeToFit={!stretch}
           minimumFontScale={0.7}
         >
           {label}
         </Text>
-        <Text style={[styles.value, compactGrid && styles.valueCompact, { color: valueColor }]}>
+        <Text
+          style={[
+            styles.value,
+            compactGrid && !stretch && styles.valueCompact,
+            stretch && styles.valueStretch,
+            { color: valueColor },
+          ]}
+        >
           {value}
         </Text>
       </View>
@@ -113,7 +125,8 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     minWidth: 0,
-    borderRadius: 10,
+    minHeight: 0,
+    borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -134,14 +147,26 @@ const styles = StyleSheet.create({
   contentStretch: {
     flex: 1,
     justifyContent: 'center',
-    gap: 6,
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
   },
   cardRegular: {
-    padding: 8,
+    padding: 10,
   },
   cardCompact: {
-    paddingVertical: 6,
-    paddingHorizontal: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  labelStretch: {
+    fontSize: 10,
+    letterSpacing: 0.55,
+    lineHeight: 13,
+    textAlign: 'center',
+  },
+  valueStretch: {
+    fontSize: 26,
+    lineHeight: 30,
   },
   label: {
     fontSize: 10,

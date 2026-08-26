@@ -8,7 +8,7 @@
 -- 4. Clique Run
 -- 5. Sucesso = mensagem verde "Success. No rows returned"
 --
--- Se falhar na 2ª tentativa, rode este arquivo (continuação idempotente).
+-- Se falhar na 2ª tentativa, rode fix_agendamento_nip_nullable.sql e depois este arquivo.
 -- =============================================================================
 
 create extension if not exists pgcrypto with schema extensions;

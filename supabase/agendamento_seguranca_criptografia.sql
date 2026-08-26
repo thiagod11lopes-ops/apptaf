@@ -7,7 +7,7 @@
 --   3. Altere o segredo em agendamento_crypto_pepper() abaixo
 --   4. Run → deve aparecer "Success. No rows returned"
 --
--- Se falhar na 2ª tentativa: rode fix_agendamento_seguranca_reexec.sql
+-- Se falhar na 2ª tentativa: rode fix_agendamento_nip_nullable.sql e depois fix_agendamento_seguranca_reexec.sql
 -- =============================================================================
 
 -- pgcrypto no Supabase fica em extensions (não em public).
@@ -140,6 +140,12 @@ alter table public.agendamento_militar_lookup
   add column if not exists nip_hash text,
   add column if not exists payload_enc text;
 
+-- CRÍTICO: liberar nip/nome nullable ANTES de cifrar ou limpar texto plano
+alter table public.agendamento_reservas alter column nip drop not null;
+alter table public.agendamento_reservas alter column nome drop not null;
+alter table public.agendamento_militar_lookup alter column nip drop not null;
+alter table public.agendamento_militar_lookup alter column nome drop not null;
+
 -- Migra reservas legadas (texto plano → cifrado)
 update public.agendamento_reservas r
 set
@@ -186,31 +192,34 @@ set
 where coalesce(l.payload_enc, '') = ''
   and coalesce(l.nip, '') <> '';
 
--- Remove texto plano (PII) — nip pode ser NOT NULL na tabela antiga
-alter table public.agendamento_reservas alter column nip drop not null;
-alter table public.agendamento_reservas alter column nome drop not null;
-alter table public.agendamento_militar_lookup alter column nip drop not null;
-alter table public.agendamento_militar_lookup alter column nome drop not null;
+-- Remove texto plano (PII) — nip/nome já são nullable acima
+do $$
+begin
+  alter table public.agendamento_reservas alter column nip drop not null;
+  alter table public.agendamento_reservas alter column nome drop not null;
+  alter table public.agendamento_militar_lookup alter column nip drop not null;
+  alter table public.agendamento_militar_lookup alter column nome drop not null;
 
-update public.agendamento_reservas r
-set nip_hash = coalesce(r.nip_hash, public.agendamento_nip_hash(r.nip))
-where r.nip_hash is null
-  and coalesce(r.nip, '') <> '';
+  update public.agendamento_reservas r
+  set nip_hash = coalesce(r.nip_hash, public.agendamento_nip_hash(r.nip))
+  where r.nip_hash is null
+    and coalesce(r.nip, '') <> '';
 
-update public.agendamento_militar_lookup l
-set nip_hash = coalesce(l.nip_hash, public.agendamento_nip_hash(l.nip))
-where l.nip_hash is null
-  and coalesce(l.nip, '') <> '';
+  update public.agendamento_militar_lookup l
+  set nip_hash = coalesce(l.nip_hash, public.agendamento_nip_hash(l.nip))
+  where l.nip_hash is null
+    and coalesce(l.nip, '') <> '';
 
-update public.agendamento_reservas
-set nip = null, nome = null, data_nascimento = null, sexo = null,
-    categoria = null, posto = null, vinculo = null
-where payload_enc is not null and payload_enc <> '';
+  update public.agendamento_reservas
+  set nip = null, nome = null, data_nascimento = null, sexo = null,
+      categoria = null, posto = null, vinculo = null
+  where payload_enc is not null and payload_enc <> '';
 
-update public.agendamento_militar_lookup
-set nip = null, nome = null, data_nascimento = null, sexo = null,
-    categoria = null, posto = null, vinculo = null
-where payload_enc is not null and payload_enc <> '';
+  update public.agendamento_militar_lookup
+  set nip = null, nome = null, data_nascimento = null, sexo = null,
+      categoria = null, posto = null, vinculo = null
+  where payload_enc is not null and payload_enc <> '';
+end $$;
 
 -- Lookup: PK por hash (sem NIP legível na chave) — idempotente
 alter table public.agendamento_militar_lookup drop constraint if exists agendamento_militar_lookup_pkey;

@@ -792,7 +792,13 @@
     }
     function nipDigitos(fmt) { return fmt.replace(/\D/g,''); }
 
-    function render() {
+    function render(opts) {
+      opts = opts || {};
+      var keepScroll = !!opts.keepScroll;
+      var scrollY = keepScroll
+        ? (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0)
+        : null;
+
       atualizarHeader(); atualizarSteps();
       var c = document.getElementById('content');
       document.getElementById('stepsBar').style.display = 'flex';
@@ -804,11 +810,25 @@
       else if (etapa==='sucesso') { document.getElementById('stepsBar').style.display='none'; c.innerHTML=telaSucesso(); }
       if (etapa==='identificar') {
         var ni=document.getElementById('nipInput');
-        if(ni){ni.value=nipVal;ni.focus();}
+        if(ni){
+          ni.value=nipVal;
+          // Foco no NIP só ao entrar na etapa — nunca ao editar outros campos
+          // (evita a página subir sozinha).
+          if (opts.focusNip) {
+            try { ni.focus({ preventScroll: true }); }
+            catch (err) { /* ignore */ }
+          }
+        }
         sincronizarFormularioNaTela();
         atualizarBtnContinuar();
       }
       atualizarModalCancelamento();
+
+      if (scrollY != null) {
+        var restore = function(){ window.scrollTo(0, scrollY); };
+        restore();
+        requestAnimationFrame(restore);
+      }
     }
 
     function atualizarHeader() {
@@ -980,7 +1000,7 @@
         if (res.error) {
           abrirCadastroNovo();
           setFeedbackIdent('Não foi possível consultar o cadastro. Preencha seus dados.', 'err');
-          render();
+          render({ keepScroll: true });
           return;
         }
         var row = (res.data && res.data[0]) || null;
@@ -989,12 +1009,12 @@
         } else {
           abrirCadastroNovo();
         }
-        render();
+        render({ keepScroll: true });
       } catch (err) {
         if (seq !== nipBuscaSeq) return;
         abrirCadastroNovo();
         setFeedbackIdent('Não foi possível consultar o cadastro. Preencha seus dados.', 'err');
-        render();
+        render({ keepScroll: true });
       }
     }
 
@@ -1104,7 +1124,7 @@
     function telaConfirmar() {
       var label=slotSel?(LABEL[slotSel.modalidade]||slotSel.modalidade):'—';
       var sexoLabel = form.sexo === 'F' ? 'Feminino' : form.sexo === 'M' ? 'Masculino' : '—';
-      var vinculoLabel = form.vinculo === 'rm2' ? 'RM2' : 'Quadro';
+      var vinculoLabel = form.vinculo === 'rm2' ? 'RM2' : 'Carreira';
       return '<p class="section-title">Confirmar inscrição</p><p class="section-sub">Verifique seus dados antes de confirmar.</p>'
         +'<div class="summary-card"><div class="summary-label">Prova</div><div class="summary-value">'+e(label)+'</div><div class="summary-sub">'+e(slotSel?slotSel.data_taf:'—')+'</div></div>'
         +'<div class="summary-card"><div class="summary-label">Militar</div><div class="summary-value">'+e(nomeExibicao())+'</div>'
@@ -1154,7 +1174,7 @@
         nipVal='';
         limparFormularioCadastro();
         nipBuscaSeq++;
-        render();
+        render({ focusNip: true });
       },
       voltar: function(){
         if(etapa==='modalidade'){etapa='data';render();}
@@ -1167,9 +1187,9 @@
           nipVal='';
           limparFormularioCadastro();
           nipBuscaSeq++;
-          render();
+          render({ focusNip: true });
         }
-        else if(etapa==='confirmar'){etapa='identificar';render();}
+        else if(etapa==='confirmar'){etapa='identificar';render({ focusNip: true });}
       },
       pedirCancelamento: function(){
         cancelConfirmando = true;
@@ -1257,7 +1277,7 @@
           limparFormularioCadastro();
           setFeedbackIdent('', '');
           var box=document.getElementById('cadastroBox');
-          if (box) render();
+          if (box) render({ keepScroll: true });
           atualizarBtnContinuar();
           return;
         }
@@ -1297,7 +1317,7 @@
           form[campo] = valor;
         }
         if (cadastroModo === 'incompleto') calcularFaltando(true);
-        render();
+        render({ keepScroll: true });
       },
       confirmarSexo: function(valor){
         form.sexo = valor;
@@ -1306,13 +1326,13 @@
           calcularFaltando(true);
           delete camposFaltando.sexo;
         }
-        render();
+        render({ keepScroll: true });
       },
       avancarConfirmar: async function(){
         if (nipDigitos(nipVal).length < 8) return;
         if (!sexoConfirmado || (form.sexo !== 'M' && form.sexo !== 'F')) {
           setFeedbackIdent('Confirme seu gênero (Masculino ou Feminino) para continuar.', 'err');
-          render();
+          render({ keepScroll: true });
           return;
         }
         if (!cadastroCompleto()) {
@@ -1322,7 +1342,7 @@
             cadastroModo = 'incompleto';
             calcularFaltando(true);
             setFeedbackIdent('Complete os campos em destaque e confirme o gênero.', 'err');
-            render();
+            render({ keepScroll: true });
           }
           return;
         }

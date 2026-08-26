@@ -572,8 +572,8 @@
         p_data_taf: null,
         p_modalidade: null,
       });
-      if (q1.error) throw q1.error;
-      if (q1.data && q1.data.length > 0) return q1.data[0];
+      if (!q1.error && q1.data && q1.data.length > 0) return q1.data[0];
+      if (q1.error && !rpcAusente(q1.error)) throw q1.error;
 
       var q2 = await sb.rpc('buscar_reserva_agendamento', {
         p_nip: digits,
@@ -581,8 +581,10 @@
         p_data_taf: slotSel.data_taf,
         p_modalidade: slotSel.modalidade,
       });
-      if (q2.error) throw q2.error;
-      return (q2.data && q2.data.length > 0) ? q2.data[0] : null;
+      if (!q2.error && q2.data && q2.data.length > 0) return q2.data[0];
+      if (q2.error && !rpcAusente(q2.error)) throw q2.error;
+
+      return buscarReservaLegacy(digits, slotSel.id, slotSel.data_taf, slotSel.modalidade);
     }
 
     function abrirJaAgendado(reserva) {
@@ -766,6 +768,61 @@
       return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
     }
 
+    function rpcAusente(err) {
+      if (!err) return false;
+      var m = String((err.message || err.code || err.details || err)).toLowerCase();
+      return m.indexOf('could not find the function') !== -1
+        || m.indexOf('pgrst202') !== -1
+        || m.indexOf('42883') !== -1;
+    }
+
+    var COLS_RESERVA = 'id,slot_id,data_taf,modalidade,nip,nome,data_nascimento,sexo,categoria,posto,vinculo,updated_at';
+
+    async function carregarContagemReservas() {
+      var map = {};
+      var r2 = await sb.rpc('contar_reservas_por_slot');
+      if (!r2.error && r2.data) {
+        (r2.data || []).forEach(function (r) {
+          map[r.slot_id] = Number(r.total) || 0;
+        });
+        return map;
+      }
+      if (!rpcAusente(r2.error)) throw r2.error;
+      var leg = await sb.from('agendamento_reservas').select('slot_id').eq('deleted', false);
+      if (leg.error) throw leg.error;
+      (leg.data || []).forEach(function (r) {
+        map[r.slot_id] = (map[r.slot_id] || 0) + 1;
+      });
+      return map;
+    }
+
+    async function buscarReservaLegacy(digits, slotId, dataTaf, modalidade) {
+      if (slotId) {
+        var q1 = await sb.from('agendamento_reservas')
+          .select(COLS_RESERVA)
+          .eq('nip', digits)
+          .eq('slot_id', slotId)
+          .eq('deleted', false)
+          .maybeSingle();
+        if (q1.error) throw q1.error;
+        if (q1.data) return q1.data;
+      }
+      if (dataTaf && modalidade) {
+        var q2 = await sb.from('agendamento_reservas')
+          .select(COLS_RESERVA)
+          .eq('nip', digits)
+          .eq('data_taf', dataTaf)
+          .eq('modalidade', modalidade)
+          .eq('deleted', false)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (q2.error) throw q2.error;
+        return q2.data || null;
+      }
+      return null;
+    }
+
     async function carregarDados() {
       try {
         var r1 = await sb.from('agendamento_slots').select('*').eq('deleted', false);
@@ -776,12 +833,12 @@
           return !!iso;
         })
           .sort(function(a,b) { var ia=brParaIso(a.data_taf)||'',ib=brParaIso(b.data_taf)||''; return ia<ib?-1:ia>ib?1:a.modalidade.localeCompare(b.modalidade); });
-        var r2 = await sb.rpc('contar_reservas_por_slot');
-        if (r2.error) throw r2.error;
-        reservasMap = {};
-        (r2.data||[]).forEach(function(r) { reservasMap[r.slot_id] = Number(r.total)||0; });
+        reservasMap = await carregarContagemReservas();
         etapa = 'data'; render();
-      } catch(e) { mostrarErro('Erro ao carregar disponibilidade. Verifique sua conexão e tente novamente.'); }
+      } catch(e) {
+        console.error('[agendamento] carregarDados:', e);
+        mostrarErro('Erro ao carregar disponibilidade. Verifique sua conexão e tente novamente.');
+      }
     }
 
     function vagas(s) { return Math.max(0, (s.max_participantes||0) - (reservasMap[s.id]||0)); }
@@ -1550,6 +1607,23 @@
             p_posto: form.posto,
             p_vinculo: form.vinculo,
           });
+          if (ins.error && rpcAusente(ins.error)) {
+            ins = await sb.from('agendamento_reservas').insert({
+              id: id,
+              slot_id: slotSel.id,
+              data_taf: slotSel.data_taf,
+              modalidade: slotSel.modalidade,
+              nip: nipKey,
+              nome: nomeExibicao(),
+              data_nascimento: form.dataNascimento.trim(),
+              sexo: form.sexo,
+              categoria: form.categoria,
+              posto: form.posto,
+              vinculo: form.vinculo,
+              updated_at: Date.now(),
+              deleted: false,
+            });
+          }
           if(ins.error) throw ins.error;
           etapa='sucesso'; render();
         } catch(ex){

@@ -352,10 +352,10 @@ export default function HomeScreen() {
             style={[
               theme.textStyles.brandTitle,
               styles.titleCenter,
-              { fontSize: isNarrowPhone ? 26 : 28 },
+              { fontSize: isNarrowPhone ? 22 : 24 },
             ]}
           >
-            TAF
+            Teste Físico
           </Text>
           <LinearGradient
             colors={[theme.primary, '#6366f1']}
@@ -363,9 +363,6 @@ export default function HomeScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.titleRule}
           />
-          <Text style={[styles.subtitleCenter, { color: theme.textSecondary }]}>
-            Teste de Aptidão Física
-          </Text>
           {emailPrefixo ? (
             <Text
               style={[styles.emailPrefix, { color: theme.textMuted }]}
@@ -623,14 +620,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     marginTop: 6,
     marginBottom: 2,
-  },
-  subtitleCenter: {
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
-    textAlign: 'center',
-    width: '100%',
-    marginTop: 4,
   },
   emailPrefix: {
     fontSize: 12,

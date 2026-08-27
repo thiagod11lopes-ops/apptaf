@@ -151,7 +151,7 @@ export default function LoginScreen() {
                 <Text style={[ts.caption, { color: theme.textMuted, marginTop: 4 }]}>
                   {passwordRecoveryPending
                     ? 'Escolha uma nova senha para a conta'
-                    : 'Na nuvem: e-mail autorizado usa o banco do chefe; demais e-mails usam banco próprio'}
+                    : 'Somente e-mails já cadastrados e autorizados pelo chefe'}
                 </Text>
               </View>
             )}

@@ -67,7 +67,7 @@ export function EmailPasswordAuthForm({
 }: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
-  const { signInWithEmail, signUpWithEmail, requestPasswordReset, updatePassword } = useAuth();
+  const { signInWithEmail, requestPasswordReset, updatePassword } = useAuth();
 
   const [mode, setMode] = useState<Mode>(forceRecovery ? 'recovery' : 'login');
   const [email, setEmail] = useState('');
@@ -127,16 +127,15 @@ export function EmailPasswordAuthForm({
 
   const switchMode = useCallback(
     (next: Mode) => {
-      setMode(next);
+      // Cadastro público desativado: só login, recuperação e nova senha pelo link.
+      const safeNext: Mode = next === 'register' ? 'login' : next;
+      setMode(safeNext);
       setInfo(null);
       setPassword('');
       setPassword2('');
       setBossCryptoPassword('');
       setNeedBossCryptoPassword(false);
-      if (next === 'register') {
-        if (!termsAccepted) setTermsModalVisible(true);
-      } else if (next === 'login') {
-        // Mantém pré-aceite se o usuário já leu os termos (fluxo "Já tenho conta").
+      if (safeNext === 'login') {
         setTermsModalVisible(false);
         if (!termsAccepted) {
           clearDatabaseTermsPreAccepted();
@@ -214,11 +213,10 @@ export function EmailPasswordAuthForm({
 
     setLoading(true);
     try {
-      // Aviso de e-mail não cadastrado só no clique (Entrar / Criar conta), nunca ao digitar.
       if (mode === 'login' || mode === 'register') {
         const accessProbe = await probeEmailSystemAccess(email);
         if (accessProbe === 'blocked') {
-          setAccessModalVariant(mode === 'register' ? 'denied' : 'unregistered');
+          setAccessModalVariant('unregistered');
           setAccessBlockedVisible(true);
           return;
         }
@@ -262,52 +260,11 @@ export function EmailPasswordAuthForm({
         }
       }
       if (mode === 'register') {
-        // Pré-aceite só se o usuário já leu os termos; membros autorizados ignoram no AuthContext.
-        if (termsAccepted) {
-          setDatabaseTermsPreAcceptedForEmail(email);
-        }
-        try {
-          const result = await signUpWithEmail(
-            email,
-            password,
-            needBossCryptoPassword && bossCryptoPassword.trim()
-              ? { bootstrapBossPassword: bossCryptoPassword.trim() }
-              : undefined,
-          );
-          if (result.needsEmailConfirmation) {
-            setInfo(
-              'Conta criada. Confirme o e-mail pelo link enviado (e spam) e depois use Entrar — não clique em Criar conta de novo.',
-            );
-            setMode('login');
-            setPassword('');
-            setPassword2('');
-            setBossCryptoPassword('');
-            setNeedBossCryptoPassword(false);
-            resetTermsState();
-            return;
-          }
-          setNeedBossCryptoPassword(false);
-          setBossCryptoPassword('');
-          onSuccess?.();
-          return;
-        } catch (e) {
-          if (isWrapMissingError(e)) {
-            setNeedBossCryptoPassword(false);
-            setInfo(E2E_MEMBER_WRAP_MISSING_MESSAGE);
-            onError?.(E2E_MEMBER_WRAP_MISSING_MESSAGE);
-            return;
-          }
-          if (isBootstrapRequiredError(e)) {
-            setNeedBossCryptoPassword(true);
-            setInfo(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
-            onError?.(E2E_MEMBER_NEEDS_BOOTSTRAP_MESSAGE);
-            return;
-          }
-          if (isSystemAccessBlockedError(e)) {
-            return;
-          }
-          throw e;
-        }
+        onError?.(
+          'Criação de conta desativada. Use um e-mail já cadastrado e autorizado pelo chefe.',
+        );
+        setMode('login');
+        return;
       }
       if (mode === 'forgot') {
         await requestPasswordReset(email);
@@ -342,7 +299,6 @@ export function EmailPasswordAuthForm({
     requestPasswordReset,
     resetTermsState,
     signInWithEmail,
-    signUpWithEmail,
     termsAccepted,
     updatePassword,
   ]);
@@ -514,15 +470,10 @@ export function EmailPasswordAuthForm({
               Esqueci a senha
             </Text>
           </Pressable>
-          <Pressable onPress={() => switchMode('register')} accessibilityRole="button">
-            <Text style={[ts.caption, { color: theme.primary, fontWeight: '700' }]}>
-              Criar conta
-            </Text>
-          </Pressable>
         </View>
       ) : null}
 
-      {mode === 'register' || mode === 'forgot' ? (
+      {mode === 'forgot' ? (
         <Pressable
           onPress={() => switchMode('login')}
           accessibilityRole="button"
@@ -543,14 +494,12 @@ export function EmailPasswordAuthForm({
       <SistemaAcessoBloqueadoModal
         visible={accessBlockedVisible}
         variant={accessModalVariant}
+        actionLabel="Entendi"
         onClose={() => {
           setAccessBlockedVisible(false);
         }}
         onAction={() => {
           setAccessBlockedVisible(false);
-          if (accessModalVariant === 'unregistered') {
-            switchMode('register');
-          }
         }}
       />
     </View>
@@ -596,7 +545,7 @@ const styles = StyleSheet.create({
   },
   links: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     marginTop: 8,
     paddingHorizontal: 2,
   },

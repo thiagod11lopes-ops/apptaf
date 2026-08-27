@@ -47,7 +47,7 @@ const VARIANT_UI = {
     message: SYSTEM_EMAIL_UNREGISTERED_MESSAGE,
     colors: ['#9a3412', '#ea580c', '#c2410c'] as const,
     shadow: '0 28px 64px rgba(154, 52, 18, 0.45)',
-    actionDefault: 'Criar conta',
+    actionDefault: 'Entendi',
     Icon: MailWarning,
     btnTextLight: '#9a3412',
   },

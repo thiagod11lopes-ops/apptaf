@@ -1196,10 +1196,10 @@
     }
 
     function telaIdentificar() {
-      if (cadastroModo === 'completo') sub = 'Cadastro encontrado. Confirme seu gênero e o transporte para continuar.';
+      var sub = 'Informe seu NIP. Em seguida, confirme seu gênero e o transporte para continuar.';
       if (cadastroModo === 'novo') sub = 'NIP não encontrado. Preencha os dados, confirme o gênero e o transporte.';
       if (cadastroModo === 'incompleto') sub = 'Há dados faltando. Complete os campos em laranja, confirme o gênero e o transporte.';
-      if (cadastroModo === 'idle') sub = 'Informe seu NIP. Em seguida, confirme seu gênero e o transporte para continuar.';
+      if (cadastroModo === 'completo') sub = 'Cadastro encontrado. Confirme seu gênero e o transporte para continuar.';
       var mostrarSexo = cadastroModo === 'novo' || cadastroModo === 'incompleto' || cadastroModo === 'completo';
       return '<p class="section-title">Identificação</p><p class="section-sub">' + sub + '</p>'
         +'<label class="field-label" for="nipInput">NIP</label>'

@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Agendamento do Teste de Aptidão Física — HNMD" />
+  <title>Agendamento TAF — HNMD</title>
+  <link rel="icon" href="./favicon.png" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <!-- Credenciais injetadas pelo CI via scripts/patch-web-dist.mjs -->
+  <script>
+    window.__AGENDAMENTO_CFG__ = {
+      url: "https://iacfawkdcsdvebvnokbo.supabase.co",
+      key: "sb_publishable_2Hnhi8Br4yFJA3TPkx6OCQ_wAmFfy35",
+      build: "3a2ef60d2b12"
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:      #0f172a;
+      --navy-2:    #1e293b;
+      --navy-3:    #334155;
+      --gold:      #d4af37;
+      --gold-dark: #b8941c;
+      --text:      #f1f5f9;
+      --text-2:    #cbd5e1;
+      --text-m:    #94a3b8;
+      --green:     #22c55e;
+      --green-bg:  rgba(34,197,94,.12);
+      --red:       #ef4444;
+      --red-bg:    rgba(239,68,68,.10);
+      --yellow-bg: rgba(212,175,55,.10);
+      --r:         14px;
+      --r-sm:      8px;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                   'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(160deg, #0f172a 0%, #1a2742 50%, #0f172a 100%);
+      color: var(--text);
+      min-height: 100%;
+    }
+
+    .app { max-width: 520px; margin: 0 auto; padding: 0 16px 48px; }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    .header { display: flex; align-items: center; gap: 12px; padding: 28px 0 22px; }
+
+    .back-btn {
+      width: 40px; height: 40px; border: none;
+      background: var(--navy-2); border-radius: var(--r-sm);
+      cursor: pointer; display: none; align-items: center; justify-content: center;
+      color: var(--text); font-size: 20px; flex-shrink: 0; transition: background .15s;
+    }
+    .back-btn:hover { background: var(--navy-3); }
+    .back-btn.visible { display: flex; }
+
+    .brand { display: flex; align-items: center; gap: 12px; flex: 1; }
+
+    .brand-badge {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      border-radius: 12px; display: flex; align-items: center;
+      justify-content: center; font-size: 22px; font-weight: 900;
+      color: var(--navy); flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(212,175,55,.35);
+    }
+
+    .header-title { font-size: 21px; font-weight: 800; color: var(--gold); line-height: 1.2; }
+    .header-title-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .header-sub   { font-size: 13px; color: var(--text-m); margin-top: 2px; }
+
+    .qr-icon-btn {
+      width: 36px; height: 36px; border: 1px solid rgba(212,175,55,.4);
+      background: rgba(212,175,55,.12); border-radius: 10px;
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      color: var(--gold); flex-shrink: 0; transition: background .15s, border-color .15s;
+      padding: 0;
+    }
+    .qr-icon-btn:hover { background: rgba(212,175,55,.22); border-color: var(--gold); }
+    .qr-icon-btn svg { width: 20px; height: 20px; display: block; }
+
+    /* ── Steps ──────────────────────────────────────────────────── */
+    #stepsBar { display: flex; align-items: center; margin-bottom: 24px; }
+
+    .step-item { display: flex; align-items: center; flex: 1; }
+    .step-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: rgba(255,255,255,.15); flex-shrink: 0; transition: background .25s;
+    }
+    .step-dot.active { background: var(--gold); }
+    .step-dot.done   { background: var(--green); }
+    .step-line {
+      flex: 1; height: 2px; background: rgba(255,255,255,.1);
+      margin: 0 4px; transition: background .25s;
+    }
+    .step-line.done { background: var(--green); }
+
+    /* ── Section ────────────────────────────────────────────────── */
+    .section-title { font-size: 20px; font-weight: 800; color: var(--text); margin-bottom: 5px; }
+    .section-sub   { font-size: 14px; color: var(--text-m); margin-bottom: 18px; line-height: 1.4; }
+
+    /* ── Cards clicáveis ────────────────────────────────────────── */
+    .card {
+      background: var(--navy-2); border: 1px solid rgba(255,255,255,.07);
+      border-radius: var(--r); padding: 15px 16px; margin-bottom: 10px;
+      cursor: pointer; display: flex; align-items: center; gap: 13px;
+      transition: border-color .2s, transform .12s; -webkit-tap-highlight-color: transparent;
+    }
+    .card:hover  { border-color: var(--gold); }
+    .card:active { transform: scale(.98); }
+    .card.finalizada {
+      opacity: .52;
+      cursor: default;
+      position: relative;
+      overflow: hidden;
+      pointer-events: none;
+      border-color: rgba(255,255,255,.08);
+    }
+    .card.finalizada:hover { border-color: rgba(255,255,255,.08); }
+    .card.finalizada:active { transform: none; }
+    .tarja-finalizada {
+      position: absolute;
+      left: -8%;
+      top: 42%;
+      width: 116%;
+      padding: 7px 0;
+      background: rgba(15, 23, 42, 0.88);
+      border-top: 1px solid rgba(212,175,55,.55);
+      border-bottom: 1px solid rgba(212,175,55,.55);
+      color: #fbbf24;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      text-align: center;
+      transform: rotate(-8deg);
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .card-emoji { font-size: 24px; flex-shrink: 0; }
+    .card-texts { flex: 1; }
+    .card-title { font-size: 16px; font-weight: 700; color: var(--text); }
+    .card-sub   { font-size: 13px; color: var(--text-m); margin-top: 3px; }
+    .card-arrow { color: var(--text-m); font-size: 20px; flex-shrink: 0; }
+
+    .badge {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; flex-shrink: 0;
+    }
+    .badge-green { background: var(--green-bg); color: var(--green); }
+
+    /* ── Empty state ────────────────────────────────────────────── */
+    .empty {
+      background: var(--navy-2); border: 1px solid rgba(255,255,255,.07);
+      border-radius: var(--r); padding: 40px 20px; text-align: center;
+    }
+    .empty-icon { font-size: 44px; margin-bottom: 14px; opacity: .7; }
+    .empty-text { color: var(--text-m); font-size: 15px; line-height: 1.6; }
+
+    /* ── Formulário ─────────────────────────────────────────────── */
+    .field-label {
+      display: block; font-size: 11px; font-weight: 800;
+      letter-spacing: .5px; text-transform: uppercase;
+      color: var(--text-m); margin: 16px 0 6px;
+    }
+    .field-label:first-child { margin-top: 0; }
+
+    input[type="text"], input[type="tel"] {
+      width: 100%; background: var(--navy-2);
+      border: 1px solid rgba(255,255,255,.12); border-radius: var(--r-sm);
+      padding: 13px 14px; font-size: 16px; color: var(--text);
+      outline: none; transition: border-color .2s; -webkit-appearance: none;
+    }
+    input:focus   { border-color: var(--gold); }
+    input::placeholder { color: var(--text-m); }
+    .nip-input { font-size: 24px !important; text-align: center; letter-spacing: 4px; font-weight: 700; }
+
+    .feedback {
+      font-size: 13px; font-weight: 600; text-align: center;
+      padding: 9px 12px; border-radius: var(--r-sm); margin-top: 8px; line-height: 1.4;
+    }
+    .feedback-ok  { color: var(--green); background: var(--green-bg); }
+    .feedback-err { color: var(--red);   background: var(--red-bg);   }
+    .feedback-warn {
+      color: #fbbf24;
+      background: rgba(251,191,36,.12);
+      border: 1px solid rgba(251,191,36,.28);
+    }
+
+    .ja-agendado-banner {
+      margin: 8px 0 14px;
+      padding: 14px 16px;
+      border-radius: var(--r);
+      background: rgba(251,191,36,.12);
+      border: 1px solid rgba(251,191,36,.35);
+      text-align: center;
+    }
+    .ja-agendado-banner .t {
+      font-size: 17px;
+      font-weight: 800;
+      color: #fbbf24;
+      letter-spacing: .02em;
+    }
+    .ja-agendado-banner .s {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--text-2);
+      line-height: 1.45;
+    }
+
+    .cadastro-box {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,.08);
+    }
+    .hint-sexo {
+      font-size: 12px;
+      color: #fbbf24;
+      margin: 6px 0 10px;
+      line-height: 1.45;
+      background: rgba(251,191,36,.08);
+      border: 1px solid rgba(251,191,36,.25);
+      border-radius: var(--r-sm);
+      padding: 10px 12px;
+    }
+    .toggle-row, .chip-row {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;
+      padding: 4px; border-radius: var(--r-sm);
+    }
+    .toggle-btn, .chip {
+      border: 1px solid rgba(255,255,255,.12);
+      background: var(--navy-2);
+      color: var(--text);
+      border-radius: var(--r-sm);
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .toggle-btn { flex: 1; text-align: center; }
+    .toggle-btn.active, .chip.active {
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      color: #0f172a;
+      border-color: var(--gold);
+    }
+    .field-blink {
+      animation: blinkOrange 1s ease-in-out infinite;
+      border-color: #f97316 !important;
+      box-shadow: 0 0 0 2px rgba(249,115,22,.35);
+    }
+    .toggle-row.field-blink, .chip-row.field-blink {
+      outline: 2px solid #f97316;
+      box-shadow: 0 0 0 2px rgba(249,115,22,.25);
+    }
+    @keyframes blinkOrange {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(249,115,22,.2); }
+      50% { box-shadow: 0 0 0 5px rgba(249,115,22,.55); }
+    }
+
+    /* ── Resumo ─────────────────────────────────────────────────── */
+    .summary-card {
+      background: var(--navy-2); border: 1px solid rgba(255,255,255,.07);
+      border-radius: var(--r); padding: 16px; margin-bottom: 10px;
+    }
+    .summary-label { font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--text-m); margin-bottom: 5px; }
+    .summary-value { font-size: 16px; font-weight: 700; color: var(--text); }
+    .summary-sub   { font-size: 13px; color: var(--text-m); margin-top: 3px; }
+
+    /* ── Botões ──────────────────────────────────────────────────── */
+    .btn {
+      width: 100%; padding: 15px; border: none; border-radius: var(--r);
+      font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 10px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: opacity .2s, transform .12s; -webkit-tap-highlight-color: transparent;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn:active:not(:disabled) { transform: scale(.98); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      color: #0f172a; box-shadow: 0 4px 14px rgba(212,175,55,.3);
+    }
+    .btn-primary:hover:not(:disabled) { opacity: .9; }
+    .btn-success {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff; box-shadow: 0 4px 14px rgba(34,197,94,.25);
+    }
+    .btn-outline { background: transparent; border: 1.5px solid var(--gold); color: var(--gold); }
+    .btn-danger {
+      background: transparent;
+      border: 1.5px solid var(--red);
+      color: #fca5a5;
+    }
+    .btn-danger:hover:not(:disabled) { background: var(--red-bg); }
+    .btn-danger-solid {
+      background: var(--red);
+      color: #fff;
+    }
+
+    /* ── Modal confirmação cancelamento ──────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(2, 6, 23, 0.72);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      align-items: center;
+      justify-content: center;
+      padding: 20px 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--navy-2);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: var(--r);
+      padding: 22px 18px 16px;
+      box-shadow: 0 24px 48px rgba(0,0,0,.45);
+    }
+    .modal-icon {
+      width: 56px; height: 56px; border-radius: 14px;
+      margin: 0 auto 14px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--red-bg);
+      border: 1px solid rgba(239,68,68,.35);
+      font-size: 26px;
+    }
+    .modal-title {
+      font-size: 18px; font-weight: 800; text-align: center;
+      color: var(--text); margin-bottom: 8px;
+    }
+    .modal-text {
+      font-size: 14px; line-height: 1.5; text-align: center;
+      color: var(--text-2); margin-bottom: 6px;
+    }
+    .modal-hint {
+      font-size: 12px; text-align: center; color: var(--text-m);
+      margin-bottom: 16px;
+    }
+    .modal-actions { display: flex; flex-direction: column; gap: 8px; }
+    .modal-actions .btn { margin-top: 0; }
+
+    .modal-qr-frame {
+      width: 260px; height: 260px; margin: 8px auto 12px;
+      background: #fff; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 12px;
+    }
+    .modal-qr-frame canvas,
+    .modal-qr-frame img {
+      width: 236px; height: 236px; display: block;
+    }
+    .modal-qr-url {
+      font-size: 11px; text-align: center; color: var(--text-m);
+      word-break: break-all; margin-bottom: 4px; font-weight: 600;
+    }
+    .modal-icon.qr {
+      background: rgba(212,175,55,.12);
+      border-color: rgba(212,175,55,.35);
+      color: var(--gold);
+      font-size: 22px;
+    }
+
+    /* ── Loading ────────────────────────────────────────────────── */
+    .loading { display: flex; flex-direction: column; align-items: center; padding: 64px 0; gap: 16px; }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid rgba(255,255,255,.12);
+      border-top-color: var(--gold); border-radius: 50%;
+      animation: spin .75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { color: var(--text-m); font-size: 14px; }
+
+    /* ── Sucesso ────────────────────────────────────────────────── */
+    .success-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 40px 0; text-align: center;
+    }
+    .success-icon   { font-size: 78px; line-height: 1; margin-bottom: 22px; }
+    .success-title  { font-size: 26px; font-weight: 800; color: var(--green); margin-bottom: 10px; }
+    .success-name   { font-size: 16px; color: var(--text-2); margin-bottom: 5px; }
+    .success-detail { font-size: 15px; color: var(--text); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+
+    <div class="header" id="pageHeader">
+      <button class="back-btn" id="backBtn" onclick="app.voltar()" aria-label="Voltar">&#8592;</button>
+      <div class="brand">
+        <div class="brand-badge">T</div>
+        <div>
+          <div class="header-title-row">
+            <div class="header-title">Agendamento TAF</div>
+            <button type="button" class="qr-icon-btn" id="btnQrCode" onclick="app.abrirQrCode()" aria-label="Gerar QR Code do agendamento" title="QR Code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                <path d="M14 14h3v3h-3z"></path>
+                <path d="M20 14h1v1"></path>
+                <path d="M14 20h1v1"></path>
+                <path d="M17 17h1v1"></path>
+                <path d="M20 17h1v3h-3v-1"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="header-sub" id="headerSub">Inscreva-se na sua modalidade</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="stepsBar">
+      <div class="step-item"><div class="step-dot active" id="dot0"></div><div class="step-line" id="line0"></div></div>
+      <div class="step-item"><div class="step-dot" id="dot1"></div><div class="step-line" id="line1"></div></div>
+      <div class="step-item"><div class="step-dot" id="dot2"></div><div class="step-line" id="line2"></div></div>
+      <div class="step-item"><div class="step-dot" id="dot3"></div></div>
+    </div>
+
+    <div id="content"></div>
+
+  </div>
+
+  <div class="modal-overlay" id="modalCancelar" role="dialog" aria-modal="true" aria-labelledby="modalCancelarTitle" onclick="app.onModalOverlayClick(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-icon">⚠</div>
+      <div class="modal-title" id="modalCancelarTitle">Cancelar agendamento?</div>
+      <div class="modal-text" id="modalCancelarTexto">Confirma o cancelamento desta inscrição? A vaga será liberada.</div>
+      <div class="modal-hint">Esta ação não pode ser desfeita.</div>
+      <div id="modalCancelarErro" class="feedback feedback-err" style="display:none;margin-bottom:10px"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger-solid" id="btnModalConfirmarCancel" onclick="app.confirmarCancelamento()">Sim, cancelar agendamento</button>
+        <button type="button" class="btn btn-outline" id="btnModalManterAgendamento" onclick="app.desistirCancelamento()">Manter agendamento</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modalQrCode" role="dialog" aria-modal="true" aria-labelledby="modalQrTitle" onclick="app.onQrOverlayClick(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-icon qr" aria-hidden="true">▣</div>
+      <div class="modal-title" id="modalQrTitle">QR Code — Agendamento</div>
+      <div class="modal-text">Escaneie para abrir a página online de agendamento do TAF.</div>
+      <div class="modal-qr-frame" id="modalQrFrame">
+        <div class="spinner" aria-label="Gerando QR Code"></div>
+      </div>
+      <div class="modal-qr-url" id="modalQrUrl"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" id="btnCompartilharQr" onclick="app.compartilharQrCode()">Compartilhar</button>
+        <button type="button" class="btn btn-outline" onclick="app.fecharQrCode()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    var cfg = window.__AGENDAMENTO_CFG__ || {};
+    function credenciaisOk(url, key) {
+      if (!url || !key) return false;
+      var u = String(url).trim();
+      var k = String(key).trim();
+      if (!u || !k) return false;
+      if (u.indexOf('__SUPABASE') !== -1 || k.indexOf('__SUPABASE') !== -1) return false;
+      if (u.indexOf('http') !== 0) return false;
+      return k.length >= 20;
+    }
+    var URL_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.url).trim() : '';
+    var KEY_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.key).trim() : '';
+    var URL_AGENDAMENTO_PUBLICO = 'https://thiagod11lopes-ops.github.io/apptaf/agendamento';
+    var qrDataUrlCache = null;
+    var compartilhandoQr = false;
+
+    var LABEL = {
+      corrida:'Corrida', natacao_permanencia:'Natação + Permanência',
+      caminhada:'Caminhada', flexao_barra:'Flexão de Barra',
+      flexao_solo:'Flexão de Solo', abdominal_remador:'Abdominal Remador',
+      abdominal_prancha:'Abdominal Prancha',
+    };
+    var ICON = {
+      corrida:'🏃', natacao_permanencia:'🏊', caminhada:'🚶',
+      flexao_barra:'💪', flexao_solo:'🤸', abdominal_remador:'🚣', abdominal_prancha:'🧘',
+    };
+
+    var GRADUACOES_PRACAS = ['MN', 'CB', '3°SG', '2°SG', '1°SG', 'SO', 'SD'];
+    var POSTOS_OFICIAIS = ['GM', '2°TEN', '1°TEN', 'CT', 'CC', 'CF', 'CMG', 'CALTE'];
+
+    var sb, etapa = 'data', slots = [], reservasMap = {};
+    var dataSel = null, slotSel = null, nipVal = '';
+    var nipBuscaTimer = null;
+    var nipBuscaSeq = 0;
+    /** Reserva já existente para este NIP nesta prova (bloqueia novo agendamento). */
+    var reservaExistente = null;
+    var cancelandoReserva = false;
+    var cancelFeedback = '';
+    var cancelConfirmando = false;
+    /** 'idle' | 'completo' | 'incompleto' | 'novo' */
+    var cadastroModo = 'idle';
+    var form = {
+      nome: '',
+      dataNascimento: '',
+      sexo: '',
+      categoria: 'Praças',
+      posto: 'MN',
+      vinculo: 'carreira',
+      transporte: '',
+    };
+    var camposFaltando = {};
+    var feedbackMsg = '';
+    var feedbackTipo = 'ok';
+    /** Usuário precisa confirmar o gênero nesta sessão (mesmo com cadastro completo). */
+    var sexoConfirmado = false;
+
+    function limparFormularioCadastro() {
+      form = { nome: '', dataNascimento: '', sexo: '', categoria: 'Praças', posto: 'MN', vinculo: 'carreira', transporte: '' };
+      camposFaltando = {};
+      cadastroModo = 'idle';
+      feedbackMsg = '';
+      feedbackTipo = 'ok';
+      sexoConfirmado = false;
+      reservaExistente = null;
+      cancelandoReserva = false;
+      cancelFeedback = '';
+      cancelConfirmando = false;
+    }
+
+    function formatarNipExibicao(digitsOrFmt) {
+      return formatarNip(String(digitsOrFmt || '').replace(/\D/g, ''));
+    }
+
+    function labelModalidade(mod) {
+      return LABEL[mod] || mod || '—';
+    }
+
+    function vinculoLabelDe(v) {
+      return v === 'rm2' ? 'RM2' : v === 'carreira' ? 'Carreira' : '—';
+    }
+
+    function nomeDaReserva(r) {
+      if (!r) return '—';
+      var n = String(r.nome || '').trim();
+      if (n) return n.toUpperCase();
+      var posto = String(r.posto || '').trim().toUpperCase();
+      var vinculo = String(r.vinculo || '').toLowerCase() === 'rm2' ? ' RM2' : '';
+      return posto ? (posto + vinculo).trim() : '—';
+    }
+
+    /** Busca inscrição ativa deste NIP na prova selecionada (mesmo slot / mesma data+modalidade). */
+    async function buscarReservaExistente(nipFmt) {
+      var digits = nipDigitos(nipFmt);
+      if (!sb || !slotSel || digits.length < 8) return null;
+      var q1 = await sb.rpc('buscar_reserva_agendamento', {
+        p_nip: digits,
+        p_slot_id: slotSel.id,
+        p_data_taf: null,
+        p_modalidade: null,
+      });
+      if (!q1.error && q1.data && q1.data.length > 0) return q1.data[0];
+      if (q1.error && !rpcAusente(q1.error)) throw q1.error;
+
+      var q2 = await sb.rpc('buscar_reserva_agendamento', {
+        p_nip: digits,
+        p_slot_id: null,
+        p_data_taf: slotSel.data_taf,
+        p_modalidade: slotSel.modalidade,
+      });
+      if (!q2.error && q2.data && q2.data.length > 0) return q2.data[0];
+      if (q2.error && !rpcAusente(q2.error)) throw q2.error;
+
+      return null;
+    }
+
+    async function carregarContagemReservas() {
+      var map = {};
+      var r2 = await sb.rpc('contar_reservas_por_slot');
+      if (r2.error) throw new Error(erroAmigavel(r2.error));
+      (r2.data || []).forEach(function (r) {
+        map[r.slot_id] = Number(r.total) || 0;
+      });
+      return map;
+    }
+
+    function abrirJaAgendado(reserva) {
+      reservaExistente = reserva;
+      cancelandoReserva = false;
+      cancelFeedback = '';
+      cancelConfirmando = false;
+      etapa = 'jaAgendado';
+      cadastroModo = 'idle';
+      feedbackMsg = '';
+      render();
+    }
+
+    function formatarDataInput(raw) {
+      var d = String(raw || '').replace(/\D/g, '').slice(0, 8);
+      if (d.length <= 2) return d;
+      if (d.length <= 4) return d.slice(0, 2) + '/' + d.slice(2);
+      return d.slice(0, 2) + '/' + d.slice(2, 4) + '/' + d.slice(4);
+    }
+
+    function dataNascValida(v) { return /^\d{2}\/\d{2}\/\d{4}$/.test(String(v || '').trim()); }
+
+    function nomeExibicao() {
+      var nome = String(form.nome || '').trim().toUpperCase();
+      var posto = String(form.posto || '').trim().toUpperCase();
+      var vinculo = String(form.vinculo || '').toLowerCase() === 'rm2' ? ' RM2' : '';
+      if (posto && nome) return (posto + vinculo + ' ' + nome).trim();
+      return nome;
+    }
+
+    function calcularFaltando(blink) {
+      var f = {};
+      if (!String(form.nome || '').trim() || String(form.nome).trim().length < 3) f.nome = true;
+      if (!dataNascValida(form.dataNascimento)) f.dataNascimento = true;
+      if (form.sexo !== 'M' && form.sexo !== 'F') f.sexo = true;
+      if (form.categoria !== 'Oficiais' && form.categoria !== 'Praças') f.categoria = true;
+      if (!String(form.posto || '').trim()) f.posto = true;
+      if (form.vinculo !== 'carreira' && form.vinculo !== 'rm2') f.vinculo = true;
+      camposFaltando = blink ? f : {};
+      return f;
+    }
+
+    function cadastroCompleto() {
+      var f = calcularFaltando(false);
+      return Object.keys(f).length === 0
+        && sexoConfirmado
+        && (form.transporte === 'proprios' || form.transporte === 'institucional');
+    }
+
+    function transporteLabelDe(v) {
+      if (v === 'institucional') return 'Transporte Institucional';
+      if (v === 'proprios') return 'Meios próprios';
+      return '—';
+    }
+
+    function aplicarCadastroDaBusca(row) {
+      var nome = String(row.nome || '').trim().toUpperCase();
+      var dataNascimento = String(
+        row.data_nascimento || row.dataNascimento || '',
+      ).trim();
+      if (dataNascimento && !dataNascValida(dataNascimento)) {
+        dataNascimento = formatarDataInput(dataNascimento);
+      }
+      var categoria = row.categoria === 'Oficiais' || row.categoria === 'Praças'
+        ? row.categoria
+        : '';
+      var posto = String(row.posto || row.oficial || row.praca || '')
+        .trim()
+        .toUpperCase();
+      var vinculo = row.vinculo === 'carreira' || row.vinculo === 'rm2' ? row.vinculo : '';
+
+      form.nome = nome;
+      form.dataNascimento = dataNascimento;
+      form.sexo = '';
+      sexoConfirmado = false;
+      form.categoria = categoria || 'Praças';
+      form.posto = posto || (form.categoria === 'Oficiais' ? 'GM' : 'MN');
+      form.vinculo = vinculo;
+
+      var faltando = calcularFaltando(true);
+      delete faltando.sexo;
+      // Se posto veio só do default (MN/GM) e a busca não trouxe posto, marca incompleto
+      if (!posto) faltando.posto = true;
+      if (!categoria) faltando.categoria = true;
+      if (!vinculo) faltando.vinculo = true;
+
+      if (Object.keys(faltando).length === 0) {
+        cadastroModo = 'completo';
+        camposFaltando = {};
+        setFeedbackIdent(
+          'Militar encontrado: ' + nomeExibicao() + '. Confirme seu gênero para continuar.',
+          'ok',
+        );
+      } else {
+        cadastroModo = 'incompleto';
+        faltando.sexo = true;
+        camposFaltando = faltando;
+        setFeedbackIdent(
+          'Cadastro incompleto. Complete os campos em destaque e confirme seu gênero.',
+          'err',
+        );
+      }
+    }
+
+    function abrirCadastroNovo() {
+      limparFormularioCadastro();
+      cadastroModo = 'novo';
+      form.categoria = 'Praças';
+      form.posto = 'MN';
+      form.vinculo = 'carreira';
+      form.sexo = '';
+      sexoConfirmado = false;
+      camposFaltando = {};
+      setFeedbackIdent('NIP não encontrado. Preencha seus dados e confirme o gênero.', 'err');
+    }
+
+    function limparCacheApp() {
+      var jobs = [];
+      if (typeof caches !== 'undefined' && caches.keys) {
+        jobs.push(caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }).catch(function () {}));
+      }
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }).catch(function () {}));
+      }
+      return Promise.all(jobs);
+    }
+
+    function forcarRecarregarRede() {
+      try {
+        if (sessionStorage.getItem('agendamento_force_reload') === '1') return false;
+        sessionStorage.setItem('agendamento_force_reload', '1');
+      } catch (e) { /* ignore */ }
+      var base = location.pathname.indexOf('.html') >= 0
+        ? location.pathname
+        : (location.pathname.replace(/\/?$/, '/') + '').replace(/\/agendamento\/?$/, '/agendamento.html');
+      if (base.indexOf('agendamento.html') < 0) {
+        base = (location.pathname.split('/apptaf')[0] || '') + '/apptaf/agendamento.html';
+      }
+      location.replace(base + '?nocache=' + Date.now());
+      return true;
+    }
+
+    function init() {
+      mostrarLoading();
+      limparCacheApp().finally(function () {
+        cfg = window.__AGENDAMENTO_CFG__ || {};
+        URL_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.url).trim() : '';
+        KEY_SB = credenciaisOk(cfg.url, cfg.key) ? String(cfg.key).trim() : '';
+
+        if (!URL_SB || !KEY_SB) {
+          if (forcarRecarregarRede()) return;
+          mostrarErroCfg(
+            'Credenciais ausentes neste navegador (cache antigo). Abra em aba anônima: ' +
+            'https://thiagod11lopes-ops.github.io/apptaf/agendamento.html' +
+            ' — build=' + (cfg.build || '?') +
+            ' url=' + (cfg.url || '(vazio)')
+          );
+          return;
+        }
+        try { sessionStorage.removeItem('agendamento_force_reload'); } catch (e) {}
+
+        var lib = (typeof supabase !== 'undefined' && supabase) || window.supabase;
+        if (!lib || typeof lib.createClient !== 'function') {
+          mostrarErro('Não foi possível carregar a biblioteca do Supabase. Verifique a conexão e tente novamente.');
+          return;
+        }
+        try {
+          sb = lib.createClient(URL_SB, KEY_SB);
+        } catch (err) {
+          mostrarErro('Falha ao iniciar conexão: ' + ((err && err.message) || 'erro desconhecido'));
+          return;
+        }
+        carregarDados();
+      });
+    }
+
+    function brParaIso(br) {
+      if (!br) return null;
+      var p = br.split('/');
+      if (p.length !== 3 || p[2].length !== 4) return null;
+      return p[2] + '-' + p[1].padStart(2,'0') + '-' + p[0].padStart(2,'0');
+    }
+    function hojeIso() {
+      var d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+
+    function rpcAusente(err) {
+      if (!err) return false;
+      var m = String((err.message || err.code || err.details || err)).toLowerCase();
+      return m.indexOf('could not find the function') !== -1
+        || m.indexOf('pgrst202') !== -1
+        || m.indexOf('42883') !== -1;
+    }
+
+    function erroAmigavel(err) {
+      var m = String((err && err.message) || err || '').toLowerCase();
+      if (m.indexOf('permission denied') !== -1) {
+        return 'Versão antiga da página em cache. Feche a aba e abra de novo (ou aba anônima): '
+          + 'https://thiagod11lopes-ops.github.io/apptaf/agendamento.html?nocache=' + Date.now();
+      }
+      if (rpcAusente(err)) {
+        return 'Agendamento indisponível: o banco ainda não foi atualizado. Avise o administrador.';
+      }
+      return (err && err.message) ? err.message : String(err || 'Erro desconhecido');
+    }
+
+
+    async function carregarDados() {
+      try {
+        var r1 = await sb.from('agendamento_slots').select('*').eq('deleted', false);
+        if (r1.error) throw r1.error;
+        slots = (r1.data || []).filter(function(s) {
+          if (slotExpiradoAposProva(s)) return false;
+          var iso = brParaIso(s.data_taf);
+          return !!iso;
+        })
+          .sort(function(a,b) { var ia=brParaIso(a.data_taf)||'',ib=brParaIso(b.data_taf)||''; return ia<ib?-1:ia>ib?1:a.modalidade.localeCompare(b.modalidade); });
+        reservasMap = await carregarContagemReservas();
+        etapa = 'data'; render();
+      } catch(e) {
+        console.error('[agendamento] carregarDados:', e);
+        mostrarErro(erroAmigavel(e) || 'Erro ao carregar disponibilidade. Verifique sua conexão e tente novamente.');
+      }
+    }
+
+    function vagas(s) { return Math.max(0, (s.max_participantes||0) - (reservasMap[s.id]||0)); }
+
+    function horaInicioSlot(s) {
+      var n = parseInt(s && s.hora_inicio, 10);
+      if (!Number.isFinite(n)) n = 8;
+      return Math.min(23, Math.max(0, n));
+    }
+
+    function fechamentoAntecedenciaSlot(s) {
+      var n = parseInt(s && s.fechamento_antecedencia_horas, 10);
+      if (n === 12 || n === 24 || n === 48) return n;
+      return null;
+    }
+
+    /** Timestamp ms em que a agenda do slot fecha (hora local). */
+    function horarioFechamentoSlot(s) {
+      var iso = brParaIso(s && s.data_taf);
+      if (!iso) return null;
+      var p = iso.split('-');
+      var y = Number(p[0]), m = Number(p[1]), d = Number(p[2]);
+      if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+      var inicio = new Date(y, m - 1, d, horaInicioSlot(s), 0, 0, 0).getTime();
+      var ant = fechamentoAntecedenciaSlot(s);
+      if (ant != null) return inicio - ant * 60 * 60 * 1000;
+      return inicio;
+    }
+
+    function slotLotado(s) {
+      return vagas(s) <= 0;
+    }
+
+    function slotAgendaFinalizada(s) {
+      if (slotLotado(s)) return true;
+      var fech = horarioFechamentoSlot(s);
+      return fech != null && Date.now() >= fech;
+    }
+
+    function slotExpiradoAposProva(s) {
+      var iso = brParaIso(s && s.data_taf);
+      if (!iso) return false;
+      var p = iso.split('-');
+      var y = Number(p[0]), m = Number(p[1]), d = Number(p[2]);
+      if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return false;
+      var inicio = new Date(y, m - 1, d, horaInicioSlot(s), 0, 0, 0).getTime();
+      return Date.now() >= inicio + 12 * 60 * 60 * 1000;
+    }
+
+    function slotAberto(s) {
+      return !slotAgendaFinalizada(s);
+    }
+
+    function motivoFinalizacao(s) {
+      if (slotLotado(s)) return 'Vagas esgotadas';
+      var ant = fechamentoAntecedenciaSlot(s);
+      if (ant != null) return 'Inscrições encerradas (' + ant + 'h antes)';
+      return 'Inscrições encerradas (hora da prova)';
+    }
+
+    function cardFinalizadoHtml(inner) {
+      return '<div class="card finalizada">' + inner
+        + '<div class="tarja-finalizada">Agenda Finalizada</div></div>';
+    }
+
+    function formatarNip(raw) {
+      var d = raw.replace(/\D/g,'').slice(0,8);
+      if (d.length<=2) return d;
+      if (d.length<=6) return d.slice(0,2)+'.'+d.slice(2);
+      return d.slice(0,2)+'.'+d.slice(2,6)+'.'+d.slice(6);
+    }
+    function nipDigitos(fmt) { return fmt.replace(/\D/g,''); }
+
+    function render(opts) {
+      opts = opts || {};
+      var keepScroll = !!opts.keepScroll;
+      var scrollY = keepScroll
+        ? (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0)
+        : null;
+
+      atualizarHeader(); atualizarSteps();
+      var c = document.getElementById('content');
+      document.getElementById('stepsBar').style.display = 'flex';
+      if      (etapa==='data')        c.innerHTML = telaData();
+      else if (etapa==='modalidade')  c.innerHTML = telaModalidade();
+      else if (etapa==='identificar') c.innerHTML = telaIdentificar();
+      else if (etapa==='confirmar')   c.innerHTML = telaConfirmar();
+      else if (etapa==='jaAgendado')  c.innerHTML = telaJaAgendado();
+      else if (etapa==='sucesso') { document.getElementById('stepsBar').style.display='none'; c.innerHTML=telaSucesso(); }
+      if (etapa==='identificar') {
+        var ni=document.getElementById('nipInput');
+        if(ni){
+          ni.value=nipVal;
+          // Foco no NIP só ao entrar na etapa — nunca ao editar outros campos
+          // (evita a página subir sozinha).
+          if (opts.focusNip) {
+            try { ni.focus({ preventScroll: true }); }
+            catch (err) { /* ignore */ }
+          }
+        }
+        sincronizarFormularioNaTela();
+        atualizarBtnContinuar();
+      }
+      atualizarModalCancelamento();
+
+      if (scrollY != null) {
+        var restore = function(){ window.scrollTo(0, scrollY); };
+        restore();
+        requestAnimationFrame(restore);
+      }
+    }
+
+    function atualizarHeader() {
+      var btn=document.getElementById('backBtn'), sub=document.getElementById('headerSub');
+      if(btn) btn.classList.toggle('visible', etapa!=='data'&&etapa!=='sucesso');
+      var subs={
+        data:'Inscreva-se na sua modalidade',
+        modalidade:dataSel||'',
+        identificar:'Identificação do militar',
+        confirmar:'Confirme sua inscrição',
+        jaAgendado:'Agendamento já realizado',
+        sucesso:'Inscrição realizada'
+      };
+      if(sub) sub.textContent=subs[etapa]||'';
+    }
+
+    function atualizarSteps() {
+      var ordem=['data','modalidade','identificar','confirmar'], atual=ordem.indexOf(etapa);
+      if (etapa === 'jaAgendado') atual = 2;
+      for(var i=0;i<4;i++){
+        var dot=document.getElementById('dot'+i),line=document.getElementById('line'+i);
+        if(!dot) continue;
+        dot.className='step-dot';
+        if(i<atual) dot.classList.add('done'); else if(i===atual) dot.classList.add('active');
+        if(line){line.className='step-line'; if(i<atual) line.classList.add('done');}
+      }
+    }
+
+    function telaData() {
+      var datas=[], visto=Object.create(null);
+      slots.forEach(function(s){
+        if (!s || !s.data_taf || visto[s.data_taf]) return;
+        visto[s.data_taf]=true;
+        datas.push(s.data_taf);
+      });
+      var h='<p class="section-title">Datas disponíveis</p><p class="section-sub">Selecione a data que deseja realizar o TAF.</p>';
+      if(!datas.length) return h+'<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Não há datas disponíveis no momento.<br>Aguarde a abertura das inscrições.</div></div>';
+      datas.forEach(function(d){
+        var grupo=slots.filter(function(s){return s.data_taf===d;});
+        var abertos=grupo.filter(slotAberto);
+        var tv=abertos.reduce(function(a,s){return a+vagas(s);},0);
+        var nm=abertos.length;
+        var finalizada=abertos.length===0;
+        var inner='<span class="card-emoji">📅</span>'
+          +'<div class="card-texts"><div class="card-title">'+e(d)+'</div>'
+          +'<div class="card-sub">'
+          +(finalizada
+            ? 'Agenda finalizada para esta data'
+            : (nm+' modalidade'+(nm!==1?'s':'')+' &middot; '+tv+' vaga'+(tv!==1?'s':'')))
+          +'</div></div>';
+        if (finalizada) {
+          h += cardFinalizadoHtml(inner + '<span class="card-arrow">&#8250;</span>');
+        } else {
+          h+='<div class="card" onclick="app.selecionarData(\''+e(d)+'\')">'+inner+'<span class="card-arrow">&#8250;</span></div>';
+        }
+      });
+      return h;
+    }
+
+    function telaModalidade() {
+      var grupo=slots.filter(function(s){return s.data_taf===dataSel;});
+      var h='<p class="section-title">Modalidade</p><p class="section-sub">'+e(dataSel)+' &mdash; Escolha a modalidade que irá realizar.</p>';
+      if (!grupo.length) {
+        return h+'<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nenhuma modalidade nesta data.</div></div>';
+      }
+      grupo.forEach(function(s){
+        var d=vagas(s), label=LABEL[s.modalidade]||s.modalidade, icon=ICON[s.modalidade]||'🏋';
+        var hora=String(horaInicioSlot(s)).padStart(2,'0')+'h';
+        var finalizada=slotAgendaFinalizada(s);
+        var sub=finalizada
+          ? (motivoFinalizacao(s)+' &middot; início '+hora)
+          : (d+' vaga'+(d!==1?'s':'')+' disponív'+(d!==1?'eis':'el')+' &middot; máx. '+s.max_participantes+' &middot; início '+hora);
+        var inner='<span class="card-emoji">'+icon+'</span>'
+          +'<div class="card-texts"><div class="card-title">'+e(label)+'</div>'
+          +'<div class="card-sub">'+sub+'</div></div>'
+          +(finalizada ? '' : '<span class="badge badge-green">'+d+'</span>');
+        if (finalizada) {
+          h += cardFinalizadoHtml(inner);
+        } else {
+          h+='<div class="card" onclick="app.selecionarSlot(\''+e(s.id)+'\')">'+inner+'</div>';
+        }
+      });
+      return h;
+    }
+
+    function blinkClass(campo) {
+      return (cadastroModo === 'incompleto' && camposFaltando[campo]) ? ' field-blink' : '';
+    }
+
+    function togglesHtml(campo, opcoes) {
+      var h = '<div class="toggle-row' + blinkClass(campo) + '" id="row_' + campo + '">';
+      opcoes.forEach(function(o) {
+        var ativo = form[campo] === o.v ? ' active' : '';
+        h += '<button type="button" class="toggle-btn' + ativo + '" onclick="app.setCampo(\'' + campo + '\',\'' + o.v + '\')">' + e(o.l) + '</button>';
+      });
+      return h + '</div>';
+    }
+
+    function chipsPostoHtml() {
+      var lista = form.categoria === 'Oficiais' ? POSTOS_OFICIAIS : GRADUACOES_PRACAS;
+      var h = '<div class="chip-row' + blinkClass('posto') + '" id="row_posto">';
+      lista.forEach(function(p) {
+        var ativo = form.posto === p ? ' active' : '';
+        h += '<button type="button" class="chip' + ativo + '" onclick="app.setCampo(\'posto\',\'' + p.replace(/'/g, '') + '\')">' + e(p) + '</button>';
+      });
+      return h + '</div>';
+    }
+
+    function blocoConfirmacaoSexoHtml() {
+      var precisaBlink = !sexoConfirmado && (cadastroModo === 'completo' || cadastroModo === 'incompleto' || cadastroModo === 'novo');
+      var precisaTransporte = !(form.transporte === 'proprios' || form.transporte === 'institucional')
+        && (cadastroModo === 'completo' || cadastroModo === 'incompleto' || cadastroModo === 'novo');
+      return '<div class="cadastro-box" id="sexoConfirmBox" style="border-top:none;padding-top:4px;margin-top:8px">'
+        + '<label class="field-label">Confirmação de gênero</label>'
+        + '<div class="hint-sexo"><strong>Atenção:</strong> confirme o gênero correto (Masculino ou Feminino). Essa informação é usada nas tabelas de avaliação do TAF e deve ser selecionada por você nesta tela.</div>'
+        + '<div class="toggle-row' + (precisaBlink ? ' field-blink' : '') + '" id="row_sexo">'
+        + '<button type="button" class="toggle-btn' + (form.sexo === 'M' && sexoConfirmado ? ' active' : '') + '" onclick="app.confirmarSexo(\'M\')">Masculino</button>'
+        + '<button type="button" class="toggle-btn' + (form.sexo === 'F' && sexoConfirmado ? ' active' : '') + '" onclick="app.confirmarSexo(\'F\')">Feminino</button>'
+        + '</div>'
+        + '<label class="field-label" style="margin-top:14px">Transporte</label>'
+        + '<div class="hint-sexo">Informe como você irá se deslocar até o local da prova.</div>'
+        + '<div class="toggle-row' + (precisaTransporte ? ' field-blink' : '') + '" id="row_transporte">'
+        + '<button type="button" class="toggle-btn' + (form.transporte === 'proprios' ? ' active' : '') + '" onclick="app.setCampo(\'transporte\',\'proprios\')">Meios próprios</button>'
+        + '<button type="button" class="toggle-btn' + (form.transporte === 'institucional' ? ' active' : '') + '" onclick="app.setCampo(\'transporte\',\'institucional\')">Transporte Institucional</button>'
+        + '</div></div>';
+    }
+
+    function formularioCadastroHtml() {
+      if (cadastroModo !== 'novo' && cadastroModo !== 'incompleto') return '';
+      return '<div class="cadastro-box" id="cadastroBox">'
+        + '<label class="field-label" for="nomeInput">Nome completo</label>'
+        + '<input id="nomeInput" type="text" class="' + blinkClass('nome').trim() + '" placeholder="NOME COMPLETO" autocomplete="off" style="text-transform:uppercase" oninput="app.onNome(this.value)" />'
+        + '<label class="field-label" for="dnInput">Data de nascimento</label>'
+        + '<input id="dnInput" type="tel" class="' + blinkClass('dataNascimento').trim() + '" placeholder="DD/MM/AAAA" inputmode="numeric" autocomplete="off" oninput="app.onDataNasc(this.value)" />'
+        + '<label class="field-label">Categoria</label>'
+        + togglesHtml('categoria', [{v:'Praças',l:'Praças'},{v:'Oficiais',l:'Oficiais'}])
+        + '<label class="field-label">Posto / Graduação</label>'
+        + chipsPostoHtml()
+        + '<label class="field-label">Vínculo</label>'
+        + togglesHtml('vinculo', [{v:'carreira',l:'Carreira'},{v:'rm2',l:'RM2'}])
+        + '</div>';
+    }
+
+    function sincronizarFormularioNaTela() {
+      var nm = document.getElementById('nomeInput');
+      var dn = document.getElementById('dnInput');
+      if (nm) nm.value = form.nome || '';
+      if (dn) dn.value = form.dataNascimento || '';
+    }
+
+    function setFeedbackIdent(msg, tipo) {
+      feedbackMsg = msg || '';
+      feedbackTipo = tipo || 'ok';
+      var el = document.getElementById('feedbackIdent');
+      if (!el) return;
+      if (!feedbackMsg) { el.style.display = 'none'; el.textContent = ''; return; }
+      el.style.display = 'block';
+      el.className = 'feedback feedback-' + feedbackTipo;
+      el.textContent = feedbackMsg;
+    }
+
+    async function buscarNomePorNip(nipFmt) {
+      var digits = nipDigitos(nipFmt);
+      if (!sb || digits.length < 8) return;
+      var seq = ++nipBuscaSeq;
+      setFeedbackIdent('Buscando cadastro...', 'ok');
+      try {
+        var reserva = await buscarReservaExistente(nipFmt);
+        if (seq !== nipBuscaSeq) return;
+        if (reserva) {
+          abrirJaAgendado(reserva);
+          return;
+        }
+
+        var res = await sb.rpc('buscar_militar_agendamento', { p_nip: digits });
+        if (seq !== nipBuscaSeq) return;
+        if (res.error) {
+          abrirCadastroNovo();
+          setFeedbackIdent('Não foi possível consultar o cadastro. Preencha seus dados.', 'err');
+          render({ keepScroll: true });
+          return;
+        }
+        var row = (res.data && res.data[0]) || null;
+        if (row && String(row.nome || '').trim()) {
+          aplicarCadastroDaBusca(row);
+        } else {
+          abrirCadastroNovo();
+        }
+        render({ keepScroll: true });
+      } catch (err) {
+        if (seq !== nipBuscaSeq) return;
+        abrirCadastroNovo();
+        setFeedbackIdent('Não foi possível consultar o cadastro. Preencha seus dados.', 'err');
+        render({ keepScroll: true });
+      }
+    }
+
+    function atualizarModalCancelamento() {
+      var overlay = document.getElementById('modalCancelar');
+      if (!overlay) return;
+      var aberto = etapa === 'jaAgendado' && cancelConfirmando;
+      overlay.classList.toggle('open', aberto);
+      if (!aberto) return;
+
+      var r = reservaExistente || {};
+      var label = labelModalidade(r.modalidade || (slotSel && slotSel.modalidade));
+      var data = r.data_taf || (slotSel && slotSel.data_taf) || '—';
+      var texto = document.getElementById('modalCancelarTexto');
+      if (texto) {
+        texto.textContent =
+          'Confirma o cancelamento de ' + label + ' em ' + data + '? A vaga será liberada.';
+      }
+      var err = document.getElementById('modalCancelarErro');
+      if (err) {
+        if (cancelFeedback) {
+          err.style.display = 'block';
+          err.textContent = cancelFeedback;
+        } else {
+          err.style.display = 'none';
+          err.textContent = '';
+        }
+      }
+      var btnOk = document.getElementById('btnModalConfirmarCancel');
+      var btnNo = document.getElementById('btnModalManterAgendamento');
+      if (btnOk) {
+        btnOk.disabled = !!cancelandoReserva;
+        btnOk.textContent = cancelandoReserva ? 'Cancelando...' : 'Sim, cancelar agendamento';
+      }
+      if (btnNo) btnNo.disabled = !!cancelandoReserva;
+    }
+
+    function telaJaAgendado() {
+      var r = reservaExistente || {};
+      var label = labelModalidade(r.modalidade || (slotSel && slotSel.modalidade));
+      var data = r.data_taf || (slotSel && slotSel.data_taf) || '—';
+      var sexoLabel = r.sexo === 'F' ? 'Feminino' : r.sexo === 'M' ? 'Masculino' : '—';
+      var posto = String(r.posto || '').trim().toUpperCase() || '—';
+      var cat = r.categoria || '—';
+      var nasc = r.data_nascimento || '—';
+      return ''
+        + '<div class="ja-agendado-banner">'
+        +   '<div class="t">Agendamento já realizado</div>'
+        +   '<div class="s">Este NIP já possui inscrição nesta prova. Não é permitido agendar novamente com os mesmos dados.</div>'
+        + '</div>'
+        + '<div class="summary-card">'
+        +   '<div class="summary-label">Prova</div>'
+        +   '<div class="summary-value">' + e(label) + '</div>'
+        +   '<div class="summary-sub">Data ' + e(data) + '</div>'
+        + '</div>'
+        + '<div class="summary-card">'
+        +   '<div class="summary-label">Militar</div>'
+        +   '<div class="summary-value">' + e(nomeDaReserva(r)) + '</div>'
+        +   '<div class="summary-sub">NIP ' + e(formatarNipExibicao(r.nip || nipVal)) + ' · ' + e(sexoLabel) + ' · Nasc. ' + e(nasc) + '</div>'
+        +   '<div class="summary-sub">' + e(cat) + ' · ' + e(posto) + ' · ' + e(vinculoLabelDe(r.vinculo)) + '</div>'
+        +   '<div class="summary-sub">Transporte: ' + e(transporteLabelDe(r.transporte)) + '</div>'
+        + '</div>'
+        + '<button class="btn btn-danger" style="margin-top:12px" onclick="app.pedirCancelamento()">Cancelar agendamento</button>'
+        + '<button class="btn btn-outline" style="margin-top:8px" onclick="app.voltar()">&#8592; Voltar</button>'
+        + '<button class="btn btn-primary" style="margin-top:10px" onclick="app.novaInscricao()">Nova inscrição</button>';
+    }
+
+    function telaIdentificar() {
+      var sub = 'Informe seu NIP. Em seguida, confirme seu gênero e o transporte para continuar.';
+      if (cadastroModo === 'novo') sub = 'NIP não encontrado. Preencha os dados, confirme o gênero e o transporte.';
+      if (cadastroModo === 'incompleto') sub = 'Há dados faltando. Complete os campos em laranja, confirme o gênero e o transporte.';
+      if (cadastroModo === 'completo') sub = 'Cadastro encontrado. Confirme seu gênero e o transporte para continuar.';
+      var mostrarSexo = cadastroModo === 'novo' || cadastroModo === 'incompleto' || cadastroModo === 'completo';
+      return '<p class="section-title">Identificação</p><p class="section-sub">' + sub + '</p>'
+        +'<label class="field-label" for="nipInput">NIP</label>'
+        +'<input id="nipInput" type="tel" class="nip-input" placeholder="00.0000.00" autocomplete="off" inputmode="numeric" oninput="app.onNip(this.value)" />'
+        +(cadastroModo === 'completo'
+          ? ('<div class="summary-card" style="margin-top:12px">'
+            + '<div class="summary-label">Militar</div>'
+            + '<div class="summary-value">' + e(nomeExibicao()) + '</div>'
+            + '<div class="summary-sub">Nasc. ' + e(form.dataNascimento || '—')
+            + ' · ' + e(form.categoria || '—')
+            + ' · ' + e(form.posto || '—')
+            + ' · ' + e(form.vinculo === 'rm2' ? 'RM2' : form.vinculo === 'carreira' ? 'Carreira' : '—')
+            + '</div></div>')
+          : '')
+        +'<div id="feedbackIdent" class="feedback' + (feedbackMsg ? (' feedback-' + feedbackTipo) : '') + '" style="' + (feedbackMsg ? '' : 'display:none') + '">' + e(feedbackMsg) + '</div>'
+        + formularioCadastroHtml()
+        + (mostrarSexo ? blocoConfirmacaoSexoHtml() : '')
+        +'<button class="btn btn-primary" id="btnContinuar" onclick="app.avancarConfirmar()" disabled>Continuar &#8250;</button>';
+    }
+
+    function atualizarBtnContinuar() {
+      var btn=document.getElementById('btnContinuar');
+      if(!btn) return;
+      var okNip = nipDigitos(nipVal).length >= 8;
+      if (cadastroModo === 'completo') {
+        btn.disabled = !okNip || !cadastroCompleto();
+        return;
+      }
+      if (cadastroModo === 'novo' || cadastroModo === 'incompleto') {
+        btn.disabled = !okNip || !cadastroCompleto();
+        return;
+      }
+      btn.disabled = true;
+    }
+
+    function telaConfirmar() {
+      var label=slotSel?(LABEL[slotSel.modalidade]||slotSel.modalidade):'—';
+      var sexoLabel = form.sexo === 'F' ? 'Feminino' : form.sexo === 'M' ? 'Masculino' : '—';
+      var vinculoLabel = form.vinculo === 'rm2' ? 'RM2' : 'Carreira';
+      return '<p class="section-title">Confirmar inscrição</p><p class="section-sub">Verifique seus dados antes de confirmar.</p>'
+        +'<div class="summary-card"><div class="summary-label">Prova</div><div class="summary-value">'+e(label)+'</div><div class="summary-sub">'+e(slotSel?slotSel.data_taf:'—')+'</div></div>'
+        +'<div class="summary-card"><div class="summary-label">Militar</div><div class="summary-value">'+e(nomeExibicao())+'</div>'
+        +'<div class="summary-sub">NIP '+e(nipVal)+' · '+e(sexoLabel)+' · Nasc. '+e(form.dataNascimento||'—')+'</div>'
+        +'<div class="summary-sub">'+e(form.categoria||'')+' · '+e(form.posto||'')+' · '+e(vinculoLabel)+'</div>'
+        +'<div class="summary-sub">Transporte: '+e(transporteLabelDe(form.transporte))+'</div></div>'
+        +'<div id="erroCfm" class="feedback feedback-err" style="display:none"></div>'
+        +'<button class="btn btn-success" id="btnConfirmar" onclick="app.confirmar()">&#10003; Confirmar inscrição</button>';
+    }
+
+    function telaSucesso() {
+      var label=slotSel?(LABEL[slotSel.modalidade]||slotSel.modalidade):'';
+      return '<div class="success-wrap"><div class="success-icon">&#9989;</div><div class="success-title">Inscrição confirmada!</div><div class="success-name">'+e(nomeExibicao())+'</div><div class="success-detail">'+e(label)+' &middot; '+e(slotSel?slotSel.data_taf:'')+'</div>'
+        +'<button class="btn btn-primary" style="max-width:300px;margin-top:28px" onclick="app.novaInscricao()">Nova inscrição</button></div>';
+    }
+
+    function mostrarErroCfg(msg) {
+      document.getElementById('stepsBar').style.display='none';
+      document.getElementById('content').innerHTML='<div class="empty"><div class="empty-icon">⚙️</div><div class="empty-text"><strong>Página em configuração</strong><br><br>'+e(msg||'Esta página está sendo preparada pelo administrador. Tente novamente em alguns instantes.')+'</div></div><button class="btn btn-outline" style="margin-top:16px" onclick="location.reload(true)">&#8635; Recarregar sem cache</button>';
+    }
+    function mostrarErro(msg) {
+      document.getElementById('content').innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">'+e(msg)+'</div></div><button class="btn btn-outline" style="margin-top:16px" onclick="location.reload()">&#8635; Tentar novamente</button>';
+    }
+    function mostrarLoading() {
+      document.getElementById('content').innerHTML='<div class="loading"><div class="spinner"></div><div class="loading-text">Carregando disponibilidade...</div></div>';
+    }
+
+    function e(s) {
+      if(s==null) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    window.app = {
+      selecionarData: function(d){
+        var abertos=slots.filter(function(s){return s.data_taf===d&&slotAberto(s);});
+        if(!abertos.length) return;
+        dataSel=d; etapa='modalidade'; render();
+      },
+      selecionarSlot: function(id){
+        slotSel=slots.find(function(s){return s.id===id;})||null;
+        if(!slotSel)return;
+        if(slotAgendaFinalizada(slotSel)){
+          etapa='modalidade';
+          render();
+          return;
+        }
+        etapa='identificar';
+        nipVal='';
+        limparFormularioCadastro();
+        nipBuscaSeq++;
+        render({ focusNip: true });
+      },
+      voltar: function(){
+        if(etapa==='modalidade'){etapa='data';render();}
+        else if(etapa==='identificar'){etapa='modalidade';render();}
+        else if(etapa==='jaAgendado'){
+          reservaExistente=null;
+          cancelConfirmando=false;
+          cancelFeedback='';
+          etapa='identificar';
+          nipVal='';
+          limparFormularioCadastro();
+          nipBuscaSeq++;
+          render({ focusNip: true });
+        }
+        else if(etapa==='confirmar'){etapa='identificar';render({ focusNip: true });}
+      },
+      pedirCancelamento: function(){
+        cancelConfirmando = true;
+        cancelFeedback = '';
+        atualizarModalCancelamento();
+      },
+      desistirCancelamento: function(){
+        if (cancelandoReserva) return;
+        cancelConfirmando = false;
+        cancelFeedback = '';
+        atualizarModalCancelamento();
+      },
+      abrirQrCode: function(){
+        var overlay = document.getElementById('modalQrCode');
+        var frame = document.getElementById('modalQrFrame');
+        var urlEl = document.getElementById('modalQrUrl');
+        if (urlEl) urlEl.textContent = URL_AGENDAMENTO_PUBLICO;
+        if (overlay) overlay.classList.add('open');
+        if (!frame) return;
+        frame.innerHTML = '<div class="spinner" aria-label="Gerando QR Code"></div>';
+        qrDataUrlCache = null;
+        function pintar(dataUrl) {
+          qrDataUrlCache = dataUrl;
+          frame.innerHTML = '';
+          var img = document.createElement('img');
+          img.src = dataUrl;
+          img.alt = 'QR Code do agendamento TAF';
+          frame.appendChild(img);
+        }
+        function fallbackHttp() {
+          var src = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=12&data='
+            + encodeURIComponent(URL_AGENDAMENTO_PUBLICO);
+          pintar(src);
+        }
+        if (window.QRCode && typeof window.QRCode.toDataURL === 'function') {
+          window.QRCode.toDataURL(URL_AGENDAMENTO_PUBLICO, {
+            width: 320,
+            margin: 2,
+            errorCorrectionLevel: 'M',
+          }).then(pintar).catch(fallbackHttp);
+        } else {
+          fallbackHttp();
+        }
+      },
+      fecharQrCode: function(){
+        var overlay = document.getElementById('modalQrCode');
+        if (overlay) overlay.classList.remove('open');
+      },
+      onQrOverlayClick: function(ev){
+        if (ev && ev.target && ev.target.id === 'modalQrCode') {
+          app.fecharQrCode();
+        }
+      },
+      compartilharQrCode: async function(){
+        if (compartilhandoQr) return;
+        compartilhandoQr = true;
+        var btn = document.getElementById('btnCompartilharQr');
+        if (btn) { btn.disabled = true; btn.textContent = 'Preparando...'; }
+        var title = 'Agendamento TAF';
+        var text = 'Acesse o agendamento do TAF:\n' + URL_AGENDAMENTO_PUBLICO;
+        try {
+          var dataUrl = qrDataUrlCache;
+          if (!dataUrl && window.QRCode && typeof window.QRCode.toDataURL === 'function') {
+            dataUrl = await window.QRCode.toDataURL(URL_AGENDAMENTO_PUBLICO, {
+              width: 320, margin: 2, errorCorrectionLevel: 'M',
+            });
+            qrDataUrlCache = dataUrl;
+          }
+          if (dataUrl && dataUrl.indexOf('data:') === 0 && navigator.share) {
+            var res = await fetch(dataUrl);
+            var blob = await res.blob();
+            var file = new File([blob], 'agendamento-taf-qrcode.png', { type: 'image/png' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({ files: [file], title: title, text: text, url: URL_AGENDAMENTO_PUBLICO });
+              return;
+            }
+          }
+          if (navigator.share) {
+            await navigator.share({ title: title, text: text, url: URL_AGENDAMENTO_PUBLICO });
+            return;
+          }
+          window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+          try {
+            window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
+          } catch (e2) {
+            alert(text);
+          }
+        } finally {
+          compartilhandoQr = false;
+          if (btn) { btn.disabled = false; btn.textContent = 'Compartilhar'; }
+        }
+      },
+      onModalOverlayClick: function(ev){
+        if (cancelandoReserva) return;
+        if (ev && ev.target && ev.target.id === 'modalCancelar') {
+          app.desistirCancelamento();
+        }
+      },
+      confirmarCancelamento: async function(){
+        if (!reservaExistente || !reservaExistente.id) {
+          cancelFeedback = 'Não foi possível identificar a inscrição.';
+          atualizarModalCancelamento();
+          return;
+        }
+        var nipKey = nipDigitos(reservaExistente.nip || nipVal);
+        if (nipKey.length < 8) {
+          cancelFeedback = 'NIP inválido para cancelar.';
+          atualizarModalCancelamento();
+          return;
+        }
+        cancelandoReserva = true;
+        cancelFeedback = '';
+        atualizarModalCancelamento();
+        try {
+          var res = await sb.rpc('cancelar_agendamento_reserva', {
+            p_nip: nipKey,
+            p_reserva_id: reservaExistente.id,
+          });
+          if (res.error) throw res.error;
+          if (res.data !== true) {
+            throw new Error('Inscrição não encontrada ou já cancelada.');
+          }
+          // Libera vaga no contador local
+          if (reservaExistente.slot_id && reservasMap[reservaExistente.slot_id]) {
+            reservasMap[reservaExistente.slot_id] = Math.max(
+              0,
+              (reservasMap[reservaExistente.slot_id] || 0) - 1,
+            );
+          }
+          var slotCancelado = slotSel;
+          reservaExistente = null;
+          cancelConfirmando = false;
+          cancelandoReserva = false;
+          cancelFeedback = '';
+          atualizarModalCancelamento();
+          etapa = 'identificar';
+          limparFormularioCadastro();
+          // Mantém a prova selecionada; NIP limpo para nova inscrição
+          if (slotCancelado) slotSel = slotCancelado;
+          nipVal = '';
+          nipBuscaSeq++;
+          cadastroModo = 'idle';
+          setFeedbackIdent('Agendamento cancelado. Informe o NIP para se inscrever novamente.', 'ok');
+          render({ focusNip: true });
+        } catch (ex) {
+          cancelandoReserva = false;
+          var rawMsg = (ex && ex.message) ? String(ex.message) : '';
+          if (/cancelar_agendamento_reserva|schema cache|Could not find the function/i.test(rawMsg)) {
+            cancelFeedback =
+              'Cancelamento indisponível: a função ainda não foi instalada no banco. No Supabase → SQL Editor, execute o arquivo cancelar_agendamento_reserva.sql e tente de novo.';
+          } else {
+            cancelFeedback = rawMsg || 'Não foi possível cancelar. Tente novamente.';
+          }
+          atualizarModalCancelamento();
+        }
+      },
+      onNip: function(v){
+        nipVal=formatarNip(v);
+        var el=document.getElementById('nipInput');
+        if(el) el.value=nipVal;
+        var digits=nipDigitos(nipVal);
+        if (digits.length < 8) {
+          if (nipBuscaTimer) { clearTimeout(nipBuscaTimer); nipBuscaTimer=null; }
+          nipBuscaSeq++;
+          limparFormularioCadastro();
+          setFeedbackIdent('', '');
+          var box=document.getElementById('cadastroBox');
+          if (box) render({ keepScroll: true });
+          atualizarBtnContinuar();
+          return;
+        }
+        if (nipBuscaTimer) clearTimeout(nipBuscaTimer);
+        nipBuscaTimer = setTimeout(function(){ buscarNomePorNip(nipVal); }, 280);
+        atualizarBtnContinuar();
+      },
+      onNome: function(v){
+        form.nome = String(v || '').toUpperCase();
+        if (cadastroModo === 'incompleto') {
+          calcularFaltando(true);
+          var nm = document.getElementById('nomeInput');
+          if (nm) nm.className = blinkClass('nome').trim();
+        }
+        atualizarBtnContinuar();
+      },
+      onDataNasc: function(v){
+        form.dataNascimento = formatarDataInput(v);
+        var dn = document.getElementById('dnInput');
+        if (dn) {
+          dn.value = form.dataNascimento;
+          if (cadastroModo === 'incompleto') {
+            calcularFaltando(true);
+            dn.className = blinkClass('dataNascimento').trim();
+          }
+        }
+        atualizarBtnContinuar();
+      },
+      setCampo: function(campo, valor){
+        if (campo === 'categoria') {
+          form.categoria = valor;
+          form.posto = valor === 'Oficiais' ? 'GM' : 'MN';
+        } else if (campo === 'sexo') {
+          form.sexo = valor;
+          sexoConfirmado = true;
+        } else {
+          form[campo] = valor;
+        }
+        if (cadastroModo === 'incompleto') calcularFaltando(true);
+        render({ keepScroll: true });
+      },
+      confirmarSexo: function(valor){
+        form.sexo = valor;
+        sexoConfirmado = true;
+        if (cadastroModo === 'incompleto') {
+          calcularFaltando(true);
+          delete camposFaltando.sexo;
+        }
+        render({ keepScroll: true });
+      },
+      avancarConfirmar: async function(){
+        if (nipDigitos(nipVal).length < 8) return;
+        if (!sexoConfirmado || (form.sexo !== 'M' && form.sexo !== 'F')) {
+          setFeedbackIdent('Confirme seu gênero (Masculino ou Feminino) para continuar.', 'err');
+          render({ keepScroll: true });
+          return;
+        }
+        if (form.transporte !== 'proprios' && form.transporte !== 'institucional') {
+          setFeedbackIdent('Selecione Meios próprios ou Transporte Institucional para continuar.', 'err');
+          render({ keepScroll: true });
+          return;
+        }
+        if (!cadastroCompleto()) {
+          if (cadastroModo === 'novo') {
+            setFeedbackIdent('Preencha todos os campos do cadastro, confirme o gênero e o transporte.', 'err');
+          } else {
+            cadastroModo = 'incompleto';
+            calcularFaltando(true);
+            setFeedbackIdent('Complete os campos em destaque, confirme o gênero e o transporte.', 'err');
+            render({ keepScroll: true });
+          }
+          return;
+        }
+        try {
+          var dup = await buscarReservaExistente(nipVal);
+          if (dup) {
+            abrirJaAgendado(dup);
+            return;
+          }
+          if (!slotSel || slotAgendaFinalizada(slotSel)) {
+            setFeedbackIdent('Agenda finalizada para esta prova.', 'err');
+            etapa = 'modalidade';
+            render();
+            return;
+          }
+        } catch (e) {
+          // segue para confirmação; o insert também valida
+        }
+        camposFaltando = {};
+        etapa = 'confirmar';
+        render();
+      },
+      confirmar: async function(){
+        var btn=document.getElementById('btnConfirmar'), err=document.getElementById('erroCfm');
+        if(btn){btn.disabled=true;btn.textContent='Salvando...';}
+        if(err) err.style.display='none';
+        try {
+          if (!cadastroCompleto()) throw new Error('Dados do cadastro incompletos.');
+          if (!slotSel || slotAgendaFinalizada(slotSel)) {
+            throw new Error('Agenda finalizada para esta prova. Não é possível confirmar a inscrição.');
+          }
+          var nipKey=nipDigitos(nipVal);
+          var dup = await buscarReservaExistente(nipVal);
+          if (dup) {
+            abrirJaAgendado(dup);
+            return;
+          }
+          var salv = await sb.rpc('salvar_militar_agendamento', {
+            p_nip: nipKey,
+            p_nome: form.nome.trim(),
+            p_data_nascimento: form.dataNascimento.trim(),
+            p_sexo: form.sexo,
+            p_categoria: form.categoria,
+            p_posto: form.posto,
+            p_vinculo: form.vinculo,
+          });
+          if (salv.error) throw salv.error;
+
+          var id=Date.now()+'_'+Math.random().toString(16).slice(2,8);
+          var ins=await sb.rpc('inscrever_agendamento_reserva', {
+            p_id: id,
+            p_slot_id: slotSel.id,
+            p_data_taf: slotSel.data_taf,
+            p_modalidade: slotSel.modalidade,
+            p_nip: nipKey,
+            p_nome: nomeExibicao(),
+            p_data_nascimento: form.dataNascimento.trim(),
+            p_sexo: form.sexo,
+            p_categoria: form.categoria,
+            p_posto: form.posto,
+            p_vinculo: form.vinculo,
+            p_transporte: form.transporte,
+          });
+          if (ins.error) throw ins.error;
+          etapa='sucesso'; render();
+        } catch(ex){
+          var msg=erroAmigavel(ex);
+          if(err){err.textContent=msg;err.style.display='block';}
+          if(btn){btn.disabled=false;btn.innerHTML='&#10003; Confirmar inscrição';}
+        }
+      },
+      novaInscricao: function(){
+        etapa='data'; dataSel=null; slotSel=null; nipVal='';
+        limparFormularioCadastro(); nipBuscaSeq++; reservaExistente=null;
+        document.getElementById('stepsBar').style.display='flex';
+        mostrarLoading(); carregarDados();
+      },
+    };
+
+    init();
+  })();
+  </script>
+</body>
+</html>

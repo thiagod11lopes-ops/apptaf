@@ -339,7 +339,7 @@ export function EmailPasswordAuthForm({
             onBlur={() => {
               blurHideTimerRef.current = setTimeout(() => setEmailFocused(false), 180);
             }}
-            placeholder="E-mail @marinha.mil.br"
+            placeholder="E-mail"
             placeholderTextColor={theme.textMuted}
             style={inputStyle}
             autoCapitalize="none"

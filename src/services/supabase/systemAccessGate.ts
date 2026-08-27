@@ -17,7 +17,7 @@ export const SYSTEM_ACCESS_BLOCKED_MESSAGE =
 
 /** Aviso no fluxo Entrar: e-mail ainda não cadastrado / não autorizado. */
 export const SYSTEM_EMAIL_UNREGISTERED_MESSAGE =
-  'Email não Cadastrado, clique em criar conta';
+  'Email não cadastrado. Somente contas já criadas e autorizadas pelo administrador podem entrar.';
 
 export class SystemAccessBlockedError extends Error {
   constructor(message = SYSTEM_ACCESS_BLOCKED_MESSAGE) {

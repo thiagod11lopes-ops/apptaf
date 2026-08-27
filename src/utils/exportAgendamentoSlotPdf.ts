@@ -1,6 +1,10 @@
 import { Platform } from 'react-native';
 import * as Print from 'expo-print';
-import type { ReservaAgendamento } from '../services/reservasAgendamentoStorage';
+import {
+  isTransporteInstitucional,
+  labelTransporteAgendamento,
+  type ReservaAgendamento,
+} from '../services/reservasAgendamentoStorage';
 import {
   MODALIDADE_AGENDAMENTO_LABELS,
   tipoTafDaModalidade,
@@ -29,6 +33,7 @@ export type LinhaAgendamentoPdf = {
   posto: string;
   nip: string;
   nome: string;
+  transporte: string;
   updatedAt: number;
 };
 
@@ -56,6 +61,7 @@ export function montarLinhasAgendamentoPdf(
       posto,
       nip: nipKey ? formatNipInput(nipKey) : r.nip || '—',
       nome: nomeBareSemPosto(r.nome || '').trim() || (r.nome || '—').trim(),
+      transporte: labelTransporteAgendamento(r.transporte),
       updatedAt: r.updatedAt ?? 0,
     };
   });
@@ -123,6 +129,12 @@ const EXTRA_STYLES = `
   }
   .kpi.gold .n { color: #b45309; }
   .kpi.gold .l { color: #92400e; }
+  .kpi.cyan {
+    background: linear-gradient(180deg, #ecfeff 0%, #fff 100%);
+    border-color: #67e8f9;
+  }
+  .kpi.cyan .n { color: #0e7490; }
+  .kpi.cyan .l { color: #155e75; }
   table.agendamento-taf {
     width: 100%;
     border-collapse: collapse;
@@ -164,6 +176,7 @@ const EXTRA_STYLES = `
 export function buildAgendamentoSlotHtml(
   slot: SlotAgendamento,
   linhas: LinhaAgendamentoPdf[],
+  reservas?: ReservaAgendamento[],
 ): string {
   const tipo = TIPO_TAF_AGENDAMENTO_LABELS[tipoTafDaModalidade(slot.modalidade)];
   const modalidade = MODALIDADE_AGENDAMENTO_LABELS[slot.modalidade];
@@ -171,6 +184,9 @@ export function buildAgendamentoSlotHtml(
   const max = slot.maxParticipantes;
   const agendados = linhas.length;
   const vagas = Math.max(0, max - agendados);
+  const transporteInstitucional = (reservas ?? []).filter((r) =>
+    isTransporteInstitucional(r.transporte),
+  ).length;
 
   const rows = linhas
     .map(
@@ -179,6 +195,7 @@ export function buildAgendamentoSlotHtml(
       <td><strong>${escapeHtmlPdf(r.posto)}</strong></td>
       <td class="mono">${escapeHtmlPdf(r.nip)}</td>
       <td class="col-nome"><strong>${escapeHtmlPdf(r.nome)}</strong></td>
+      <td>${escapeHtmlPdf(r.transporte)}</td>
     </tr>`,
     )
     .join('');
@@ -191,22 +208,24 @@ export function buildAgendamentoSlotHtml(
     </div>
     <div class="kpi-row">
       <div class="kpi gold"><div class="n">${agendados}</div><div class="l">Agendados</div></div>
+      <div class="kpi cyan"><div class="n">${transporteInstitucional}</div><div class="l">Transporte institucional</div></div>
       <div class="kpi"><div class="n">${max}</div><div class="l">Máximo de vagas</div></div>
       <div class="kpi"><div class="n">${vagas}</div><div class="l">Vagas restantes</div></div>
     </div>
     <table class="agendamento-taf">
       <thead>
         <tr>
-          <th style="width:8%">Nº</th>
-          <th style="width:16%">Posto / Grad.</th>
-          <th style="width:18%">NIP</th>
-          <th style="width:58%">Nome</th>
+          <th style="width:7%">Nº</th>
+          <th style="width:14%">Posto / Grad.</th>
+          <th style="width:14%">NIP</th>
+          <th style="width:40%">Nome</th>
+          <th style="width:25%">Transporte</th>
         </tr>
       </thead>
       <tbody>
         ${
           rows ||
-          `<tr><td colspan="4" style="padding:16px;color:#64748b">Nenhum militar agendado nesta prova.</td></tr>`
+          `<tr><td colspan="5" style="padding:16px;color:#64748b">Nenhum militar agendado nesta prova.</td></tr>`
         }
       </tbody>
     </table>
@@ -222,6 +241,7 @@ export function buildAgendamentoSlotHtml(
 async function gerarAgendamentoSlotPdfBlobWeb(
   slot: SlotAgendamento,
   linhas: LinhaAgendamentoPdf[],
+  reservas: ReservaAgendamento[],
 ): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
@@ -238,18 +258,21 @@ async function gerarAgendamentoSlotPdfBlobWeb(
   const max = slot.maxParticipantes;
   const agendados = linhas.length;
   const vagas = Math.max(0, max - agendados);
+  const transporteInstitucional = reservas.filter((r) =>
+    isTransporteInstitucional(r.transporte),
+  ).length;
 
   type Col = { title: string; w: number; get: (r: LinhaAgendamentoPdf, i: number) => string };
   const cols: Col[] = [
-    { title: 'Nº', w: usableW * 0.08, get: (_r, i) => String(i + 1) },
-    { title: 'Posto / Grad.', w: usableW * 0.16, get: (r) => r.posto || '—' },
-    { title: 'NIP', w: usableW * 0.18, get: (r) => r.nip || '—' },
-    { title: 'Nome', w: usableW * 0.58, get: (r) => r.nome || '—' },
+    { title: 'Nº', w: usableW * 0.07, get: (_r, i) => String(i + 1) },
+    { title: 'Posto / Grad.', w: usableW * 0.14, get: (r) => r.posto || '—' },
+    { title: 'NIP', w: usableW * 0.14, get: (r) => r.nip || '—' },
+    { title: 'Nome', w: usableW * 0.40, get: (r) => r.nome || '—' },
+    { title: 'Transporte', w: usableW * 0.25, get: (r) => r.transporte || '—' },
   ];
 
   const drawHeader = (pageIndex: number) => {
     let y = marginTop;
-    // Hero navy
     doc.setFillColor(15, 23, 42);
     doc.roundedRect(marginX, y, usableW, 54, 8, 8, 'F');
     doc.setFont('helvetica', 'bold');
@@ -276,17 +299,25 @@ async function gerarAgendamentoSlotPdfBlobWeb(
     y += 68;
 
     if (pageIndex === 0) {
-      const kpiW = (usableW - 16) / 3;
+      const kpiW = (usableW - 24) / 4;
       const kpis = [
-        { n: String(agendados), l: 'AGENDADOS', gold: true },
-        { n: String(max), l: 'MAXIMO DE VAGAS', gold: false },
-        { n: String(vagas), l: 'VAGAS RESTANTES', gold: false },
+        { n: String(agendados), l: 'AGENDADOS', tone: 'gold' as const },
+        {
+          n: String(transporteInstitucional),
+          l: 'TRANSP. INSTITUCIONAL',
+          tone: 'cyan' as const,
+        },
+        { n: String(max), l: 'MAXIMO DE VAGAS', tone: 'plain' as const },
+        { n: String(vagas), l: 'VAGAS RESTANTES', tone: 'plain' as const },
       ];
       kpis.forEach((k, idx) => {
         const x = marginX + idx * (kpiW + 8);
-        if (k.gold) {
+        if (k.tone === 'gold') {
           doc.setFillColor(255, 251, 235);
           doc.setDrawColor(252, 211, 77);
+        } else if (k.tone === 'cyan') {
+          doc.setFillColor(236, 254, 255);
+          doc.setDrawColor(103, 232, 249);
         } else {
           doc.setFillColor(248, 250, 252);
           doc.setDrawColor(226, 232, 240);
@@ -295,10 +326,14 @@ async function gerarAgendamentoSlotPdfBlobWeb(
         doc.roundedRect(x, y, kpiW, 42, 6, 6, 'FD');
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
-        doc.setTextColor(k.gold ? 180 : 15, k.gold ? 83 : 23, k.gold ? 9 : 42);
+        if (k.tone === 'gold') doc.setTextColor(180, 83, 9);
+        else if (k.tone === 'cyan') doc.setTextColor(14, 116, 144);
+        else doc.setTextColor(15, 23, 42);
         doc.text(pdfTexto(k.n), x + 12, y + 20);
-        doc.setFontSize(8);
-        doc.setTextColor(k.gold ? 146 : 100, k.gold ? 64 : 116, k.gold ? 14 : 139);
+        doc.setFontSize(7);
+        if (k.tone === 'gold') doc.setTextColor(146, 64, 14);
+        else if (k.tone === 'cyan') doc.setTextColor(21, 94, 117);
+        else doc.setTextColor(100, 116, 139);
         doc.text(pdfTexto(k.l), x + 12, y + 34);
       });
       y += 56;
@@ -380,13 +415,13 @@ export async function exportAgendamentoSlotPdf(
   );
 
   if (Platform.OS === 'web') {
-    const blob = await gerarAgendamentoSlotPdfBlobWeb(slot, linhas);
+    const blob = await gerarAgendamentoSlotPdfBlobWeb(slot, linhas, reservas);
     const resultado = await entregarPdfBlobWeb(blob, filename);
     if (!resultado.ok) throw new SalvamentoCanceladoError();
     return mensagemSucessoSalvarNaPasta(resultado);
   }
 
-  const html = buildAgendamentoSlotHtml(slot, linhas);
+  const html = buildAgendamentoSlotHtml(slot, linhas, reservas);
   const { uri } = await Print.printToFileAsync({
     html,
     width: PDF_A4_LANDSCAPE_WIDTH,

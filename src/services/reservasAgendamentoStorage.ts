@@ -8,6 +8,8 @@ import { getCachedDataOwnerUid } from './firebase/authUid';
 import type { ModalidadeAgendamento } from './agendamentoStorage';
 import { getSupabase } from '../config/supabase';
 
+export type TransporteAgendamento = 'proprios' | 'institucional';
+
 export type ReservaAgendamento = {
   id: string;
   slotId: string;
@@ -22,9 +24,33 @@ export type ReservaAgendamento = {
   /** Posto/graduação (página pública / lookup). */
   posto?: string;
   vinculo?: 'carreira' | 'rm2';
+  /**
+   * Meios próprios | Transporte Institucional.
+   * Ausente em reservas anteriores à funcionalidade — não entra na contagem institucional.
+   */
+  transporte?: TransporteAgendamento;
   updatedAt: number;
   deleted?: boolean;
 };
+
+export function isTransporteInstitucional(
+  transporte: string | null | undefined,
+): boolean {
+  return String(transporte || '')
+    .trim()
+    .toLowerCase() === 'institucional';
+}
+
+export function labelTransporteAgendamento(
+  transporte: string | null | undefined,
+): string {
+  const t = String(transporte || '')
+    .trim()
+    .toLowerCase();
+  if (t === 'institucional') return 'Transporte Institucional';
+  if (t === 'proprios') return 'Meios próprios';
+  return '—';
+}
 
 const STORAGE_KEY_LEGACY = 'reservas-agendamento:registros';
 const WEB_LS_KEY_LEGACY = '@taf-reservas-agendamento-v1';
@@ -186,6 +212,7 @@ export async function saveReserva(input: {
   oficial?: string;
   praca?: string;
   vinculo?: 'carreira' | 'rm2';
+  transporte?: TransporteAgendamento;
 }): Promise<ReservaAgendamento> {
   const map = await readMap();
   // Remove reserva anterior do mesmo militar no mesmo slot
@@ -207,6 +234,7 @@ export async function saveReserva(input: {
     oficial: input.oficial,
     praca: input.praca,
     vinculo: input.vinculo,
+    transporte: input.transporte,
     updatedAt: Date.now(),
     deleted: false,
   };
@@ -247,6 +275,7 @@ async function syncReservaSupabase(reserva: ReservaAgendamento): Promise<void> {
     p_categoria: reserva.categoria ?? '',
     p_posto: reserva.posto || reserva.oficial || reserva.praca || '',
     p_vinculo: reserva.vinculo ?? '',
+    p_transporte: reserva.transporte ?? '',
     p_deleted: reserva.deleted ?? false,
     p_updated_at: reserva.updatedAt,
   });
@@ -272,6 +301,11 @@ export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
     const map = await readMap();
     for (const row of data) {
       if (slotId && (row.slot_id as string) !== slotId) continue;
+      const trRaw = String((row as { transporte?: string }).transporte || '')
+        .trim()
+        .toLowerCase();
+      const transporte: TransporteAgendamento | undefined =
+        trRaw === 'institucional' || trRaw === 'proprios' ? trRaw : undefined;
       const remote: ReservaAgendamento = {
         id: row.id as string,
         slotId: row.slot_id as string,
@@ -287,6 +321,7 @@ export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
           (row.oficial as string | undefined) ||
           (row.praca as string | undefined),
         vinculo: row.vinculo as 'carreira' | 'rm2' | undefined,
+        transporte,
         updatedAt: row.updated_at as number,
         deleted: row.deleted as boolean,
       };
@@ -308,6 +343,24 @@ export async function contarReservasPorSlot(): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const r of all) {
     if (!r.slotId) continue;
+    out[r.slotId] = (out[r.slotId] ?? 0) + 1;
+  }
+  return out;
+}
+
+/**
+ * Contagem de transporte institucional por slot.
+ * Só conta quem escolheu explicitamente "institucional" após a funcionalidade;
+ * reservas antigas (sem o campo) não entram.
+ */
+export async function contarTransporteInstitucionalPorSlot(): Promise<
+  Record<string, number>
+> {
+  await syncReservasFromSupabase();
+  const all = await getAllReservas();
+  const out: Record<string, number> = {};
+  for (const r of all) {
+    if (!r.slotId || !isTransporteInstitucional(r.transporte)) continue;
     out[r.slotId] = (out[r.slotId] ?? 0) + 1;
   }
   return out;

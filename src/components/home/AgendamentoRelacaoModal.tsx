@@ -22,6 +22,8 @@ import {
 import {
   deleteReserva,
   getReservasBySlot,
+  isTransporteInstitucional,
+  labelTransporteAgendamento,
   syncReservasFromSupabase,
   type ReservaAgendamento,
 } from '../../services/reservasAgendamentoStorage';
@@ -171,6 +173,11 @@ export function AgendamentoRelacaoModal({
     ? `${MODALIDADE_AGENDAMENTO_LABELS[slot.modalidade]} · ${slot.data}`
     : 'Relação de agendados';
 
+  const qtdTransporteInstitucional = useMemo(
+    () => reservas.filter((r) => isTransporteInstitucional(r.transporte)).length,
+    [reservas],
+  );
+
   return (
     <>
       <ModernModal
@@ -189,7 +196,7 @@ export function AgendamentoRelacaoModal({
           <Text style={[ts.label, { color: theme.primary, marginBottom: 4 }]}>{titulo}</Text>
           <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 14 }]}>
             {slot
-              ? `${TIPO_TAF_AGENDAMENTO_LABELS[tipoTafDaModalidade(slot.modalidade)]} · ${reservas.length} agendado${reservas.length !== 1 ? 's' : ''} · máx. ${slot.maxParticipantes}`
+              ? `${TIPO_TAF_AGENDAMENTO_LABELS[tipoTafDaModalidade(slot.modalidade)]} · ${reservas.length} agendado${reservas.length !== 1 ? 's' : ''} · máx. ${slot.maxParticipantes} · transporte institucional: ${qtdTransporteInstitucional}`
               : ''}
           </Text>
 
@@ -281,7 +288,9 @@ export function AgendamentoRelacaoModal({
                     <Text style={[ts.body, { color: ui.text, fontWeight: '700' }]} numberOfLines={2}>
                       {posto} {nome}
                     </Text>
-                    <Text style={[ts.caption, { color: theme.textMuted }]}>NIP {nip}</Text>
+                    <Text style={[ts.caption, { color: theme.textMuted }]}>
+                      NIP {nip} · {labelTransporteAgendamento(r.transporte)}
+                    </Text>
                   </View>
                   <TouchableOpacity
                     onPress={() => {

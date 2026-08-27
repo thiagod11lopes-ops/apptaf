@@ -32,6 +32,7 @@ import {
 import { syncMilitarLookupComCadastros } from '../../services/agendamentoMilitarLookup';
 import {
   contarReservasPorSlot,
+  contarTransporteInstitucionalPorSlot,
 } from '../../services/reservasAgendamentoStorage';
 import { ConfirmacaoExcluirSlotAgendamentoModal } from './ConfirmacaoExcluirSlotAgendamentoModal';
 import { AgendamentoRelacaoModal } from './AgendamentoRelacaoModal';
@@ -67,6 +68,9 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
 
   const [slots, setSlots] = useState<SlotAgendamento[]>([]);
   const [reservadosPorSlot, setReservadosPorSlot] = useState<Record<string, number>>({});
+  const [transporteInstitucionalPorSlot, setTransporteInstitucionalPorSlot] = useState<
+    Record<string, number>
+  >({});
   const [editandoId, setEditandoId] = useState<string | null>(null);
 
   // Formulário
@@ -115,10 +119,15 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       const lista = await getAllSlots();
       setSlots(lista);
       try {
-        const contagem = await contarReservasPorSlot();
+        const [contagem, transp] = await Promise.all([
+          contarReservasPorSlot(),
+          contarTransporteInstitucionalPorSlot(),
+        ]);
         setReservadosPorSlot(contagem);
+        setTransporteInstitucionalPorSlot(transp);
       } catch {
         setReservadosPorSlot({});
+        setTransporteInstitucionalPorSlot({});
       }
       try {
         const nSlots = await pushAllSlotsToSupabase();
@@ -151,6 +160,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     } catch {
       setSlots([]);
       setReservadosPorSlot({});
+      setTransporteInstitucionalPorSlot({});
     }
   }, []);
 
@@ -814,6 +824,8 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                         {' · '}Máx.: {slot.maxParticipantes} participante
                         {slot.maxParticipantes !== 1 ? 's' : ''}
                         {' · '}Agendados: {reservadosPorSlot[slot.id] ?? 0}
+                        {' · '}Transp. institucional:{' '}
+                        {transporteInstitucionalPorSlot[slot.id] ?? 0}
                         {' · '}Início: {String(slot.horaInicio ?? 8).padStart(2, '0')}h
                         {' · '}Fecha:{' '}
                         {slot.fechamentoAntecedenciaHoras
@@ -890,8 +902,14 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       slot={slotRelacao}
       onClose={() => setSlotRelacao(null)}
       onReservasAlteradas={() => {
-        void contarReservasPorSlot()
-          .then(setReservadosPorSlot)
+        void Promise.all([
+          contarReservasPorSlot(),
+          contarTransporteInstitucionalPorSlot(),
+        ])
+          .then(([contagem, transp]) => {
+            setReservadosPorSlot(contagem);
+            setTransporteInstitucionalPorSlot(transp);
+          })
           .catch(() => undefined);
       }}
     />

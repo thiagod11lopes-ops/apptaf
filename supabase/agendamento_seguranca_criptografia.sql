@@ -426,6 +426,7 @@ returns table (
   categoria text,
   posto text,
   vinculo text,
+  transporte text,
   updated_at bigint
 )
 language plpgsql
@@ -435,7 +436,6 @@ set search_path = public
 as $$
 declare
   nh text := public.agendamento_nip_hash(p_nip);
-  pl jsonb;
 begin
   if nh is null then
     return;
@@ -454,6 +454,7 @@ begin
     coalesce(dec.pl->>'categoria', '')::text,
     coalesce(dec.pl->>'posto', '')::text,
     coalesce(dec.pl->>'vinculo', '')::text,
+    coalesce(dec.pl->>'transporte', '')::text,
     r.updated_at
   from public.agendamento_reservas r
   cross join lateral (
@@ -481,6 +482,7 @@ grant execute on function public.buscar_reserva_agendamento(text, text, text, te
 -- ─── RPC: inscrever (página pública) ─────────────────────────────────────────
 
 drop function if exists public.inscrever_agendamento_reserva(text, text, text, text, text, text, text, text, text, text, text);
+drop function if exists public.inscrever_agendamento_reserva(text, text, text, text, text, text, text, text, text, text, text, text);
 
 create function public.inscrever_agendamento_reserva(
   p_id text,
@@ -493,7 +495,8 @@ create function public.inscrever_agendamento_reserva(
   p_sexo text default '',
   p_categoria text default '',
   p_posto text default '',
-  p_vinculo text default ''
+  p_vinculo text default '',
+  p_transporte text default ''
 )
 returns text
 language plpgsql
@@ -503,6 +506,7 @@ as $$
 declare
   nh text := public.agendamento_nip_hash(p_nip);
   rid text := trim(coalesce(p_id, ''));
+  tr text := lower(trim(coalesce(p_transporte, '')));
   pl jsonb;
 begin
   if nh is null then
@@ -517,6 +521,9 @@ begin
   if length(trim(coalesce(p_nome, ''))) < 3 then
     raise exception 'Nome inválido';
   end if;
+  if tr <> 'proprios' and tr <> 'institucional' then
+    raise exception 'Informe o transporte (Meios próprios ou Transporte Institucional)';
+  end if;
 
   pl := jsonb_strip_nulls(jsonb_build_object(
     'nip', public.agendamento_nip_digits(p_nip),
@@ -525,7 +532,8 @@ begin
     'sexo', upper(trim(coalesce(p_sexo, ''))),
     'categoria', trim(coalesce(p_categoria, '')),
     'posto', upper(trim(coalesce(p_posto, ''))),
-    'vinculo', lower(trim(coalesce(p_vinculo, '')))
+    'vinculo', lower(trim(coalesce(p_vinculo, ''))),
+    'transporte', tr
   ));
 
   insert into public.agendamento_reservas as t (
@@ -562,8 +570,8 @@ begin
 end;
 $$;
 
-revoke all on function public.inscrever_agendamento_reserva(text, text, text, text, text, text, text, text, text, text, text) from public;
-grant execute on function public.inscrever_agendamento_reserva(text, text, text, text, text, text, text, text, text, text, text) to anon, authenticated;
+revoke all on function public.inscrever_agendamento_reserva(text, text, text, text, text, text, text, text, text, text, text, text) from public;
+grant execute on function public.inscrever_agendamento_reserva(text, text, text, text, text, text, text, text, text, text, text, text) to anon, authenticated;
 
 -- ─── RPC: cancelar (valida hash do NIP) ───────────────────────────────────────
 
@@ -747,6 +755,7 @@ returns table (
   categoria text,
   posto text,
   vinculo text,
+  transporte text,
   updated_at bigint,
   deleted boolean
 )
@@ -773,6 +782,7 @@ begin
     coalesce(dec.pl->>'categoria', coalesce(r.categoria, ''))::text,
     coalesce(dec.pl->>'posto', coalesce(r.posto, ''))::text,
     coalesce(dec.pl->>'vinculo', coalesce(r.vinculo, ''))::text,
+    coalesce(dec.pl->>'transporte', '')::text,
     r.updated_at,
     coalesce(r.deleted, false)
   from public.agendamento_reservas r
@@ -788,6 +798,7 @@ grant execute on function public.listar_reservas_agendamento_admin() to authenti
 -- ─── RPC: admin — upsert reserva criptografada ────────────────────────────────
 
 drop function if exists public.upsert_reserva_agendamento_admin(text, text, text, text, text, text, text, text, text, text, text, boolean, bigint);
+drop function if exists public.upsert_reserva_agendamento_admin(text, text, text, text, text, text, text, text, text, text, text, text, boolean, bigint);
 
 create function public.upsert_reserva_agendamento_admin(
   p_id text,
@@ -801,6 +812,7 @@ create function public.upsert_reserva_agendamento_admin(
   p_categoria text default '',
   p_posto text default '',
   p_vinculo text default '',
+  p_transporte text default '',
   p_deleted boolean default false,
   p_updated_at bigint default null
 )
@@ -811,6 +823,7 @@ set search_path = public
 as $$
 declare
   nh text := public.agendamento_nip_hash(p_nip);
+  tr text := lower(trim(coalesce(p_transporte, '')));
   pl jsonb;
   ts bigint := coalesce(p_updated_at, (extract(epoch from now()) * 1000)::bigint);
 begin
@@ -821,6 +834,10 @@ begin
     raise exception 'NIP inválido';
   end if;
 
+  if tr <> '' and tr <> 'proprios' and tr <> 'institucional' then
+    tr := '';
+  end if;
+
   pl := jsonb_strip_nulls(jsonb_build_object(
     'nip', public.agendamento_nip_digits(p_nip),
     'nome', upper(trim(coalesce(p_nome, ''))),
@@ -828,7 +845,8 @@ begin
     'sexo', upper(trim(coalesce(p_sexo, ''))),
     'categoria', trim(coalesce(p_categoria, '')),
     'posto', upper(trim(coalesce(p_posto, ''))),
-    'vinculo', lower(trim(coalesce(p_vinculo, '')))
+    'vinculo', lower(trim(coalesce(p_vinculo, ''))),
+    'transporte', nullif(tr, '')
   ));
 
   insert into public.agendamento_reservas as t (
@@ -863,8 +881,8 @@ begin
 end;
 $$;
 
-revoke all on function public.upsert_reserva_agendamento_admin(text, text, text, text, text, text, text, text, text, text, text, boolean, bigint) from public;
-grant execute on function public.upsert_reserva_agendamento_admin(text, text, text, text, text, text, text, text, text, text, text, boolean, bigint) to authenticated;
+revoke all on function public.upsert_reserva_agendamento_admin(text, text, text, text, text, text, text, text, text, text, text, text, boolean, bigint) from public;
+grant execute on function public.upsert_reserva_agendamento_admin(text, text, text, text, text, text, text, text, text, text, text, text, boolean, bigint) to authenticated;
 
 -- ─── RPC: admin — lookup ──────────────────────────────────────────────────────
 

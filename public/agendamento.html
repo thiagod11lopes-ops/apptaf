@@ -521,6 +521,7 @@
       categoria: 'Praças',
       posto: 'MN',
       vinculo: 'carreira',
+      transporte: '',
     };
     var camposFaltando = {};
     var feedbackMsg = '';
@@ -529,7 +530,7 @@
     var sexoConfirmado = false;
 
     function limparFormularioCadastro() {
-      form = { nome: '', dataNascimento: '', sexo: '', categoria: 'Praças', posto: 'MN', vinculo: 'carreira' };
+      form = { nome: '', dataNascimento: '', sexo: '', categoria: 'Praças', posto: 'MN', vinculo: 'carreira', transporte: '' };
       camposFaltando = {};
       cadastroModo = 'idle';
       feedbackMsg = '';
@@ -639,7 +640,15 @@
 
     function cadastroCompleto() {
       var f = calcularFaltando(false);
-      return Object.keys(f).length === 0 && sexoConfirmado;
+      return Object.keys(f).length === 0
+        && sexoConfirmado
+        && (form.transporte === 'proprios' || form.transporte === 'institucional');
+    }
+
+    function transporteLabelDe(v) {
+      if (v === 'institucional') return 'Transporte Institucional';
+      if (v === 'proprios') return 'Meios próprios';
+      return '—';
     }
 
     function aplicarCadastroDaBusca(row) {
@@ -1035,12 +1044,20 @@
 
     function blocoConfirmacaoSexoHtml() {
       var precisaBlink = !sexoConfirmado && (cadastroModo === 'completo' || cadastroModo === 'incompleto' || cadastroModo === 'novo');
+      var precisaTransporte = !(form.transporte === 'proprios' || form.transporte === 'institucional')
+        && (cadastroModo === 'completo' || cadastroModo === 'incompleto' || cadastroModo === 'novo');
       return '<div class="cadastro-box" id="sexoConfirmBox" style="border-top:none;padding-top:4px;margin-top:8px">'
         + '<label class="field-label">Confirmação de gênero</label>'
         + '<div class="hint-sexo"><strong>Atenção:</strong> confirme o gênero correto (Masculino ou Feminino). Essa informação é usada nas tabelas de avaliação do TAF e deve ser selecionada por você nesta tela.</div>'
         + '<div class="toggle-row' + (precisaBlink ? ' field-blink' : '') + '" id="row_sexo">'
         + '<button type="button" class="toggle-btn' + (form.sexo === 'M' && sexoConfirmado ? ' active' : '') + '" onclick="app.confirmarSexo(\'M\')">Masculino</button>'
         + '<button type="button" class="toggle-btn' + (form.sexo === 'F' && sexoConfirmado ? ' active' : '') + '" onclick="app.confirmarSexo(\'F\')">Feminino</button>'
+        + '</div>'
+        + '<label class="field-label" style="margin-top:14px">Transporte</label>'
+        + '<div class="hint-sexo">Informe como você irá se deslocar até o local da prova.</div>'
+        + '<div class="toggle-row' + (precisaTransporte ? ' field-blink' : '') + '" id="row_transporte">'
+        + '<button type="button" class="toggle-btn' + (form.transporte === 'proprios' ? ' active' : '') + '" onclick="app.setCampo(\'transporte\',\'proprios\')">Meios próprios</button>'
+        + '<button type="button" class="toggle-btn' + (form.transporte === 'institucional' ? ' active' : '') + '" onclick="app.setCampo(\'transporte\',\'institucional\')">Transporte Institucional</button>'
         + '</div></div>';
     }
 
@@ -1171,6 +1188,7 @@
         +   '<div class="summary-value">' + e(nomeDaReserva(r)) + '</div>'
         +   '<div class="summary-sub">NIP ' + e(formatarNipExibicao(r.nip || nipVal)) + ' · ' + e(sexoLabel) + ' · Nasc. ' + e(nasc) + '</div>'
         +   '<div class="summary-sub">' + e(cat) + ' · ' + e(posto) + ' · ' + e(vinculoLabelDe(r.vinculo)) + '</div>'
+        +   '<div class="summary-sub">Transporte: ' + e(transporteLabelDe(r.transporte)) + '</div>'
         + '</div>'
         + '<button class="btn btn-danger" style="margin-top:12px" onclick="app.pedirCancelamento()">Cancelar agendamento</button>'
         + '<button class="btn btn-outline" style="margin-top:8px" onclick="app.voltar()">&#8592; Voltar</button>'
@@ -1178,10 +1196,10 @@
     }
 
     function telaIdentificar() {
-      var sub = 'Informe seu NIP. Em seguida, confirme seu gênero para continuar.';
-      if (cadastroModo === 'novo') sub = 'NIP não encontrado. Preencha os dados e confirme o gênero.';
-      if (cadastroModo === 'incompleto') sub = 'Há dados faltando. Complete os campos em laranja e confirme o gênero.';
-      if (cadastroModo === 'completo') sub = 'Cadastro encontrado. Confirme seu gênero para continuar.';
+      if (cadastroModo === 'completo') sub = 'Cadastro encontrado. Confirme seu gênero e o transporte para continuar.';
+      if (cadastroModo === 'novo') sub = 'NIP não encontrado. Preencha os dados, confirme o gênero e o transporte.';
+      if (cadastroModo === 'incompleto') sub = 'Há dados faltando. Complete os campos em laranja, confirme o gênero e o transporte.';
+      if (cadastroModo === 'idle') sub = 'Informe seu NIP. Em seguida, confirme seu gênero e o transporte para continuar.';
       var mostrarSexo = cadastroModo === 'novo' || cadastroModo === 'incompleto' || cadastroModo === 'completo';
       return '<p class="section-title">Identificação</p><p class="section-sub">' + sub + '</p>'
         +'<label class="field-label" for="nipInput">NIP</label>'
@@ -1225,7 +1243,8 @@
         +'<div class="summary-card"><div class="summary-label">Prova</div><div class="summary-value">'+e(label)+'</div><div class="summary-sub">'+e(slotSel?slotSel.data_taf:'—')+'</div></div>'
         +'<div class="summary-card"><div class="summary-label">Militar</div><div class="summary-value">'+e(nomeExibicao())+'</div>'
         +'<div class="summary-sub">NIP '+e(nipVal)+' · '+e(sexoLabel)+' · Nasc. '+e(form.dataNascimento||'—')+'</div>'
-        +'<div class="summary-sub">'+e(form.categoria||'')+' · '+e(form.posto||'')+' · '+e(vinculoLabel)+'</div></div>'
+        +'<div class="summary-sub">'+e(form.categoria||'')+' · '+e(form.posto||'')+' · '+e(vinculoLabel)+'</div>'
+        +'<div class="summary-sub">Transporte: '+e(transporteLabelDe(form.transporte))+'</div></div>'
         +'<div id="erroCfm" class="feedback feedback-err" style="display:none"></div>'
         +'<button class="btn btn-success" id="btnConfirmar" onclick="app.confirmar()">&#10003; Confirmar inscrição</button>';
     }
@@ -1513,13 +1532,18 @@
           render({ keepScroll: true });
           return;
         }
+        if (form.transporte !== 'proprios' && form.transporte !== 'institucional') {
+          setFeedbackIdent('Selecione Meios próprios ou Transporte Institucional para continuar.', 'err');
+          render({ keepScroll: true });
+          return;
+        }
         if (!cadastroCompleto()) {
           if (cadastroModo === 'novo') {
-            setFeedbackIdent('Preencha todos os campos do cadastro e confirme o gênero.', 'err');
+            setFeedbackIdent('Preencha todos os campos do cadastro, confirme o gênero e o transporte.', 'err');
           } else {
             cadastroModo = 'incompleto';
             calcularFaltando(true);
-            setFeedbackIdent('Complete os campos em destaque e confirme o gênero.', 'err');
+            setFeedbackIdent('Complete os campos em destaque, confirme o gênero e o transporte.', 'err');
             render({ keepScroll: true });
           }
           return;
@@ -1582,6 +1606,7 @@
             p_categoria: form.categoria,
             p_posto: form.posto,
             p_vinculo: form.vinculo,
+            p_transporte: form.transporte,
           });
           if (ins.error) throw ins.error;
           etapa='sucesso'; render();

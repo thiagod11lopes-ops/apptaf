@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,7 +33,9 @@ import { syncMilitarLookupComCadastros } from '../../services/agendamentoMilitar
 import {
   contarReservasPorSlot,
   contarTransporteInstitucionalPorSlot,
+  refreshContagensAgendamentoVagas,
 } from '../../services/reservasAgendamentoStorage';
+import { subscribeAgendamentoVagasRealtime } from '../../services/agendamentoVagasRealtime';
 import { ConfirmacaoExcluirSlotAgendamentoModal } from './ConfirmacaoExcluirSlotAgendamentoModal';
 import { AgendamentoRelacaoModal } from './AgendamentoRelacaoModal';
 import { AgendamentoQrCodeModal } from './AgendamentoQrCodeModal';
@@ -93,11 +95,44 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
   const [slotParaExcluir, setSlotParaExcluir] = useState<SlotAgendamento | null>(null);
   const [slotRelacao, setSlotRelacao] = useState<SlotAgendamento | null>(null);
   const [qrModalVisible, setQrModalVisible] = useState(false);
+  /** Incrementa a cada atualização em tempo real (reabre lista da relação). */
+  const [vagasTick, setVagasTick] = useState(0);
+  const contagemRef = useRef<string>('');
 
   const modalidadesDoTipo = useMemo(
     () => MODALIDADES_POR_TIPO_TAF[tipoTaf],
     [tipoTaf],
   );
+
+  const aplicarContagens = useCallback(
+    (contagem: Record<string, number>, transp: Record<string, number>) => {
+      setReservadosPorSlot(contagem);
+      setTransporteInstitucionalPorSlot(transp);
+      const sig = JSON.stringify({ contagem, transp });
+      if (sig !== contagemRef.current) {
+        contagemRef.current = sig;
+        setVagasTick((n) => n + 1);
+      }
+    },
+    [],
+  );
+
+  const atualizarVagasEmTempoReal = useCallback(async () => {
+    try {
+      try {
+        await syncSlotsFromSupabase();
+      } catch {
+        // mantém slots locais
+      }
+      const lista = await getAllSlots();
+      setSlots(lista);
+      const { reservadosPorSlot: contagem, transporteInstitucionalPorSlot: transp } =
+        await refreshContagensAgendamentoVagas();
+      aplicarContagens(contagem, transp);
+    } catch {
+      // silencioso — próximo evento/poll tenta de novo
+    }
+  }, [aplicarContagens]);
 
   const recarregar = useCallback(async () => {
     try {
@@ -124,8 +159,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
           contarReservasPorSlot(),
           contarTransporteInstitucionalPorSlot(),
         ]);
-        setReservadosPorSlot(contagem);
-        setTransporteInstitucionalPorSlot(transp);
+        aplicarContagens(contagem, transp);
       } catch {
         setReservadosPorSlot({});
         setTransporteInstitucionalPorSlot({});
@@ -163,11 +197,18 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       setReservadosPorSlot({});
       setTransporteInstitucionalPorSlot({});
     }
-  }, []);
+  }, [aplicarContagens]);
 
   useEffect(() => {
     if (visible) void recarregar();
   }, [visible, recarregar]);
+
+  useEffect(() => {
+    if (!visible) return;
+    return subscribeAgendamentoVagasRealtime(() => {
+      void atualizarVagasEmTempoReal();
+    });
+  }, [visible, atualizarVagasEmTempoReal]);
 
   const limparFormulario = useCallback(() => {
     setData('');
@@ -915,15 +956,12 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     <AgendamentoRelacaoModal
       visible={!!slotRelacao}
       slot={slotRelacao}
+      refreshKey={vagasTick}
       onClose={() => setSlotRelacao(null)}
       onReservasAlteradas={() => {
-        void Promise.all([
-          contarReservasPorSlot(),
-          contarTransporteInstitucionalPorSlot(),
-        ])
-          .then(([contagem, transp]) => {
-            setReservadosPorSlot(contagem);
-            setTransporteInstitucionalPorSlot(transp);
+        void refreshContagensAgendamentoVagas()
+          .then(({ reservadosPorSlot: contagem, transporteInstitucionalPorSlot: transp }) => {
+            aplicarContagens(contagem, transp);
           })
           .catch(() => undefined);
       }}

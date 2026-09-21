@@ -344,22 +344,28 @@ export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
  * Contagem de reservas ativas por slotId.
  * Preferência: mesma RPC da página pública (`contar_reservas_por_slot`),
  * para Agendados/vagas coincidirem com a disponibilidade publicada.
+ *
+ * `syncLocal: false` evita merge completo (útil em refresh frequente / tempo real).
  */
-export async function contarReservasPorSlot(): Promise<Record<string, number>> {
+export async function contarReservasPorSlot(opts?: {
+  syncLocal?: boolean;
+}): Promise<Record<string, number>> {
+  const syncLocal = opts?.syncLocal !== false;
   const sb = getSupabase();
   if (sb) {
     try {
       const { data, error } = await sb.rpc('contar_reservas_por_slot');
       if (!error && Array.isArray(data)) {
-        // Mantém a relação de nomes alinhada, sem alterar a contagem oficial.
-        void syncReservasFromSupabase().catch(() => undefined);
+        if (syncLocal) {
+          void syncReservasFromSupabase().catch(() => undefined);
+        }
         return mapearContagemReservasRpc(data);
       }
     } catch {
       // fallback local
     }
   }
-  await syncReservasFromSupabase();
+  if (syncLocal) await syncReservasFromSupabase();
   return contarReservasAtivasPorSlotId(await getAllReservas());
 }
 
@@ -368,10 +374,10 @@ export async function contarReservasPorSlot(): Promise<Record<string, number>> {
  * Só conta quem escolheu explicitamente "institucional" após a funcionalidade;
  * reservas antigas (sem o campo) não entram.
  */
-export async function contarTransporteInstitucionalPorSlot(): Promise<
-  Record<string, number>
-> {
-  await syncReservasFromSupabase();
+export async function contarTransporteInstitucionalPorSlot(opts?: {
+  sync?: boolean;
+}): Promise<Record<string, number>> {
+  if (opts?.sync !== false) await syncReservasFromSupabase();
   const all = await getAllReservas();
   const out: Record<string, number> = {};
   for (const r of all) {
@@ -379,4 +385,20 @@ export async function contarTransporteInstitucionalPorSlot(): Promise<
     out[r.slotId] = (out[r.slotId] ?? 0) + 1;
   }
   return out;
+}
+
+/**
+ * Atualiza contagens (RPC + merge local) para a UI de disponibilidade.
+ * Usado no modal e na escuta em tempo real.
+ */
+export async function refreshContagensAgendamentoVagas(): Promise<{
+  reservadosPorSlot: Record<string, number>;
+  transporteInstitucionalPorSlot: Record<string, number>;
+}> {
+  await syncReservasFromSupabase();
+  const [reservadosPorSlot, transporteInstitucionalPorSlot] = await Promise.all([
+    contarReservasPorSlot({ syncLocal: false }),
+    contarTransporteInstitucionalPorSlot({ sync: false }),
+  ]);
+  return { reservadosPorSlot, transporteInstitucionalPorSlot };
 }

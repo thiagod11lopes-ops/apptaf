@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -40,6 +40,8 @@ type Props = {
   onClose: () => void;
   /** Chamado após exclusão para atualizar contagens na lista de vagas. */
   onReservasAlteradas?: () => void;
+  /** Quando muda (tempo real), recarrega a relação aberta. */
+  refreshKey?: number;
 };
 
 function postoDaReserva(r: ReservaAgendamento): string {
@@ -70,6 +72,7 @@ export function AgendamentoRelacaoModal({
   slot,
   onClose,
   onReservasAlteradas,
+  refreshKey = 0,
 }: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
@@ -83,9 +86,10 @@ export function AgendamentoRelacaoModal({
   const [reservaParaExcluir, setReservaParaExcluir] = useState<ReservaAgendamento | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
+  const lastRefreshKey = useRef<number | null>(null);
 
-  const carregar = useCallback(async (slotId: string) => {
-    setCarregando(true);
+  const carregar = useCallback(async (slotId: string, silent = false) => {
+    if (!silent) setCarregando(true);
     setErro(null);
     try {
       await syncReservasFromSupabase(slotId);
@@ -99,9 +103,9 @@ export function AgendamentoRelacaoModal({
       setReservas(ordenada);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível carregar os agendados.');
-      setReservas([]);
+      if (!silent) setReservas([]);
     } finally {
-      setCarregando(false);
+      if (!silent) setCarregando(false);
     }
   }, []);
 
@@ -112,10 +116,23 @@ export function AgendamentoRelacaoModal({
       setErro(null);
       setSucesso(null);
       setReservaParaExcluir(null);
+      lastRefreshKey.current = null;
       return;
     }
-    void carregar(slot.id);
+    lastRefreshKey.current = refreshKey;
+    void carregar(slot.id, false);
   }, [visible, slot, carregar]);
+
+  useEffect(() => {
+    if (!visible || !slot) return;
+    if (lastRefreshKey.current === null) {
+      lastRefreshKey.current = refreshKey;
+      return;
+    }
+    if (refreshKey === lastRefreshKey.current) return;
+    lastRefreshKey.current = refreshKey;
+    void carregar(slot.id, true);
+  }, [refreshKey, visible, slot, carregar]);
 
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();

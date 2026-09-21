@@ -72,10 +72,66 @@ describe('montarListaReprovadosInicioTaf', () => {
     const lista = montarListaReprovadosInicioTaf(sessoes, cadastros, []);
     expect(lista).toHaveLength(1);
     const natacao = lista[0]?.modalidades.find((m) => m.label === 'Natação');
-    expect(natacao?.data).toBe('20/04/2026');
-    expect(natacao?.tempo).toBe('01:35:45');
-    expect(natacao?.chave).toBe('natacao');
+    expect(natacao).toEqual(
+      expect.objectContaining({
+        data: '20/04/2026',
+        tempo: '01:35:45',
+        chave: 'natacao',
+      }),
+    );
     // Mulher ~34 anos (faixa 31–40): limite nota 50 = 02:25
     expect(natacao?.tempoMinimo).toBe('02:25');
+  });
+
+  it('remove do Reprovados quando refaz a mesma prova e é aprovado', () => {
+    const cadastros: CadastroItemPersist[] = [
+      {
+        id: 'c4',
+        nip: '22.2222.22',
+        nome: 'COSTA MARIA',
+        dataNascimento: '01/01/1990',
+        categoria: 'Praças',
+        praca: 'MN',
+        sexo: 'F',
+        notaCorrida: '85',
+        tempoCorrida: '14:00',
+        dataTafCorrida: '10/05/2026',
+      },
+    ];
+    const sessoes: SessaoAplicacaoTaf[] = [
+      {
+        id: 's-fail',
+        criadoEm: '2026-05-01T10:00:00.000Z',
+        dataAplicacao: '01/05/2026',
+        tipoProva: 'corrida',
+        resultados: [
+          {
+            corredor: 1,
+            nome: 'COSTA MARIA',
+            nip: '22.2222.22',
+            tempoMs: 20 * 60 * 1000,
+            notaTexto: 'REPROVADO',
+            reprovacaoTexto: 'Reprovado',
+          },
+        ],
+      },
+      {
+        id: 's-ok',
+        criadoEm: '2026-05-10T10:00:00.000Z',
+        dataAplicacao: '10/05/2026',
+        tipoProva: 'corrida',
+        resultados: [
+          {
+            corredor: 1,
+            nome: 'COSTA MARIA',
+            nip: '22.2222.22',
+            tempoMs: 14 * 60 * 1000,
+            notaTexto: '85',
+          },
+        ],
+      },
+    ];
+    const lista = montarListaReprovadosInicioTaf(sessoes, cadastros, []);
+    expect(lista.find((i) => i.id === 'c4')).toBeUndefined();
   });
 });

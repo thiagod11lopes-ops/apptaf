@@ -21,6 +21,8 @@ import {
   temAvaliacaoCaminhada,
   temAvaliacaoCorrida,
   temAvaliacaoCorridaOuCaminhada,
+  temAvaliacaoNatacao,
+  temAvaliacaoPermanencia,
 } from './resultadoTafCadastro';
 import { unificarSessoesComCadastroRegistrador } from './sessoesUnificadasResultados';
 import { compareByNomePtBr } from './compareNomePtBr';
@@ -47,6 +49,8 @@ type AggRow = {
   permanencia?: ModalidadeHistorico;
   corridaSessaoEm?: string;
   caminhadaSessaoEm?: string;
+  natacaoSessaoEm?: string;
+  permanenciaSessaoEm?: string;
   /** CFN */
   flexaoBarra?: ModalidadeHistorico;
   flexaoSolo?: ModalidadeHistorico;
@@ -307,13 +311,17 @@ export function agregarHistoricoPorParticipante(
 
       if (tipo === 'corrida') {
         agg.corrida = slice;
-        agg.corridaSessaoEm = sessao.criadoEm;
+        agg.corridaSessaoEm = sessao.dataAplicacao || sessao.criadoEm;
       } else if (tipo === 'caminhada') {
         agg.caminhada = slice;
-        agg.caminhadaSessaoEm = sessao.criadoEm;
-      } else if (tipo === 'natacao') agg.natacao = slice;
-      else if (tipo === 'permanencia') agg.permanencia = slice;
-      else if (tipo === 'flexao_barra') agg.flexaoBarra = slice;
+        agg.caminhadaSessaoEm = sessao.dataAplicacao || sessao.criadoEm;
+      } else if (tipo === 'natacao') {
+        agg.natacao = slice;
+        agg.natacaoSessaoEm = sessao.dataAplicacao || sessao.criadoEm;
+      } else if (tipo === 'permanencia') {
+        agg.permanencia = slice;
+        agg.permanenciaSessaoEm = sessao.dataAplicacao || sessao.criadoEm;
+      } else if (tipo === 'flexao_barra') agg.flexaoBarra = slice;
       else if (tipo === 'flexao_solo') agg.flexaoSolo = slice;
       else if (tipo === 'abdominal_remador') agg.abdominalRemador = slice;
       else if (tipo === 'abdominal_prancha') agg.abdominalPrancha = slice;
@@ -655,91 +663,70 @@ function modalidadeEhReprovada(m?: ModalidadeHistorico): boolean {
   return isNotaReprovacaoTexto(m.nota);
 }
 
-function aggTemReprovacao(agg: AggRow): boolean {
-  return (
-    modalidadeEhReprovada(agg.corrida) ||
-    modalidadeEhReprovada(agg.caminhada) ||
-    modalidadeEhReprovada(agg.natacao) ||
-    modalidadeEhReprovada(agg.permanencia) ||
-    modalidadeEhReprovada(agg.flexaoBarra) ||
-    modalidadeEhReprovada(agg.flexaoSolo) ||
-    modalidadeEhReprovada(agg.abdominalRemador) ||
-    modalidadeEhReprovada(agg.abdominalPrancha)
-  );
+/** Timestamp para comparar cadastro vs última sessão (ISO ou DD/MM/AAAA). */
+function dataVigenciaMs(raw?: string | null): number | null {
+  const s = (raw ?? '').trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const t = Date.parse(s);
+    return Number.isFinite(t) ? t : null;
+  }
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+  if (!m) return null;
+  const t = Date.parse(`${m[3]}-${m[2]}-${m[1]}T12:00:00`);
+  return Number.isFinite(t) ? t : null;
 }
 
-function resultadoItemEhReprovado(r: ResultadoCorridaItem): boolean {
-  if (r.desistencia) return true;
-  const rep = (r.reprovacaoTexto ?? '').trim().toLowerCase();
-  if (rep.includes('reprov') || rep.includes('desist')) return true;
-  if (isNotaReprovacaoTexto(r.notaTexto ?? r.noraTexto)) return true;
-  const desempenho = (r.desempenhoTexto ?? '').trim().toLowerCase();
-  return desempenho === 'reprovado' || desempenho.startsWith('desist');
+/**
+ * Resultado vigente da modalidade: se cadastro e sessão divergem, usa o mais recente;
+ * em empate/sem data, a sessão agregada (última aplicação) prevalece.
+ * Assim, ao ser aprovado depois de reprovado, some do card Reprovados.
+ */
+function modalidadeVigenteReprovada(
+  cadastro: { ativo: boolean; reprovado: boolean; data?: string | null },
+  sessao: { ativo: boolean; reprovado: boolean; data?: string | null },
+): boolean {
+  if (!cadastro.ativo && !sessao.ativo) return false;
+  if (cadastro.ativo && !sessao.ativo) return cadastro.reprovado;
+  if (!cadastro.ativo && sessao.ativo) return sessao.reprovado;
+  const tc = dataVigenciaMs(cadastro.data);
+  const ts = dataVigenciaMs(sessao.data);
+  if (tc != null && ts != null && tc !== ts) {
+    return tc > ts ? cadastro.reprovado : sessao.reprovado;
+  }
+  return sessao.reprovado;
 }
 
-function cadastroTemReprovacaoDireta(c: CadastroItemPersist): boolean {
-  if (c.normaTaf === 'cfn') {
-    // Para militares CFN os campos notaCorrida/notaNatacao/notaCaminhada podem ter sido
-    // calculados com tabelas Armada (dados antigos) — recalcula ao vivo com tabelas CFN
-    // para evitar falso positivo no card Reprovados.
-    const notaCorridaCfn = (c.tempoCorrida ?? '').trim()
-      ? textoNotaCorridaFromCadastro({
-          tempoCorrida: c.tempoCorrida,
-          dataNascimento: c.dataNascimento,
-          sexo: c.sexo,
-          normaTaf: 'cfn',
-        })
-      : null;
-    const notaNatacaoCfn = (c.tempoNatacao ?? '').trim()
-      ? textoNotaNatacaoFromCadastro({
-          tempoNatacao: c.tempoNatacao,
-          dataNascimento: c.dataNascimento,
-          sexo: c.sexo,
-          normaTaf: 'cfn',
-        })
-      : null;
-    for (const nota of [
-      notaCorridaCfn, notaNatacaoCfn,
-      c.notaFlexaoBarra, c.notaFlexaoSolo, c.notaAbdominalRemador, c.notaAbdominalPrancha,
-    ]) {
-      if (isNotaReprovacaoTexto(nota)) return true;
-    }
-    return c.resultadoPermanencia === 'reprovado' || c.resultadoNatacao === 'reprovado';
+function notaCorridaVigenteNoCadastro(c: CadastroItemPersist): string {
+  if (c.normaTaf === 'cfn' && (c.tempoCorrida ?? '').trim()) {
+    return (
+      textoNotaCorridaFromCadastro({
+        tempoCorrida: c.tempoCorrida,
+        dataNascimento: c.dataNascimento,
+        sexo: c.sexo,
+        normaTaf: 'cfn',
+      }) || ''
+    ).trim();
   }
-
-  // Militares Armada: usa campos persistidos normalmente.
-  for (const nota of [c.notaCorrida, c.notaCaminhada, c.notaNatacao]) {
-    if (isNotaReprovacaoTexto(nota)) return true;
-  }
-  return c.resultadoPermanencia === 'reprovado' || c.resultadoNatacao === 'reprovado';
+  return (c.notaCorrida ?? '').trim();
 }
 
-/** Chaves (NIP normalizado ou id) de participantes com ao menos um teste reprovado nas sessões. */
-function chavesComReprovacaoEmSessoes(
-  sessoes: SessaoAplicacaoTaf[],
-  cadastros: CadastroItemPersist[],
-): Set<string> {
-  const index = buildCadastroLookupIndex(cadastros);
-  const keys = new Set<string>();
-  for (const sessao of sessoes) {
-    for (const r of sessao.resultados ?? []) {
-      if (!resultadoItemEhReprovado(r)) continue;
-      const busca = buscarCadastroIndexed(
-        index,
-        cadastros,
-        (r.nip ?? '').trim() || (r.nome ?? '').trim(),
-      );
-      if (busca.kind === 'found') {
-        const nipKey = nipChaveCadastro(busca.cadastro.nip);
-        if (nipKey) keys.add(nipKey);
-        keys.add(busca.cadastro.id);
-        continue;
-      }
-      const nipKey = nipChaveCadastro(r.nip ?? '');
-      if (nipKey) keys.add(nipKey);
-    }
+function notaNatacaoVigenteNoCadastro(c: CadastroItemPersist): string {
+  if (c.normaTaf === 'cfn' && (c.tempoNatacao ?? '').trim()) {
+    return (
+      textoNotaNatacaoFromCadastro({
+        tempoNatacao: c.tempoNatacao,
+        dataNascimento: c.dataNascimento,
+        sexo: c.sexo,
+        normaTaf: 'cfn',
+      }) || ''
+    ).trim();
   }
-  return keys;
+  return (c.notaNatacao ?? '').trim();
+}
+
+function notaCaminhadaVigenteNoCadastro(c: CadastroItemPersist): string {
+  return (c.notaCaminhada ?? '').trim();
 }
 
 /** Resumo da aba Iniciar com base no Histórico de aplicações. */
@@ -777,8 +764,6 @@ export function calcularResumoInicioTafFromHistorico(
     if (key) nipsFatoresPreenchidosNorm.add(key);
   }
 
-  const chavesReprovados = chavesComReprovacaoEmSessoes(unificadas, cadastrosReais);
-
   let completos = 0;
   let parcial = 0;
   let semTeste = 0;
@@ -796,12 +781,8 @@ export function calcularResumoInicioTafFromHistorico(
       cadastroIncompleto += 1;
     }
     const agg = findAggRowForCadastro(aggs, c);
-    const reprovadoEmTeste =
-      cadastroTemReprovacaoDireta(c) ||
-      (agg ? aggTemReprovacao(agg) : false) ||
-      (!!nipC && chavesReprovados.has(nipC)) ||
-      chavesReprovados.has(c.id);
-    if (reprovadoEmTeste) {
+    // Só resultado vigente (última prova/cadastro) — aprovação posterior remove do card.
+    if (modalidadesReprovadasDoCadastro(c, agg).length > 0) {
       reprovados += 1;
     }
     if (nipC && nipsRestritosNorm.has(nipC)) {
@@ -923,21 +904,6 @@ function tempoMinimoAprovacaoModalidade(
   return undefined;
 }
 
-function tempoFromResultadoItem(
-  tipo: TipoProvaAplicada,
-  r: ResultadoCorridaItem,
-): string | undefined {
-  if (tipo === 'permanencia') {
-    const t = tempoPermanenciaFromResultado(r).trim();
-    return t || undefined;
-  }
-  if (typeof r.tempoMs === 'number' && r.tempoMs > 0) {
-    const modality = tipo === 'natacao' ? 'natacao' : 'corrida';
-    return formatMsByModality(modality, r.tempoMs).trim() || undefined;
-  }
-  return undefined;
-}
-
 export type ReprovadoInicioTafItem = {
   id: string;
   nip: string;
@@ -1011,178 +977,181 @@ function modalidadesReprovadasDoCadastro(
 ): ReprovadoInicioModalidade[] {
   const out: ReprovadoInicioModalidade[] = [];
 
-  if (agg?.corrida && modalidadeEhReprovada(agg.corrida)) {
+  const notaCorridaCad = notaCorridaVigenteNoCadastro(c);
+  if (
+    modalidadeVigenteReprovada(
+      {
+        ativo: temAvaliacaoCorrida(c),
+        reprovado: isNotaReprovacaoTexto(notaCorridaCad),
+        data: c.dataTafCorrida,
+      },
+      {
+        ativo: !!agg?.corrida,
+        reprovado: !!agg?.corrida && modalidadeEhReprovada(agg.corrida),
+        data: agg?.corridaSessaoEm || c.dataTafCorrida,
+      },
+    )
+  ) {
+    const doAgg = !!agg?.corrida && modalidadeEhReprovada(agg.corrida);
     pushModalidadeUnica(
       out,
       'Corrida',
-      detalheModalidade(agg.corrida),
-      c.dataTafCorrida || agg.corridaSessaoEm,
-      primeiroTempo(agg.corrida.tempo, c.tempoCorrida),
-      undefined,
-      'corrida',
-    );
-  } else if (isNotaReprovacaoTexto(c.notaCorrida)) {
-    pushModalidadeUnica(
-      out,
-      'Corrida',
-      (c.notaCorrida || '').trim() || 'Reprovado',
-      c.dataTafCorrida,
-      primeiroTempo(c.tempoCorrida),
+      doAgg
+        ? detalheModalidade(agg!.corrida!)
+        : notaCorridaCad || 'Reprovado',
+      c.dataTafCorrida || agg?.corridaSessaoEm,
+      primeiroTempo(agg?.corrida?.tempo, c.tempoCorrida),
       undefined,
       'corrida',
     );
   }
 
-  if (agg?.caminhada && modalidadeEhReprovada(agg.caminhada)) {
+  const notaCamCad = notaCaminhadaVigenteNoCadastro(c);
+  if (
+    modalidadeVigenteReprovada(
+      {
+        ativo: temAvaliacaoCaminhada(c),
+        reprovado: isNotaReprovacaoTexto(notaCamCad),
+        data: c.dataTafCaminhada,
+      },
+      {
+        ativo: !!agg?.caminhada,
+        reprovado: !!agg?.caminhada && modalidadeEhReprovada(agg.caminhada),
+        data: agg?.caminhadaSessaoEm || c.dataTafCaminhada,
+      },
+    )
+  ) {
+    const doAgg = !!agg?.caminhada && modalidadeEhReprovada(agg.caminhada);
     pushModalidadeUnica(
       out,
       'Caminhada',
-      detalheModalidade(agg.caminhada),
-      c.dataTafCaminhada || agg.caminhadaSessaoEm,
-      primeiroTempo(agg.caminhada.tempo, c.tempoCaminhada),
-      undefined,
-      'caminhada',
-    );
-  } else if (isNotaReprovacaoTexto(c.notaCaminhada)) {
-    pushModalidadeUnica(
-      out,
-      'Caminhada',
-      (c.notaCaminhada || '').trim() || 'Reprovado',
-      c.dataTafCaminhada,
-      primeiroTempo(c.tempoCaminhada),
+      doAgg
+        ? detalheModalidade(agg!.caminhada!)
+        : notaCamCad || 'Reprovado',
+      c.dataTafCaminhada || agg?.caminhadaSessaoEm,
+      primeiroTempo(agg?.caminhada?.tempo, c.tempoCaminhada),
       undefined,
       'caminhada',
     );
   }
 
-  if (agg?.natacao && modalidadeEhReprovada(agg.natacao)) {
+  const notaNatCad = notaNatacaoVigenteNoCadastro(c);
+  const natCadRep =
+    isNotaReprovacaoTexto(notaNatCad) || c.resultadoNatacao === 'reprovado';
+  if (
+    modalidadeVigenteReprovada(
+      {
+        ativo: temAvaliacaoNatacao(c),
+        reprovado: natCadRep,
+        data: c.dataTafNatacao,
+      },
+      {
+        ativo: !!agg?.natacao,
+        reprovado: !!agg?.natacao && modalidadeEhReprovada(agg.natacao),
+        data: agg?.natacaoSessaoEm || c.dataTafNatacao,
+      },
+    )
+  ) {
+    const doAgg = !!agg?.natacao && modalidadeEhReprovada(agg.natacao);
     pushModalidadeUnica(
       out,
       'Natação',
-      detalheModalidade(agg.natacao),
-      c.dataTafNatacao,
-      primeiroTempo(agg.natacao.tempo, c.tempoNatacao),
-      undefined,
-      'natacao',
-    );
-  } else if (isNotaReprovacaoTexto(c.notaNatacao) || c.resultadoNatacao === 'reprovado') {
-    pushModalidadeUnica(
-      out,
-      'Natação',
-      (c.notaNatacao || '').trim() || 'Reprovado',
-      c.dataTafNatacao,
-      primeiroTempo(c.tempoNatacao),
+      doAgg
+        ? detalheModalidade(agg!.natacao!)
+        : notaNatCad || 'Reprovado',
+      c.dataTafNatacao || agg?.natacaoSessaoEm,
+      primeiroTempo(agg?.natacao?.tempo, c.tempoNatacao),
       undefined,
       'natacao',
     );
   }
 
-  if (agg?.permanencia && modalidadeEhReprovada(agg.permanencia)) {
+  const permCadRep = c.resultadoPermanencia === 'reprovado';
+  if (
+    modalidadeVigenteReprovada(
+      {
+        ativo: temAvaliacaoPermanencia(c),
+        reprovado: permCadRep,
+        data: c.dataTafPermanencia,
+      },
+      {
+        ativo: !!agg?.permanencia,
+        reprovado: !!agg?.permanencia && modalidadeEhReprovada(agg.permanencia),
+        data: agg?.permanenciaSessaoEm || c.dataTafPermanencia,
+      },
+    )
+  ) {
+    const doAgg = !!agg?.permanencia && modalidadeEhReprovada(agg.permanencia);
     pushModalidadeUnica(
       out,
       'Permanência',
-      detalheModalidade(agg.permanencia),
-      c.dataTafPermanencia,
-      primeiroTempo(agg.permanencia.tempo, c.tempoPermanencia),
-      undefined,
-      'permanencia',
-    );
-  } else if (c.resultadoPermanencia === 'reprovado') {
-    pushModalidadeUnica(
-      out,
-      'Permanência',
-      'Reprovado',
-      c.dataTafPermanencia,
-      primeiroTempo(c.tempoPermanencia),
+      doAgg ? detalheModalidade(agg!.permanencia!) : 'Reprovado',
+      c.dataTafPermanencia || agg?.permanenciaSessaoEm,
+      primeiroTempo(agg?.permanencia?.tempo, c.tempoPermanencia),
       undefined,
       'permanencia',
     );
   }
 
-  // Modalidades CFN — 4th param = data (undefined), 5th param = tempo
-  if (agg?.flexaoBarra && modalidadeEhReprovada(agg.flexaoBarra)) {
-    pushModalidadeUnica(out, 'Flexão de Barra', detalheModalidade(agg.flexaoBarra), undefined, agg.flexaoBarra.tempo);
-  } else if (isNotaReprovacaoTexto(c.notaFlexaoBarra)) {
-    pushModalidadeUnica(out, 'Flexão de Barra', (c.notaFlexaoBarra || '').trim() || 'Reprovado');
-  }
-
-  if (agg?.flexaoSolo && modalidadeEhReprovada(agg.flexaoSolo)) {
-    pushModalidadeUnica(out, 'Flexão de Solo', detalheModalidade(agg.flexaoSolo), undefined, agg.flexaoSolo.tempo);
-  } else if (isNotaReprovacaoTexto(c.notaFlexaoSolo)) {
-    pushModalidadeUnica(out, 'Flexão de Solo', (c.notaFlexaoSolo || '').trim() || 'Reprovado');
-  }
-
-  if (agg?.abdominalRemador && modalidadeEhReprovada(agg.abdominalRemador)) {
-    pushModalidadeUnica(out, 'Abdominal Remador', detalheModalidade(agg.abdominalRemador), undefined, agg.abdominalRemador.tempo);
-  } else if (isNotaReprovacaoTexto(c.notaAbdominalRemador)) {
-    pushModalidadeUnica(out, 'Abdominal Remador', (c.notaAbdominalRemador || '').trim() || 'Reprovado');
-  }
-
-  if (agg?.abdominalPrancha && modalidadeEhReprovada(agg.abdominalPrancha)) {
-    pushModalidadeUnica(out, 'Abdominal Prancha', detalheModalidade(agg.abdominalPrancha), undefined, agg.abdominalPrancha.tempo);
-  } else if (isNotaReprovacaoTexto(c.notaAbdominalPrancha)) {
-    pushModalidadeUnica(out, 'Abdominal Prancha', (c.notaAbdominalPrancha || '').trim() || 'Reprovado');
-  }
-
-  return out;
-}
-
-function modalidadesReprovadasNasSessoes(
-  sessoes: SessaoAplicacaoTaf[],
-  c: CadastroItemPersist,
-  index: CadastroLookupIndex,
-  cadastros: CadastroItemPersist[],
-): ReprovadoInicioModalidade[] {
-  const out: ReprovadoInicioModalidade[] = [];
-  const nipC = nipDigitos(c.nip);
-  for (const sessao of sessoes) {
-    const tipo = sessao.tipoProva;
-    const label =
-      tipo === 'natacao'
-        ? 'Natação'
-        : tipo === 'permanencia'
-          ? 'Permanência'
-          : tipo === 'caminhada'
-            ? 'Caminhada'
-            : tipo === 'corrida'
-              ? 'Corrida'
-              : tipo === 'flexao_barra'
-                ? 'Flexão de Barra'
-                : tipo === 'flexao_solo'
-                  ? 'Flexão de Solo'
-                  : tipo === 'abdominal_remador'
-                    ? 'Abdominal Remador'
-                    : tipo === 'abdominal_prancha'
-                      ? 'Abdominal Prancha'
-                      : null;
-    if (!label) continue;
-    const dataSessao = sessao.dataAplicacao || sessao.criadoEm;
-    for (const r of sessao.resultados ?? []) {
-      if (!resultadoItemEhReprovado(r)) continue;
-      const busca = buscarCadastroIndexed(
-        index,
-        cadastros,
-        (r.nip ?? '').trim() || (r.nome ?? '').trim(),
-      );
-      const match =
-        (busca.kind === 'found' && busca.cadastro.id === c.id) ||
-        (nipC.length >= 8 && nipDigitos(r.nip ?? '') === nipC);
-      if (!match) continue;
-      const detalhe =
-        (r.reprovacaoTexto || '').trim() ||
-        (r.notaTexto || r.noraTexto || '').trim() ||
-        (r.desistencia ? 'Desistência' : 'Reprovado');
+  const cfnMods: Array<{
+    label: string;
+    chave: ModalidadeResultadoTaf;
+    notaCad: string | undefined;
+    aggMod?: ModalidadeHistorico;
+  }> = [
+    {
+      label: 'Flexão de Barra',
+      chave: 'flexao_barra',
+      notaCad: c.notaFlexaoBarra,
+      aggMod: agg?.flexaoBarra,
+    },
+    {
+      label: 'Flexão de Solo',
+      chave: 'flexao_solo',
+      notaCad: c.notaFlexaoSolo,
+      aggMod: agg?.flexaoSolo,
+    },
+    {
+      label: 'Abdominal Remador',
+      chave: 'abdominal_remador',
+      notaCad: c.notaAbdominalRemador,
+      aggMod: agg?.abdominalRemador,
+    },
+    {
+      label: 'Abdominal Prancha',
+      chave: 'abdominal_prancha',
+      notaCad: c.notaAbdominalPrancha,
+      aggMod: agg?.abdominalPrancha,
+    },
+  ];
+  for (const m of cfnMods) {
+    const nota = (m.notaCad ?? '').trim();
+    const temCad = !!nota || (m.chave === 'abdominal_prancha' && !!(c.tempoAbdominalPrancha ?? '').trim());
+    if (
+      modalidadeVigenteReprovada(
+        {
+          ativo: temCad,
+          reprovado: isNotaReprovacaoTexto(nota),
+        },
+        {
+          ativo: !!m.aggMod,
+          reprovado: !!m.aggMod && modalidadeEhReprovada(m.aggMod),
+        },
+      )
+    ) {
+      const doAgg = !!m.aggMod && modalidadeEhReprovada(m.aggMod);
       pushModalidadeUnica(
         out,
-        label,
-        detalhe,
-        dataSessao,
-        tempoFromResultadoItem(tipo, r),
+        m.label,
+        doAgg ? detalheModalidade(m.aggMod!) : nota || 'Reprovado',
         undefined,
-        tipo,
+        m.aggMod?.tempo,
+        undefined,
+        m.chave,
       );
     }
   }
+
   return out;
 }
 
@@ -1252,30 +1221,16 @@ export function montarListaReprovadosInicioTaf(
     excluidasReais,
   );
   const aggs = agregarHistoricoPorParticipante(unificadas, cadastrosReais);
-  const chavesReprovados = chavesComReprovacaoEmSessoes(unificadas, cadastrosReais);
   const index = buildCadastroLookupIndex(cadastrosReais);
 
   const lista: ReprovadoInicioTafItem[] = [];
   for (const c of cadastrosReais) {
-    const nipC = nipChaveCadastro(c.nip);
     const agg = findAggRowForCadastro(aggs, c);
-    const reprovadoEmTeste =
-      cadastroTemReprovacaoDireta(c) ||
-      (agg ? aggTemReprovacao(agg) : false) ||
-      (!!nipC && chavesReprovados.has(nipC)) ||
-      chavesReprovados.has(c.id);
-    if (!reprovadoEmTeste) continue;
-
     const modalidades: ReprovadoInicioModalidade[] = [];
     for (const m of modalidadesReprovadasDoCadastro(c, agg)) {
-      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data, m.tempo, m.tempoMinimo);
+      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data, m.tempo, m.tempoMinimo, m.chave);
     }
-    for (const m of modalidadesReprovadasNasSessoes(unificadas, c, index, cadastrosReais)) {
-      pushModalidadeUnica(modalidades, m.label, m.detalhe, m.data, m.tempo, m.tempoMinimo);
-    }
-    if (modalidades.length === 0) {
-      pushModalidadeUnica(modalidades, 'Teste', 'Reprovado');
-    }
+    if (modalidades.length === 0) continue;
     for (const m of modalidades) {
       const cfn = sessaoCfnParaModalidade(m.label, unificadas, c, index, cadastrosReais);
       const minimo = tempoMinimoAprovacaoModalidade(m.label, c, cfn);

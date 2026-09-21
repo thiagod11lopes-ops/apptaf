@@ -34,6 +34,7 @@ describe('montarListaReprovadosInicioTaf', () => {
     const corrida = lista[0]?.modalidades.find((m) => m.label === 'Corrida');
     expect(corrida?.data).toBe('15/03/2026');
     expect(corrida?.tempo).toMatch(/^12:34/);
+    expect(corrida?.chave).toBe('corrida');
     // Homem ~36 anos (faixa 34–39): limite nota 50 = 15:30
     expect(corrida?.tempoMinimo).toBe('15:30');
   });
@@ -73,6 +74,7 @@ describe('montarListaReprovadosInicioTaf', () => {
     const natacao = lista[0]?.modalidades.find((m) => m.label === 'Natação');
     expect(natacao?.data).toBe('20/04/2026');
     expect(natacao?.tempo).toBe('01:35:45');
+    expect(natacao?.chave).toBe('natacao');
     // Mulher ~34 anos (faixa 31–40): limite nota 50 = 02:25
     expect(natacao?.tempoMinimo).toBe('02:25');
   });

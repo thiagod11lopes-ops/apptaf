@@ -28,6 +28,7 @@ import { isDemoCadastroId, isDemoSessaoId } from './gatherSystemBackupData';
 import { cadastroIncompletoNascimentoOuFatores } from './cadastroIncompleto';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
 import { postoGradComVinculo } from './formatNomeComPosto';
+import type { ModalidadeResultadoTaf } from './limparResultadoModalidade';
 
 type ModalidadeHistorico = {
   nota: string;
@@ -270,9 +271,9 @@ export function agregarHistoricoPorParticipante(
 
       const busca = buscarCadastroIndexed(
         index,
-        cadastros,
-        (r.nip ?? '').trim() || (r.nome ?? '').trim(),
-      );
+          cadastros,
+          (r.nip ?? '').trim() || (r.nome ?? '').trim(),
+        );
       const nipHint =
         busca.kind === 'found' ? (busca.cadastro.nip ?? '') : (r.nip ?? '');
       const merged = mergeKeyForParticipante(map, id, nipHint);
@@ -335,14 +336,14 @@ function findAggForCadastro(
 ): AggRow | undefined {
   const byId = map.get(c.id);
   if (byId) return byId;
-  const nipC = nipDigitos(c.nip);
+    const nipC = nipDigitos(c.nip);
   if (nipC.length >= 8) return byNipAgg.get(nipC);
   return undefined;
 }
 
 function buildAggByNip(map: Map<string, AggRow>): Map<string, AggRow> {
   const byNip = new Map<string, AggRow>();
-  for (const row of map.values()) {
+      for (const row of map.values()) {
     const d = nipDigitos(row.nip);
     if (d.length >= 8 && !byNip.has(d)) byNip.set(d, row);
   }
@@ -813,6 +814,8 @@ export function calcularResumoInicioTafFromHistorico(
 
 export type ReprovadoInicioModalidade = {
   label: string;
+  /** Chave estável para exclusão no cadastro/histórico (quando conhecida). */
+  chave?: ModalidadeResultadoTaf;
   detalhe: string;
   /** Tempo da prova (MM:SS ou MM:SS:CS), quando conhecido. */
   tempo?: string;
@@ -824,6 +827,22 @@ export type ReprovadoInicioModalidade = {
   /** Data do teste (DD/MM/AAAA), quando conhecida. */
   data?: string;
 };
+
+/** Converte o rótulo exibido (Corrida, Natação…) na chave de exclusão. */
+export function modalidadeChaveFromLabelReprovado(
+  label: string,
+): ModalidadeResultadoTaf | null {
+  const t = (label || '').trim().toLowerCase();
+  if (t === 'corrida') return 'corrida';
+  if (t === 'caminhada') return 'caminhada';
+  if (t === 'natação' || t === 'natacao') return 'natacao';
+  if (t === 'permanência' || t === 'permanencia') return 'permanencia';
+  if (t.includes('barra')) return 'flexao_barra';
+  if (t.includes('solo')) return 'flexao_solo';
+  if (t.includes('remador')) return 'abdominal_remador';
+  if (t.includes('prancha')) return 'abdominal_prancha';
+  return null;
+}
 
 /** Texto de chip/coluna: `Corrida: REPROVADO · 12:34 · mín. 14:30 · 15/03/2026`. */
 export function textoModalidadeReprovada(m: ReprovadoInicioModalidade): string {
@@ -944,20 +963,24 @@ function pushModalidadeUnica(
   data?: string,
   tempo?: string,
   tempoMinimo?: string,
+  chave?: ModalidadeResultadoTaf | null,
 ): void {
   const dataNorm = formatDataTesteReprovado(data);
   const tempoNorm = (tempo ?? '').trim() || undefined;
   const tempoMinNorm = (tempoMinimo ?? '').trim() || undefined;
+  const chaveNorm = chave ?? modalidadeChaveFromLabelReprovado(label) ?? undefined;
   const existing = list.find((m) => m.label === label);
   if (existing) {
     if (!existing.data && dataNorm) existing.data = dataNorm;
     if (!existing.tempo && tempoNorm) existing.tempo = tempoNorm;
     if (!existing.tempoMinimo && tempoMinNorm) existing.tempoMinimo = tempoMinNorm;
+    if (!existing.chave && chaveNorm) existing.chave = chaveNorm;
     return;
   }
   list.push({
     label,
     detalhe: detalhe.trim() || 'Reprovado',
+    ...(chaveNorm ? { chave: chaveNorm } : {}),
     ...(tempoNorm ? { tempo: tempoNorm } : {}),
     ...(tempoMinNorm ? { tempoMinimo: tempoMinNorm } : {}),
     ...(dataNorm ? { data: dataNorm } : {}),
@@ -977,6 +1000,8 @@ function modalidadesReprovadasDoCadastro(
       detalheModalidade(agg.corrida),
       c.dataTafCorrida || agg.corridaSessaoEm,
       primeiroTempo(agg.corrida.tempo, c.tempoCorrida),
+      undefined,
+      'corrida',
     );
   } else if (isNotaReprovacaoTexto(c.notaCorrida)) {
     pushModalidadeUnica(
@@ -985,6 +1010,8 @@ function modalidadesReprovadasDoCadastro(
       (c.notaCorrida || '').trim() || 'Reprovado',
       c.dataTafCorrida,
       primeiroTempo(c.tempoCorrida),
+      undefined,
+      'corrida',
     );
   }
 
@@ -995,6 +1022,8 @@ function modalidadesReprovadasDoCadastro(
       detalheModalidade(agg.caminhada),
       c.dataTafCaminhada || agg.caminhadaSessaoEm,
       primeiroTempo(agg.caminhada.tempo, c.tempoCaminhada),
+      undefined,
+      'caminhada',
     );
   } else if (isNotaReprovacaoTexto(c.notaCaminhada)) {
     pushModalidadeUnica(
@@ -1003,6 +1032,8 @@ function modalidadesReprovadasDoCadastro(
       (c.notaCaminhada || '').trim() || 'Reprovado',
       c.dataTafCaminhada,
       primeiroTempo(c.tempoCaminhada),
+      undefined,
+      'caminhada',
     );
   }
 
@@ -1013,6 +1044,8 @@ function modalidadesReprovadasDoCadastro(
       detalheModalidade(agg.natacao),
       c.dataTafNatacao,
       primeiroTempo(agg.natacao.tempo, c.tempoNatacao),
+      undefined,
+      'natacao',
     );
   } else if (isNotaReprovacaoTexto(c.notaNatacao) || c.resultadoNatacao === 'reprovado') {
     pushModalidadeUnica(
@@ -1021,6 +1054,8 @@ function modalidadesReprovadasDoCadastro(
       (c.notaNatacao || '').trim() || 'Reprovado',
       c.dataTafNatacao,
       primeiroTempo(c.tempoNatacao),
+      undefined,
+      'natacao',
     );
   }
 
@@ -1031,6 +1066,8 @@ function modalidadesReprovadasDoCadastro(
       detalheModalidade(agg.permanencia),
       c.dataTafPermanencia,
       primeiroTempo(agg.permanencia.tempo, c.tempoPermanencia),
+      undefined,
+      'permanencia',
     );
   } else if (c.resultadoPermanencia === 'reprovado') {
     pushModalidadeUnica(
@@ -1039,6 +1076,8 @@ function modalidadesReprovadasDoCadastro(
       'Reprovado',
       c.dataTafPermanencia,
       primeiroTempo(c.tempoPermanencia),
+      undefined,
+      'permanencia',
     );
   }
 
@@ -1115,7 +1154,15 @@ function modalidadesReprovadasNasSessoes(
         (r.reprovacaoTexto || '').trim() ||
         (r.notaTexto || r.noraTexto || '').trim() ||
         (r.desistencia ? 'Desistência' : 'Reprovado');
-      pushModalidadeUnica(out, label, detalhe, dataSessao, tempoFromResultadoItem(tipo, r));
+      pushModalidadeUnica(
+        out,
+        label,
+        detalhe,
+        dataSessao,
+        tempoFromResultadoItem(tipo, r),
+        undefined,
+        tipo,
+      );
     }
   }
   return out;

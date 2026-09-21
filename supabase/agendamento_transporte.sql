@@ -37,6 +37,9 @@ declare
   rid text := trim(coalesce(p_id, ''));
   tr text := lower(trim(coalesce(p_transporte, '')));
   pl jsonb;
+  max_p integer;
+  atuais bigint;
+  sid text := trim(coalesce(p_slot_id, ''));
 begin
   if nh is null then
     raise exception 'NIP inválido';
@@ -44,7 +47,7 @@ begin
   if rid = '' then
     raise exception 'ID inválido';
   end if;
-  if trim(coalesce(p_slot_id, '')) = '' then
+  if sid = '' then
     raise exception 'Slot inválido';
   end if;
   if length(trim(coalesce(p_nome, ''))) < 3 then
@@ -52,6 +55,33 @@ begin
   end if;
   if tr <> 'proprios' and tr <> 'institucional' then
     raise exception 'Informe o transporte (Meios próprios ou Transporte Institucional)';
+  end if;
+
+  select s.max_participantes into max_p
+  from public.agendamento_slots s
+  where s.id = sid
+    and coalesce(s.deleted, false) = false;
+  if max_p is null then
+    raise exception 'Disponibilidade não encontrada';
+  end if;
+
+  -- Evita duplicata do mesmo NIP no slot (libera a vaga antes de recontar).
+  update public.agendamento_reservas
+  set
+    deleted = true,
+    updated_at = (extract(epoch from now()) * 1000)::bigint
+  where slot_id = sid
+    and nip_hash = nh
+    and coalesce(deleted, false) = false
+    and id <> rid;
+
+  select count(*)::bigint into atuais
+  from public.agendamento_reservas r
+  where r.slot_id = sid
+    and coalesce(r.deleted, false) = false
+    and r.id <> rid;
+  if atuais >= max_p then
+    raise exception 'Vagas esgotadas para esta prova';
   end if;
 
   pl := jsonb_strip_nulls(jsonb_build_object(
@@ -70,7 +100,7 @@ begin
     nip, nome, data_nascimento, sexo, categoria, posto, vinculo
   ) values (
     rid,
-    trim(p_slot_id),
+    sid,
     trim(p_data_taf),
     trim(p_modalidade),
     nh,

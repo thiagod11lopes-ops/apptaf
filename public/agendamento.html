@@ -1005,7 +1005,9 @@
         var finalizada=slotAgendaFinalizada(s);
         var sub=finalizada
           ? (motivoFinalizacao(s)+' &middot; início '+hora)
-          : (d+' vaga'+(d!==1?'s':'')+' disponív'+(d!==1?'eis':'el')+' &middot; máx. '+s.max_participantes+' &middot; início '+hora);
+          : (d+' vaga'+(d!==1?'s':'')+' disponív'+(d!==1?'eis':'el')
+            +' &middot; agendados '+(reservasMap[s.id]||0)+'/'+s.max_participantes
+            +' &middot; início '+hora);
         var inner='<span class="card-emoji">'+icon+'</span>'
           +'<div class="card-texts"><div class="card-title">'+e(label)+'</div>'
           +'<div class="card-sub">'+sub+'</div></div>'

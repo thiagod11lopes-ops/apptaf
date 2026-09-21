@@ -196,7 +196,7 @@ export function AgendamentoRelacaoModal({
           <Text style={[ts.label, { color: theme.primary, marginBottom: 4 }]}>{titulo}</Text>
           <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 14 }]}>
             {slot
-              ? `${TIPO_TAF_AGENDAMENTO_LABELS[tipoTafDaModalidade(slot.modalidade)]} · ${reservas.length} agendado${reservas.length !== 1 ? 's' : ''} · máx. ${slot.maxParticipantes} · transporte institucional: ${qtdTransporteInstitucional}`
+              ? `${TIPO_TAF_AGENDAMENTO_LABELS[tipoTafDaModalidade(slot.modalidade)]} · ${reservas.length}/${slot.maxParticipantes} agendado${reservas.length !== 1 ? 's' : ''} · ${Math.max(0, slot.maxParticipantes - reservas.length)} vaga${Math.max(0, slot.maxParticipantes - reservas.length) !== 1 ? 's' : ''} · transporte institucional: ${qtdTransporteInstitucional}`
               : ''}
           </Text>
 

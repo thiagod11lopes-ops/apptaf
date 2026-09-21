@@ -7,6 +7,10 @@ import { readAppMeta, writeAppMeta } from '../offline-first/db/appMeta';
 import { getCachedDataOwnerUid } from './firebase/authUid';
 import type { ModalidadeAgendamento } from './agendamentoStorage';
 import { getSupabase } from '../config/supabase';
+import {
+  contarReservasAtivasPorSlotId,
+  mapearContagemReservasRpc,
+} from '../utils/agendamentoVagasContagem';
 
 export type TransporteAgendamento = 'proprios' | 'institucional';
 
@@ -296,7 +300,7 @@ export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
     if (!sessionData.session) return;
 
     const { data, error } = await sb.rpc('listar_reservas_agendamento_admin');
-    if (error || !data?.length) return;
+    if (error || !Array.isArray(data)) return;
 
     const map = await readMap();
     for (const row of data) {
@@ -326,7 +330,7 @@ export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
         deleted: row.deleted as boolean,
       };
       const local = map[remote.id];
-      if (!local || (remote.updatedAt ?? 0) > (local.updatedAt ?? 0)) {
+      if (!local || (remote.updatedAt ?? 0) >= (local.updatedAt ?? 0)) {
         map[remote.id] = remote;
       }
     }
@@ -336,16 +340,27 @@ export async function syncReservasFromSupabase(slotId?: string): Promise<void> {
   }
 }
 
-/** Contagem de reservas ativas por slotId (fonte: Supabase + merge local). */
+/**
+ * Contagem de reservas ativas por slotId.
+ * Preferência: mesma RPC da página pública (`contar_reservas_por_slot`),
+ * para Agendados/vagas coincidirem com a disponibilidade publicada.
+ */
 export async function contarReservasPorSlot(): Promise<Record<string, number>> {
-  await syncReservasFromSupabase();
-  const all = await getAllReservas();
-  const out: Record<string, number> = {};
-  for (const r of all) {
-    if (!r.slotId) continue;
-    out[r.slotId] = (out[r.slotId] ?? 0) + 1;
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data, error } = await sb.rpc('contar_reservas_por_slot');
+      if (!error && Array.isArray(data)) {
+        // Mantém a relação de nomes alinhada, sem alterar a contagem oficial.
+        void syncReservasFromSupabase().catch(() => undefined);
+        return mapearContagemReservasRpc(data);
+      }
+    } catch {
+      // fallback local
+    }
   }
-  return out;
+  await syncReservasFromSupabase();
+  return contarReservasAtivasPorSlotId(await getAllReservas());
 }
 
 /**

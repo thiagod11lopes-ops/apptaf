@@ -45,6 +45,7 @@ import {
   HORAS_INICIO_DIA,
   type FechamentoAntecedenciaHoras,
 } from '../../utils/agendamentoFechamento';
+import { vagasRestantes } from '../../utils/agendamentoVagasContagem';
 
 /** Página pública de agendamento. */
 const URL_AGENDAMENTO = URL_AGENDAMENTO_PUBLICO;
@@ -218,6 +219,15 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
       setErro('Informe o número máximo de participantes (mínimo 1).');
       return;
     }
+    if (editandoId) {
+      const jaAgendados = reservadosPorSlot[editandoId] ?? 0;
+      if (max < jaAgendados) {
+        setErro(
+          `Já há ${jaAgendados} agendado${jaAgendados !== 1 ? 's' : ''}. O máximo de vagas não pode ser menor.`,
+        );
+        return;
+      }
+    }
     setSalvando(true);
     setErro(null);
     setSucesso(null);
@@ -245,6 +255,7 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
     horaInicio,
     fechamentoAntecedencia,
     editandoId,
+    reservadosPorSlot,
     limparFormulario,
     recarregar,
   ]);
@@ -821,9 +832,13 @@ export function AgendamentoConfigModal({ visible, onClose }: Props) {
                       </Text>
                       <Text style={[ts.caption, { color: theme.textMuted }]}>
                         {TIPO_TAF_AGENDAMENTO_LABELS[tipoTafDaModalidade(slot.modalidade)]}
-                        {' · '}Máx.: {slot.maxParticipantes} participante
-                        {slot.maxParticipantes !== 1 ? 's' : ''}
-                        {' · '}Agendados: {reservadosPorSlot[slot.id] ?? 0}
+                        {' · '}Agendados: {reservadosPorSlot[slot.id] ?? 0}/
+                        {slot.maxParticipantes}
+                        {' · '}Vagas:{' '}
+                        {vagasRestantes(
+                          slot.maxParticipantes,
+                          reservadosPorSlot[slot.id] ?? 0,
+                        )}
                         {' · '}Transp. institucional:{' '}
                         {transporteInstitucionalPorSlot[slot.id] ?? 0}
                         {' · '}Início: {String(slot.horaInicio ?? 8).padStart(2, '0')}h

@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FileDown, ShieldAlert, Trash2, X } from 'lucide-react-native';
+import { FileDown, ShieldAlert, X } from 'lucide-react-native';
 import { AppModal } from '../premium/AppModal';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
@@ -21,23 +21,10 @@ import {
 } from '../../utils/resultadoGeralHistorico';
 import { exportReprovadosTafPdf } from '../../utils/exportReprovadosTafPdf';
 import { SalvarPdfFeedbackModal } from '../sismav/SalvarPdfFeedbackModal';
-import { ConfirmacaoExcluirResultadoModal } from '../sismav/ConfirmacaoExcluirResultadoModal';
-import type { ModalidadeResultadoTaf } from '../../utils/limparResultadoModalidade';
-import {
-  labelModalidadeResultado,
-  limparResultadoModalidadeCadastro,
-} from '../../utils/limparResultadoModalidade';
-import { removerParticipanteModalidadeDoHistorico } from '../../utils/registroModalidadeHistorico';
-import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-};
-
-type ExclusaoPendente = {
-  item: ReprovadoInicioTafItem;
-  modalidades: ModalidadeResultadoTaf[];
 };
 
 export function ReprovadosInicioModal({ visible, onClose }: Props) {
@@ -48,8 +35,6 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
   const [lista, setLista] = useState<ReprovadoInicioTafItem[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [gerandoPdf, setGerandoPdf] = useState(false);
-  const [excluindo, setExcluindo] = useState(false);
-  const [exclusao, setExclusao] = useState<ExclusaoPendente | null>(null);
   const [feedback, setFeedback] = useState<{
     tipo: 'ok' | 'erro';
     titulo: string;
@@ -70,10 +55,7 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!visible) {
-      setExclusao(null);
-      return;
-    }
+    if (!visible) return;
     let cancelled = false;
     setCarregando(true);
     void (async () => {
@@ -113,59 +95,6 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
       setGerandoPdf(false);
     }
   }, [lista]);
-
-  const pedirExclusao = useCallback((item: ReprovadoInicioTafItem) => {
-    const modalidades = item.modalidades
-      .map((m) => m.chave)
-      .filter((c): c is ModalidadeResultadoTaf => Boolean(c));
-    if (modalidades.length === 0) {
-      Alert.alert(
-        'Não é possível excluir',
-        'Não foi possível identificar a modalidade reprovada deste militar.',
-      );
-      return;
-    }
-    setExclusao({ item, modalidades });
-  }, []);
-
-  const executarExclusao = useCallback(async () => {
-    if (!exclusao || excluindo) return;
-    setExcluindo(true);
-    try {
-      const { getAllCadastros, addCadastro } = await import('../../services/cadastrosIndexedDb');
-      const cadastros = await getAllCadastros({ includeDemo: false });
-      const porId = cadastros.find((c) => c.id === exclusao.item.id);
-      const porNip = buscarCadastroPorNomeOuNip(cadastros, exclusao.item.nip);
-      let cadastro = porId ?? (porNip.kind === 'found' ? porNip.cadastro : undefined);
-
-      for (const modalidade of exclusao.modalidades) {
-        if (cadastro) {
-          cadastro = limparResultadoModalidadeCadastro(cadastro, modalidade);
-          await addCadastro(cadastro);
-          await removerParticipanteModalidadeDoHistorico(cadastro.nip, modalidade, cadastro);
-        } else {
-          await removerParticipanteModalidadeDoHistorico(exclusao.item.nip, modalidade);
-        }
-      }
-
-      setExclusao(null);
-      setLista(await recarregarLista());
-    } catch (e) {
-      Alert.alert(
-        'Erro',
-        e instanceof Error ? e.message : 'Não foi possível excluir o resultado reprovado.',
-      );
-    } finally {
-      setExcluindo(false);
-    }
-  }, [exclusao, excluindo, recarregarLista]);
-
-  const rotuloExclusao =
-    exclusao == null
-      ? ''
-      : exclusao.modalidades.length === 1
-        ? labelModalidadeResultado(exclusao.modalidades[0]!)
-        : exclusao.modalidades.map(labelModalidadeResultado).join(', ');
 
   return (
     <>
@@ -233,93 +162,70 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
                   contentContainerStyle={styles.listContent}
                   showsVerticalScrollIndicator
                 >
-                  {lista.map((item, index) => {
-                    const podeExcluir = item.modalidades.some((m) => Boolean(m.chave));
-                    return (
-                      <View
-                        key={item.id}
-                        style={[
-                          styles.item,
-                          {
-                            backgroundColor: theme.isDark
-                              ? 'rgba(127, 29, 29, 0.18)'
-                              : 'rgba(254, 242, 242, 0.9)',
-                            borderColor: theme.isDark
-                              ? 'rgba(248, 113, 113, 0.22)'
-                              : 'rgba(252, 165, 165, 0.55)',
-                          },
-                        ]}
-                      >
-                        <View style={styles.itemTop}>
-                          <Text style={[styles.itemIndex, { color: theme.error }]}>
-                            #{String(index + 1).padStart(2, '0')}
+                  {lista.map((item, index) => (
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.item,
+                        {
+                          backgroundColor: theme.isDark
+                            ? 'rgba(127, 29, 29, 0.18)'
+                            : 'rgba(254, 242, 242, 0.9)',
+                          borderColor: theme.isDark
+                            ? 'rgba(248, 113, 113, 0.22)'
+                            : 'rgba(252, 165, 165, 0.55)',
+                        },
+                      ]}
+                    >
+                      <View style={styles.itemTop}>
+                        <Text style={[styles.itemIndex, { color: theme.error }]}>
+                          #{String(index + 1).padStart(2, '0')}
+                        </Text>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text
+                            style={[ts.body, { color: ui.text, fontWeight: '800' }]}
+                            numberOfLines={2}
+                          >
+                            {item.nome}
                           </Text>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text
-                              style={[ts.body, { color: ui.text, fontWeight: '800' }]}
-                              numberOfLines={2}
-                            >
-                              {item.nome}
-                            </Text>
-                            <Text style={[ts.caption, { color: theme.textMuted, marginTop: 2 }]}>
-                              NIP {item.nip}
-                              {item.postoGrad && item.postoGrad !== '—'
-                                ? ` · ${item.postoGrad}`
-                                : ''}
-                              {item.categoria && item.categoria !== '—'
-                                ? ` · ${item.categoria}`
-                                : ''}
-                            </Text>
-                          </View>
-                          {podeExcluir ? (
-                            <TouchableOpacity
-                              onPress={() => pedirExclusao(item)}
-                              accessibilityLabel={`Excluir resultado reprovado de ${item.nome}`}
-                              hitSlop={8}
-                              style={[
-                                styles.trashBtn,
-                                {
-                                  backgroundColor: theme.isDark
-                                    ? 'rgba(220, 38, 38, 0.22)'
-                                    : 'rgba(254, 226, 226, 1)',
-                                  borderColor: theme.isDark
-                                    ? 'rgba(248, 113, 113, 0.45)'
-                                    : 'rgba(252, 165, 165, 0.95)',
-                                },
-                              ]}
-                            >
-                              <Trash2 size={16} color={theme.error} strokeWidth={2.4} />
-                            </TouchableOpacity>
-                          ) : null}
-                        </View>
-                        <View style={styles.chips}>
-                          {item.modalidades.map((m) => (
-                            <View
-                              key={`${item.id}-${m.label}`}
-                              style={[
-                                styles.chip,
-                                {
-                                  backgroundColor: theme.isDark
-                                    ? 'rgba(220, 38, 38, 0.28)'
-                                    : 'rgba(254, 226, 226, 1)',
-                                  borderColor: theme.isDark
-                                    ? 'rgba(248, 113, 113, 0.4)'
-                                    : 'rgba(252, 165, 165, 0.9)',
-                                },
-                              ]}
-                            >
-                              <Text style={[styles.chipText, { color: theme.error }]}>
-                                {m.label}: {m.detalhe}
-                                {m.tempo ? ` · ${m.tempo}` : ''}
-                                {m.tempoMinimo ? ` · mín. ${m.tempoMinimo}` : ''}
-                                {m.data ? ` · ${m.data}` : ''}
-                              </Text>
-                            </View>
-                          ))}
+                          <Text style={[ts.caption, { color: theme.textMuted, marginTop: 2 }]}>
+                            NIP {item.nip}
+                            {item.postoGrad && item.postoGrad !== '—'
+                              ? ` · ${item.postoGrad}`
+                              : ''}
+                            {item.categoria && item.categoria !== '—'
+                              ? ` · ${item.categoria}`
+                              : ''}
+                          </Text>
                         </View>
                       </View>
-                    );
-                  })}
+                      <View style={styles.chips}>
+                        {item.modalidades.map((m) => (
+                          <View
+                            key={`${item.id}-${m.label}`}
+                            style={[
+                              styles.chip,
+                              {
+                                backgroundColor: theme.isDark
+                                  ? 'rgba(220, 38, 38, 0.28)'
+                                  : 'rgba(254, 226, 226, 1)',
+                                borderColor: theme.isDark
+                                  ? 'rgba(248, 113, 113, 0.4)'
+                                  : 'rgba(252, 165, 165, 0.9)',
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.chipText, { color: theme.error }]}>
+                              {m.label}: {m.detalhe}
+                              {m.tempo ? ` · ${m.tempo}` : ''}
+                              {m.tempoMinimo ? ` · mín. ${m.tempoMinimo}` : ''}
+                              {m.data ? ` · ${m.data}` : ''}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
                 </ScrollView>
               )}
             </View>
@@ -362,21 +268,6 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
           </View>
         </View>
       </AppModal>
-
-      <ConfirmacaoExcluirResultadoModal
-        visible={exclusao != null}
-        nome={exclusao?.item.nome ?? ''}
-        nip={exclusao?.item.nip ?? ''}
-        modalidade={
-          exclusao?.modalidades.length === 1 ? (exclusao.modalidades[0] ?? null) : null
-        }
-        rotuloProva={exclusao && exclusao.modalidades.length !== 1 ? rotuloExclusao : undefined}
-        loading={excluindo}
-        onClose={() => {
-          if (!excluindo) setExclusao(null);
-        }}
-        onConfirm={() => void executarExclusao()}
-      />
 
       <SalvarPdfFeedbackModal
         visible={feedback != null}
@@ -494,15 +385,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
     marginTop: 2,
-  },
-  trashBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -2,
   },
   chips: {
     flexDirection: 'row',

@@ -15,7 +15,7 @@ import { getUiColors } from '../../theme/uiColors';
 import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import {
   formatMinutosSegundosInput,
-  tempoParaExibicao,
+  tempoParaEdicaoMmSs,
 } from '../../utils/formatMinutosSegundos';
 import {
   salvarResultadosTafEditados,
@@ -23,6 +23,7 @@ import {
 } from '../../utils/atualizarResultadoTaf';
 import { idadeFromDataNascimento } from '../../utils/idadeFromDataNascimento';
 import { PREMIUM } from '../../theme/premium';
+import { isNotaReprovacaoTexto } from '../../utils/notaReprovacaoTexto';
 
 type Props = {
   visible: boolean;
@@ -34,6 +35,26 @@ type Props = {
 function permanenciaInicial(c: CadastroItemPersist): 'aprovado' | 'reprovado' | null {
   const r = c.resultadoPermanencia ?? c.resultadoNatacao;
   if (r === 'aprovado' || r === 'reprovado') return r;
+  return null;
+}
+
+function tempoCorridaInicial(c: CadastroItemPersist): string {
+  const legado = c as CadastroItemPersist & { tempo?: string };
+  return tempoParaEdicaoMmSs(c.tempoCorrida || legado.tempo || c.tempoCaminhada);
+}
+
+function tempoNatacaoInicial(c: CadastroItemPersist): string {
+  return tempoParaEdicaoMmSs(c.tempoNatacao);
+}
+
+function rotuloNotaSituacao(nota?: string, situacaoFallback?: string): string | null {
+  const n = (nota ?? '').trim();
+  if (n && n !== '—') {
+    if (isNotaReprovacaoTexto(n)) return `Resultado: Reprovado (${n})`;
+    return `Resultado: Aprovado · nota ${n}`;
+  }
+  const s = (situacaoFallback ?? '').trim();
+  if (s === 'Aprovado' || s === 'Reprovado') return `Resultado: ${s}`;
   return null;
 }
 
@@ -66,8 +87,8 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
 
   useEffect(() => {
     if (!visible || !cadastro) return;
-    setTempoCorrida(tempoParaExibicao(cadastro.tempoCorrida));
-    setTempoNatacao(tempoParaExibicao(cadastro.tempoNatacao));
+    setTempoCorrida(tempoCorridaInicial(cadastro));
+    setTempoNatacao(tempoNatacaoInicial(cadastro));
     setPermanencia(permanenciaInicial(cadastro));
     setDataNascimento((cadastro.dataNascimento || '').trim());
     setErro('');
@@ -127,6 +148,15 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
   ]);
 
   if (!cadastro) return null;
+
+  const infoCorrida = rotuloNotaSituacao(cadastro.notaCorrida);
+  const infoNatacao = rotuloNotaSituacao(cadastro.notaNatacao);
+  const infoPermanencia =
+    permanencia === 'aprovado'
+      ? 'Resultado: Aprovado'
+      : permanencia === 'reprovado'
+        ? 'Resultado: Reprovado'
+        : null;
 
   return (
     <AppModal visible={visible} transparent animationType="fade" onRequestClose={fechar}>
@@ -204,6 +234,21 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
             maxLength={5}
             editable={!salvando}
           />
+          {infoCorrida ? (
+            <Text
+              style={[
+                theme.textStyles.caption,
+                {
+                  color: isNotaReprovacaoTexto(cadastro.notaCorrida) ? theme.loss : theme.gain,
+                  marginTop: -4,
+                  marginBottom: 8,
+                  fontWeight: '700',
+                },
+              ]}
+            >
+              {infoCorrida}
+            </Text>
+          ) : null}
 
           <Text style={[theme.textStyles.label, styles.fieldLabel, { color: ui.text }]}>Natação</Text>
           <TextInput
@@ -219,8 +264,37 @@ export function EditarResultadoTafModal({ visible, cadastro, onClose, onSalvo }:
             maxLength={5}
             editable={!salvando}
           />
+          {infoNatacao ? (
+            <Text
+              style={[
+                theme.textStyles.caption,
+                {
+                  color: isNotaReprovacaoTexto(cadastro.notaNatacao) ? theme.loss : theme.gain,
+                  marginTop: -4,
+                  marginBottom: 8,
+                  fontWeight: '700',
+                },
+              ]}
+            >
+              {infoNatacao}
+            </Text>
+          ) : null}
 
           <Text style={[theme.textStyles.label, styles.fieldLabel, { color: ui.text }]}>Permanência</Text>
+          {infoPermanencia ? (
+            <Text
+              style={[
+                theme.textStyles.caption,
+                {
+                  color: permanencia === 'reprovado' ? theme.loss : theme.gain,
+                  marginBottom: 6,
+                  fontWeight: '700',
+                },
+              ]}
+            >
+              {infoPermanencia}
+            </Text>
+          ) : null}
           {(['aprovado', 'reprovado'] as const).map((opcao) => {
             const active = permanencia === opcao;
             return (

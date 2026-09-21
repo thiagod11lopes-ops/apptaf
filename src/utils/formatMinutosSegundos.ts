@@ -24,13 +24,27 @@ export function tempoMinutosSegundosValido(s: string): boolean {
 /** Normaliza valor já salvo para exibição (ex.: 3:05 → 03:05; 105:03 mantém minutos longos). */
 export function tempoParaExibicao(s: string | undefined): string {
   if (!s?.trim()) return '';
-  const m = /^(\d+):(\d{2})$/.exec(s.trim());
+  const raw = s.trim();
+  if (raw === '—') return '';
+  // MM:SS:CS ou MM:SS.CS (persistência do Aplicar TAF) → MM:SS no modal de edição.
+  const comCs = /^(\d+):(\d{2})[:.](\d{2})$/.exec(raw);
+  if (comCs) {
+    const minRaw = comCs[1]!;
+    const mm = minRaw.length === 1 ? minRaw.padStart(2, '0') : minRaw;
+    return `${mm}:${comCs[2]}`;
+  }
+  const m = /^(\d+):(\d{2})$/.exec(raw);
   if (m) {
-    const minRaw = m[1];
+    const minRaw = m[1]!;
     const mm = minRaw.length === 1 ? minRaw.padStart(2, '0') : minRaw;
     return `${mm}:${m[2]}`;
   }
-  return s.trim();
+  return raw;
+}
+
+/** Alias explícito para o modal de edição (sempre MM:SS, sem centésimos). */
+export function tempoParaEdicaoMmSs(s: string | undefined): string {
+  return tempoParaExibicao(s);
 }
 
 /** `MM:SS` como minutos e segundos → total em segundos (ex.: 05:03 → 303). */

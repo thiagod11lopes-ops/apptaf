@@ -14,10 +14,16 @@ export type ResultadoTafLinha = {
   nome: string;
   notaCorrida: string;
   situacaoCorrida: string;
+  /** Tempo da corrida (MM:SS ou MM:SS:CS), quando conhecido. */
+  tempoCorrida?: string;
   notaCaminhada: string;
   situacaoCaminhada: string;
+  /** Tempo da caminhada, quando conhecido. */
+  tempoCaminhada?: string;
   notaNatacao: string;
   situacaoNatacao: string;
+  /** Tempo da natação, quando conhecido. */
+  tempoNatacao?: string;
   permanenciaTempo: string;
   situacaoPermanencia: string;
   rubricaCorridaSvg?: string;
@@ -239,10 +245,13 @@ export function cadastroParaLinhaResultado(c: CadastroItemPersist): ResultadoTaf
     nome: c.nome || '—',
     notaCorrida: temCorrida ? (c.notaCorrida || '—').trim() || '—' : '—',
     situacaoCorrida: situacaoDeNota(c.notaCorrida, temCorrida),
+    ...(temCorrida && t.corrida ? { tempoCorrida: t.corrida } : {}),
     notaCaminhada: temCaminhada ? (c.notaCaminhada || '—').trim() || '—' : '—',
     situacaoCaminhada: situacaoDeNota(c.notaCaminhada, temCaminhada),
+    ...(temCaminhada && t.caminhada ? { tempoCaminhada: t.caminhada } : {}),
     notaNatacao: temNatacao ? (c.notaNatacao || '—').trim() || '—' : '—',
     situacaoNatacao: situacaoDeNota(c.notaNatacao, temNatacao),
+    ...(temNatacao && t.natacao ? { tempoNatacao: t.natacao } : {}),
     permanenciaTempo: temPerm ? t.permanencia || '—' : '—',
     situacaoPermanencia: temPerm ? situacaoPermanencia(c) : '—',
     rubricaCorridaSvg: temCorrida ? c.rubricaCorridaSvg : undefined,

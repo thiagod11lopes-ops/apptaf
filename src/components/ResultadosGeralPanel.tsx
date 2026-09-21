@@ -26,6 +26,10 @@ import { nipDigitos } from '../utils/nipFormat';
 import { carregarRubricasDasSessoesPorNip } from '../utils/rubricasDasSessoes';
 import { salvarResultadosTafPdfEmDownloads } from '../utils/exportResultadosTafPdf';
 import { formatBrDateKey } from '../utils/backupNaming';
+import {
+  hidratarCadastroParaEdicaoTaf,
+  sementesEdicaoFromLinhaResultado,
+} from '../utils/hidratarCadastroParaEdicaoTaf';
 import { PREMIUM } from '../theme/premium';
 import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
@@ -217,7 +221,10 @@ export function ResultadosGeralPanel({
   const abrirEdicao = useCallback(
     (item: ResultadoGeralItem) => {
       const cadastro = cadastros.find((c) => c.id === item.id);
-      if (cadastro) setCadastroEmEdicao(cadastro);
+      if (!cadastro) return;
+      setCadastroEmEdicao(
+        hidratarCadastroParaEdicaoTaf(cadastro, sementesEdicaoFromLinhaResultado(item)),
+      );
     },
     [cadastros],
   );

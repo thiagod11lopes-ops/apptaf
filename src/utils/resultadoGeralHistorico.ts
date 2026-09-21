@@ -202,10 +202,19 @@ function aggParaLinha(agg: AggRow): ResultadoGeralItem {
     nome: agg.nome || '—',
     notaCorrida: temCorrida ? agg.corrida!.nota : '—',
     situacaoCorrida: temCorrida ? agg.corrida!.situacao : '—',
+    ...(temCorrida && agg.corrida!.tempo
+      ? { tempoCorrida: agg.corrida!.tempo }
+      : {}),
     notaCaminhada: temCaminhada ? agg.caminhada!.nota : '—',
     situacaoCaminhada: temCaminhada ? agg.caminhada!.situacao : '—',
+    ...(temCaminhada && agg.caminhada!.tempo
+      ? { tempoCaminhada: agg.caminhada!.tempo }
+      : {}),
     notaNatacao: temNatacao ? agg.natacao!.nota : '—',
     situacaoNatacao: temNatacao ? agg.natacao!.situacao : '—',
+    ...(temNatacao && agg.natacao!.tempo
+      ? { tempoNatacao: agg.natacao!.tempo }
+      : {}),
     permanenciaTempo: temPerm ? (agg.permanencia!.tempo ?? '—') : '—',
     situacaoPermanencia: temPerm ? agg.permanencia!.situacao : '—',
     rubricaCorridaSvg: agg.corrida?.rubricaSvg,
@@ -362,25 +371,34 @@ function enriquecerCorridaCaminhadaFromCadastros(
 
     if (temAvaliacaoCorrida(c)) {
       const notaAtual = (agg.corrida?.nota ?? '').trim();
+      const tempoCad = (c.tempoCorrida ?? (c as CadastroItemPersist & { tempo?: string }).tempo ?? '')
+        .trim();
       if (!notaAtual || notaAtual === '—') {
         const nota = c.notaCorrida?.trim();
         agg.corrida = {
           nota: nota || '—',
           situacao: situacaoFromNotaCadastro(nota),
+          ...(tempoCad ? { tempo: tempoCad } : {}),
           rubricaSvg: c.rubricaCorridaSvg,
         };
+      } else if (!agg.corrida?.tempo && tempoCad) {
+        agg.corrida = { ...agg.corrida!, tempo: tempoCad };
       }
     }
 
     if (temAvaliacaoCaminhada(c)) {
       const notaAtual = (agg.caminhada?.nota ?? '').trim();
+      const tempoCad = (c.tempoCaminhada ?? '').trim();
       if (!notaAtual || notaAtual === '—') {
         const nota = c.notaCaminhada?.trim();
         agg.caminhada = {
           nota: nota || '—',
           situacao: situacaoFromNotaCadastro(nota),
+          ...(tempoCad ? { tempo: tempoCad } : {}),
           rubricaSvg: c.rubricaCaminhadaSvg,
         };
+      } else if (!agg.caminhada?.tempo && tempoCad) {
+        agg.caminhada = { ...agg.caminhada!, tempo: tempoCad };
       }
     }
   }

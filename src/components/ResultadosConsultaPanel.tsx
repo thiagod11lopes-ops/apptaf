@@ -28,6 +28,10 @@ import { RubricaCaptureModal } from './RubricaCaptureModal';
 import { buscarCadastroPorNomeOuNip } from '../utils/buscarCadastroPorNomeOuNip';
 import { formatNipInput, nipDigitos } from '../utils/nipFormat';
 import { persistirRubricaModalidadeParticipante } from '../utils/persistirRubricaCadastro';
+import {
+  hidratarCadastroParaEdicaoTaf,
+  sementesEdicaoFromLinhaResultado,
+} from '../utils/hidratarCadastroParaEdicaoTaf';
 import type { ResultadoCorridaItem } from '../navigation/types';
 import {
   cadastroComAlgumResultadoTaf,
@@ -616,7 +620,11 @@ export function ResultadosConsultaPanel({
             </View>
             {cadastro ? (
               <PressableScale
-                onPress={() => setCadastroEmEdicao(cadastro)}
+                onPress={() =>
+                  setCadastroEmEdicao(
+                    hidratarCadastroParaEdicaoTaf(cadastro, sementesEdicaoFromLinhaResultado(r)),
+                  )
+                }
                 style={[styles.editBtn, { borderColor: theme.border }]}
                 accessibilityLabel={`Editar resultados de ${nomeComPosto}`}
               >

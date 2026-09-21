@@ -6,6 +6,7 @@ import {
   colunasDistanciaPdfVisiveis,
   valoresCorridaCaminhadaParaPdf,
 } from './corridaCaminhadaExcludente';
+import { tempoParaCelulaPdf } from './celulaNotaComTempoPdf';
 import { RUBRICA_PDF_ALTURA, RUBRICA_PDF_LARGURA } from './rubricaConstants';
 import { desenharRubricaJsPdf } from './gerarResumoAplicacaoPdfWeb';
 import { rubricaParaPdfEmbedDataUrl } from './rubricaRasterPersist';
@@ -19,6 +20,8 @@ type Coluna = {
   label: string;
   width: number;
   get: (r: ResultadoTafLinha) => string;
+  /** Tempo da prova abaixo da nota/situação, quando couber. */
+  getTempo?: (r: ResultadoTafLinha) => string | undefined;
   rubrica?: (r: ResultadoTafLinha) => string | undefined;
 };
 
@@ -126,7 +129,13 @@ export async function gerarResultadosTafPdfBlobWeb(
   ];
   if (mostrarCorrida) {
     colunas.push(
-      { key: 'nc', label: 'Nota corr.', width: 38, get: (r) => r.notaCorrida },
+      {
+        key: 'nc',
+        label: 'Nota corr.',
+        width: 42,
+        get: (r) => r.notaCorrida,
+        getTempo: (r) => r.tempoCorrida,
+      },
       { key: 'sc', label: 'Sit.', width: 42, get: (r) => r.situacaoCorrida },
       {
         key: 'rc',
@@ -139,7 +148,13 @@ export async function gerarResultadosTafPdfBlobWeb(
   }
   if (mostrarCaminhada) {
     colunas.push(
-      { key: 'ncam', label: 'Nota cam.', width: 38, get: (r) => r.notaCaminhada },
+      {
+        key: 'ncam',
+        label: 'Nota cam.',
+        width: 42,
+        get: (r) => r.notaCaminhada,
+        getTempo: (r) => r.tempoCaminhada,
+      },
       { key: 'scam', label: 'Sit.', width: 42, get: (r) => r.situacaoCaminhada },
       {
         key: 'rcam',
@@ -151,7 +166,13 @@ export async function gerarResultadosTafPdfBlobWeb(
     );
   }
   colunas.push(
-    { key: 'nn', label: 'Nota nat.', width: 38, get: (r) => r.notaNatacao },
+    {
+      key: 'nn',
+      label: 'Nota nat.',
+      width: 42,
+      get: (r) => r.notaNatacao,
+      getTempo: (r) => r.tempoNatacao,
+    },
     { key: 'sn', label: 'Sit.', width: 42, get: (r) => r.situacaoNatacao },
     {
       key: 'rn',
@@ -160,7 +181,13 @@ export async function gerarResultadosTafPdfBlobWeb(
       get: () => '',
       rubrica: (r) => r.rubricaNatacaoSvg,
     },
-    { key: 'sp', label: 'Sit. perm.', width: 48, get: (r) => r.situacaoPermanencia },
+    {
+      key: 'sp',
+      label: 'Sit. perm.',
+      width: 48,
+      get: (r) => r.situacaoPermanencia,
+      getTempo: (r) => r.permanenciaTempo,
+    },
     {
       key: 'rp',
       label: 'Rub.',
@@ -181,7 +208,16 @@ export async function gerarResultadosTafPdfBlobWeb(
       r.rubricaNatacaoSvg ||
       r.rubricaPermanenciaSvg,
   );
-  const rowH = temRubrica ? Math.max(22, rubH + 8) : 14;
+  const temTempo = todasLinhas.some((r) => {
+    const dist = valoresCorridaCaminhadaParaPdf(r);
+    return Boolean(
+      tempoParaCelulaPdf(dist.tempoCorrida) ||
+        tempoParaCelulaPdf(dist.tempoCaminhada) ||
+        tempoParaCelulaPdf(r.tempoNatacao) ||
+        tempoParaCelulaPdf(r.permanenciaTempo),
+    );
+  });
+  const rowH = Math.max(temRubrica ? rubH + 8 : 14, temTempo ? 22 : 14);
   const headerH = 16;
   const geradoEm = new Date().toLocaleString('pt-BR');
   const tituloDoc = tituloResultadosTafPdf(mostrarCorrida, mostrarCaminhada);
@@ -270,7 +306,13 @@ export async function gerarResultadosTafPdfBlobWeb(
   };
 
   const desenharLinha = (linhaRaw: ResultadoTafLinha) => {
-    const linha = { ...linhaRaw, ...valoresCorridaCaminhadaParaPdf(linhaRaw) };
+    const dist = valoresCorridaCaminhadaParaPdf(linhaRaw);
+    const linha: ResultadoTafLinha = {
+      ...linhaRaw,
+      ...dist,
+      tempoCorrida: dist.tempoCorrida || undefined,
+      tempoCaminhada: dist.tempoCaminhada || undefined,
+    };
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.4);
     doc.line(marginX, y + rowH, marginX + usableW, y + rowH);
@@ -305,11 +347,30 @@ export async function gerarResultadosTafPdfBlobWeb(
           doc.setTextColor(17, 24, 39);
         }
       } else {
+        const tempo = tempoParaCelulaPdf(col.getTempo?.(linha));
         const text = pdfTexto(col.get(linha) || '—');
-        doc.text(text, x + w / 2, y + rowH / 2 + 2, {
-          align: 'center',
-          maxWidth: w - 4,
-        });
+        if (tempo) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(6.5);
+          doc.text(text, x + w / 2, y + rowH / 2 - 2, {
+            align: 'center',
+            maxWidth: w - 4,
+          });
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(5.5);
+          doc.setTextColor(71, 85, 105);
+          doc.text(pdfTexto(tempo), x + w / 2, y + rowH / 2 + 7, {
+            align: 'center',
+            maxWidth: w - 4,
+          });
+          doc.setTextColor(17, 24, 39);
+          doc.setFontSize(6.5);
+        } else {
+          doc.text(text, x + w / 2, y + rowH / 2 + 2, {
+            align: 'center',
+            maxWidth: w - 4,
+          });
+        }
       }
       x += w;
     }

@@ -137,6 +137,8 @@ export function modalidadeCorridaCaminhadaDispensavel(
 type LinhaPdfCorridaCaminhada = LinhaCorridaCaminhada & {
   rubricaCorridaSvg?: string;
   rubricaCaminhadaSvg?: string;
+  tempoCorrida?: string;
+  tempoCaminhada?: string;
 };
 
 /** Quais blocos de colunas (corrida / caminhada) incluir no PDF do conjunto. */
@@ -160,21 +162,29 @@ export function valoresCorridaCaminhadaParaPdf(item: LinhaPdfCorridaCaminhada): 
   notaCorrida: string;
   situacaoCorrida: string;
   rubricaCorridaSvg: string | undefined;
+  tempoCorrida: string;
   notaCaminhada: string;
   situacaoCaminhada: string;
   rubricaCaminhadaSvg: string | undefined;
+  tempoCaminhada: string;
 } {
   const vigente = modalidadeCorridaCaminhadaVigente(item);
   const vazio = '—';
+  const tempoOuVazio = (t?: string) => {
+    const s = (t ?? '').trim();
+    return s && s !== '—' ? s : '';
+  };
 
   if (vigente === 'corrida') {
     return {
       notaCorrida: item.notaCorrida || vazio,
       situacaoCorrida: item.situacaoCorrida || vazio,
       rubricaCorridaSvg: item.rubricaCorridaSvg,
+      tempoCorrida: tempoOuVazio(item.tempoCorrida),
       notaCaminhada: vazio,
       situacaoCaminhada: vazio,
       rubricaCaminhadaSvg: undefined,
+      tempoCaminhada: '',
     };
   }
 
@@ -183,9 +193,11 @@ export function valoresCorridaCaminhadaParaPdf(item: LinhaPdfCorridaCaminhada): 
       notaCorrida: vazio,
       situacaoCorrida: vazio,
       rubricaCorridaSvg: undefined,
+      tempoCorrida: '',
       notaCaminhada: item.notaCaminhada || vazio,
       situacaoCaminhada: item.situacaoCaminhada || vazio,
       rubricaCaminhadaSvg: item.rubricaCaminhadaSvg,
+      tempoCaminhada: tempoOuVazio(item.tempoCaminhada),
     };
   }
 
@@ -193,9 +205,11 @@ export function valoresCorridaCaminhadaParaPdf(item: LinhaPdfCorridaCaminhada): 
     notaCorrida: item.notaCorrida || vazio,
     situacaoCorrida: item.situacaoCorrida || vazio,
     rubricaCorridaSvg: item.rubricaCorridaSvg,
+    tempoCorrida: tempoOuVazio(item.tempoCorrida),
     notaCaminhada: item.notaCaminhada || vazio,
     situacaoCaminhada: item.situacaoCaminhada || vazio,
     rubricaCaminhadaSvg: item.rubricaCaminhadaSvg,
+    tempoCaminhada: tempoOuVazio(item.tempoCaminhada),
   };
 }
 

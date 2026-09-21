@@ -22,6 +22,7 @@ import {
   colunasDistanciaPdfVisiveis,
   valoresCorridaCaminhadaParaPdf,
 } from './corridaCaminhadaExcludente';
+import { celulaNotaComTempoHtml, celulaSituacaoComTempoHtml } from './celulaNotaComTempoPdf';
 import {
   baixarArquivoParaDownloads,
   entregarPdfBlobWeb,
@@ -109,23 +110,23 @@ function buildLinhasTabelaHtml(
     ];
     if (mostrarCorrida) {
       celulas.push(
-        `<td class="nota">${escapeHtmlPdf(dist.notaCorrida)}</td>`,
+        celulaNotaComTempoHtml(dist.notaCorrida, dist.tempoCorrida),
         `<td>${escapeHtmlPdf(dist.situacaoCorrida)}</td>`,
         `<td class="col-rubrica">${celulaRubricaHtml(dist.rubricaCorridaSvg)}</td>`,
       );
     }
     if (mostrarCaminhada) {
       celulas.push(
-        `<td class="nota">${escapeHtmlPdf(dist.notaCaminhada)}</td>`,
+        celulaNotaComTempoHtml(dist.notaCaminhada, dist.tempoCaminhada),
         `<td>${escapeHtmlPdf(dist.situacaoCaminhada)}</td>`,
         `<td class="col-rubrica">${celulaRubricaHtml(dist.rubricaCaminhadaSvg)}</td>`,
       );
     }
     celulas.push(
-      `<td class="nota">${escapeHtmlPdf(r.notaNatacao)}</td>`,
+      celulaNotaComTempoHtml(r.notaNatacao, r.tempoNatacao),
       `<td>${escapeHtmlPdf(r.situacaoNatacao)}</td>`,
       `<td class="col-rubrica">${celulaRubricaHtml(r.rubricaNatacaoSvg)}</td>`,
-      `<td>${escapeHtmlPdf(r.situacaoPermanencia)}</td>`,
+      celulaSituacaoComTempoHtml(r.situacaoPermanencia, r.permanenciaTempo),
       `<td class="col-rubrica">${celulaRubricaHtml(r.rubricaPermanenciaSvg)}</td>`,
     );
     return `<tr>${celulas.join('')}</tr>`;
@@ -192,6 +193,14 @@ export function buildResultadosTafHtml(
         margin-top: 14px;
         display: flex;
         justify-content: center;
+      }
+      table.resultados-taf .tempo {
+        display: block;
+        margin-top: 1px;
+        font-size: 10px;
+        font-weight: 600;
+        color: #475569;
+        letter-spacing: 0.02em;
       }
     `,
   });

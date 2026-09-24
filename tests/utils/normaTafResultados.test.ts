@@ -61,7 +61,13 @@ describe('normaTafResultados', () => {
   it('filtrarCadastrosPorNorma inclui cadastro CFN com flexão', () => {
     const cadastros = [
       cadastro({ id: 'arm', nip: '11111111', notaCorrida: '80', tempoCorrida: '12:00' }),
-      cadastro({ id: 'cfn', nip: '22222222', repsFlexaoBarra: 15, notaFlexaoBarra: '90' }),
+      cadastro({
+        id: 'cfn',
+        nip: '22222222',
+        normaTaf: 'cfn',
+        repsFlexaoBarra: 15,
+        notaFlexaoBarra: '90',
+      }),
     ];
     const sessoesCfn = [
       sessao({

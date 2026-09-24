@@ -24,6 +24,13 @@ export const SESSAO_REGISTRADOR_ID_PREFIX = 'registrador-';
 export const REGISTRADOR_SESSAO_PERSISTIDA_RE =
   /^registrador-(.+)-(corrida|natacao|permanencia|caminhada|flexao_barra|flexao_solo|abdominal_remador|abdominal_prancha)$/;
 
+/**
+ * Sessão de grupo virtual indevidamente persistida
+ * (`registrador-corrida:dd/mm/aaaa`) — deve contar como real no Histórico/Geral.
+ */
+export const REGISTRADOR_GRUPO_VIRTUAL_PERSISTIDO_RE =
+  /^registrador-(corrida|natacao|permanencia|caminhada|flexao_barra|flexao_solo|abdominal_remador|abdominal_prancha):/;
+
 export function isSessaoVirtualRegistrador(sessao: SessaoAplicacaoTaf): boolean {
   return sessao.id.startsWith(SESSAO_REGISTRADOR_ID_PREFIX);
 }
@@ -33,9 +40,18 @@ export function isSessaoPersistidaRegistrador(sessao: SessaoAplicacaoTaf): boole
   return REGISTRADOR_SESSAO_PERSISTIDA_RE.test(sessao.id);
 }
 
+/** Grupo virtual (`registrador-{tipo}:{data}`) que chegou a ser gravado no banco. */
+export function isSessaoGrupoVirtualPersistida(sessao: SessaoAplicacaoTaf): boolean {
+  return REGISTRADOR_GRUPO_VIRTUAL_PERSISTIDO_RE.test(sessao.id);
+}
+
 /** Sessão gerada só na memória (cadastro legado), sem registro no banco. */
 export function isSessaoApenasVirtualCadastro(sessao: SessaoAplicacaoTaf): boolean {
-  return isSessaoVirtualRegistrador(sessao) && !isSessaoPersistidaRegistrador(sessao);
+  return (
+    isSessaoVirtualRegistrador(sessao) &&
+    !isSessaoPersistidaRegistrador(sessao) &&
+    !isSessaoGrupoVirtualPersistida(sessao)
+  );
 }
 
 function idParticipanteSessao(
@@ -257,9 +273,14 @@ export function unificarSessoesComCadastroRegistrador(
   cadastros: CadastroItemPersist[],
   sessoesExcluidas: SessaoAplicacaoTaf[] = [],
 ): SessaoAplicacaoTaf[] {
-  // Mantém aplicações normais e sessões persistidas do Registrador/manual.
+  // Mantém aplicações normais, registrador-{cadastroId}-{tipo} e grupos virtuais
+  // que chegaram a ser persistidos (`registrador-corrida:data`) — estes últimos
+  // precisam aparecer no Histórico e no Gerenciar resultados.
   const reais = sessoes.filter(
-    (s) => !isSessaoVirtualRegistrador(s) || isSessaoPersistidaRegistrador(s),
+    (s) =>
+      !isSessaoVirtualRegistrador(s) ||
+      isSessaoPersistidaRegistrador(s) ||
+      isSessaoGrupoVirtualPersistida(s),
   );
   const virtuais = gerarSessoesVirtuaisFromCadastros(cadastros, reais, sessoesExcluidas);
   return [...reais, ...virtuais].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));

@@ -180,20 +180,9 @@ export function prepararDadosResultadosNorma(
     ? sessoesSemDemo
     : unificarSessoesComCadastroRegistrador(sessoesSemDemo, cadastrosSemDemo);
 
-  // Monta o conjunto de NIPs CFN — usado em ambas as visões para separar participantes.
-  const nipsCfn = new Set<string>();
-  for (const c of cadastrosSemDemo) {
-    if (c.normaTaf === 'cfn') {
-      const nip = (c.nip ?? '').replace(/\D/g, '');
-      if (nip.length >= 8) nipsCfn.add(nip);
-    }
-  }
-
-  const sessoesBase =
-    norma === 'cfn'
-      ? sessoesParaCfn(unificadas, nipsCfn)
-      : sessoesParaArmada(unificadas, nipsCfn);
-
+  // Mesma regra do Histórico: a sessão inteira entra se a norma inferida bate.
+  // Assim Gerenciar resultados reflete 1:1 os militares visíveis no Histórico.
+  const sessoesBase = filtrarSessoesPorNorma(unificadas, norma);
   const sessoesNorma = agruparSessoesHistoricoPorTeste(sessoesBase);
   const cadastrosNorma = filtrarCadastrosPorNorma(cadastrosSemDemo, norma, sessoesNorma);
   return { sessoesNorma, cadastrosNorma };

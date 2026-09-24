@@ -183,7 +183,7 @@ export default function ResultadosScreen() {
     }
   }, []);
 
-  useAuthDataReload(carregar, {
+  useAuthDataReload(() => carregar({ force: true }), {
     scopes: ['cadastros', 'sessoes', 'fatores', 'restritos'],
   });
 

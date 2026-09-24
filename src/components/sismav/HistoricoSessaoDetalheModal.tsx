@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,9 +20,14 @@ import {
   DataNascimentoAtencaoModal,
   type DataNascimentoAtencaoInfo,
 } from './DataNascimentoAtencaoModal';
+import {
+  ModalTesteJaAplicado,
+  type ModalTesteJaAplicadoInfo,
+} from './ModalTesteJaAplicado';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import {
+  getAllSessoesAplicacao,
   tituloTipoProva,
   updateSessaoAplicacao,
   deleteSessaoAplicacao,
@@ -39,7 +44,7 @@ import { isNotaReprovacaoTexto } from '../../utils/notaReprovacaoTexto';
 import { RubricaCell } from '../RubricaThumb';
 import { AplicadorAssinaturaBloco } from '../AplicadorAssinaturaBloco';
 import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
-import { formatNomeComPostoParts } from '../../utils/formatNomeComPosto';
+import { formatNomeComPosto, formatNomeComPostoParts } from '../../utils/formatNomeComPosto';
 import { postoGradFromCadastro } from '../../utils/resultadoTafCadastro';
 import { formatNipInput, nipDigitos } from '../../utils/nipFormat';
 import { formatMinutosSegundosInput } from '../../utils/formatMinutosSegundos';
@@ -54,6 +59,10 @@ import {
   limparResultadoModalidadeCadastro,
   type ModalidadeResultadoTaf,
 } from '../../utils/limparResultadoModalidade';
+import {
+  buscarRegistroModalidadeExistente,
+  removerParticipanteModalidadeDoHistorico,
+} from '../../utils/registroModalidadeHistorico';
 import type { TipoProvaTAF } from '../../taf/tafProvaTypes';
 
 function modalidadeExcluivel(tipo: TipoProvaAplicada): ModalidadeResultadoTaf | null {
@@ -344,6 +353,9 @@ export function HistoricoSessaoDetalheModal({
     titulo: string;
     mensagem: string;
   } | null>(null);
+  const [modalTesteExistente, setModalTesteExistente] =
+    useState<ModalTesteJaAplicadoInfo | null>(null);
+  const repeticaoAutorizadaRef = useRef<Set<number>>(new Set());
 
   const modoTafNaval = sessao?.normaTaf === 'cfn';
   const tipo = sessao?.tipoProva ?? 'corrida';
@@ -359,6 +371,8 @@ export function HistoricoSessaoDetalheModal({
       setErro('');
       setExcluirIdx(null);
       setDnInfo(null);
+      setModalTesteExistente(null);
+      repeticaoAutorizadaRef.current = new Set();
       return;
     }
     setLinhas(sessao.resultados.map((r) => ({ ...r })));
@@ -375,6 +389,8 @@ export function HistoricoSessaoDetalheModal({
     setExcluirIdx(null);
     setDnInfo(null);
     setFeedbackPdf(null);
+    setModalTesteExistente(null);
+    repeticaoAutorizadaRef.current = new Set();
     void getAllCadastros()
       .then(setCadastros)
       .catch(() => setCadastros([]));
@@ -470,6 +486,28 @@ export function HistoricoSessaoDetalheModal({
         // Falha não crítica: continua sem hidratar rubricas.
       }
 
+      // Repetições autorizadas: manter só a linha nova do NIP nesta sessão.
+      const indicesRepeticao = [...repeticaoAutorizadaRef.current];
+      const nipsRepeticao = new Set<string>();
+      if (indicesRepeticao.length > 0) {
+        const nipKeepIdx = new Map<string, number>();
+        for (const i of indicesRepeticao) {
+          const k = nipDigitos(nextLinhas[i]?.nip);
+          if (!k) continue;
+          nipKeepIdx.set(k, i);
+          nipsRepeticao.add(k);
+        }
+        if (nipKeepIdx.size > 0) {
+          const keepMask = nextLinhas.map((r, j) => {
+            const k = nipDigitos(r.nip);
+            if (!k || !nipKeepIdx.has(k)) return true;
+            return nipKeepIdx.get(k) === j;
+          });
+          nextLinhas = nextLinhas.filter((_, j) => keepMask[j]);
+          nextMetas = nextMetas.filter((_, j) => keepMask[j]);
+        }
+      }
+
       const resultados = renumerar(nextLinhas);
 
       // Aplica rubrica do aplicador colhida dos IDs de origem, se a sessão atual
@@ -492,6 +530,18 @@ export function HistoricoSessaoDetalheModal({
       setSalvando(true);
       setErro('');
       try {
+        if (nipsRepeticao.size > 0) {
+          for (const nipKey of nipsRepeticao) {
+            const buscaRep = buscarCadastroPorNomeOuNip(cadastros, nipKey);
+            await removerParticipanteModalidadeDoHistorico(
+              nipKey,
+              tipo,
+              buscaRep.kind === 'found' ? buscaRep.cadastro : undefined,
+            );
+          }
+          repeticaoAutorizadaRef.current = new Set();
+        }
+
         await updateSessaoAplicacao(atualizada);
         if (idsOrigem && idsOrigem.length > 1) {
           for (const id of idsOrigem) {
@@ -592,7 +642,18 @@ export function HistoricoSessaoDetalheModal({
       next[idx + 1] = '';
       return next;
     });
-  }, [tipo]);
+    const nextAuth = new Set<number>();
+    for (const i of repeticaoAutorizadaRef.current) {
+      nextAuth.add(i > idx ? i + 1 : i);
+    }
+    repeticaoAutorizadaRef.current = nextAuth;
+    if (modalTesteExistente && modalTesteExistente.index > idx) {
+      setModalTesteExistente({
+        ...modalTesteExistente,
+        index: modalTesteExistente.index + 1,
+      });
+    }
+  }, [tipo, modalTesteExistente]);
 
   const solicitarDataNascimento = useCallback(
     (idx: number, cadastro: CadastroItemPersist, nomeFallback?: string) => {
@@ -606,6 +667,73 @@ export function HistoricoSessaoDetalheModal({
     },
     [],
   );
+
+  const preencherLinhaComCadastro = useCallback(
+    (idx: number, nipFmt: string, c: CadastroItemPersist) => {
+      const metaOk: MetaLinha = {
+        editavel: true,
+        dataNascimento: c.dataNascimento || '',
+        sexo: c.sexo,
+        avisoNip: !(c.dataNascimento || '').trim()
+          ? 'Cadastro sem data de nascimento — nota indisponível'
+          : undefined,
+      };
+      setMetas((prev) => {
+        const next = [...prev];
+        if (!next[idx]) return prev;
+        next[idx] = { ...next[idx], ...metaOk, editavel: next[idx].editavel };
+        return next;
+      });
+      setNipDraft((prev) => ({ ...prev, [idx]: c.nip || nipFmt }));
+
+      setLinhas((prev) => {
+        const next = [...prev];
+        if (!next[idx]) return prev;
+        const desemp = valorDesempenhoExibido(tipo, next[idx], desempenhoDraft[idx]).trim();
+        const calc = desemp
+          ? calcularCamposDesempenho(tipo, desemp, metaOk, modoTafNaval)
+          : {};
+        next[idx] = {
+          ...next[idx],
+          ...calc,
+          nip: c.nip || nipFmt,
+          nome: (c.nome || '').trim() || '—',
+          prova: tipo,
+        };
+        return next;
+      });
+
+      solicitarDataNascimento(idx, c);
+    },
+    [tipo, desempenhoDraft, modoTafNaval, solicitarDataNascimento],
+  );
+
+  const limparLinhaNipPendente = useCallback((idx: number) => {
+    setNipDraft((prev) => ({ ...prev, [idx]: '' }));
+    setLinhas((prev) => {
+      const next = [...prev];
+      if (!next[idx]) return prev;
+      next[idx] = {
+        ...next[idx],
+        nip: '',
+        nome: '',
+        ...limparNotaCampos(),
+        tempoMs: 0,
+      };
+      return next;
+    });
+    setMetas((prev) => {
+      const next = [...prev];
+      if (!next[idx]) return prev;
+      next[idx] = {
+        ...next[idx],
+        dataNascimento: '',
+        sexo: undefined,
+        avisoNip: undefined,
+      };
+      return next;
+    });
+  }, []);
 
   const aplicarNipNaLinha = useCallback(
     (idx: number, nipRaw: string) => {
@@ -663,43 +791,67 @@ export function HistoricoSessaoDetalheModal({
       }
 
       const c = busca.cadastro;
-      const metaOk: MetaLinha = {
-        editavel: true,
-        dataNascimento: c.dataNascimento || '',
-        sexo: c.sexo,
-        avisoNip: !(c.dataNascimento || '').trim()
-          ? 'Cadastro sem data de nascimento — nota indisponível'
-          : undefined,
-      };
-      setMetas((prev) => {
-        const next = [...prev];
-        if (!next[idx]) return prev;
-        next[idx] = { ...next[idx], ...metaOk, editavel: next[idx].editavel };
-        return next;
-      });
-      setNipDraft((prev) => ({ ...prev, [idx]: c.nip || nipFmt }));
+      const metaLinha = metas[idx];
+      const precisaAviso =
+        Boolean(metaLinha?.editavel) &&
+        !somenteLeitura &&
+        !repeticaoAutorizadaRef.current.has(idx);
 
-      setLinhas((prev) => {
-        const next = [...prev];
-        if (!next[idx]) return prev;
-        const desemp = valorDesempenhoExibido(tipo, next[idx], desempenhoDraft[idx]).trim();
-        const calc = desemp
-          ? calcularCamposDesempenho(tipo, desemp, metaOk, modoTafNaval)
-          : {};
-        next[idx] = {
-          ...next[idx],
-          ...calc,
-          nip: c.nip || nipFmt,
-          nome: (c.nome || '').trim() || '—',
-          prova: tipo,
-        };
-        return next;
-      });
+      if (precisaAviso) {
+        void (async () => {
+          try {
+            const sessoes = await getAllSessoesAplicacao({ includeDemo: false });
+            const existente = buscarRegistroModalidadeExistente(
+              c.nip || nipFmt,
+              tipo,
+              sessoes,
+              c,
+              cadastros,
+            );
+            if (existente) {
+              setModalTesteExistente({
+                index: idx,
+                nip: formatNipInput(c.nip || nipFmt) || nipFmt,
+                nome: formatNomeComPosto({ ...c, nome: (c.nome || '').trim() || 'Militar' }),
+                registro: existente,
+              });
+              return;
+            }
+          } catch {
+            // Se falhar a consulta, segue o preenchimento normal.
+          }
+          preencherLinhaComCadastro(idx, nipFmt, c);
+        })();
+        return;
+      }
 
-      solicitarDataNascimento(idx, c);
+      preencherLinhaComCadastro(idx, nipFmt, c);
     },
-    [cadastros, tipo, desempenhoDraft, modoTafNaval, solicitarDataNascimento],
+    [
+      cadastros,
+      tipo,
+      metas,
+      somenteLeitura,
+      preencherLinhaComCadastro,
+    ],
   );
+
+  const fecharModalTesteExistente = useCallback(() => {
+    const idx = modalTesteExistente?.index;
+    setModalTesteExistente(null);
+    if (idx != null) limparLinhaNipPendente(idx);
+  }, [modalTesteExistente, limparLinhaNipPendente]);
+
+  const confirmarRepeticaoTesteHistorico = useCallback(() => {
+    if (!modalTesteExistente) return;
+    const { index, nip } = modalTesteExistente;
+    repeticaoAutorizadaRef.current.add(index);
+    setModalTesteExistente(null);
+    const busca = buscarCadastroPorNomeOuNip(cadastros, nip);
+    if (busca.kind === 'found') {
+      preencherLinhaComCadastro(index, nip, busca.cadastro);
+    }
+  }, [modalTesteExistente, cadastros, preencherLinhaComCadastro]);
 
   // Se o cadastro carregar depois do NIP digitado, resolve e recalcula a nota.
   useEffect(() => {
@@ -1025,6 +1177,13 @@ export function HistoricoSessaoDetalheModal({
       const nextMetas = metas.filter((_, i) => i !== idx);
       setNipDraft((prev) => reindexDraft(prev, idx));
       setDesempenhoDraft((prev) => reindexDraft(prev, idx));
+
+      const nextAuth = new Set<number>();
+      for (const i of repeticaoAutorizadaRef.current) {
+        if (i === idx) continue;
+        nextAuth.add(i > idx ? i - 1 : i);
+      }
+      repeticaoAutorizadaRef.current = nextAuth;
 
       const nip = (removido.nip || '').trim();
       if (nip) {
@@ -1481,6 +1640,12 @@ export function HistoricoSessaoDetalheModal({
           if (!salvandoDn) setDnInfo(null);
         }}
         onSalvar={(data) => void salvarDataNascimentoInformada(data)}
+      />
+
+      <ModalTesteJaAplicado
+        info={modalTesteExistente}
+        onClose={fecharModalTesteExistente}
+        onConfirmarRepeticao={confirmarRepeticaoTesteHistorico}
       />
 
       <SalvarPdfFeedbackModal

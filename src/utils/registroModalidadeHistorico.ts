@@ -92,6 +92,17 @@ function cadastroTemResultadoNaModalidade(
       return temAvaliacaoPermanencia(c);
     case 'caminhada':
       return temAvaliacaoCaminhada(c);
+    case 'flexao_barra':
+      return !!(c.notaFlexaoBarra ?? '').trim() || c.repsFlexaoBarra != null;
+    case 'flexao_solo':
+      return !!(c.notaFlexaoSolo ?? '').trim() || c.repsFlexaoSolo != null;
+    case 'abdominal_remador':
+      return !!(c.notaAbdominalRemador ?? '').trim() || c.repsAbdominalRemador != null;
+    case 'abdominal_prancha':
+      return (
+        !!(c.notaAbdominalPrancha ?? '').trim() ||
+        !!(c.tempoAbdominalPrancha ?? '').trim()
+      );
     default:
       return false;
   }

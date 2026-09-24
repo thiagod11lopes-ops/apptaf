@@ -27,6 +27,7 @@ import {
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import {
+  addSessaoAplicacao,
   getAllSessoesAplicacao,
   tituloTipoProva,
   updateSessaoAplicacao,
@@ -63,6 +64,8 @@ import {
   buscarRegistroModalidadeExistente,
   removerParticipanteModalidadeDoHistorico,
 } from '../../utils/registroModalidadeHistorico';
+import { isSessaoApenasVirtualCadastro } from '../../utils/sessoesUnificadasResultados';
+import { dataBrParaIso } from '../../utils/tafRegistro';
 import type { TipoProvaTAF } from '../../taf/tafProvaTypes';
 
 function modalidadeExcluivel(tipo: TipoProvaAplicada): ModalidadeResultadoTaf | null {
@@ -521,12 +524,7 @@ export function HistoricoSessaoDetalheModal({
         aplicadorAssinatura = { ...aplicadorAssinatura, rubricaSvg: aplicadorSvgFromOrigem };
       }
 
-      const atualizada: SessaoAplicacaoTaf = {
-        ...sessao,
-        ...(aplicadorAssinatura ? { aplicadorAssinatura } : {}),
-        resultados,
-        updatedAt: Date.now(),
-      };
+      const normaTaf = sessao.normaTaf ?? 'armada';
       setSalvando(true);
       setErro('');
       try {
@@ -542,23 +540,67 @@ export function HistoricoSessaoDetalheModal({
           repeticaoAutorizadaRef.current = new Set();
         }
 
-        await updateSessaoAplicacao(atualizada);
-        if (idsOrigem && idsOrigem.length > 1) {
-          for (const id of idsOrigem) {
-            if (id === sessao.id) continue;
-            try {
-              await deleteSessaoAplicacao(id);
-            } catch {
-              // Sessão auxiliar já removida.
+        // Sessão só-virtual (gerada do cadastro): gravar em sessão real `grupo-*`.
+        // IDs `registrador-{tipo}:{data}` são filtrados na unificação e sumiriam do Geral.
+        let idPersistido = sessao.id;
+        if (isSessaoApenasVirtualCadastro(sessao)) {
+          const iso =
+            dataBrParaIso(sessao.dataAplicacao) ||
+            sessao.dataAplicacao.replace(/\D/g, '') ||
+            String(Date.now());
+          idPersistido = `grupo-${iso}-${tipo}-${normaTaf}-${Date.now()}`;
+          await addSessaoAplicacao({
+            id: idPersistido,
+            dataAplicacao: sessao.dataAplicacao,
+            tipoProva: tipo,
+            resultados,
+            aplicadorAssinatura,
+            normaTaf,
+          });
+          // Remove cópia indevida do ID virtual, se já tiver sido gravada antes.
+          try {
+            await deleteSessaoAplicacao(sessao.id);
+          } catch {
+            // Pode não existir no banco (só memória).
+          }
+        } else {
+          const { idsOrigem: _idsDrop, ...sessaoLimpa } = sessao as SessaoAplicacaoTaf & {
+            idsOrigem?: string[];
+          };
+          const atualizadaDb: SessaoAplicacaoTaf = {
+            ...sessaoLimpa,
+            id: sessao.id,
+            ...(aplicadorAssinatura ? { aplicadorAssinatura } : {}),
+            normaTaf,
+            resultados,
+            updatedAt: Date.now(),
+          };
+          await updateSessaoAplicacao(atualizadaDb);
+          if (idsOrigem && idsOrigem.length > 1) {
+            for (const id of idsOrigem) {
+              if (id === sessao.id) continue;
+              try {
+                await deleteSessaoAplicacao(id);
+              } catch {
+                // Sessão auxiliar já removida.
+              }
             }
           }
         }
 
+        // Sincroniza cadastro de TODOS os participantes com desempenho (não só editáveis),
+        // para o Resultado Geral / virtuais refletirem o Histórico.
         for (let i = 0; i < resultados.length; i++) {
           const r = resultados[i];
-          const meta = nextMetas[i];
-          if (!meta?.editavel) continue;
           if (!(r.nip ?? '').trim() || !(r.nome ?? '').trim()) continue;
+          const temDesempenho =
+            tipo === 'permanencia'
+              ? Boolean(r.notaTexto?.trim()) || r.desistencia === true
+              : provaEhReps(tipo)
+                ? Boolean(r.desempenhoTexto?.trim())
+                : r.tempoMs > 0;
+          if (!temDesempenho) continue;
+
           const busca = buscarCadastroPorNomeOuNip(cadastros, r.nip || r.nome);
           if (busca.kind !== 'found') continue;
 
@@ -597,6 +639,14 @@ export function HistoricoSessaoDetalheModal({
           }
         }
 
+        const atualizada: SessaoAplicacaoTaf = {
+          ...sessao,
+          id: idPersistido,
+          ...(aplicadorAssinatura ? { aplicadorAssinatura } : {}),
+          normaTaf,
+          resultados,
+          updatedAt: Date.now(),
+        };
         setLinhas(resultados);
         onSessaoAtualizada?.(atualizada);
       } catch (e) {
@@ -1201,30 +1251,79 @@ export function HistoricoSessaoDetalheModal({
       }
 
       if (nextLinhas.length === 0) {
-        await deleteSessaoAplicacao(sessao.id);
+        if (!isSessaoApenasVirtualCadastro(sessao)) {
+          try {
+            await deleteSessaoAplicacao(sessao.id);
+          } catch {
+            // Já removida.
+          }
+          const idsExtraVazio = (sessao as SessaoAplicacaoTaf & { idsOrigem?: string[] }).idsOrigem;
+          if (idsExtraVazio && idsExtraVazio.length > 1) {
+            for (const id of idsExtraVazio) {
+              if (id === sessao.id) continue;
+              try {
+                await deleteSessaoAplicacao(id);
+              } catch {
+                // Sessão auxiliar já removida.
+              }
+            }
+          }
+        }
         setExcluirIdx(null);
         onSessaoAtualizada?.({ ...sessao, resultados: [] });
         onClose();
         return;
       }
 
-      const atualizada: SessaoAplicacaoTaf = {
-        ...sessao,
-        resultados: nextLinhas,
-        updatedAt: Date.now(),
-      };
-      await updateSessaoAplicacao(atualizada);
-      const idsExtra = (sessao as SessaoAplicacaoTaf & { idsOrigem?: string[] }).idsOrigem;
-      if (idsExtra && idsExtra.length > 1) {
-        for (const id of idsExtra) {
-          if (id === sessao.id) continue;
-          try {
-            await deleteSessaoAplicacao(id);
-          } catch {
-            // Sessão auxiliar já removida.
+      let idPersistido = sessao.id;
+      const normaTaf = sessao.normaTaf ?? 'armada';
+      if (isSessaoApenasVirtualCadastro(sessao)) {
+        const iso =
+          dataBrParaIso(sessao.dataAplicacao) ||
+          sessao.dataAplicacao.replace(/\D/g, '') ||
+          String(Date.now());
+        idPersistido = `grupo-${iso}-${tipo}-${normaTaf}-${Date.now()}`;
+        await addSessaoAplicacao({
+          id: idPersistido,
+          dataAplicacao: sessao.dataAplicacao,
+          tipoProva: tipo,
+          resultados: nextLinhas,
+          aplicadorAssinatura: sessao.aplicadorAssinatura,
+          normaTaf,
+        });
+        try {
+          await deleteSessaoAplicacao(sessao.id);
+        } catch {
+          // Pode não existir no banco.
+        }
+      } else {
+        const { idsOrigem: _idsDrop, ...sessaoLimpa } = sessao as SessaoAplicacaoTaf & {
+          idsOrigem?: string[];
+        };
+        await updateSessaoAplicacao({
+          ...sessaoLimpa,
+          resultados: nextLinhas,
+          updatedAt: Date.now(),
+        });
+        const idsExtra = (sessao as SessaoAplicacaoTaf & { idsOrigem?: string[] }).idsOrigem;
+        if (idsExtra && idsExtra.length > 1) {
+          for (const id of idsExtra) {
+            if (id === sessao.id) continue;
+            try {
+              await deleteSessaoAplicacao(id);
+            } catch {
+              // Sessão auxiliar já removida.
+            }
           }
         }
       }
+
+      const atualizada: SessaoAplicacaoTaf = {
+        ...sessao,
+        id: idPersistido,
+        resultados: nextLinhas,
+        updatedAt: Date.now(),
+      };
       setLinhas(nextLinhas);
       setMetas(nextMetas);
       setExcluirIdx(null);

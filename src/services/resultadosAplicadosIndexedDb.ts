@@ -25,7 +25,7 @@ export type SessaoAplicacaoTaf = {
   updatedAt?: number;
 };
 
-import { resolveStorageOwnerUid } from './firebase/authUid';
+import { resolveStorageOwnerUid, waitForAuthenticatedUid } from './firebase/authUid';
 import { getTafDatabase } from '../offline-first/db/tafDatabase';
 import { dataStore } from '../offline-first/store/DataStore';
 import {
@@ -33,6 +33,7 @@ import {
   upsertSessaoOffline,
   deleteSessaoOffline,
 } from './offline/offlineCloudEngine';
+import { invalidateSessoesListCache } from './sessoesListCache';
 
 function useOfflineFirstDb(): boolean {
   return getTafDatabase() != null;
@@ -146,12 +147,14 @@ export async function addSessaoAplicacao(
   const uid = await resolveStorageOwnerUid();
   if (useOfflineFirstDb()) {
     await dataStore.upsertSessao(sessao, uid);
+    invalidateSessoesListCache();
     return id;
   }
 
   const authUid = await waitForAuthenticatedUid();
   if (authUid) {
     await upsertSessaoOffline(authUid, sessao);
+    invalidateSessoesListCache();
     return id;
   }
 
@@ -167,6 +170,7 @@ export async function addSessaoAplicacao(
     // Mantém fluxo da aplicação mesmo sem persistência.
   }
 
+  invalidateSessoesListCache();
   return id;
 }
 
@@ -192,11 +196,13 @@ export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
     await dataStore.upsertSessao(sessao, uid);
+    invalidateSessoesListCache();
     return;
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
     await upsertSessaoOffline(uid, sessao);
+    invalidateSessoesListCache();
     return;
   }
   try {
@@ -210,6 +216,7 @@ export async function updateSessaoAplicacao(sessao: SessaoAplicacaoTaf): Promise
   } catch {
     // silencioso
   }
+  invalidateSessoesListCache();
 }
 
 export async function deleteSessaoAplicacao(id: string): Promise<void> {
@@ -219,11 +226,13 @@ export async function deleteSessaoAplicacao(id: string): Promise<void> {
   if (useOfflineFirstDb()) {
     const uid = await resolveStorageOwnerUid();
     await dataStore.deleteSessao(id, uid);
+    invalidateSessoesListCache();
     return;
   }
   const uid = await waitForAuthenticatedUid();
   if (uid) {
     await deleteSessaoOffline(uid, id);
+    invalidateSessoesListCache();
     return;
   }
   const db = await openDb();
@@ -235,6 +244,7 @@ export async function deleteSessaoAplicacao(id: string): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error('Falha na transação de exclusão.'));
   });
+  invalidateSessoesListCache();
 }
 
 export function tituloTipoProva(tipo: TipoProvaAplicada): string {

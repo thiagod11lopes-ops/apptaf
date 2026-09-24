@@ -38,10 +38,12 @@ import {
 } from '../services/resultadosAplicadosIndexedDb';
 import {
   isCadastrosListCacheWarm,
+  invalidateCadastrosListCache,
   peekCadastrosListCache,
 } from '../services/cadastrosListCache';
 import {
   isSessoesListCacheWarm,
+  invalidateSessoesListCache,
   peekSessoesListCache,
 } from '../services/sessoesListCache';
 import { isDemoSessaoId } from '../utils/gatherSystemBackupData';
@@ -134,12 +136,16 @@ export default function ResultadosScreen() {
     [sessoes],
   );
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force === true;
     const peekedCad = peekCadastrosListCache();
     const peekedSess = peekSessoesListCache({ includeDemo: true });
 
-    // Cache quente + já carregou (incl. sessões excluídas): não re-unifica no foco.
+    // Cache quente + já carregou: evita re-unificar no foco — mas mutations
+    // (Histórico → Geral) passam force para não ficar com estado React defasado
+    // enquanto outro fluxo só reaqueceu o cache em memória.
     if (
+      !force &&
       hasLoadedOnceRef.current &&
       isCadastrosListCacheWarm() &&
       isSessoesListCacheWarm()
@@ -257,7 +263,7 @@ export default function ResultadosScreen() {
         }
       }
       setSessaoParaExcluir(null);
-      await carregar();
+      await carregar({ force: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Não foi possível excluir a sessão.';
       setErroExclusao(msg);
@@ -276,7 +282,7 @@ export default function ResultadosScreen() {
       }
       await deleteCadastro(cadastroParaExcluir.id);
       setCadastroParaExcluir(null);
-      await carregar();
+      await carregar({ force: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Não foi possível excluir o militar.';
       console.warn('[excluirCadastro]', msg);
@@ -465,7 +471,7 @@ export default function ResultadosScreen() {
             normaTaf={normaVista}
             cadastros={cadastros}
             sessoes={sessoesParaPaineis}
-            onDatasetRefresh={carregar}
+            onDatasetRefresh={() => carregar({ force: true })}
           />
         ) : aba === 'geral' ? (
           <ResultadosGeralPanel
@@ -473,7 +479,7 @@ export default function ResultadosScreen() {
             onVerHistoricoMilitar={abrirHistoricoMilitar}
             cadastros={cadastros}
             sessoes={sessoesParaPaineis}
-            onDatasetRefresh={carregar}
+            onDatasetRefresh={() => carregar({ force: true })}
             carregandoDataset={carregando}
           />
         ) : aba === 'concluido' ? (
@@ -523,7 +529,9 @@ export default function ResultadosScreen() {
         onClose={() => setSessaoDetalhe(null)}
         onSessaoAtualizada={(atualizada) => {
           setSessaoDetalhe(atualizada);
-          carregar();
+          invalidateSessoesListCache();
+          invalidateCadastrosListCache();
+          void carregar({ force: true });
         }}
       />
 

@@ -21,6 +21,11 @@ const TABLES_WITH_DELETED = new Set([
 
 /** PostgREST/Supabase limita ~1000 por request — sem paginação o LWW acha que falta dado na nuvem. */
 const PAGE_SIZE = 1000;
+/**
+ * Páginas da coluna `data` (cifrada). Menor que o teto do PostgREST para o Chrome
+ * Android não segurar mil blobs + o plaintext no mesmo pico.
+ */
+const DATA_PAGE_SIZE = 80;
 
 function tableSupportsDeleted(table: string): boolean {
   return TABLES_WITH_DELETED.has(table);
@@ -137,7 +142,36 @@ export function getOwnerDocsDecryptFailureAccum(): number {
   return ownerDocsDecryptFailureAccum;
 }
 
-async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
+function yieldDecryptPage(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+function throwKeyMismatch(decryptFailures: number): never {
+  const err = new Error(
+    `${E2E_KEY_MISMATCH_CODE}: ${E2E_KEY_MISMATCH_MESSAGE} (${decryptFailures} registro(s) ilegíveis).`,
+  );
+  (err as Error & { code?: string }).code = E2E_KEY_MISMATCH_CODE;
+  throw err;
+}
+
+function countEncryptedRows(rows: CloudDocRow[]): number {
+  let encryptedSeen = 0;
+  for (const row of rows) {
+    if (isCloudDataEncrypted(row.data ?? {})) encryptedSeen += 1;
+  }
+  return encryptedSeen;
+}
+
+/**
+ * Descriptografa um lote. `throwIfNoneReadable` fica falso na listagem paginada:
+ * uma página vazia não pode abortar o resto da tabela.
+ */
+async function mapDecryptedRows(
+  rows: CloudDocRow[],
+  throwIfNoneReadable = true,
+): Promise<CloudDocRow[]> {
   const out: CloudDocRow[] = [];
   let decryptFailures = 0;
   let encryptedSeen = 0;
@@ -160,15 +194,24 @@ async function mapDecryptedRows(rows: CloudDocRow[]): Promise<CloudDocRow[]> {
   }
   ownerDocsDecryptFailureAccum += decryptFailures;
   // Nenhum registro legível com a chave atual → chave errada neste aparelho.
-  if (encryptedSeen > 0 && out.length === 0 && decryptFailures > 0) {
-    const err = new Error(
-      `${E2E_KEY_MISMATCH_CODE}: ${E2E_KEY_MISMATCH_MESSAGE} (${decryptFailures} registro(s) ilegíveis).`,
-    );
-    (err as Error & { code?: string }).code = E2E_KEY_MISMATCH_CODE;
-    throw err;
+  if (throwIfNoneReadable && encryptedSeen > 0 && out.length === 0 && decryptFailures > 0) {
+    throwKeyMismatch(decryptFailures);
   }
   // Parcial: mantém só os legíveis — o sync NÃO deve podar ausência nesse ciclo.
   return out;
+}
+
+/** Junta páginas já descriptografadas e só então decide chave errada. */
+function finishPagedDecrypt(
+  all: CloudDocRow[],
+  encryptedSeen: number,
+  failuresBefore: number,
+): CloudDocRow[] {
+  const failures = ownerDocsDecryptFailureAccum - failuresBefore;
+  if (encryptedSeen > 0 && all.length === 0 && failures > 0) {
+    throwKeyMismatch(failures);
+  }
+  return all;
 }
 
 const HEAL_TABLES = [
@@ -230,6 +273,8 @@ export async function listOwnerDocs(
   const sb = requireSupabase();
   const all: CloudDocRow[] = [];
   let from = 0;
+  let encryptedSeen = 0;
+  const failuresBefore = ownerDocsDecryptFailureAccum;
 
   for (;;) {
     const { data, error } = await sb
@@ -237,15 +282,18 @@ export async function listOwnerDocs(
       .select(selectColumns(table))
       .eq('owner_uid', ownerUid)
       .order('id', { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
+      .range(from, from + DATA_PAGE_SIZE - 1);
     if (error) throw new Error(error.message);
     const chunk = (data ?? []) as CloudDocRow[];
-    all.push(...chunk);
-    if (chunk.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
+    if (chunk.length === 0) break;
+    encryptedSeen += countEncryptedRows(chunk);
+    all.push(...(await mapDecryptedRows(chunk, false)));
+    if (chunk.length < DATA_PAGE_SIZE) break;
+    from += DATA_PAGE_SIZE;
+    await yieldDecryptPage();
   }
 
-  return mapDecryptedRows(all);
+  return finishPagedDecrypt(all, encryptedSeen, failuresBefore);
 }
 
 /** Lista documentos alterados desde um timestamp (sync incremental, paginado). */
@@ -272,6 +320,8 @@ export async function listOwnerDocsAfterCursor(
   const sb = requireSupabase();
   const all: CloudDocRow[] = [];
   let pageCursor: OwnerDocCursor = { ...cursor };
+  let encryptedSeen = 0;
+  const failuresBefore = ownerDocsDecryptFailureAccum;
 
   for (;;) {
     let query = sb
@@ -281,7 +331,7 @@ export async function listOwnerDocsAfterCursor(
       .lte('updated_at', upperBound)
       .order('updated_at', { ascending: true })
       .order('id', { ascending: true })
-      .limit(PAGE_SIZE);
+      .limit(DATA_PAGE_SIZE);
 
     // Primeira página após watermark: updated_at >= cursor (overlap seguro).
     // Páginas seguintes: keyset estrito (updated_at, id) > pageCursor.
@@ -297,13 +347,15 @@ export async function listOwnerDocsAfterCursor(
     if (error) throw new Error(error.message);
     const chunk = (data ?? []) as CloudDocRow[];
     if (chunk.length === 0) break;
-    all.push(...chunk);
+    encryptedSeen += countEncryptedRows(chunk);
     const last = chunk[chunk.length - 1]!;
     pageCursor = { updated_at: last.updated_at, id: last.id };
-    if (chunk.length < PAGE_SIZE) break;
+    all.push(...(await mapDecryptedRows(chunk, false)));
+    if (chunk.length < DATA_PAGE_SIZE) break;
+    await yieldDecryptPage();
   }
 
-  return mapDecryptedRows(all);
+  return finishPagedDecrypt(all, encryptedSeen, failuresBefore);
 }
 
 export type OwnerDocMetadata = {

@@ -11,6 +11,7 @@ import { ANONYMOUS_OWNER, compactDuplicateCadastrosByNip, compactDuplicateAplica
 import { systemState } from './SystemState';
 import { isCloudLinkEnabled, setCloudLinkEnabled } from './cloudLinkPreference';
 import { syncLogger } from './SyncLogger';
+import { yieldToUi } from '../../utils/yieldToUi';
 import { createLocalBackup, restoreLocalBackup } from './localBackup';
 import { detectClockDrift, type ClockDriftResult } from './clockDrift';
 import { prepareSyncSession } from './syncSessionPrepare';
@@ -944,6 +945,7 @@ async function runSyncPipeline(
     currentStep = 'local_backup';
     setUiProgress(0, 'Criando backup local…');
     backupIdBeforeSync = await createLocalBackup(ownerUid);
+    await yieldToUi();
 
     setUiProgress(0, 'Verificando horário do sistema…');
     clockDriftResult = await detectClockDrift();
@@ -1093,6 +1095,7 @@ async function runSyncPipeline(
         await markFullFetchDone(ownerUid);
       }
     }
+    invalidateRemoteSnapshotCache();
     await loadLastSyncFromAudit();
 
     completeStep('finalizing');

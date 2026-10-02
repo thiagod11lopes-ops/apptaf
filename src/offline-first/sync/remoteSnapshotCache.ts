@@ -1,7 +1,13 @@
 import type { CadastroItemPersist } from '../../services/cadastrosIndexedDb';
 import type { AplicadorItemPersist } from '../../services/aplicadoresIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../services/resultadosAplicadosIndexedDb';
-import type { CollectionName, PreCadastroRecord } from '../types';
+import type {
+  AplicadorRecord,
+  CadastroRecord,
+  CollectionName,
+  PreCadastroRecord,
+  SessaoRecord,
+} from '../types';
 import type { TombstonePayload } from './tombstone';
 import { getCachedLoginUid } from '../../services/firebase/authUid';
 import { toCadastroLight } from '../../utils/cadastroLight';
@@ -154,7 +160,14 @@ function localDeletedToTombstone(row: {
 }
 
 /** Baseline remoto a partir do IndexedDB já sincronizado (evita full fetch). */
-async function buildRemoteBaselineFromLocal(ownerUid: string): Promise<{
+async function buildRemoteBaselineFromLocal(
+  ownerUid: string,
+  preloaded?: {
+    localCad: CadastroRecord[];
+    localSess: SessaoRecord[];
+    localApp: AplicadorRecord[];
+  },
+): Promise<{
   remoteCad: CadastroItemPersist[];
   remoteSess: SessaoAplicacaoTaf[];
   remoteApp: AplicadorItemPersist[];
@@ -162,11 +175,9 @@ async function buildRemoteBaselineFromLocal(ownerUid: string): Promise<{
   remoteSessTombstones: TombstonePayload[];
   remoteAppTombstones: TombstonePayload[];
 }> {
-  const [localCad, localSess, localApp] = await Promise.all([
-    listCadastrosForSync(ownerUid, true),
-    listSessoesForSync(ownerUid, true),
-    listAplicadoresForSync(ownerUid, true),
-  ]);
+  const localCad = preloaded?.localCad ?? (await listCadastrosForSync(ownerUid, true));
+  const localSess = preloaded?.localSess ?? (await listSessoesForSync(ownerUid, true));
+  const localApp = preloaded?.localApp ?? (await listAplicadoresForSync(ownerUid, true));
 
   const remoteCad: CadastroItemPersist[] = [];
   const remoteCadTombstones: TombstonePayload[] = [];
@@ -223,6 +234,11 @@ export const INCREMENTAL_SINCE_MARGIN_MS = 10 * 60_000;
 export async function fetchRemoteCollectionsSnapshot(
   ownerUid: string,
   force = false,
+  preloadedLocal?: {
+    localCad: CadastroRecord[];
+    localSess: SessaoRecord[];
+    localApp: AplicadorRecord[];
+  },
 ): Promise<RemoteCollectionsSnapshot> {
   const fresh = peekRemoteSnapshotCache(ownerUid);
   if (!force && fresh) return fresh;
@@ -253,7 +269,7 @@ export async function fetchRemoteCollectionsSnapshot(
         ),
       ]);
 
-    const baseline = await buildRemoteBaselineFromLocal(ownerUid);
+    const baseline = await buildRemoteBaselineFromLocal(ownerUid, preloadedLocal);
 
     const tombstones = {
       remoteCadTombstones: mergeById(baseline.remoteCadTombstones, deltaCadTombs),

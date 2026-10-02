@@ -13,6 +13,16 @@ import type {
 import type { LocalAuthorizedEmail } from '../repositories/AuthorizedEmailRepository';
 export type MetaEntry = { key: string; value: string };
 
+/** Pedaço do backup pré-sync. Rúbricas SVG não vão no snapshot único. */
+export type LocalBackupChunkKind = 'cadastroRubricas' | 'sessaoRubricas';
+
+export type LocalBackupChunk = {
+  id?: number;
+  backupId: number;
+  kind: LocalBackupChunkKind;
+  rows: unknown[];
+};
+
 /** Side-table rows (imagens de rúbrica fora do documento principal). */
 export type CadastroRubricasTableRow = {
   id: string;
@@ -45,6 +55,7 @@ export class TafDatabase extends Dexie {
   syncLogs!: Table<SyncLogEntry, number>;
   syncAuditHistory!: Table<SyncAuditEntry, number>;
   localBackups!: Table<LocalBackupSnapshot, number>;
+  localBackupChunks!: Table<LocalBackupChunk, number>;
   authorizedEmails!: Table<LocalAuthorizedEmail, string>;
   preCadastros!: Table<PreCadastroRecord, string>;
   cadastroRubricas!: Table<CadastroRubricasTableRow, string>;
@@ -85,6 +96,9 @@ export class TafDatabase extends Dexie {
     this.version(8).stores({
       cadastroRubricas: 'id, ownerUid, [ownerUid+id]',
       sessaoRubricas: 'id, ownerUid, [ownerUid+id]',
+    });
+    this.version(9).stores({
+      localBackupChunks: '++id, backupId, kind, [backupId+kind]',
     });
   }
 }

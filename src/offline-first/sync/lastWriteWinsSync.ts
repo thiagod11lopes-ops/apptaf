@@ -105,7 +105,8 @@ import { alignRedundantDownloads } from './redundantDownloadGuard';
 import { syncLogger } from './SyncLogger';
 import { isCloudLinkEnabled } from './cloudLinkPreference';
 
-const DOWNLOAD_CONCURRENCY = 8;
+/** Poucos downloads em paralelo — cada um pode trazer SVG de rúbrica. */
+const DOWNLOAD_CONCURRENCY = 3;
 
 export type LwwSyncStats = {
   uploads: number;
@@ -963,13 +964,15 @@ export type SyncPlanSnapshot = {
 };
 
 async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Promise<SyncPlanSnapshot> {
-  const [localCad, localSess, localApp] = await Promise.all([
-    listCadastrosForSync(ownerUid, true),
-    listSessoesForSync(ownerUid, true),
-    listAplicadoresForSync(ownerUid, true),
-  ]);
+  let localCad = await listCadastrosForSync(ownerUid, true);
+  let localSess = await listSessoesForSync(ownerUid, true);
+  let localApp = await listAplicadoresForSync(ownerUid, true);
 
-  let remoteSnapshot = await fetchRemoteCollectionsSnapshot(ownerUid, forceRemote);
+  let remoteSnapshot = await fetchRemoteCollectionsSnapshot(ownerUid, forceRemote, {
+    localCad,
+    localSess,
+    localApp,
+  });
   let {
     remoteCad,
     remoteSess,
@@ -998,11 +1001,14 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     fetchMode: 'full' | 'incremental',
     allowCadSessPrune: boolean,
     allowAppPrune: boolean,
+    seedCad: CadastroRecord[],
+    seedSess: SessaoRecord[],
+    seedApp: AplicadorRecord[],
   ) => {
     await reconcileIdenticalUnsyncedLocals(
       'cadastros',
       ownerUid,
-      localCad,
+      seedCad,
       remoteCad,
       remoteToCadastroRecord,
       remoteCadTombstones,
@@ -1010,7 +1016,7 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     await reconcileIdenticalUnsyncedLocals(
       'sessoes',
       ownerUid,
-      localSess,
+      seedSess,
       remoteSess,
       remoteToSessaoRecord,
       remoteSessTombstones,
@@ -1018,7 +1024,7 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     await reconcileIdenticalUnsyncedLocals(
       'aplicadores',
       ownerUid,
-      localApp,
+      seedApp,
       remoteApp,
       remoteToAplicadorRecord,
       remoteAppTombstones,
@@ -1100,6 +1106,9 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
     remoteSnapshot.fetchMode,
     allowCadSessPruneThisCycle,
     allowAppPruneThisCycle,
+    localCad,
+    localSess,
+    localApp,
   );
 
   // Incremental viu ids sincronizados ausentes na nuvem → full fetch imediato (nuvem = SoT).
@@ -1136,12 +1145,25 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
       ...pruneGateAfterFull,
       collection: 'aplicadores',
     });
+    const seedCad = planned.localCadFresh;
+    const seedSess = planned.localSessFresh;
+    const seedApp = planned.localAppFresh;
+    localCad = [];
+    localSess = [];
+    localApp = [];
     planned = await runReconcileAndPlan(
       remoteSnapshot.fetchMode,
       allowCadSessPruneAfterFull,
       allowAppPruneAfterFull,
+      seedCad,
+      seedSess,
+      seedApp,
     );
   }
+
+  localCad = [];
+  localSess = [];
+  localApp = [];
 
   const { cadPlanFresh, sessPlanFresh, appPlanFresh, localCadFresh, localSessFresh, localAppFresh } =
     planned;
@@ -1308,10 +1330,13 @@ async function runPlanPhase(
       phase,
     });
 
+    const batchCaches =
+      phase === 'download' ? await buildDownloadRubricCaches(ownerUid, batch) : rubricCaches;
+
     await Promise.all(
       batch.map(async (item) => {
         try {
-          await executePlanItem(ownerUid, item, uploadFns, stats, deletionAudits, rubricCaches);
+          await executePlanItem(ownerUid, item, uploadFns, stats, deletionAudits, batchCaches);
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
           stats.errors.push(`${item.collection}/${item.id}: ${msg}`);
@@ -1409,7 +1434,7 @@ export async function executeLastWriteWinsSync(
     phase: 'compare',
   });
 
-  const plan = await buildSyncPlanSnapshot(ownerUid, true);
+  const plan = await buildSyncPlanSnapshot(ownerUid, false);
   const {
     downloadItems,
     uploadItems,
@@ -1531,11 +1556,6 @@ export async function executeLastWriteWinsSync(
     };
   }
 
-  const rubricCaches =
-    downloadItems.length > 0
-      ? await buildDownloadRubricCaches(ownerUid, downloadItems)
-      : undefined;
-
   await runPlanPhase(
     ownerUid,
     uploadItems,
@@ -1557,7 +1577,6 @@ export async function executeLastWriteWinsSync(
     progressCb,
     plannedUploads,
     plannedDownloads,
-    rubricCaches,
   );
 
   if (uploadItems.length > 0) {

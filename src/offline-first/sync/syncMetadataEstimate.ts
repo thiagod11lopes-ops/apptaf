@@ -56,6 +56,34 @@ export function countMetadataDownloads(
   return downloads;
 }
 
+/**
+ * Militares cadastrados na nuvem que este aparelho ainda não tem,
+ * ou cuja ficha na nuvem é mais nova que a ficha local.
+ * Exclusão não conta como cadastro.
+ */
+export function countCadastroMilitarDownloads(
+  local: Map<string, SyncHead>,
+  remote: OwnerDocMetadata[],
+): number {
+  let downloads = 0;
+  for (const row of remote) {
+    if (row.deleted) continue;
+    const here = local.get(row.id);
+    if (!here) {
+      downloads += 1;
+      continue;
+    }
+    if (here.deleted) {
+      if (!here.unsynced && here.updatedAt > 0 && row.updated_at > here.updatedAt) {
+        downloads += 1;
+      }
+      continue;
+    }
+    if (here.updatedAt > 0 && row.updated_at > here.updatedAt) downloads += 1;
+  }
+  return downloads;
+}
+
 async function collectLocalHeads(
   table: 'cadastros' | 'sessoes' | 'aplicadores',
   ownerUid: string,
@@ -104,7 +132,10 @@ export async function estimateSyncQueueFromMetadata(ownerUid: string): Promise<{
     const entry = META_COLLECTIONS[i]!;
     const remote = remoteLists[i] ?? [];
     const local = await collectLocalHeads(entry.table, ownerUid);
-    const downloads = countMetadataDownloads(local.heads, remote);
+    const downloads =
+      entry.collection === 'cadastros'
+        ? countCadastroMilitarDownloads(local.heads, remote)
+        : countMetadataDownloads(local.heads, remote);
     pendingUploads += local.unsynced;
     pendingDownloads += downloads;
     if (downloads > 0) {

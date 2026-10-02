@@ -86,6 +86,15 @@ async function queryUnsyncedByOwnerStatus<T extends CadastroRecord | SessaoRecor
   return batches.flat();
 }
 
+/** Cadastro na tela de sync: militar ainda cadastrado, não a exclusão. */
+const CADASTRO_MILITAR_STATUSES: readonly SyncStatus[] = UNSYNCED_STATUSES.filter(
+  (status) => status !== STATUS_DELETED,
+);
+
+function isCadastroMilitarPendente(row: { syncStatus: SyncStatus; deleted?: boolean }): boolean {
+  return row.syncStatus !== STATUS_DELETED && row.deleted !== true && isUnsyncedLocalStatus(row.syncStatus);
+}
+
 async function countUnsyncedByOwnerStatus(
   table: {
     where: (index: string) => {
@@ -93,9 +102,10 @@ async function countUnsyncedByOwnerStatus(
     };
   },
   ownerUid: string,
+  statuses: readonly SyncStatus[] = UNSYNCED_STATUSES,
 ): Promise<number> {
   const counts = await Promise.all(
-    UNSYNCED_STATUSES.map((status) =>
+    statuses.map((status) =>
       table.where('[ownerUid+syncStatus]').equals([ownerUid, status]).count(),
     ),
   );
@@ -138,7 +148,7 @@ export async function getPendingSyncItems(ownerUid: string): Promise<PendingSync
       if (seen.has(key)) continue;
       seen.add(key);
       items.push(toPendingItem('cadastros', row));
-      cadastros += 1;
+      if (isCadastroMilitarPendente(row)) cadastros += 1;
     }
     for (const row of sessRows) {
       if (!isUnsyncedLocalStatus(row.syncStatus)) continue;
@@ -200,19 +210,22 @@ export async function getPendingSyncCounts(ownerUid: string): Promise<PendingSyn
   }
 
   let cadastros = 0;
+  let cadastroExclusoes = 0;
   let sessoes = 0;
   let aplicadores = 0;
   let authorizedEmails = 0;
 
   for (const uid of owners) {
-    const [cad, sess, app, localEmails, deletedEmails] = await Promise.all([
-      countUnsyncedByOwnerStatus(db.cadastros, uid),
+    const [cad, exclusoes, sess, app, localEmails, deletedEmails] = await Promise.all([
+      countUnsyncedByOwnerStatus(db.cadastros, uid, CADASTRO_MILITAR_STATUSES),
+      countUnsyncedByOwnerStatus(db.cadastros, uid, [STATUS_DELETED]),
       countUnsyncedByOwnerStatus(db.sessoes, uid),
       countUnsyncedByOwnerStatus(db.aplicadores, uid),
       db.authorizedEmails.where('[ownerUid+syncStatus]').equals([uid, 'local']).count(),
       db.authorizedEmails.where('[ownerUid+syncStatus]').equals([uid, 'deleted']).count(),
     ]);
     cadastros += cad;
+    cadastroExclusoes += exclusoes;
     sessoes += sess;
     aplicadores += app;
     authorizedEmails += localEmails + deletedEmails;
@@ -220,7 +233,7 @@ export async function getPendingSyncCounts(ownerUid: string): Promise<PendingSyn
 
   return {
     items: [],
-    total: cadastros + sessoes + aplicadores + authorizedEmails,
+    total: cadastros + cadastroExclusoes + sessoes + aplicadores + authorizedEmails,
     cadastros,
     sessoes,
     aplicadores,

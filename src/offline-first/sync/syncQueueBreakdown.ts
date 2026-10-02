@@ -107,11 +107,20 @@ export function buildUploadBreakdown(summary: PendingSyncSummary): SyncQueueBrea
         count: summary.authorizedEmails,
       });
     }
-    return finalizeBreakdown(categories, summary.total);
+    const visivel = categories.reduce((acc, item) => acc + item.count, 0);
+    return finalizeBreakdown(categories, visivel);
   }
 
   const map = new Map<string, SyncQueueCategory>();
+  let cadastrosExcluidos = 0;
   for (const item of summary.items) {
+    if (
+      item.collection === 'cadastros' &&
+      (item.syncStatus === 'deleted' || item.record.deleted === true)
+    ) {
+      cadastrosExcluidos += 1;
+      continue;
+    }
     addItemToMap(map, item.collection);
   }
   const categories = Array.from(map.values());
@@ -122,7 +131,7 @@ export function buildUploadBreakdown(summary: PendingSyncSummary): SyncQueueBrea
       count: summary.authorizedEmails,
     });
   }
-  return finalizeBreakdown(categories, summary.total);
+  return finalizeBreakdown(categories, Math.max(0, summary.total - cadastrosExcluidos));
 }
 
 /** Detalha o que será baixado da nuvem (plano LWW). */

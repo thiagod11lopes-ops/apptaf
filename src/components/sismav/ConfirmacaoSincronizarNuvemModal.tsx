@@ -96,7 +96,7 @@ export function ConfirmacaoSincronizarNuvemModal({
             ) : null}
             {summary.sessoes > 0 ? (
               <Text style={[styles.statsLine, { color: theme.text }]}>
-                · {summary.sessoes} aplicação{summary.sessoes !== 1 ? 'ões' : ''} de TAF
+                · {summary.sessoes} {summary.sessoes === 1 ? 'teste físico' : 'testes físicos'}
               </Text>
             ) : null}
             {summary.aplicadores > 0 ? (

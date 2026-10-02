@@ -56,9 +56,8 @@ describe('syncQueueBreakdown', () => {
 
     const breakdown = buildUploadBreakdown(summary);
     expect(breakdown.total).toBe(3);
-    expect(breakdown.categories.map((c) => c.label)).toEqual(
-      expect.arrayContaining(['Cadastro', 'Natação', 'Corrida']),
-    );
+    expect(breakdown.categories.map((c) => c.label)).toEqual(['Testes físicos', 'Cadastros']);
+    expect(breakdown.categories.find((c) => c.label === 'Testes físicos')?.count).toBe(2);
   });
 
   it('detalha downloads por modalidade de resultado', () => {
@@ -71,8 +70,8 @@ describe('syncQueueBreakdown', () => {
       3,
     );
 
-    expect(breakdown.categories.find((c) => c.label === 'Natação')?.count).toBe(2);
-    expect(breakdown.categories.find((c) => c.label === 'Cadastro')?.count).toBe(1);
+    expect(breakdown.categories.find((c) => c.label === 'Testes físicos')?.count).toBe(2);
+    expect(breakdown.categories.find((c) => c.label === 'Cadastros')?.count).toBe(1);
   });
 
   it('ignora pre_cadastros no breakdown de envio', () => {

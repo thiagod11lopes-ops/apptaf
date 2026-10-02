@@ -1,9 +1,5 @@
 import type { CollectionName } from '../types';
 import type { PendingSyncSummary } from './pendingSyncItems';
-import {
-  tituloTipoProva,
-  type TipoProvaAplicada,
-} from '../../services/resultadosAplicadosIndexedDb';
 import { isCloudSyncCollection } from './preCadastroLocalOnly';
 
 export type SyncQueueCategory = {
@@ -18,12 +14,12 @@ export type SyncQueueBreakdown = {
 };
 
 const COLLECTION_LABELS: Partial<Record<CollectionName, string>> = {
-  cadastros: 'Cadastro',
-  sessoes: 'Resultado',
-  aplicadores: 'Aplicador',
+  cadastros: 'Cadastros',
+  sessoes: 'Testes físicos',
+  aplicadores: 'Aplicadores',
 };
 
-type TipoProvaLike = TipoProvaAplicada | string | undefined;
+const CATEGORY_ORDER = ['sessoes', 'cadastros', 'aplicadores', 'authorizedEmails', 'other'];
 
 type BreakdownRecord = {
   tipoProva?: string;
@@ -36,11 +32,6 @@ export type DownloadPlanItem = {
   remote?: BreakdownRecord;
 };
 
-function resultadoLabel(tipoProva: TipoProvaLike): string {
-  if (!tipoProva) return 'Resultado';
-  return tituloTipoProva(tipoProva as TipoProvaAplicada);
-}
-
 function bumpCategory(map: Map<string, SyncQueueCategory>, key: string, label: string): void {
   const existing = map.get(key);
   if (existing) {
@@ -51,9 +42,13 @@ function bumpCategory(map: Map<string, SyncQueueCategory>, key: string, label: s
 }
 
 function sortCategories(categories: SyncQueueCategory[]): SyncQueueCategory[] {
-  return [...categories].sort(
-    (a, b) => b.count - a.count || a.label.localeCompare(b.label, 'pt-BR'),
-  );
+  return [...categories].sort((a, b) => {
+    const ai = CATEGORY_ORDER.indexOf(a.key);
+    const bi = CATEGORY_ORDER.indexOf(b.key);
+    const ar = ai === -1 ? CATEGORY_ORDER.length : ai;
+    const br = bi === -1 ? CATEGORY_ORDER.length : bi;
+    return ar - br || b.count - a.count || a.label.localeCompare(b.label, 'pt-BR');
+  });
 }
 
 function finalizeBreakdown(categories: SyncQueueCategory[], total: number): SyncQueueBreakdown {
@@ -69,11 +64,10 @@ function finalizeBreakdown(categories: SyncQueueCategory[], total: number): Sync
   return { total, categories: sorted };
 }
 
-function addItemToMap(map: Map<string, SyncQueueCategory>, collection: CollectionName, record?: BreakdownRecord): void {
+function addItemToMap(map: Map<string, SyncQueueCategory>, collection: CollectionName): void {
   if (!isCloudSyncCollection(collection)) return;
   if (collection === 'sessoes') {
-    const tipo = record?.tipoProva;
-    bumpCategory(map, `sessoes:${tipo ?? 'unknown'}`, resultadoLabel(tipo));
+    bumpCategory(map, 'sessoes', COLLECTION_LABELS.sessoes ?? 'Testes físicos');
     return;
   }
   const label = COLLECTION_LABELS[collection];
@@ -90,7 +84,7 @@ export function buildUploadBreakdown(summary: PendingSyncSummary): SyncQueueBrea
       categories.push({ key: 'cadastros', label: 'Cadastros', count: summary.cadastros });
     }
     if (summary.sessoes > 0) {
-      categories.push({ key: 'sessoes', label: 'Sessões', count: summary.sessoes });
+      categories.push({ key: 'sessoes', label: 'Testes físicos', count: summary.sessoes });
     }
     if (summary.aplicadores > 0) {
       categories.push({
@@ -118,7 +112,7 @@ export function buildUploadBreakdown(summary: PendingSyncSummary): SyncQueueBrea
 
   const map = new Map<string, SyncQueueCategory>();
   for (const item of summary.items) {
-    addItemToMap(map, item.collection, item.record as BreakdownRecord);
+    addItemToMap(map, item.collection);
   }
   const categories = Array.from(map.values());
   if (summary.authorizedEmails > 0) {
@@ -138,8 +132,7 @@ export function buildDownloadBreakdown(
 ): SyncQueueBreakdown {
   const map = new Map<string, SyncQueueCategory>();
   for (const item of items) {
-    const record = item.remote ?? item.local;
-    addItemToMap(map, item.collection, record);
+    addItemToMap(map, item.collection);
   }
   const total = totalOverride ?? items.length;
   return finalizeBreakdown(Array.from(map.values()), total);

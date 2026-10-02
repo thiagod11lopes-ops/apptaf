@@ -6,20 +6,51 @@ import { useOfflineSyncState } from '../../contexts/OfflineSyncContext';
 import { PressableScale } from '../premium/PressableScale';
 import { PREMIUM } from '../../theme/premium';
 import { SyncHistoryModal } from './SyncHistoryModal';
-import { SyncQueueDetailModal } from './SyncQueueDetailModal';
 import {
   formatDurationSeconds,
   formatLastSyncLabel,
   formatRecordsPerSecond,
 } from '../../offline-first/sync/syncFormatters';
 import { SYNC_AUTH_REQUIRED_MESSAGE } from '../../offline-first/sync/SyncManager';
-import { EMPTY_SYNC_QUEUE_BREAKDOWN } from '../../offline-first/sync/syncQueueBreakdown';
+import { EMPTY_SYNC_QUEUE_BREAKDOWN, type SyncQueueBreakdown } from '../../offline-first/sync/syncQueueBreakdown';
 import { stepLabel } from '../../offline-first/sync/syncSteps';
 import type { SyncProgressState, SyncUiState } from '../../offline-first/sync/syncUiState';
 
-function formatQueueCount(value: number | null | undefined): string {
-  if (value == null) return '—';
-  return value.toLocaleString('pt-BR');
+function QueueDirectionList({
+  title,
+  emptyLabel,
+  breakdown,
+  pending,
+  theme,
+}: {
+  title: string;
+  emptyLabel: string;
+  breakdown: SyncQueueBreakdown;
+  pending: boolean;
+  theme: ReturnType<typeof useTheme>['theme'];
+}) {
+  const ts = theme.textStyles;
+  const categories = (breakdown.categories ?? []).filter((item) => item.count > 0);
+
+  return (
+    <View style={[styles.queueCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+      <Text style={[styles.queueCardTitle, { color: theme.text }]}>{title}</Text>
+      {pending && categories.length === 0 ? (
+        <Text style={[ts.caption, { color: theme.textMuted }]}>Calculando…</Text>
+      ) : categories.length === 0 ? (
+        <Text style={[ts.caption, { color: theme.textMuted }]}>{emptyLabel}</Text>
+      ) : (
+        categories.map((item) => (
+          <View key={item.key} style={styles.queueRow}>
+            <Text style={[styles.queueRowLabel, { color: theme.text }]}>{item.label}</Text>
+            <Text style={[styles.queueRowCount, { color: theme.primary }]}>
+              {item.count.toLocaleString('pt-BR')}
+            </Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
 }
 
 function cloudConnectionLabel(syncUi: SyncUiState, loggedIn: boolean): string {
@@ -87,10 +118,8 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
   const { firebaseEnabled, isAuthenticated, authReady } = useAuth();
   const { syncUi, retrySync } = useOfflineSyncState();
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [queueDetail, setQueueDetail] = useState<'download' | 'upload' | null>(null);
 
   const loggedIn = authReady && isAuthenticated;
-  const pendingUploads = syncUi.counters.pendingUploads;
   const pendingDownloads = syncUi.counters.pendingDownloads;
   const uploadBreakdown = syncUi.counters.uploadBreakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN;
   const downloadBreakdown = syncUi.counters.downloadBreakdown ?? EMPTY_SYNC_QUEUE_BREAKDOWN;
@@ -114,17 +143,6 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
     }
     setHistoryOpen(true);
   }, [syncUi.isSyncing]);
-
-  const openQueueDetail = useCallback(
-    (direction: 'download' | 'upload') => {
-      if (syncUi.isSyncing) return;
-      if (Platform.OS === 'web') {
-        (document.activeElement as HTMLElement | null)?.blur?.();
-      }
-      setQueueDetail(direction);
-    },
-    [syncUi.isSyncing],
-  );
 
   if (!firebaseEnabled) return null;
 
@@ -162,50 +180,25 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
               </Text>
             ) : null}
           </View>
-
-          <View style={styles.statusCluster}>
-            <View style={styles.queueBadges}>
-              <PressableScale
-                onPress={() => openQueueDetail('download')}
-                disabled={syncUi.isSyncing}
-                style={[
-                  styles.queueBtn,
-                  { backgroundColor: theme.cardBg, borderColor: theme.border, opacity: syncUi.isSyncing ? 0.55 : 1 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`Receber da nuvem, ${formatQueueCount(pendingDownloads)} atualização(ões). Toque para ver detalhes`}
-              >
-                <Text style={[ts.caption, { color: theme.textSecondary }]}>⬇</Text>
-                <Text style={[styles.queueValue, { color: theme.text }]}>
-                  {formatQueueCount(pendingDownloads)}
-                </Text>
-              </PressableScale>
-              <PressableScale
-                onPress={() => openQueueDetail('upload')}
-                disabled={syncUi.isSyncing}
-                style={[
-                  styles.queueBtn,
-                  { backgroundColor: theme.cardBg, borderColor: theme.border, opacity: syncUi.isSyncing ? 0.55 : 1 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`Enviar para a nuvem, ${formatQueueCount(pendingUploads)} alteração(ões). Toque para ver detalhes`}
-              >
-                <Text style={[ts.caption, { color: theme.textSecondary }]}>⬆</Text>
-                <Text style={[styles.queueValue, { color: theme.text }]}>
-                  {formatQueueCount(pendingUploads)}
-                </Text>
-              </PressableScale>
-            </View>
-
-            {syncUi.isSyncing ? (
-              <ActivityIndicator size="small" color={theme.primary} />
-            ) : null}
-          </View>
+          {syncUi.isSyncing ? <ActivityIndicator size="small" color={theme.primary} /> : null}
         </View>
 
-        <Text style={[ts.caption, { color: theme.textMuted, textAlign: 'right' }]}>
-          Toque nos números para ver o que será sincronizado (Cadastro, Corrida, Natação, etc.)
-        </Text>
+        <View style={styles.queueLists}>
+          <QueueDirectionList
+            title="Baixar para atualizar o sistema"
+            emptyLabel="Nada para baixar"
+            breakdown={downloadBreakdown}
+            pending={pendingDownloads == null && !syncUi.isSyncing}
+            theme={theme}
+          />
+          <QueueDirectionList
+            title="Enviar para atualizar o sistema"
+            emptyLabel="Nada para enviar"
+            breakdown={uploadBreakdown}
+            pending={false}
+            theme={theme}
+          />
+        </View>
 
         {!loggedIn ? (
           <View style={[styles.blockedBanner, { backgroundColor: '#fef3c7', borderColor: '#ca8a04' }]}>
@@ -320,21 +313,6 @@ export function SyncStatusBar({ embedded = false }: { embedded?: boolean }) {
       </View>
 
       <SyncHistoryModal visible={historyOpen} onClose={() => setHistoryOpen(false)} />
-
-      <SyncQueueDetailModal
-        visible={queueDetail === 'download'}
-        direction="download"
-        breakdown={downloadBreakdown}
-        totalLabel={formatQueueCount(pendingDownloads)}
-        onClose={() => setQueueDetail(null)}
-      />
-      <SyncQueueDetailModal
-        visible={queueDetail === 'upload'}
-        direction="upload"
-        breakdown={uploadBreakdown}
-        totalLabel={formatQueueCount(pendingUploads)}
-        onClose={() => setQueueDetail(null)}
-      />
     </>
   );
 }
@@ -375,28 +353,37 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
-  statusCluster: {
+  queueLists: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexShrink: 0,
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  queueBadges: {
-    flexDirection: 'row',
+  queueCard: {
+    flexGrow: 1,
+    flexBasis: 200,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     gap: 6,
   },
-  queueBtn: {
+  queueCardTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  queueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    minWidth: 52,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  queueValue: {
+  queueRowLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  queueRowCount: {
     fontSize: 15,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],

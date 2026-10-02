@@ -75,23 +75,20 @@ import {
 import type { SyncStepId } from './syncSteps';
 import { getPendingSyncCounts, getPendingSyncItems } from './pendingSyncItems';
 import { yieldToUi } from '../../utils/yieldToUi';
-import { buildDownloadBreakdown, EMPTY_SYNC_QUEUE_BREAKDOWN, type SyncQueueBreakdown } from './syncQueueBreakdown';
+import { EMPTY_SYNC_QUEUE_BREAKDOWN, type SyncQueueBreakdown } from './syncQueueBreakdown';
+import { estimateSyncQueueFromMetadata } from './syncMetadataEstimate';
+import { buildDownloadRubricCaches, type DownloadRubricCaches } from './downloadRubricCache';
 import {
   decideSyncedLocalOnlyAbsence,
   shouldAllowCloudAbsencePrune,
   stripMassSyntheticPrune,
 } from './cloudAbsencePrune';
 import {
-  buildDownloadRubricCaches,
-  type DownloadRubricCaches,
-} from './downloadRubricCache';
-import {
   fetchRemoteCollectionsSnapshot,
   invalidateRemoteSnapshotCache,
 } from './remoteSnapshotCache';
 import { forceNextFullRemoteFetch } from './syncWatermark';
 import {
-  countBusinessContentDrift,
   resolveContentDriftAction,
   syncBusinessContentEqual,
 } from './syncBusinessContent';
@@ -291,32 +288,6 @@ async function applySessaoRubricasSideLocal(
 function countIds(local: SyncRecord[], remote: { id: string }[]): number {
   const ids = new Set([...local.map((r) => r.id), ...remote.map((r) => r.id)]);
   return ids.size;
-}
-
-/** Detecta divergência de presença (ativo × excluído) que o LWW possa não enfileirar. */
-function countActivePresenceDrift(
-  localRows: SyncRecord[],
-  remoteRows: Array<{ id: string }>,
-  toRecord: (remote: { id: string }, ownerUid: string) => SyncRecord,
-  ownerUid: string,
-): { extraDownloads: number; extraUploads: number } {
-  let extraDownloads = 0;
-  let extraUploads = 0;
-  const allIds = new Set([...localRows.map((r) => r.id), ...remoteRows.map((r) => r.id)]);
-
-  for (const id of allIds) {
-    const local = localRows.find((r) => r.id === id);
-    const remoteRaw = remoteRows.find((r) => r.id === id);
-    const remote = remoteRaw ? toRecord(remoteRaw, ownerUid) : undefined;
-    const localActive = local != null && local.deleted !== true;
-    const remoteActive = remote != null && remote.deleted !== true;
-    if (localActive === remoteActive) continue;
-    if (remoteActive && !localActive) extraDownloads += 1;
-    // Ausência na nuvem: espelho autoritativo baixa/prune — não conta como upload.
-    if (localActive && !remoteActive) extraDownloads += 1;
-  }
-
-  return { extraDownloads, extraUploads };
 }
 
 function buildSyncPlan<TLocal extends SyncRecord, TRemote extends { id: string }>(
@@ -1234,16 +1205,16 @@ async function buildSyncPlanSnapshot(ownerUid: string, forceRemote = false): Pro
   };
 }
 
-/** Estima filas de envio (local) e recebimento (nuvem) comparando IndexedDB × Firebase. */
+/** Estima a fila do status só com id e data — sem decrypt e sem rúbrica. */
 export async function estimateSyncQueueCounts(
   ownerUid: string,
-  forceRemote = false,
+  _forceRemote = false,
 ): Promise<{
   pendingUploads: number;
   pendingDownloads: number;
   downloadBreakdown: SyncQueueBreakdown;
 }> {
-  // Sem BNC: não consulta nuvem para estimar diff.
+  void _forceRemote;
   if (!isCloudLinkEnabled()) {
     return {
       pendingUploads: 0,
@@ -1251,39 +1222,7 @@ export async function estimateSyncQueueCounts(
       downloadBreakdown: { ...EMPTY_SYNC_QUEUE_BREAKDOWN },
     };
   }
-  const plan = await buildSyncPlanSnapshot(ownerUid, forceRemote);
-  let pendingUploads = plan.plannedUploads;
-  let pendingDownloads = plan.plannedDownloads;
-
-  const remoteCadForLww = [
-    ...plan.remoteCad,
-    ...plan.remoteCadTombstones.map((t) => tombstonePayloadToSyncRecord(t, ownerUid) as CadastroItemPersist),
-  ];
-  const remoteSessForLww = [
-    ...plan.remoteSess,
-    ...plan.remoteSessTombstones.map((t) => tombstonePayloadToSyncRecord(t, ownerUid) as SessaoAplicacaoTaf),
-  ];
-  const remoteAppForLww = [
-    ...plan.remoteApp,
-    ...plan.remoteAppTombstones.map((t) => tombstonePayloadToSyncRecord(t, ownerUid) as AplicadorItemPersist),
-  ];
-
-  const drifts = [
-    countActivePresenceDrift(plan.localCad, remoteCadForLww, remoteToCadastroRecord, ownerUid),
-    countActivePresenceDrift(plan.localSess, remoteSessForLww, remoteToSessaoRecord, ownerUid),
-    // Membro também precisa ver aplicadores faltantes na fila (select de senha/rúbrica).
-    countActivePresenceDrift(plan.localApp, remoteAppForLww, remoteToAplicadorRecord, ownerUid),
-    countBusinessContentDrift('cadastros', plan.localCad, plan.remoteCad, remoteToCadastroRecord, ownerUid),
-    countBusinessContentDrift('sessoes', plan.localSess, plan.remoteSess, remoteToSessaoRecord, ownerUid),
-  ];
-  for (const drift of drifts) {
-    pendingDownloads = Math.max(pendingDownloads, drift.extraDownloads);
-    pendingUploads = Math.max(pendingUploads, drift.extraUploads);
-  }
-
-  const downloadBreakdown = buildDownloadBreakdown(plan.downloadItems, pendingDownloads);
-
-  return { pendingUploads, pendingDownloads, downloadBreakdown };
+  return estimateSyncQueueFromMetadata(ownerUid);
 }
 
 async function runPlanPhase(

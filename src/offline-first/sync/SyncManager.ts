@@ -66,11 +66,6 @@ import {
 import { getActiveTeamKey } from '../../services/supabase/e2eCrypto';
 import { applyTeamWipeIfNeeded } from './syncTeamWipe';
 import {
-  attachRealConflictsToSyncAudit,
-  scanAndAuditRealConflicts,
-  type AuditedRealConflict,
-} from './auditRealConflicts';
-import {
   startRealtimeBridge,
   stopRealtimeBridge,
   suppressRealtimeEcho,
@@ -957,20 +952,6 @@ async function runSyncPipeline(
     currentStep = 'comparing';
     recordSyncStartedAt = Date.now();
 
-    // Auditoria de conflitos reais (não altera LWW nem o plano de sync).
-    let auditedConflicts: AuditedRealConflict[] = [];
-    try {
-      setUiProgress(0, 'Auditando conflitos…', 0, 0, undefined, 'preparing');
-      auditedConflicts = await scanAndAuditRealConflicts(ownerUid);
-    } catch (auditError) {
-      await syncLogger.warn(
-        'audit',
-        `Falha na auditoria de conflitos (sync segue com LWW): ${
-          auditError instanceof Error ? auditError.message : String(auditError)
-        }`,
-      );
-    }
-
     let lastProgressPhase: string | undefined;
 
     // BNC pode ter sido desligado durante o prepare — não inicia LWW.
@@ -1015,18 +996,6 @@ async function runSyncPipeline(
     });
 
     lastAudit = result.audit;
-    if (auditedConflicts.length > 0) {
-      try {
-        lastAudit = await attachRealConflictsToSyncAudit(result.audit, auditedConflicts);
-      } catch (attachError) {
-        await syncLogger.warn(
-          'audit',
-          `Não foi possível anexar conflitos ao audit da sync: ${
-            attachError instanceof Error ? attachError.message : String(attachError)
-          }`,
-        );
-      }
-    }
 
     await refreshPendingSummary();
     if (pendingSummary.total > 0) {

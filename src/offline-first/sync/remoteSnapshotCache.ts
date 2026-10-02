@@ -38,6 +38,7 @@ import {
   listSessoesTombstonesSinceForSync,
 } from '../../services/supabase/cloudTombstonesForSync';
 import { readUpdatedAt } from './recordMeta';
+import { yieldToUi } from '../../utils/yieldToUi';
 import {
   getOwnerDocsDecryptFailureAccum,
   resetOwnerDocsDecryptFailureAccum,
@@ -300,21 +301,27 @@ export async function fetchRemoteCollectionsSnapshot(
     return cached;
   }
 
-  const [
-    remoteCad,
-    remoteSess,
-    remoteApp,
-    remoteCadTombstones,
-    remoteSessTombstones,
-    remoteAppTombstones,
-  ] = await Promise.all([
-    fetchRemoteCollection('cadastros', ownerUid, () => getAllCadastrosFirestoreLight(ownerUid)),
-    fetchRemoteCollection('sessoes', ownerUid, () => getAllSessoesFirestoreLight(ownerUid)),
-    fetchRemoteCollection('aplicadores', ownerUid, () => getAllAplicadoresFirestore(ownerUid)),
-    fetchRemoteCollection('cadastros', ownerUid, () => listCadastrosTombstonesForSync(ownerUid)),
-    fetchRemoteCollection('sessoes', ownerUid, () => listSessoesTombstonesForSync(ownerUid)),
-    fetchRemoteCollection('aplicadores', ownerUid, () => listAplicadoresTombstonesForSync(ownerUid)),
-  ]);
+  const remoteCad = await fetchRemoteCollection('cadastros', ownerUid, () =>
+    getAllCadastrosFirestoreLight(ownerUid),
+  );
+  await yieldToUi();
+  const remoteSess = await fetchRemoteCollection('sessoes', ownerUid, () =>
+    getAllSessoesFirestoreLight(ownerUid),
+  );
+  await yieldToUi();
+  const remoteApp = await fetchRemoteCollection('aplicadores', ownerUid, () =>
+    getAllAplicadoresFirestore(ownerUid),
+  );
+  await yieldToUi();
+  const remoteCadTombstones = await fetchRemoteCollection('cadastros', ownerUid, () =>
+    listCadastrosTombstonesForSync(ownerUid),
+  );
+  const remoteSessTombstones = await fetchRemoteCollection('sessoes', ownerUid, () =>
+    listSessoesTombstonesForSync(ownerUid),
+  );
+  const remoteAppTombstones = await fetchRemoteCollection('aplicadores', ownerUid, () =>
+    listAplicadoresTombstonesForSync(ownerUid),
+  );
 
   // markFullFetchDone só após LWW íntegro (SyncManager) — evita consumir
   // o orçamento de 24h quando o download ok mas a aplicação falha.

@@ -25,12 +25,12 @@ export function shouldForceFullFetchOnRealtimeEvent(_isAuthorizedMember: boolean
   return false;
 }
 
-/** Full fetch periódico no poll do membro. */
+/** O poll do membro não dispara full fetch: isso derruba o Chrome em tablet com pouca RAM. */
 export function shouldForceFullFetchOnMemberPollTick(
-  tick: number,
-  everyTicks: number = MEMBER_FULL_FETCH_EVERY_TICKS,
+  _tick: number,
+  _everyTicks: number = MEMBER_FULL_FETCH_EVERY_TICKS,
 ): boolean {
-  return tick > 0 && tick % everyTicks === 0;
+  return false;
 }
 
 export type MemberCloudPollHost = {

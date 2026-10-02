@@ -152,11 +152,11 @@ async function computeResumoInicioFromIndexedDb(): Promise<ResumoInicioTafHistor
     '../services/resultadosAplicadosIndexedDb'
   );
 
-  const [cadastros, sessoes, sessoesExcluidas] = await Promise.all([
-    getAllCadastros({ includeDemo: false }),
-    getAllSessoesAplicacao({ includeDemo: false }),
-    getDeletedSessoesAplicacao(),
-  ]);
+  const cadastros = await getAllCadastros({ includeDemo: false });
+  await yieldToUi();
+  const sessoes = await getAllSessoesAplicacao({ includeDemo: false });
+  await yieldToUi();
+  const sessoesExcluidas = await getDeletedSessoesAplicacao();
 
   const inputs: ResumoInputs = { cadastros, sessoes, sessoesExcluidas };
   lastInputs = inputs;

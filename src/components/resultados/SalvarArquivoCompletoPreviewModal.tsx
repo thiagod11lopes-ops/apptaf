@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -161,7 +161,62 @@ function linhaCombinaBusca(
   }
   const nome = (linha.nome || '').toLowerCase();
   const posto = (linha.postoGrad || '').toLowerCase();
-  return nome.includes(q) || posto.includes(q);
+  if (nome.includes(q) || posto.includes(q)) return true;
+  // Nome pesquisado também aceita NIP digitado junto ao texto.
+  if (qDigits.length >= 2 && nip.includes(qDigits)) return true;
+  return false;
+}
+
+/** Filtra blocos do PDF pela pesquisa atual (NIP ou nome). Sem pesquisa → todos. */
+export function filtrarBlocosPorBusca(
+  blocos: ResultadosTafPdfBloco[],
+  busca: string,
+): ResultadosTafPdfBloco[] {
+  const raw = busca.trim();
+  if (!raw) {
+    return blocos.map((bloco) => ({
+      ...bloco,
+      linhas: bloco.linhas.map((linha) => ({ ...linha })),
+    }));
+  }
+  const q = raw.toLowerCase();
+  const qDigits = nipDigitos(raw);
+  const porNip = isBuscaPorNip(raw);
+  return blocos
+    .map((bloco) => ({
+      rotuloAplicador: bloco.rotuloAplicador,
+      aplicadorAssinatura: bloco.aplicadorAssinatura,
+      linhas: bloco.linhas
+        .filter((linha) => linhaCombinaBusca(linha, q, qDigits, porNip))
+        .map((linha) => ({ ...linha })),
+    }))
+    .filter((bloco) => bloco.linhas.length > 0);
+}
+
+function montarSubtituloPdfFiltrado(
+  subtitulo: string,
+  busca: string,
+  blocosFiltrados: ResultadosTafPdfBloco[],
+): string {
+  const base = (subtitulo || '').trim();
+  const q = busca.trim();
+  if (!q || blocosFiltrados.length === 0) return base;
+  const linhas = blocosFiltrados.flatMap((b) => b.linhas);
+  const nips = new Set(linhas.map((l) => nipDigitos(l.nip)).filter(Boolean));
+  const porNip = isBuscaPorNip(q);
+  if (porNip && nips.size === 1) {
+    const nipFmt = (linhas[0]?.nip || q).trim();
+    const nome = (linhas[0]?.nome || '').trim();
+    const quem = nome && nome !== '—' ? `${nome} · NIP ${nipFmt}` : `NIP ${nipFmt}`;
+    return base ? `${base} — ${quem}` : quem;
+  }
+  if (nips.size === 1) {
+    const nipFmt = (linhas[0]?.nip || '').trim();
+    const nome = (linhas[0]?.nome || q).trim();
+    const quem = nipFmt ? `${nome} · NIP ${nipFmt}` : nome;
+    return base ? `${base} — ${quem}` : quem;
+  }
+  return base ? `${base} — filtro: ${q}` : `Filtro: ${q}`;
 }
 
 export function SalvarArquivoCompletoPreviewModal({
@@ -187,6 +242,13 @@ export function SalvarArquivoCompletoPreviewModal({
     if (!visible) setBusca('');
   }, [visible]);
 
+  const buscaRef = useRef(busca);
+  const blocosRef = useRef(blocos);
+  const subtituloRef = useRef(subtitulo);
+  buscaRef.current = busca;
+  blocosRef.current = blocos;
+  subtituloRef.current = subtitulo;
+
   const todasLinhas = useMemo(() => blocos.flatMap((b) => b.linhas), [blocos]);
   const { mostrarCorrida, mostrarCaminhada } = useMemo(
     () => colunasDistanciaPdfVisiveis(todasLinhas),
@@ -194,20 +256,12 @@ export function SalvarArquivoCompletoPreviewModal({
   );
 
   const buscaPorNip = useMemo(() => isBuscaPorNip(busca), [busca]);
+  const temPesquisa = busca.trim().length > 0;
 
-  const blocosFiltrados = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    const qDigits = nipDigitos(busca);
-    if (!q) return blocos;
-    return blocos
-      .map((bloco) => ({
-        ...bloco,
-        linhas: bloco.linhas.filter((linha) =>
-          linhaCombinaBusca(linha, q, qDigits, buscaPorNip),
-        ),
-      }))
-      .filter((bloco) => bloco.linhas.length > 0);
-  }, [blocos, busca, buscaPorNip]);
+  const blocosFiltrados = useMemo(
+    () => filtrarBlocosPorBusca(blocos, busca),
+    [blocos, busca],
+  );
 
   const resumoBusca = useMemo(() => {
     if (!busca.trim()) return null;
@@ -258,31 +312,22 @@ export function SalvarArquivoCompletoPreviewModal({
     setHistoricoAberto(true);
   }, []);
 
-  const subtituloPdf = useMemo(() => {
-    const base = (subtitulo || '').trim();
-    const q = busca.trim();
-    if (!q || blocosFiltrados.length === 0) return base;
-    const linhas = blocosFiltrados.flatMap((b) => b.linhas);
-    const nips = new Set(linhas.map((l) => nipDigitos(l.nip)).filter(Boolean));
-    if (buscaPorNip && nips.size === 1) {
-      const nipFmt = (linhas[0]?.nip || q).trim();
-      const nome = (linhas[0]?.nome || '').trim();
-      const quem = nome && nome !== '—' ? `${nome} · NIP ${nipFmt}` : `NIP ${nipFmt}`;
-      return base ? `${base} — ${quem}` : quem;
-    }
-    if (nips.size === 1) {
-      const nipFmt = (linhas[0]?.nip || '').trim();
-      const nome = (linhas[0]?.nome || q).trim();
-      const quem = nipFmt ? `${nome} · NIP ${nipFmt}` : nome;
-      return base ? `${base} — ${quem}` : quem;
-    }
-    return base ? `${base} — filtro: ${q}` : `Filtro: ${q}`;
-  }, [subtitulo, busca, blocosFiltrados, buscaPorNip]);
+  const subtituloPdf = useMemo(
+    () => montarSubtituloPdfFiltrado(subtitulo, busca, blocosFiltrados),
+    [subtitulo, busca, blocosFiltrados],
+  );
 
   const confirmarSalvarFiltrado = useCallback(() => {
-    if (blocosFiltrados.length === 0) return;
-    onConfirmarSalvar(blocosFiltrados, subtituloPdf);
-  }, [blocosFiltrados, onConfirmarSalvar, subtituloPdf]);
+    // Recalcula no clique com a pesquisa atual — só o NIP/nome filtrado vai ao PDF.
+    const filtrados = filtrarBlocosPorBusca(blocosRef.current, buscaRef.current);
+    if (filtrados.length === 0) return;
+    const sub = montarSubtituloPdfFiltrado(
+      subtituloRef.current,
+      buscaRef.current,
+      filtrados,
+    );
+    onConfirmarSalvar(filtrados, sub);
+  }, [onConfirmarSalvar]);
 
   const footer = (
     <View style={styles.footerCol}>
@@ -330,12 +375,19 @@ export function SalvarArquivoCompletoPreviewModal({
             ) : (
               <>
                 <Download size={16} color="#FFFFFF" strokeWidth={2.4} />
-                <Text style={styles.saveBtnText}>Salvar PDF</Text>
+                <Text style={styles.saveBtnText}>
+                  {temPesquisa ? 'Salvar PDF da pesquisa' : 'Salvar PDF'}
+                </Text>
               </>
             )}
           </LinearGradient>
         </TouchableOpacity>
       </View>
+      {temPesquisa && blocosFiltrados.length > 0 ? (
+        <Text style={[styles.filtroHint, { color: theme.textMuted }]}>
+          O PDF incluirá somente o que está na pesquisa atual.
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -506,6 +558,12 @@ const styles = StyleSheet.create({
   cell: { fontSize: 12, fontWeight: '600', lineHeight: 17 },
   footerCol: { width: '100%', gap: 10 },
   footerRow: { flexDirection: 'row', gap: 10, width: '100%' },
+  filtroHint: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
   secondaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',

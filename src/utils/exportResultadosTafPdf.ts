@@ -211,19 +211,29 @@ export function normalizarBlocosResultadosTafPdf(
   linhasOuBlocos: ResultadoTafLinha[] | ResultadosTafPdfBloco[],
   aplicadorAssinaturas?: AplicadorAssinaturaResumo[],
 ): ResultadosTafPdfBloco[] {
-  if (
-    Array.isArray(linhasOuBlocos) &&
-    linhasOuBlocos.length > 0 &&
-    'rotuloAplicador' in (linhasOuBlocos[0] as object)
-  ) {
-    return linhasOuBlocos as ResultadosTafPdfBloco[];
+  if (Array.isArray(linhasOuBlocos) && linhasOuBlocos.length > 0) {
+    const primeiro = linhasOuBlocos[0] as ResultadosTafPdfBloco | ResultadoTafLinha;
+    if (
+      primeiro &&
+      typeof primeiro === 'object' &&
+      'rotuloAplicador' in primeiro &&
+      Array.isArray((primeiro as ResultadosTafPdfBloco).linhas)
+    ) {
+      return (linhasOuBlocos as ResultadosTafPdfBloco[])
+        .map((bloco) => ({
+          rotuloAplicador: bloco.rotuloAplicador,
+          aplicadorAssinatura: bloco.aplicadorAssinatura,
+          linhas: Array.isArray(bloco.linhas) ? [...bloco.linhas] : [],
+        }))
+        .filter((bloco) => bloco.linhas.length > 0);
+    }
   }
   const linhas = linhasOuBlocos as ResultadoTafLinha[];
   if (linhas.length === 0) return [];
   const assinatura = aplicadorAssinaturas?.find((a) => a.nome?.trim());
   return [
     {
-      linhas,
+      linhas: [...linhas],
       aplicadorAssinatura: assinatura,
       rotuloAplicador: assinatura?.nome?.trim()
         ? `Aplicador: ${assinatura.nome.trim()}`

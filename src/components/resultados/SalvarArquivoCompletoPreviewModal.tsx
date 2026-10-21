@@ -30,7 +30,8 @@ type Props = {
   blocos: ResultadosTafPdfBloco[];
   subtitulo: string;
   salvando?: boolean;
-  onConfirmarSalvar: () => void;
+  /** Gera o PDF só com os blocos informados (já filtrados pela pesquisa, se houver). */
+  onConfirmarSalvar: (blocosParaSalvar: ResultadosTafPdfBloco[], subtituloPdf: string) => void;
 };
 
 function celula(v: string | undefined): string {
@@ -257,6 +258,32 @@ export function SalvarArquivoCompletoPreviewModal({
     setHistoricoAberto(true);
   }, []);
 
+  const subtituloPdf = useMemo(() => {
+    const base = (subtitulo || '').trim();
+    const q = busca.trim();
+    if (!q || blocosFiltrados.length === 0) return base;
+    const linhas = blocosFiltrados.flatMap((b) => b.linhas);
+    const nips = new Set(linhas.map((l) => nipDigitos(l.nip)).filter(Boolean));
+    if (buscaPorNip && nips.size === 1) {
+      const nipFmt = (linhas[0]?.nip || q).trim();
+      const nome = (linhas[0]?.nome || '').trim();
+      const quem = nome && nome !== '—' ? `${nome} · NIP ${nipFmt}` : `NIP ${nipFmt}`;
+      return base ? `${base} — ${quem}` : quem;
+    }
+    if (nips.size === 1) {
+      const nipFmt = (linhas[0]?.nip || '').trim();
+      const nome = (linhas[0]?.nome || q).trim();
+      const quem = nipFmt ? `${nome} · NIP ${nipFmt}` : nome;
+      return base ? `${base} — ${quem}` : quem;
+    }
+    return base ? `${base} — filtro: ${q}` : `Filtro: ${q}`;
+  }, [subtitulo, busca, blocosFiltrados, buscaPorNip]);
+
+  const confirmarSalvarFiltrado = useCallback(() => {
+    if (blocosFiltrados.length === 0) return;
+    onConfirmarSalvar(blocosFiltrados, subtituloPdf);
+  }, [blocosFiltrados, onConfirmarSalvar, subtituloPdf]);
+
   const footer = (
     <View style={styles.footerCol}>
       <TouchableOpacity
@@ -279,11 +306,18 @@ export function SalvarArquivoCompletoPreviewModal({
           <Text style={[styles.ghostBtnText, { color: theme.textSecondary }]}>Cancelar</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={onConfirmarSalvar}
-          disabled={salvando || blocos.length === 0}
+          onPress={confirmarSalvarFiltrado}
+          disabled={salvando || blocosFiltrados.length === 0}
           activeOpacity={0.88}
-          style={[styles.saveOuter, { opacity: salvando || blocos.length === 0 ? 0.65 : 1 }]}
-          accessibilityLabel="Salvar PDF do arquivo completo"
+          style={[
+            styles.saveOuter,
+            { opacity: salvando || blocosFiltrados.length === 0 ? 0.65 : 1 },
+          ]}
+          accessibilityLabel={
+            busca.trim()
+              ? 'Salvar PDF somente do militar ou filtro pesquisado'
+              : 'Salvar PDF do arquivo completo'
+          }
         >
           <LinearGradient
             colors={[...theme.tokens.gradientPrimaryBtn]}

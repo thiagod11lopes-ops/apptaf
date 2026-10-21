@@ -224,24 +224,24 @@ export function ResultadosGeralPanel({
     }
   }, [preparandoPreview, salvandoCompleto, lista, cadastros, sessoes, normaTaf]);
 
-  const confirmarSalvarArquivoCompleto = useCallback(async () => {
-    if (!previewCompleto || salvandoCompleto) return;
-    setSalvandoCompleto(true);
-    setAvisoPdf(null);
-    try {
-      const msg = await salvarResultadosTafPdfEmDownloads(
-        previewCompleto.blocos,
-        previewCompleto.subtitulo,
-      );
-      setAvisoPdf(msg);
-      setPreviewCompleto(null);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Falha ao salvar o arquivo completo.';
-      if (!/cancelad/i.test(msg)) setAvisoPdf(msg);
-    } finally {
-      setSalvandoCompleto(false);
-    }
-  }, [previewCompleto, salvandoCompleto]);
+  const confirmarSalvarArquivoCompleto = useCallback(
+    async (blocosParaSalvar: ResultadosTafPdfBloco[], subtituloPdf: string) => {
+      if (salvandoCompleto || blocosParaSalvar.length === 0) return;
+      setSalvandoCompleto(true);
+      setAvisoPdf(null);
+      try {
+        const msg = await salvarResultadosTafPdfEmDownloads(blocosParaSalvar, subtituloPdf);
+        setAvisoPdf(msg);
+        setPreviewCompleto(null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Falha ao salvar o arquivo completo.';
+        if (!/cancelad/i.test(msg)) setAvisoPdf(msg);
+      } finally {
+        setSalvandoCompleto(false);
+      }
+    },
+    [salvandoCompleto],
+  );
 
   const abrirEdicao = useCallback(
     (item: ResultadoGeralItem) => {
@@ -602,7 +602,9 @@ export function ResultadosGeralPanel({
         blocos={previewCompleto?.blocos ?? []}
         subtitulo={previewCompleto?.subtitulo ?? ''}
         salvando={salvandoCompleto}
-        onConfirmarSalvar={() => void confirmarSalvarArquivoCompleto()}
+        onConfirmarSalvar={(blocosParaSalvar, subtituloPdf) =>
+          void confirmarSalvarArquivoCompleto(blocosParaSalvar, subtituloPdf)
+        }
       />
     </View>
   );

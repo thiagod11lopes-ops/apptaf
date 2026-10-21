@@ -97,14 +97,70 @@ function PreviewRow({
   );
 }
 
-function linhaCombinaBusca(linha: ResultadoTafLinha, q: string, qDigits: string): boolean {
+function isBuscaPorNip(busca: string): boolean {
+  const raw = busca.trim();
+  if (!raw) return false;
+  const digits = nipDigitos(raw);
+  if (digits.length < 2) return false;
+  // NIP é só dígitos (com ou sem pontos/espaços) — não mistura com nome.
+  return /^[\d.\s-]+$/.test(raw);
+}
+
+function temValorResultado(valor: string | undefined): boolean {
+  const t = (valor || '').trim();
+  return !!t && t !== '—';
+}
+
+/** Quantos resultados de prova (modalidades) a linha traz para o militar. */
+function contarResultadosNaLinha(linha: ResultadoTafLinha): number {
+  let n = 0;
+  if (temValorResultado(linha.notaCorrida) || temValorResultado(linha.situacaoCorrida)) n += 1;
+  if (temValorResultado(linha.notaCaminhada) || temValorResultado(linha.situacaoCaminhada)) n += 1;
+  if (temValorResultado(linha.notaNatacao) || temValorResultado(linha.situacaoNatacao)) n += 1;
+  if (
+    temValorResultado(linha.situacaoPermanencia) ||
+    temValorResultado(linha.permanenciaTempo)
+  ) {
+    n += 1;
+  }
+  if (temValorResultado(linha.notaFlexaoBarra) || temValorResultado(linha.situacaoFlexaoBarra)) {
+    n += 1;
+  }
+  if (temValorResultado(linha.notaFlexaoSolo) || temValorResultado(linha.situacaoFlexaoSolo)) {
+    n += 1;
+  }
+  if (
+    temValorResultado(linha.notaAbdominalRemador) ||
+    temValorResultado(linha.situacaoAbdominalRemador)
+  ) {
+    n += 1;
+  }
+  if (
+    temValorResultado(linha.notaAbdominalPrancha) ||
+    temValorResultado(linha.situacaoAbdominalPrancha)
+  ) {
+    n += 1;
+  }
+  return n;
+}
+
+function linhaCombinaBusca(
+  linha: ResultadoTafLinha,
+  q: string,
+  qDigits: string,
+  porNip: boolean,
+): boolean {
   if (!q) return true;
+  const nip = nipDigitos(linha.nip);
+  if (porNip) {
+    if (!qDigits || !nip) return false;
+    // NIP completo: só o militar daquele NIP.
+    if (qDigits.length >= 8) return nip === qDigits.slice(0, 8) || nip === qDigits;
+    return nip.includes(qDigits);
+  }
   const nome = (linha.nome || '').toLowerCase();
   const posto = (linha.postoGrad || '').toLowerCase();
-  const nip = nipDigitos(linha.nip);
-  if (nome.includes(q) || posto.includes(q)) return true;
-  if (qDigits && nip.includes(qDigits)) return true;
-  return false;
+  return nome.includes(q) || posto.includes(q);
 }
 
 export function SalvarArquivoCompletoPreviewModal({
@@ -136,6 +192,8 @@ export function SalvarArquivoCompletoPreviewModal({
     [todasLinhas],
   );
 
+  const buscaPorNip = useMemo(() => isBuscaPorNip(busca), [busca]);
+
   const blocosFiltrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
     const qDigits = nipDigitos(busca);
@@ -143,15 +201,51 @@ export function SalvarArquivoCompletoPreviewModal({
     return blocos
       .map((bloco) => ({
         ...bloco,
-        linhas: bloco.linhas.filter((linha) => linhaCombinaBusca(linha, q, qDigits)),
+        linhas: bloco.linhas.filter((linha) =>
+          linhaCombinaBusca(linha, q, qDigits, buscaPorNip),
+        ),
       }))
       .filter((bloco) => bloco.linhas.length > 0);
-  }, [blocos, busca]);
+  }, [blocos, busca, buscaPorNip]);
 
-  const totalFiltrado = useMemo(
-    () => blocosFiltrados.reduce((acc, b) => acc + b.linhas.length, 0),
-    [blocosFiltrados],
-  );
+  const resumoBusca = useMemo(() => {
+    if (!busca.trim()) return null;
+    const linhas = blocosFiltrados.flatMap((b) => b.linhas);
+    if (linhas.length === 0) {
+      return buscaPorNip
+        ? 'Nenhum resultado encontrado para esse NIP.'
+        : 'Nenhum militar encontrado para essa pesquisa.';
+    }
+
+    const porNip = new Map<string, ResultadoTafLinha[]>();
+    for (const linha of linhas) {
+      const key = nipDigitos(linha.nip) || linha.id;
+      const list = porNip.get(key) ?? [];
+      list.push(linha);
+      porNip.set(key, list);
+    }
+
+    // Um NIP = um militar: conta resultados de prova desse militar.
+    if (porNip.size === 1) {
+      const militarLinhas = Array.from(porNip.values())[0]!;
+      const totalResultados = militarLinhas.reduce(
+        (acc, linha) => acc + contarResultadosNaLinha(linha),
+        0,
+      );
+      const qtd = totalResultados > 0 ? totalResultados : militarLinhas.length;
+      const nome = (militarLinhas[0]?.nome || '').trim();
+      const nipFmt = (militarLinhas[0]?.nip || '').trim();
+      const quem =
+        nome && nome !== '—'
+          ? nome
+          : nipFmt
+            ? `NIP ${nipFmt}`
+            : 'esse militar';
+      return `${qtd} resultado${qtd !== 1 ? 's' : ''} encontrado${qtd !== 1 ? 's' : ''} para ${quem}`;
+    }
+
+    return `${porNip.size} militares encontrados`;
+  }, [blocosFiltrados, busca, buscaPorNip]);
 
   const abrirHistoricoGeral = useCallback(() => {
     setFocoHistorico(null);
@@ -243,10 +337,11 @@ export function SalvarArquivoCompletoPreviewModal({
             <TextInput
               value={busca}
               onChangeText={setBusca}
-              placeholder="Pesquisar por nome ou NIP"
+              placeholder="Pesquisar por NIP ou nome do militar"
               placeholderTextColor={theme.textMuted}
               style={[styles.buscaInput, { color: ui.text }]}
-              accessibilityLabel="Pesquisar militar por nome ou NIP"
+              accessibilityLabel="Pesquisar por NIP ou nome do militar"
+              keyboardType={buscaPorNip || /^\d/.test(busca.trim()) ? 'number-pad' : 'default'}
               autoCorrect={false}
               autoCapitalize="none"
             />
@@ -262,11 +357,9 @@ export function SalvarArquivoCompletoPreviewModal({
           </View>
         ) : null}
 
-        {busca.trim() && blocos.length > 0 ? (
+        {resumoBusca ? (
           <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 10 }]}>
-            {totalFiltrado > 0
-              ? `${totalFiltrado} militar${totalFiltrado !== 1 ? 'es' : ''} encontrado${totalFiltrado !== 1 ? 's' : ''}`
-              : 'Nenhum militar encontrado para essa pesquisa.'}
+            {resumoBusca}
           </Text>
         ) : null}
 

@@ -104,6 +104,14 @@ export type MilitarComHistoricoSubstituido = {
   itens: ResultadoSubstituidoRecord[];
 };
 
+/** Remove o histórico substituído do aparelho — exclusão definitiva. */
+export async function excluirResultadoSubstituido(id: string): Promise<void> {
+  const db = getTafDatabase();
+  const key = (id || '').trim();
+  if (!db || !key) return;
+  await db.resultadosSubstituidos.delete(key);
+}
+
 export async function listarMilitaresComHistoricoSubstituido(): Promise<
   MilitarComHistoricoSubstituido[]
 > {

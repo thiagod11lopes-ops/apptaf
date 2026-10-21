@@ -10,7 +10,7 @@ import {
   TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Download, FileText, History, Search, X } from 'lucide-react-native';
+import { Download, FileText, History, Search, Trash2, X } from 'lucide-react-native';
 import { ModernModal } from '../sismav/ModernModal';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
@@ -22,7 +22,19 @@ import {
   valoresCorridaCaminhadaParaPdf,
 } from '../../utils/corridaCaminhadaExcludente';
 import { HistoricoResultadosSubstituidosModal } from './HistoricoResultadosSubstituidosModal';
+import { HistoricoSubstituidoStripe } from './HistoricoSubstituidoStripe';
+import { ConfirmacaoExcluirHistoricoSubstituidoModal } from './ConfirmacaoExcluirHistoricoSubstituidoModal';
+import {
+  excluirResultadoSubstituido,
+  listarResultadosSubstituidos,
+  type ResultadoSubstituidoRecord,
+} from '../../services/resultadosSubstituidosStorage';
 import { nipDigitos } from '../../utils/nipFormat';
+
+const ORANGE_BG = '#fff7ed';
+const ORANGE_BORDER = '#f97316';
+const ORANGE_TEXT = '#9a3412';
+const ORANGE_MUTED = '#c2410c';
 
 type Props = {
   visible: boolean;
@@ -232,15 +244,33 @@ export function SalvarArquivoCompletoPreviewModal({
   const ts = theme.textStyles;
   const [busca, setBusca] = useState('');
   const [historicoAberto, setHistoricoAberto] = useState(false);
+  const [historicos, setHistoricos] = useState<ResultadoSubstituidoRecord[]>([]);
+  const [excluindoHistorico, setExcluindoHistorico] = useState(false);
+  const [historicoParaExcluir, setHistoricoParaExcluir] =
+    useState<ResultadoSubstituidoRecord | null>(null);
   const [focoHistorico, setFocoHistorico] = useState<{
     nip?: string;
     cadastroId?: string;
     nome?: string;
   } | null>(null);
 
+  const carregarHistoricos = useCallback(async () => {
+    try {
+      const rows = await listarResultadosSubstituidos();
+      setHistoricos(rows);
+    } catch {
+      setHistoricos([]);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!visible) setBusca('');
-  }, [visible]);
+    if (!visible) {
+      setBusca('');
+      setHistoricoParaExcluir(null);
+      return;
+    }
+    void carregarHistoricos();
+  }, [visible, carregarHistoricos]);
 
   const buscaRef = useRef(busca);
   const blocosRef = useRef(blocos);
@@ -262,6 +292,27 @@ export function SalvarArquivoCompletoPreviewModal({
     () => filtrarBlocosPorBusca(blocos, busca),
     [blocos, busca],
   );
+
+  const historicosFiltrados = useMemo(() => {
+    const raw = busca.trim();
+    if (!raw) return historicos;
+    const q = raw.toLowerCase();
+    const qDigits = nipDigitos(raw);
+    const porNip = isBuscaPorNip(raw);
+    return historicos.filter((item) => {
+      const nip = nipDigitos(item.nip);
+      if (porNip) {
+        if (!qDigits || !nip) return false;
+        if (qDigits.length >= 8) return nip === qDigits.slice(0, 8) || nip === qDigits;
+        return nip.includes(qDigits);
+      }
+      const nome = (item.nome || '').toLowerCase();
+      const posto = (item.postoGrad || '').toLowerCase();
+      if (nome.includes(q) || posto.includes(q)) return true;
+      if (qDigits.length >= 2 && nip.includes(qDigits)) return true;
+      return false;
+    });
+  }, [historicos, busca]);
 
   const resumoBusca = useMemo(() => {
     if (!busca.trim()) return null;
@@ -311,6 +362,19 @@ export function SalvarArquivoCompletoPreviewModal({
     setFocoHistorico({ nip: linha.nip, cadastroId: linha.id, nome: linha.nome });
     setHistoricoAberto(true);
   }, []);
+
+  const executarExclusaoHistorico = useCallback(async () => {
+    if (!historicoParaExcluir || excluindoHistorico) return;
+    const id = historicoParaExcluir.id;
+    setExcluindoHistorico(true);
+    try {
+      await excluirResultadoSubstituido(id);
+      setHistoricoParaExcluir(null);
+      setHistoricos((prev) => prev.filter((h) => h.id !== id));
+    } finally {
+      setExcluindoHistorico(false);
+    }
+  }, [historicoParaExcluir, excluindoHistorico]);
 
   const subtituloPdf = useMemo(
     () => montarSubtituloPdfFiltrado(subtitulo, busca, blocosFiltrados),
@@ -412,7 +476,7 @@ export function SalvarArquivoCompletoPreviewModal({
           que foram substituídos.
         </Text>
 
-        {blocos.length > 0 ? (
+        {blocos.length > 0 || historicos.length > 0 ? (
           <View
             style={[
               styles.buscaWrap,
@@ -454,43 +518,94 @@ export function SalvarArquivoCompletoPreviewModal({
           showsVerticalScrollIndicator
           keyboardShouldPersistTaps="handled"
         >
-          {blocos.length === 0 ? (
+          {blocos.length === 0 && historicos.length === 0 ? (
             <Text style={[ts.body, { color: theme.textSecondary, textAlign: 'center' }]}>
               Não há resultados para exportar.
             </Text>
-          ) : blocosFiltrados.length === 0 ? (
+          ) : null}
+
+          {blocos.length > 0 && blocosFiltrados.length === 0 ? (
             <Text style={[ts.body, { color: theme.textSecondary, textAlign: 'center' }]}>
               Nenhum militar encontrado para essa pesquisa.
             </Text>
-          ) : (
-            blocosFiltrados.map((bloco, bi) => (
-              <View key={`${bloco.rotuloAplicador}-${bi}`} style={styles.bloco}>
-                <View
-                  style={[
-                    styles.blocoHeader,
-                    { backgroundColor: theme.primary + '18', borderColor: theme.primary + '44' },
-                  ]}
-                >
-                  <Text style={[styles.blocoTitle, { color: theme.primary }]}>
-                    {bloco.rotuloAplicador}
-                  </Text>
-                  <Text style={[ts.caption, { color: theme.textMuted }]}>
-                    {bloco.linhas.length} militar{bloco.linhas.length !== 1 ? 'es' : ''}
-                  </Text>
-                </View>
-                {bloco.linhas.map((linha) => (
-                  <PreviewRow
-                    key={`${bloco.rotuloAplicador}-${linha.id}-${linha.nip}`}
-                    linha={linha}
-                    mostrarCorrida={mostrarCorrida}
-                    mostrarCaminhada={mostrarCaminhada}
-                    theme={theme}
-                    onHistorico={abrirHistoricoMilitar}
-                  />
-                ))}
+          ) : null}
+
+          {blocosFiltrados.map((bloco, bi) => (
+            <View key={`${bloco.rotuloAplicador}-${bi}`} style={styles.bloco}>
+              <View
+                style={[
+                  styles.blocoHeader,
+                  { backgroundColor: theme.primary + '18', borderColor: theme.primary + '44' },
+                ]}
+              >
+                <Text style={[styles.blocoTitle, { color: theme.primary }]}>
+                  {bloco.rotuloAplicador}
+                </Text>
+                <Text style={[ts.caption, { color: theme.textMuted }]}>
+                  {bloco.linhas.length} militar{bloco.linhas.length !== 1 ? 'es' : ''}
+                </Text>
               </View>
-            ))
-          )}
+              {bloco.linhas.map((linha) => (
+                <PreviewRow
+                  key={`${bloco.rotuloAplicador}-${linha.id}-${linha.nip}`}
+                  linha={linha}
+                  mostrarCorrida={mostrarCorrida}
+                  mostrarCaminhada={mostrarCaminhada}
+                  theme={theme}
+                  onHistorico={abrirHistoricoMilitar}
+                />
+              ))}
+            </View>
+          ))}
+
+          {historicosFiltrados.length > 0 ? (
+            <View style={styles.bloco}>
+              <View style={[styles.blocoHeader, styles.historicoHeader]}>
+                <Text style={[styles.blocoTitle, { color: ORANGE_TEXT }]}>
+                  Resultados de histórico
+                </Text>
+                <Text style={[ts.caption, { color: ORANGE_MUTED }]}>
+                  {historicosFiltrados.length} registro
+                  {historicosFiltrados.length !== 1 ? 's' : ''} substituído
+                  {historicosFiltrados.length !== 1 ? 's' : ''} · não entram no PDF
+                </Text>
+              </View>
+              {historicosFiltrados.map((item) => (
+                <View key={item.id} style={styles.historicoCard}>
+                  <HistoricoSubstituidoStripe />
+                  <View style={styles.historicoCardBody}>
+                    <View style={styles.rowTop}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.nome, { color: ORANGE_TEXT }]} numberOfLines={2}>
+                          {item.nome}
+                        </Text>
+                        <Text style={[styles.meta, { color: ORANGE_MUTED }]}>
+                          {item.postoGrad ? `${item.postoGrad} · ` : ''}
+                          NIP {item.nip} · {item.modalidadeLabel}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => setHistoricoParaExcluir(item)}
+                        disabled={excluindoHistorico}
+                        accessibilityLabel={`Excluir histórico de ${item.modalidadeLabel}`}
+                        style={styles.historicoDeleteBtn}
+                        hitSlop={8}
+                      >
+                        <Trash2 size={16} color="#c2410c" strokeWidth={2.3} />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={[styles.cell, { color: ORANGE_TEXT }]}>
+                      Nota: {item.nota} · Situação: {item.situacao}
+                      {item.tempo && item.tempo !== '—' ? ` · Tempo: ${item.tempo}` : ''}
+                    </Text>
+                    <Text style={[styles.cell, { color: ORANGE_MUTED }]}>
+                      Aplicado em {item.dataAplicacao}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </ScrollView>
       </ModernModal>
 
@@ -499,8 +614,21 @@ export function SalvarArquivoCompletoPreviewModal({
         onClose={() => {
           setHistoricoAberto(false);
           setFocoHistorico(null);
+          void carregarHistoricos();
         }}
         foco={focoHistorico}
+      />
+
+      <ConfirmacaoExcluirHistoricoSubstituidoModal
+        visible={historicoParaExcluir != null}
+        nome={historicoParaExcluir?.nome ?? ''}
+        nip={historicoParaExcluir?.nip ?? ''}
+        modalidadeLabel={historicoParaExcluir?.modalidadeLabel ?? ''}
+        loading={excluindoHistorico}
+        onClose={() => {
+          if (!excluindoHistorico) setHistoricoParaExcluir(null);
+        }}
+        onConfirm={() => void executarExclusaoHistorico()}
       />
     </>
   );
@@ -533,6 +661,35 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   blocoTitle: { fontSize: 14, fontWeight: '800' },
+  historicoHeader: {
+    backgroundColor: '#ffedd5',
+    borderColor: ORANGE_BORDER,
+  },
+  historicoCard: {
+    borderWidth: 2,
+    borderColor: ORANGE_BORDER,
+    backgroundColor: ORANGE_BG,
+    borderRadius: PREMIUM.radiusMd,
+    overflow: 'hidden',
+    position: 'relative',
+    minHeight: 96,
+  },
+  historicoCardBody: {
+    padding: 12,
+    gap: 6,
+    zIndex: 1,
+  },
+  historicoDeleteBtn: {
+    width: 36,
+    height: 36,
+    borderWidth: 1,
+    borderRadius: 10,
+    borderColor: ORANGE_BORDER,
+    backgroundColor: '#ffedd5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 8,
+  },
   row: {
     borderWidth: 1,
     borderRadius: PREMIUM.radiusMd,

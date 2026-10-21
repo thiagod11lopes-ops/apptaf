@@ -29,7 +29,7 @@ type Props = {
 };
 
 const ORANGE_BG = '#fff7ed';
-const ORANGE_BORDER = '#fb923c';
+const ORANGE_BORDER = '#f97316';
 const ORANGE_TEXT = '#9a3412';
 const ORANGE_MUTED = '#c2410c';
 
@@ -284,10 +284,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   card: {
-    borderWidth: 1,
+    borderWidth: 2,
     borderRadius: PREMIUM.radiusMd,
     overflow: 'hidden',
     position: 'relative',
+    minHeight: 88,
   },
   cardHistorico: {
     backgroundColor: ORANGE_BG,

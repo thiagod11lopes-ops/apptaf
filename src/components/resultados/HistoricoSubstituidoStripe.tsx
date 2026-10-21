@@ -10,11 +10,7 @@ export function HistoricoSubstituidoStripe() {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <View
-        accessibilityLabel="Histórico"
-        accessibilityRole="text"
-        style={styles.stripe}
-      >
+      <View accessibilityLabel="Histórico" accessibilityRole="text" style={styles.stripe}>
         <Text style={styles.label} numberOfLines={1}>
           Histórico
         </Text>
@@ -28,37 +24,38 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 4,
+    zIndex: 6,
     overflow: 'hidden',
     borderRadius: 12,
   },
   stripe: {
-    width: '140%',
-    paddingVertical: 6,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
+    width: '145%',
+    paddingVertical: 8,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(234, 88, 12, 0.55)',
-    borderColor: 'rgba(154, 52, 18, 0.75)',
+    // Opaco o suficiente para ler "Histórico", sem esconder o conteúdo por baixo.
+    backgroundColor: 'rgba(249, 115, 22, 0.72)',
+    borderColor: '#c2410c',
     transform: [{ rotate: '-28deg' }],
     ...Platform.select({
       web: {
-        boxShadow: '0 2px 8px rgba(154, 52, 18, 0.28)',
+        boxShadow: '0 2px 10px rgba(154, 52, 18, 0.35)',
       } as object,
       default: {
-        elevation: 2,
+        elevation: 4,
       },
     }),
   },
   label: {
     color: '#fff7ed',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
     textAlign: 'center',
-    textShadowColor: 'rgba(67, 20, 7, 0.45)',
+    textShadowColor: 'rgba(67, 20, 7, 0.55)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },

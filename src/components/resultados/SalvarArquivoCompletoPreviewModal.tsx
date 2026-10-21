@@ -25,10 +25,9 @@ import { HistoricoResultadosSubstituidosModal } from './HistoricoResultadosSubst
 import { HistoricoSubstituidoStripe } from './HistoricoSubstituidoStripe';
 import { ConfirmacaoExcluirHistoricoSubstituidoModal } from './ConfirmacaoExcluirHistoricoSubstituidoModal';
 import {
-  excluirResultadoSubstituido,
-  listarResultadosSubstituidos,
-  type ResultadoSubstituidoRecord,
-} from '../../services/resultadosSubstituidosStorage';
+  excluirHistoricoProvaPreview,
+  type HistoricoProvaPreviewItem,
+} from '../../utils/resultadosAtuaisEHistoricosPreview';
 import { nipDigitos } from '../../utils/nipFormat';
 
 const ORANGE_BG = '#fff7ed';
@@ -40,8 +39,11 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   blocos: ResultadosTafPdfBloco[];
+  /** Resultados anteriores (mesma prova, não são o último) — tarja + exclusão. */
+  historicos?: HistoricoProvaPreviewItem[];
   subtitulo: string;
   salvando?: boolean;
+  onHistoricoExcluido?: () => void | Promise<void>;
   /** Gera o PDF só com os blocos informados (já filtrados pela pesquisa, se houver). */
   onConfirmarSalvar: (blocosParaSalvar: ResultadosTafPdfBloco[], subtituloPdf: string) => void;
 };
@@ -235,8 +237,10 @@ export function SalvarArquivoCompletoPreviewModal({
   visible,
   onClose,
   blocos,
+  historicos = [],
   subtitulo,
   salvando = false,
+  onHistoricoExcluido,
   onConfirmarSalvar,
 }: Props) {
   const { theme } = useTheme();
@@ -244,33 +248,21 @@ export function SalvarArquivoCompletoPreviewModal({
   const ts = theme.textStyles;
   const [busca, setBusca] = useState('');
   const [historicoAberto, setHistoricoAberto] = useState(false);
-  const [historicos, setHistoricos] = useState<ResultadoSubstituidoRecord[]>([]);
   const [excluindoHistorico, setExcluindoHistorico] = useState(false);
   const [historicoParaExcluir, setHistoricoParaExcluir] =
-    useState<ResultadoSubstituidoRecord | null>(null);
+    useState<HistoricoProvaPreviewItem | null>(null);
   const [focoHistorico, setFocoHistorico] = useState<{
     nip?: string;
     cadastroId?: string;
     nome?: string;
   } | null>(null);
 
-  const carregarHistoricos = useCallback(async () => {
-    try {
-      const rows = await listarResultadosSubstituidos();
-      setHistoricos(rows);
-    } catch {
-      setHistoricos([]);
-    }
-  }, []);
-
   useEffect(() => {
     if (!visible) {
       setBusca('');
       setHistoricoParaExcluir(null);
-      return;
     }
-    void carregarHistoricos();
-  }, [visible, carregarHistoricos]);
+  }, [visible]);
 
   const buscaRef = useRef(busca);
   const blocosRef = useRef(blocos);
@@ -317,7 +309,8 @@ export function SalvarArquivoCompletoPreviewModal({
   const resumoBusca = useMemo(() => {
     if (!busca.trim()) return null;
     const linhas = blocosFiltrados.flatMap((b) => b.linhas);
-    if (linhas.length === 0) {
+    const histQtd = historicosFiltrados.length;
+    if (linhas.length === 0 && histQtd === 0) {
       return buscaPorNip
         ? 'Nenhum resultado encontrado para esse NIP.'
         : 'Nenhum militar encontrado para essa pesquisa.';
@@ -330,28 +323,44 @@ export function SalvarArquivoCompletoPreviewModal({
       list.push(linha);
       porNip.set(key, list);
     }
+    for (const h of historicosFiltrados) {
+      const key = nipDigitos(h.nip) || h.id;
+      if (!porNip.has(key)) porNip.set(key, []);
+    }
 
-    // Um NIP = um militar: conta resultados de prova desse militar.
     if (porNip.size === 1) {
-      const militarLinhas = Array.from(porNip.values())[0]!;
-      const totalResultados = militarLinhas.reduce(
+      const militarLinhas = Array.from(porNip.values())[0] ?? [];
+      const totalAtuais = militarLinhas.reduce(
         (acc, linha) => acc + contarResultadosNaLinha(linha),
         0,
       );
-      const qtd = totalResultados > 0 ? totalResultados : militarLinhas.length;
-      const nome = (militarLinhas[0]?.nome || '').trim();
-      const nipFmt = (militarLinhas[0]?.nip || '').trim();
+      const qtdAtuais = totalAtuais > 0 ? totalAtuais : militarLinhas.length;
+      const nome =
+        (militarLinhas[0]?.nome || historicosFiltrados[0]?.nome || '').trim();
+      const nipFmt =
+        (militarLinhas[0]?.nip || historicosFiltrados[0]?.nip || '').trim();
       const quem =
         nome && nome !== '—'
           ? nome
           : nipFmt
             ? `NIP ${nipFmt}`
             : 'esse militar';
-      return `${qtd} resultado${qtd !== 1 ? 's' : ''} encontrado${qtd !== 1 ? 's' : ''} para ${quem}`;
+      const partes: string[] = [];
+      if (qtdAtuais > 0) {
+        partes.push(
+          `${qtdAtuais} resultado${qtdAtuais !== 1 ? 's' : ''} ${qtdAtuais !== 1 ? 'atuais' : 'atual'}`,
+        );
+      }
+      if (histQtd > 0) {
+        partes.push(
+          `${histQtd} histórico${histQtd !== 1 ? 's' : ''}`,
+        );
+      }
+      return `${partes.join(' · ')} para ${quem}`;
     }
 
     return `${porNip.size} militares encontrados`;
-  }, [blocosFiltrados, busca, buscaPorNip]);
+  }, [blocosFiltrados, historicosFiltrados, busca, buscaPorNip]);
 
   const abrirHistoricoGeral = useCallback(() => {
     setFocoHistorico(null);
@@ -365,16 +374,15 @@ export function SalvarArquivoCompletoPreviewModal({
 
   const executarExclusaoHistorico = useCallback(async () => {
     if (!historicoParaExcluir || excluindoHistorico) return;
-    const id = historicoParaExcluir.id;
     setExcluindoHistorico(true);
     try {
-      await excluirResultadoSubstituido(id);
+      await excluirHistoricoProvaPreview(historicoParaExcluir);
       setHistoricoParaExcluir(null);
-      setHistoricos((prev) => prev.filter((h) => h.id !== id));
+      await onHistoricoExcluido?.();
     } finally {
       setExcluindoHistorico(false);
     }
-  }, [historicoParaExcluir, excluindoHistorico]);
+  }, [historicoParaExcluir, excluindoHistorico, onHistoricoExcluido]);
 
   const subtituloPdf = useMemo(
     () => montarSubtituloPdfFiltrado(subtitulo, busca, blocosFiltrados),
@@ -614,9 +622,11 @@ export function SalvarArquivoCompletoPreviewModal({
         onClose={() => {
           setHistoricoAberto(false);
           setFocoHistorico(null);
-          void carregarHistoricos();
+          void onHistoricoExcluido?.();
         }}
         foco={focoHistorico}
+        itensSessao={historicos}
+        onItemExcluido={() => void onHistoricoExcluido?.()}
       />
 
       <ConfirmacaoExcluirHistoricoSubstituidoModal

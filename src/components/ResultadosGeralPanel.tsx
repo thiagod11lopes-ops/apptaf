@@ -37,6 +37,7 @@ import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from './mobile/TafTabChrome';
 import { SalvarArquivoCompletoPreviewModal } from './resultados/SalvarArquivoCompletoPreviewModal';
 import type { ResultadosTafPdfBloco } from '../utils/resultadosTafPdfPorAplicador';
+import type { HistoricoProvaPreviewItem } from '../utils/resultadosAtuaisEHistoricosPreview';
 
 const MIN_BUSCA = 3;
 
@@ -160,6 +161,7 @@ export function ResultadosGeralPanel({
   const [avisoPdf, setAvisoPdf] = useState<string | null>(null);
   const [previewCompleto, setPreviewCompleto] = useState<{
     blocos: ResultadosTafPdfBloco[];
+    historicos: HistoricoProvaPreviewItem[];
     subtitulo: string;
   } | null>(null);
 
@@ -183,6 +185,43 @@ export function ResultadosGeralPanel({
     await onDatasetRefresh?.();
   }, [onDatasetRefresh]);
 
+  const montarPreviewArquivoCompleto = useCallback(
+    async (opts?: {
+      sessoesFonte?: SessaoAplicacaoTaf[];
+      cadastrosFonte?: CadastroItemPersist[];
+    }) => {
+      const sessoesFonte = opts?.sessoesFonte ?? sessoes;
+      const cadastrosFonte = opts?.cadastrosFonte ?? cadastros;
+      const nipsLista = cadastrosFonte.map((c) => c.nip);
+      const idsLista = cadastrosFonte.map((c) => c.id);
+      const { carregarRubricasCadastrosPorIds } = await import('../utils/carregarRubricasCadastro');
+      const [rubSessoes, rubCadastros] = await Promise.all([
+        carregarRubricasDasSessoesPorNip(nipsLista),
+        carregarRubricasCadastrosPorIds(idsLista),
+      ]);
+      const { hydrateSessoesComRubricas } = await import('../utils/hydrateRubricas');
+      const {
+        montarBlocosPreviewSomenteAtuais,
+        mesclarHistoricosArquivo,
+      } = await import('../utils/resultadosAtuaisEHistoricosPreview');
+      const sessoesHydrated = await hydrateSessoesComRubricas(sessoesFonte);
+      const { blocos, historicosSessao } = montarBlocosPreviewSomenteAtuais({
+        sessoes: sessoesHydrated,
+        cadastros: cadastrosFonte,
+        rubricasSessoes: rubSessoes,
+        rubricasCadastros: rubCadastros,
+      });
+      const historicos = await mesclarHistoricosArquivo(historicosSessao);
+      if (blocos.length === 0 && historicos.length === 0) {
+        return null;
+      }
+      const normaLabel = normaTaf === 'cfn' ? 'CFN' : 'Armada';
+      const subtitulo = `Resultado Geral completo — ${normaLabel} — ${formatBrDateKey(new Date())}`;
+      return { blocos, historicos, subtitulo };
+    },
+    [cadastros, sessoes, normaTaf],
+  );
+
   const abrirPreviewArquivoCompleto = useCallback(async () => {
     if (preparandoPreview || salvandoCompleto || lista.length === 0) return;
     setPreparandoPreview(true);
@@ -190,39 +229,47 @@ export function ResultadosGeralPanel({
     try {
       const { yieldToUi } = await import('../utils/yieldToUi');
       await yieldToUi();
-      const nipsLista = lista.map((l) => l.nip);
-      const idsLista = lista.map((l) => l.id);
-      const { carregarRubricasCadastrosPorIds } = await import('../utils/carregarRubricasCadastro');
-      const [rubSessoes, rubCadastros] = await Promise.all([
-        carregarRubricasDasSessoesPorNip(nipsLista),
-        carregarRubricasCadastrosPorIds(idsLista),
-      ]);
-      const { montarBlocosResultadosTafPorAplicador } = await import(
-        '../utils/resultadosTafPdfPorAplicador'
-      );
-      const { hydrateSessoesComRubricas } = await import('../utils/hydrateRubricas');
-      const sessoesHydrated = await hydrateSessoesComRubricas(sessoes);
-      const blocos = montarBlocosResultadosTafPorAplicador({
-        sessoes: sessoesHydrated,
-        cadastros,
-        rubricasSessoes: rubSessoes,
-        rubricasCadastros: rubCadastros,
-        somenteSessoesInformadas: false,
-      });
-      if (blocos.length === 0) {
+      const preview = await montarPreviewArquivoCompleto();
+      if (!preview) {
         setAvisoPdf('Não há resultados para exportar.');
         return;
       }
-      const normaLabel = normaTaf === 'cfn' ? 'CFN' : 'Armada';
-      const subtitulo = `Resultado Geral completo — ${normaLabel} — ${formatBrDateKey(new Date())}`;
-      setPreviewCompleto({ blocos, subtitulo });
+      setPreviewCompleto(preview);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao preparar o arquivo completo.';
       setAvisoPdf(msg);
     } finally {
       setPreparandoPreview(false);
     }
-  }, [preparandoPreview, salvandoCompleto, lista, cadastros, sessoes, normaTaf]);
+  }, [preparandoPreview, salvandoCompleto, lista.length, montarPreviewArquivoCompleto]);
+
+  const atualizarPreviewAposExclusaoHistorico = useCallback(async () => {
+    await onDatasetRefresh?.();
+    try {
+      const { getAllSessoesAplicacao } = await import('../services/resultadosAplicadosIndexedDb');
+      const { getAllCadastros } = await import('../services/cadastrosIndexedDb');
+      const [sessoesAll, cadastrosAll] = await Promise.all([
+        getAllSessoesAplicacao({ includeDemo: false }),
+        getAllCadastros({ includeDemo: false }),
+      ]);
+      const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
+        sessoesAll,
+        cadastrosAll,
+        normaTaf,
+      );
+      const preview = await montarPreviewArquivoCompleto({
+        sessoesFonte: sessoesNorma,
+        cadastrosFonte: cadastrosNorma,
+      });
+      if (!preview) {
+        setPreviewCompleto(null);
+        return;
+      }
+      setPreviewCompleto(preview);
+    } catch {
+      // Mantém prévia aberta; o card excluído já some no modal.
+    }
+  }, [onDatasetRefresh, montarPreviewArquivoCompleto, normaTaf]);
 
   const confirmarSalvarArquivoCompleto = useCallback(
     async (blocosParaSalvar: ResultadosTafPdfBloco[], subtituloPdf: string) => {
@@ -600,8 +647,10 @@ export function ResultadosGeralPanel({
           if (!salvandoCompleto) setPreviewCompleto(null);
         }}
         blocos={previewCompleto?.blocos ?? []}
+        historicos={previewCompleto?.historicos ?? []}
         subtitulo={previewCompleto?.subtitulo ?? ''}
         salvando={salvandoCompleto}
+        onHistoricoExcluido={() => void atualizarPreviewAposExclusaoHistorico()}
         onConfirmarSalvar={(blocosParaSalvar, subtituloPdf) =>
           void confirmarSalvarArquivoCompleto(blocosParaSalvar, subtituloPdf)
         }

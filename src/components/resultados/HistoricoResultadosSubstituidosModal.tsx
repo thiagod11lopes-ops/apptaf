@@ -1,9 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
@@ -12,12 +11,10 @@ import { ModernModal } from '../sismav/ModernModal';
 import { useTheme } from '../../contexts/ThemeContext';
 import { PREMIUM } from '../../theme/premium';
 import {
-  excluirResultadoSubstituido,
-  listarMilitaresComHistoricoSubstituido,
-  listarResultadosSubstituidos,
-  type MilitarComHistoricoSubstituido,
-  type ResultadoSubstituidoRecord,
-} from '../../services/resultadosSubstituidosStorage';
+  excluirHistoricoProvaPreview,
+  type HistoricoProvaPreviewItem,
+} from '../../utils/resultadosAtuaisEHistoricosPreview';
+import { nipDigitos } from '../../utils/nipFormat';
 import { HistoricoSubstituidoStripe } from './HistoricoSubstituidoStripe';
 import { ConfirmacaoExcluirHistoricoSubstituidoModal } from './ConfirmacaoExcluirHistoricoSubstituidoModal';
 
@@ -26,6 +23,9 @@ type Props = {
   onClose: () => void;
   /** Se informado, abre direto no histórico desse militar. */
   foco?: { nip?: string; cadastroId?: string; nome?: string } | null;
+  /** Históricos derivados das sessões (anteriores ao último por prova). */
+  itensSessao?: HistoricoProvaPreviewItem[];
+  onItemExcluido?: () => void | Promise<void>;
 };
 
 const ORANGE_BG = '#fff7ed';
@@ -41,58 +41,85 @@ function formatQuando(ts: number): string {
   }
 }
 
-export function HistoricoResultadosSubstituidosModal({ visible, onClose, foco = null }: Props) {
+type MilitarGrupo = {
+  key: string;
+  nip: string;
+  nome: string;
+  postoGrad?: string;
+  cadastroId?: string;
+  total: number;
+  itens: HistoricoProvaPreviewItem[];
+};
+
+function agruparPorMilitar(itens: HistoricoProvaPreviewItem[]): MilitarGrupo[] {
+  const byKey = new Map<string, MilitarGrupo>();
+  for (const row of itens) {
+    const key = row.cadastroId || nipDigitos(row.nip) || row.id;
+    const atual = byKey.get(key);
+    if (!atual) {
+      byKey.set(key, {
+        key,
+        nip: row.nip,
+        nome: row.nome,
+        postoGrad: row.postoGrad,
+        cadastroId: row.cadastroId,
+        total: 1,
+        itens: [row],
+      });
+      continue;
+    }
+    atual.total += 1;
+    atual.itens.push(row);
+    if (!atual.postoGrad && row.postoGrad) atual.postoGrad = row.postoGrad;
+    if ((!atual.nome || atual.nome === '—') && row.nome && row.nome !== '—') {
+      atual.nome = row.nome;
+    }
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+export function HistoricoResultadosSubstituidosModal({
+  visible,
+  onClose,
+  foco = null,
+  itensSessao = [],
+  onItemExcluido,
+}: Props) {
   const { theme } = useTheme();
   const ts = theme.textStyles;
-  const [carregando, setCarregando] = useState(false);
-  const [militares, setMilitares] = useState<MilitarComHistoricoSubstituido[]>([]);
-  const [detalhe, setDetalhe] = useState<MilitarComHistoricoSubstituido | null>(null);
-  const [itensDetalhe, setItensDetalhe] = useState<ResultadoSubstituidoRecord[]>([]);
   const [excluindo, setExcluindo] = useState(false);
-  const [itemParaExcluir, setItemParaExcluir] = useState<ResultadoSubstituidoRecord | null>(null);
+  const [itemParaExcluir, setItemParaExcluir] = useState<HistoricoProvaPreviewItem | null>(null);
+  const [detalhe, setDetalhe] = useState<MilitarGrupo | null>(null);
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      if (foco?.nip || foco?.cadastroId) {
-        const itens = await listarResultadosSubstituidos({
-          nip: foco.nip,
-          cadastroId: foco.cadastroId,
-        });
-        const militar: MilitarComHistoricoSubstituido = {
-          key: foco.cadastroId || foco.nip || 'foco',
-          nip: foco.nip || itens[0]?.nip || '—',
-          nome: foco.nome || itens[0]?.nome || '—',
-          postoGrad: itens[0]?.postoGrad,
-          cadastroId: foco.cadastroId,
-          total: itens.length,
-          itens,
-        };
-        setMilitares(itens.length > 0 ? [militar] : []);
-        setDetalhe(itens.length > 0 ? militar : null);
-        setItensDetalhe(itens);
-      } else {
-        const lista = await listarMilitaresComHistoricoSubstituido();
-        setMilitares(lista);
-        setDetalhe(null);
-        setItensDetalhe([]);
-      }
-    } finally {
-      setCarregando(false);
-    }
-  }, [foco?.nip, foco?.cadastroId, foco?.nome]);
+  const militares = useMemo(() => agruparPorMilitar(itensSessao), [itensSessao]);
 
   useEffect(() => {
     if (!visible) {
       setItemParaExcluir(null);
+      setDetalhe(null);
       return;
     }
-    void carregar();
-  }, [visible, carregar]);
+    if (foco?.nip || foco?.cadastroId) {
+      const nipKey = nipDigitos(foco.nip ?? '');
+      const grupo =
+        militares.find(
+          (m) =>
+            (foco.cadastroId && m.cadastroId === foco.cadastroId) ||
+            (nipKey && nipDigitos(m.nip) === nipKey),
+        ) ?? null;
+      setDetalhe(grupo);
+      return;
+    }
+    setDetalhe((prev) => {
+      if (!prev) return null;
+      return militares.find((m) => m.key === prev.key) ?? null;
+    });
+  }, [visible, foco?.nip, foco?.cadastroId, militares]);
 
-  const abrirMilitar = useCallback((m: MilitarComHistoricoSubstituido) => {
+  const itensDetalhe = detalhe?.itens ?? [];
+
+  const abrirMilitar = useCallback((m: MilitarGrupo) => {
     setDetalhe(m);
-    setItensDetalhe(m.itens);
   }, []);
 
   const voltarLista = useCallback(() => {
@@ -101,52 +128,30 @@ export function HistoricoResultadosSubstituidosModal({ visible, onClose, foco = 
       return;
     }
     setDetalhe(null);
-    setItensDetalhe([]);
   }, [foco?.nip, foco?.cadastroId, onClose]);
 
   const executarExclusao = useCallback(async () => {
     if (!itemParaExcluir || excluindo) return;
-    const removidoId = itemParaExcluir.id;
     setExcluindo(true);
     try {
-      await excluirResultadoSubstituido(removidoId);
+      await excluirHistoricoProvaPreview(itemParaExcluir);
       setItemParaExcluir(null);
-      const restantes = itensDetalhe.filter((i) => i.id !== removidoId);
-      setItensDetalhe(restantes);
-      if (detalhe) {
-        setDetalhe({ ...detalhe, total: restantes.length, itens: restantes });
-      }
-      if (restantes.length === 0) {
-        if (foco?.nip || foco?.cadastroId) {
-          await carregar();
-        } else {
-          setDetalhe(null);
-          const lista = await listarMilitaresComHistoricoSubstituido();
-          setMilitares(lista);
-        }
-      } else if (!(foco?.nip || foco?.cadastroId)) {
-        const lista = await listarMilitaresComHistoricoSubstituido();
-        setMilitares(lista);
-      }
+      await onItemExcluido?.();
     } finally {
       setExcluindo(false);
     }
-  }, [itemParaExcluir, excluindo, itensDetalhe, detalhe, foco?.nip, foco?.cadastroId, carregar]);
+  }, [itemParaExcluir, excluindo, onItemExcluido]);
 
   return (
     <>
       <ModernModal
         visible={visible}
         onClose={onClose}
-        title={detalhe ? `Histórico · ${detalhe.nome}` : 'Histórico de resultados substituídos'}
+        title={detalhe ? `Histórico · ${detalhe.nome}` : 'Histórico de resultados anteriores'}
         icon={<History size={20} color="#FFFFFF" strokeWidth={2.2} />}
         fullScreen
       >
-        {carregando ? (
-          <View style={styles.center}>
-            <ActivityIndicator color="#ea580c" size="large" />
-          </View>
-        ) : detalhe ? (
+        {detalhe ? (
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator>
             {!(foco?.nip || foco?.cadastroId) ? (
               <TouchableOpacity
@@ -162,19 +167,17 @@ export function HistoricoResultadosSubstituidosModal({ visible, onClose, foco = 
             ) : null}
             <Text style={[ts.caption, { color: ORANGE_MUTED, marginBottom: 12 }]}>
               NIP {detalhe.nip}
-              {detalhe.postoGrad ? ` · ${detalhe.postoGrad}` : ''} · {detalhe.total} resultado
-              {detalhe.total !== 1 ? 's' : ''} substituído{detalhe.total !== 1 ? 's' : ''}
+              {detalhe.postoGrad ? ` · ${detalhe.postoGrad}` : ''} · {itensDetalhe.length} resultado
+              {itensDetalhe.length !== 1 ? 's' : ''} anterior
+              {itensDetalhe.length !== 1 ? 'es' : ''}
             </Text>
             {itensDetalhe.length === 0 ? (
               <Text style={[ts.body, { color: theme.textSecondary, textAlign: 'center' }]}>
-                Nenhum resultado substituído guardado para este militar.
+                Nenhum resultado histórico para este militar.
               </Text>
             ) : (
               itensDetalhe.map((item) => (
-                <View
-                  key={item.id}
-                  style={[styles.card, styles.cardHistorico]}
-                >
+                <View key={item.id} style={[styles.card, styles.cardHistorico]}>
                   <HistoricoSubstituidoStripe />
                   <View style={styles.cardBody}>
                     <View style={styles.cardTop}>
@@ -183,8 +186,10 @@ export function HistoricoResultadosSubstituidosModal({ visible, onClose, foco = 
                           {item.modalidadeLabel}
                         </Text>
                         <Text style={[ts.caption, { color: ORANGE_MUTED }]}>
-                          Aplicado em {item.dataAplicacao} · Substituído em{' '}
-                          {formatQuando(item.replacedAt)}
+                          Aplicado em {item.dataAplicacao}
+                          {item.origem === 'arquivo'
+                            ? ` · Arquivado em ${formatQuando(item.sortTime)}`
+                            : ''}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -212,19 +217,19 @@ export function HistoricoResultadosSubstituidosModal({ visible, onClose, foco = 
         ) : militares.length === 0 ? (
           <View style={styles.center}>
             <Text style={[ts.body, { color: theme.textSecondary, textAlign: 'center' }]}>
-              Ainda não há resultados substituídos guardados.
+              Nenhum resultado histórico encontrado.
             </Text>
             <Text
               style={[ts.caption, { color: theme.textMuted, textAlign: 'center', marginTop: 8 }]}
             >
-              Quando um teste for repetido ou um resultado for editado e substituir o anterior, ele
-              aparece aqui.
+              Quando o militar tiver mais de um resultado na mesma prova, os anteriores aparecem
+              aqui.
             </Text>
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator>
             <Text style={[ts.caption, { color: ORANGE_MUTED, marginBottom: 12 }]}>
-              Toque no militar para ver os resultados anteriores que foram substituídos.
+              Toque no militar para ver os resultados anteriores (não são o último de cada prova).
             </Text>
             {militares.map((m) => (
               <TouchableOpacity
@@ -240,7 +245,7 @@ export function HistoricoResultadosSubstituidosModal({ visible, onClose, foco = 
                   </Text>
                   <Text style={[ts.caption, { color: ORANGE_MUTED }]}>
                     NIP {m.nip}
-                    {m.postoGrad ? ` · ${m.postoGrad}` : ''} · {m.total} substituído
+                    {m.postoGrad ? ` · ${m.postoGrad}` : ''} · {m.total} histórico
                     {m.total !== 1 ? 's' : ''}
                   </Text>
                 </View>

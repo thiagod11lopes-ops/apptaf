@@ -249,33 +249,61 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
             </LinearGradient>
 
             <View style={styles.body}>
-              {!carregando && lista.length > 0 ? (
-                <View
-                  style={[
-                    styles.buscaWrap,
-                    { backgroundColor: theme.cardBg, borderColor: ui.inputBorder },
-                  ]}
-                >
-                  <Search size={16} color={theme.textMuted} strokeWidth={2.2} />
-                  <TextInput
-                    value={busca}
-                    onChangeText={setBusca}
-                    placeholder="Localizar por nome ou NIP"
-                    placeholderTextColor={theme.textMuted}
-                    style={[styles.buscaInput, { color: ui.text }]}
-                    accessibilityLabel="Localizar militar por nome ou NIP"
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                  />
-                  {busca.trim() ? (
-                    <TouchableOpacity
-                      onPress={() => setBusca('')}
-                      accessibilityLabel="Limpar busca"
-                      hitSlop={8}
+              {!carregando ? (
+                <View style={styles.toolbarRow}>
+                  <View
+                    style={[
+                      styles.buscaWrap,
+                      { backgroundColor: theme.cardBg, borderColor: ui.inputBorder },
+                    ]}
+                  >
+                    <Search size={16} color={theme.textMuted} strokeWidth={2.2} />
+                    <TextInput
+                      value={busca}
+                      onChangeText={setBusca}
+                      placeholder="Localizar por nome ou NIP"
+                      placeholderTextColor={theme.textMuted}
+                      style={[styles.buscaInput, { color: ui.text }]}
+                      accessibilityLabel="Localizar militar por nome ou NIP"
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                    />
+                    {busca.trim() ? (
+                      <TouchableOpacity
+                        onPress={() => setBusca('')}
+                        accessibilityLabel="Limpar busca"
+                        hitSlop={8}
+                      >
+                        <X size={16} color={theme.textMuted} strokeWidth={2.2} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => void gerarPdf()}
+                    disabled={gerandoPdf || lista.length === 0}
+                    activeOpacity={0.88}
+                    style={[
+                      styles.pdfBtnOuter,
+                      { opacity: gerandoPdf || lista.length === 0 ? 0.55 : 1 },
+                    ]}
+                    accessibilityLabel="Gerar PDF da relação de reprovados"
+                  >
+                    <LinearGradient
+                      colors={['#dc2626', '#e11d48']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.pdfBtn}
                     >
-                      <X size={16} color={theme.textMuted} strokeWidth={2.2} />
-                    </TouchableOpacity>
-                  ) : null}
+                      {gerandoPdf ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <>
+                          <FileDown size={16} color="#FFFFFF" strokeWidth={2.4} />
+                          <Text style={styles.pdfBtnText}>Gerar PDF</Text>
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
                 </View>
               ) : null}
 
@@ -398,32 +426,6 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
               >
                 <Text style={[styles.ghostBtnText, { color: theme.textSecondary }]}>Fechar</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => void gerarPdf()}
-                disabled={gerandoPdf || carregando || lista.length === 0}
-                activeOpacity={0.88}
-                style={[
-                  styles.pdfBtnOuter,
-                  { opacity: gerandoPdf || carregando || lista.length === 0 ? 0.65 : 1 },
-                ]}
-                accessibilityLabel="Gerar PDF dos reprovados"
-              >
-                <LinearGradient
-                  colors={['#dc2626', '#e11d48']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.pdfBtn}
-                >
-                  {gerandoPdf ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <>
-                      <FileDown size={16} color="#FFFFFF" strokeWidth={2.4} />
-                      <Text style={styles.pdfBtnText}>Gerar PDF</Text>
-                    </>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -530,7 +532,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 12,
   },
+  toolbarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
   buscaWrap: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -538,7 +548,6 @@ const styles = StyleSheet.create({
     borderRadius: PREMIUM.radiusMd,
     paddingHorizontal: 12,
     height: 44,
-    marginBottom: 12,
   },
   buscaInput: {
     flex: 1,
@@ -618,12 +627,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   pdfBtnOuter: {
-    flex: 1.4,
     borderRadius: 12,
     overflow: 'hidden',
+    flexShrink: 0,
   },
   pdfBtn: {
-    minHeight: 46,
+    height: 44,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -633,7 +642,7 @@ const styles = StyleSheet.create({
   },
   pdfBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.2,
   },

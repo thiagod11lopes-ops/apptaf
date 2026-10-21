@@ -535,6 +535,7 @@ export function HistoricoSessaoDetalheModal({
               nipKey,
               tipo,
               buscaRep.kind === 'found' ? buscaRep.cadastro : undefined,
+              { arquivarSubstituicao: true },
             );
           }
           repeticaoAutorizadaRef.current = new Set();

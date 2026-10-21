@@ -115,7 +115,9 @@ export async function salvarResultadosTafEditados(
 
   const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia', 'caminhada'];
   for (const tipo of tipos) {
-    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado);
+    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado, {
+      arquivarSubstituicao: true,
+    });
   }
   await persistirSessoesRegistradorFromCadastro(atualizado, addSessaoAplicacao);
 
@@ -148,7 +150,9 @@ export async function cadastrarResultadosManual(
 
   const tipos: TipoProvaAplicada[] = ['corrida', 'natacao', 'permanencia', 'caminhada'];
   for (const tipo of tipos) {
-    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado);
+    await removerParticipanteModalidadeDoHistorico(atualizado.nip, tipo, atualizado, {
+      arquivarSubstituicao: true,
+    });
   }
   await persistirSessoesRegistradorFromCadastro(
     atualizado,

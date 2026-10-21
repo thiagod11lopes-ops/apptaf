@@ -35,6 +35,8 @@ import { tableFullWidthStyle } from '../theme/tableLayout';
 import { getUiColors } from '../theme/uiColors';
 import { getAplicarTafGlass } from './taf/aplicar/aplicarTafTheme';
 import { TafGlassPanel } from './mobile/TafTabChrome';
+import { SalvarArquivoCompletoPreviewModal } from './resultados/SalvarArquivoCompletoPreviewModal';
+import type { ResultadosTafPdfBloco } from '../utils/resultadosTafPdfPorAplicador';
 
 const MIN_BUSCA = 3;
 
@@ -154,7 +156,12 @@ export function ResultadosGeralPanel({
   const [militarParaExcluir, setMilitarParaExcluir] = useState<ResultadoGeralItem | null>(null);
   const [excluindo, setExcluindo] = useState(false);
   const [salvandoCompleto, setSalvandoCompleto] = useState(false);
+  const [preparandoPreview, setPreparandoPreview] = useState(false);
   const [avisoPdf, setAvisoPdf] = useState<string | null>(null);
+  const [previewCompleto, setPreviewCompleto] = useState<{
+    blocos: ResultadosTafPdfBloco[];
+    subtitulo: string;
+  } | null>(null);
 
   useEffect(() => {
     const { sessoesNorma, cadastrosNorma } = prepararDadosResultadosNorma(
@@ -176,9 +183,9 @@ export function ResultadosGeralPanel({
     await onDatasetRefresh?.();
   }, [onDatasetRefresh]);
 
-  const salvarArquivoCompleto = useCallback(async () => {
-    if (salvandoCompleto || lista.length === 0) return;
-    setSalvandoCompleto(true);
+  const abrirPreviewArquivoCompleto = useCallback(async () => {
+    if (preparandoPreview || salvandoCompleto || lista.length === 0) return;
+    setPreparandoPreview(true);
     setAvisoPdf(null);
     try {
       const { yieldToUi } = await import('../utils/yieldToUi');
@@ -208,15 +215,33 @@ export function ResultadosGeralPanel({
       }
       const normaLabel = normaTaf === 'cfn' ? 'CFN' : 'Armada';
       const subtitulo = `Resultado Geral completo — ${normaLabel} — ${formatBrDateKey(new Date())}`;
-      const msg = await salvarResultadosTafPdfEmDownloads(blocos, subtitulo);
+      setPreviewCompleto({ blocos, subtitulo });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Falha ao preparar o arquivo completo.';
       setAvisoPdf(msg);
+    } finally {
+      setPreparandoPreview(false);
+    }
+  }, [preparandoPreview, salvandoCompleto, lista, cadastros, sessoes, normaTaf]);
+
+  const confirmarSalvarArquivoCompleto = useCallback(async () => {
+    if (!previewCompleto || salvandoCompleto) return;
+    setSalvandoCompleto(true);
+    setAvisoPdf(null);
+    try {
+      const msg = await salvarResultadosTafPdfEmDownloads(
+        previewCompleto.blocos,
+        previewCompleto.subtitulo,
+      );
+      setAvisoPdf(msg);
+      setPreviewCompleto(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao salvar o arquivo completo.';
       if (!/cancelad/i.test(msg)) setAvisoPdf(msg);
     } finally {
       setSalvandoCompleto(false);
     }
-  }, [salvandoCompleto, lista, cadastros, sessoes, normaTaf]);
+  }, [previewCompleto, salvandoCompleto]);
 
   const abrirEdicao = useCallback(
     (item: ResultadoGeralItem) => {
@@ -325,11 +350,14 @@ export function ResultadosGeralPanel({
 
       {!carregando && lista.length > 0 ? (
         <TouchableOpacity
-          onPress={() => void salvarArquivoCompleto()}
-          disabled={salvandoCompleto}
+          onPress={() => void abrirPreviewArquivoCompleto()}
+          disabled={preparandoPreview || salvandoCompleto}
           activeOpacity={0.88}
-          accessibilityLabel="Salvar arquivo completo PDF com todos os resultados em Downloads"
-          style={[styles.pdfBtnOuter, { opacity: salvandoCompleto ? 0.7 : 1 }]}
+          accessibilityLabel="Pré-visualizar e salvar arquivo completo PDF com todos os resultados"
+          style={[
+            styles.pdfBtnOuter,
+            { opacity: preparandoPreview || salvandoCompleto ? 0.7 : 1 },
+          ]}
         >
           <LinearGradient
             colors={[...theme.tokens.gradientPrimaryBtn]}
@@ -342,7 +370,7 @@ export function ResultadosGeralPanel({
                 : null,
             ]}
           >
-            {salvandoCompleto ? (
+            {preparandoPreview ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <>
@@ -564,6 +592,17 @@ export function ResultadosGeralPanel({
           if (!excluindo) setMilitarParaExcluir(null);
         }}
         onConfirm={() => void executarExclusao()}
+      />
+
+      <SalvarArquivoCompletoPreviewModal
+        visible={previewCompleto != null}
+        onClose={() => {
+          if (!salvandoCompleto) setPreviewCompleto(null);
+        }}
+        blocos={previewCompleto?.blocos ?? []}
+        subtitulo={previewCompleto?.subtitulo ?? ''}
+        salvando={salvandoCompleto}
+        onConfirmarSalvar={() => void confirmarSalvarArquivoCompleto()}
       />
     </View>
   );

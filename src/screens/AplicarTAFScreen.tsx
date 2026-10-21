@@ -1007,7 +1007,9 @@ export default function AplicarTAFScreen() {
         for (const i of indicesRepeticao) {
           const nip = (resultados[i]?.nip ?? nipsParticipantes[i] ?? '').trim();
           if (nip) {
-            await removerParticipanteModalidadeDoHistorico(nip, tipo);
+            await removerParticipanteModalidadeDoHistorico(nip, tipo, undefined, {
+              arquivarSubstituicao: true,
+            });
           }
         }
         nipsRepeticaoAutorizadaRef.current = new Set();

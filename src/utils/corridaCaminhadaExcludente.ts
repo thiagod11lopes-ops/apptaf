@@ -225,5 +225,7 @@ export async function removerModalidadeOpostaDistanciaDoHistorico(
   prova: 'corrida' | 'caminhada',
   cadastro: CadastroItemPersist,
 ): Promise<void> {
-  await removerParticipanteModalidadeDoHistorico(nip, modalidadeDistanciaOposta(prova), cadastro);
+  await removerParticipanteModalidadeDoHistorico(nip, modalidadeDistanciaOposta(prova), cadastro, {
+    arquivarSubstituicao: true,
+  });
 }

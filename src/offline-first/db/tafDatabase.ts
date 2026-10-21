@@ -46,6 +46,24 @@ export type SessaoRubricasTableRow = {
   aplicadorRubricaSvg?: string;
 };
 
+/** Resultado arquivado quando um novo teste substitui o anterior. */
+export type ResultadoSubstituidoTableRow = {
+  id: string;
+  ownerUid: string;
+  cadastroId?: string;
+  nip: string;
+  nome: string;
+  postoGrad?: string;
+  modalidade: string;
+  modalidadeLabel: string;
+  dataAplicacao: string;
+  tempo: string;
+  nota: string;
+  situacao: string;
+  replacedAt: number;
+  sessaoId?: string;
+};
+
 export class TafDatabase extends Dexie {
   cadastros!: Table<CadastroRecord, string>;
   aplicadores!: Table<AplicadorRecord, string>;
@@ -60,6 +78,7 @@ export class TafDatabase extends Dexie {
   preCadastros!: Table<PreCadastroRecord, string>;
   cadastroRubricas!: Table<CadastroRubricasTableRow, string>;
   sessaoRubricas!: Table<SessaoRubricasTableRow, string>;
+  resultadosSubstituidos!: Table<ResultadoSubstituidoTableRow, string>;
   meta!: Table<MetaEntry, string>;
 
   constructor() {
@@ -99,6 +118,10 @@ export class TafDatabase extends Dexie {
     });
     this.version(9).stores({
       localBackupChunks: '++id, backupId, kind, [backupId+kind]',
+    });
+    this.version(10).stores({
+      resultadosSubstituidos:
+        'id, ownerUid, nip, cadastroId, replacedAt, modalidade, [ownerUid+nip], [ownerUid+cadastroId]',
     });
   }
 }

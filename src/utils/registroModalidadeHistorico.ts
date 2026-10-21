@@ -21,6 +21,11 @@ import {
   temAvaliacaoCaminhada,
 } from './resultadoTafCadastro';
 import { SESSAO_REGISTRADOR_ID_PREFIX } from './sessoesUnificadasResultados';
+import {
+  arquivarResultadosSubstituidos,
+  type ResultadoSubstituidoInput,
+} from '../services/resultadosSubstituidosStorage';
+import { postoGradFromCadastro } from './resultadoTafCadastro';
 
 export type RegistroModalidadeExistente = {
   dataAplicacao: string;
@@ -185,21 +190,57 @@ export async function removerSessoesRegistradorPorCadastro(
   }
 }
 
+export type RemoverParticipanteHistoricoOpts = {
+  /**
+   * Quando true, guarda o resultado removido como histórico de substituição
+   * (novo teste / edição que substitui o anterior).
+   */
+  arquivarSubstituicao?: boolean;
+};
+
 /** Remove o participante de todas as sessões da modalidade no histórico. */
 export async function removerParticipanteModalidadeDoHistorico(
   nip: string,
   tipo: TipoProvaAplicada,
   cadastro?: CadastroItemPersist,
+  opts?: RemoverParticipanteHistoricoOpts,
 ): Promise<void> {
   const alvo = nipDigitos(nip);
   if (!alvo && !cadastro) return;
+
+  const arquivar = opts?.arquivarSubstituicao === true;
+  const listaCadastros = cadastro ? [cadastro] : [];
+  const sessoes = await getAllSessoesAplicacao();
+  const paraArquivar: ResultadoSubstituidoInput[] = [];
+
+  if (arquivar) {
+    for (const sessao of sessoes) {
+      if (sessao.tipoProva !== tipo) continue;
+      for (const r of sessao.resultados) {
+        if (!resultadoDeveSerRemovido(r, alvo, cadastro, listaCadastros)) continue;
+        paraArquivar.push({
+          cadastroId: cadastro?.id,
+          nip: (r.nip || nip || '').trim(),
+          nome: (r.nome || cadastro?.nome || '').trim(),
+          postoGrad: cadastro ? postoGradFromCadastro(cadastro) : undefined,
+          modalidade: tipo,
+          dataAplicacao: sessao.dataAplicacao,
+          tempo: tempoFromResultado(tipo, r),
+          nota: notaFromResultado(r),
+          situacao: situacaoFromResultado(r),
+          sessaoId: sessao.id,
+        });
+      }
+    }
+    if (paraArquivar.length > 0) {
+      await arquivarResultadosSubstituidos(paraArquivar);
+    }
+  }
 
   if (cadastro?.id) {
     await removerSessoesRegistradorPorCadastro(cadastro.id, tipo);
   }
 
-  const listaCadastros = cadastro ? [cadastro] : [];
-  const sessoes = await getAllSessoesAplicacao();
   for (const sessao of sessoes) {
     if (sessao.tipoProva !== tipo) continue;
     const filtrados = sessao.resultados.filter(

@@ -341,7 +341,6 @@ export function SalvarArquivoCompletoPreviewModal({
               placeholderTextColor={theme.textMuted}
               style={[styles.buscaInput, { color: ui.text }]}
               accessibilityLabel="Pesquisar por NIP ou nome do militar"
-              keyboardType={buscaPorNip || /^\d/.test(busca.trim()) ? 'number-pad' : 'default'}
               autoCorrect={false}
               autoCapitalize="none"
             />

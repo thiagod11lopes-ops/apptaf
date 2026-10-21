@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,25 +7,53 @@ import {
   ActivityIndicator,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FileDown, ShieldAlert, X } from 'lucide-react-native';
+import { FileDown, Search, ShieldAlert, Trash2, X } from 'lucide-react-native';
 import { AppModal } from '../premium/AppModal';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import {
+  modalidadeChaveFromLabelReprovado,
   montarListaReprovadosInicioTaf,
   type ReprovadoInicioTafItem,
 } from '../../utils/resultadoGeralHistorico';
 import { exportReprovadosTafPdf } from '../../utils/exportReprovadosTafPdf';
 import { SalvarPdfFeedbackModal } from '../sismav/SalvarPdfFeedbackModal';
+import { ConfirmacaoExcluirResultadoModal } from '../sismav/ConfirmacaoExcluirResultadoModal';
+import { nipDigitos } from '../../utils/nipFormat';
+import { buscarCadastroPorNomeOuNip } from '../../utils/buscarCadastroPorNomeOuNip';
+import {
+  limparResultadoModalidadeCadastro,
+  type ModalidadeResultadoTaf,
+} from '../../utils/limparResultadoModalidade';
+import { removerParticipanteModalidadeDoHistorico } from '../../utils/registroModalidadeHistorico';
+import { yieldToUi } from '../../utils/yieldToUi';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
 };
+
+type ConfirmarExclusao = {
+  item: ReprovadoInicioTafItem;
+  modalidades: ModalidadeResultadoTaf[];
+};
+
+function modalidadesExclusao(item: ReprovadoInicioTafItem): ModalidadeResultadoTaf[] {
+  const keys: ModalidadeResultadoTaf[] = [];
+  const seen = new Set<ModalidadeResultadoTaf>();
+  for (const m of item.modalidades) {
+    const chave = m.chave ?? modalidadeChaveFromLabelReprovado(m.label);
+    if (!chave || seen.has(chave)) continue;
+    seen.add(chave);
+    keys.push(chave);
+  }
+  return keys;
+}
 
 export function ReprovadosInicioModal({ visible, onClose }: Props) {
   const { theme } = useTheme();
@@ -33,8 +61,11 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
   const ts = theme.textStyles;
 
   const [lista, setLista] = useState<ReprovadoInicioTafItem[]>([]);
+  const [busca, setBusca] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const [confirmarExclusao, setConfirmarExclusao] = useState<ConfirmarExclusao | null>(null);
   const [feedback, setFeedback] = useState<{
     tipo: 'ok' | 'erro';
     titulo: string;
@@ -46,16 +77,20 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
     const { getAllSessoesAplicacao, getDeletedSessoesAplicacao } = await import(
       '../../services/resultadosAplicadosIndexedDb'
     );
-    const [cadastros, sessoes, sessoesExcluidas] = await Promise.all([
-      getAllCadastros({ includeDemo: false }),
-      getAllSessoesAplicacao({ includeDemo: false }),
-      getDeletedSessoesAplicacao(),
-    ]);
+    const cadastros = await getAllCadastros({ includeDemo: false });
+    await yieldToUi();
+    const sessoes = await getAllSessoesAplicacao({ includeDemo: false });
+    await yieldToUi();
+    const sessoesExcluidas = await getDeletedSessoesAplicacao();
     return montarListaReprovadosInicioTaf(sessoes, cadastros, sessoesExcluidas);
   }, []);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      setBusca('');
+      setConfirmarExclusao(null);
+      return;
+    }
     let cancelled = false;
     setCarregando(true);
     void (async () => {
@@ -78,6 +113,19 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
     };
   }, [visible, recarregarLista]);
 
+  const filtrada = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const qDigits = nipDigitos(busca);
+    if (!q) return lista;
+    return lista.filter((item) => {
+      const nome = item.nome.toLowerCase();
+      const nip = nipDigitos(item.nip);
+      if (nome.includes(q)) return true;
+      if (qDigits && nip.includes(qDigits)) return true;
+      return false;
+    });
+  }, [lista, busca]);
+
   const gerarPdf = useCallback(async () => {
     if (lista.length === 0) {
       Alert.alert('Sem dados', 'Não há militares reprovados para gerar o PDF.');
@@ -95,6 +143,61 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
       setGerandoPdf(false);
     }
   }, [lista]);
+
+  const pedirExclusao = useCallback((item: ReprovadoInicioTafItem) => {
+    const modalidades = modalidadesExclusao(item);
+    if (modalidades.length === 0) {
+      Alert.alert('Erro', 'Não foi possível identificar a prova reprovada para exclusão.');
+      return;
+    }
+    setConfirmarExclusao({ item, modalidades });
+  }, []);
+
+  const executarExclusao = useCallback(async () => {
+    if (!confirmarExclusao || excluindo) return;
+    setExcluindo(true);
+    try {
+      const { getAllCadastros, addCadastro } = await import('../../services/cadastrosIndexedDb');
+      const cadastros = await getAllCadastros({ includeDemo: false });
+      const { item, modalidades } = confirmarExclusao;
+      const buscaCad = buscarCadastroPorNomeOuNip(cadastros, item.nip);
+
+      if (buscaCad.kind === 'found') {
+        let atualizado = buscaCad.cadastro;
+        for (const modalidade of modalidades) {
+          atualizado = limparResultadoModalidadeCadastro(atualizado, modalidade);
+        }
+        await addCadastro(atualizado);
+        for (const modalidade of modalidades) {
+          await removerParticipanteModalidadeDoHistorico(atualizado.nip, modalidade, atualizado);
+        }
+      } else {
+        for (const modalidade of modalidades) {
+          await removerParticipanteModalidadeDoHistorico(item.nip, modalidade);
+        }
+      }
+
+      setConfirmarExclusao(null);
+      const next = await recarregarLista();
+      setLista(next);
+    } catch (e) {
+      Alert.alert(
+        'Erro',
+        e instanceof Error ? e.message : 'Não foi possível excluir o resultado de reprovado.',
+      );
+    } finally {
+      setExcluindo(false);
+    }
+  }, [confirmarExclusao, excluindo, recarregarLista]);
+
+  const modalidadeConfirmacao =
+    confirmarExclusao && confirmarExclusao.modalidades.length === 1
+      ? confirmarExclusao.modalidades[0]!
+      : null;
+  const rotuloProvaConfirmacao =
+    confirmarExclusao && confirmarExclusao.modalidades.length > 1
+      ? confirmarExclusao.item.modalidades.map((m) => m.label).join(', ')
+      : undefined;
 
   return (
     <>
@@ -146,6 +249,36 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
             </LinearGradient>
 
             <View style={styles.body}>
+              {!carregando && lista.length > 0 ? (
+                <View
+                  style={[
+                    styles.buscaWrap,
+                    { backgroundColor: theme.cardBg, borderColor: ui.inputBorder },
+                  ]}
+                >
+                  <Search size={16} color={theme.textMuted} strokeWidth={2.2} />
+                  <TextInput
+                    value={busca}
+                    onChangeText={setBusca}
+                    placeholder="Localizar por nome ou NIP"
+                    placeholderTextColor={theme.textMuted}
+                    style={[styles.buscaInput, { color: ui.text }]}
+                    accessibilityLabel="Localizar militar por nome ou NIP"
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                  />
+                  {busca.trim() ? (
+                    <TouchableOpacity
+                      onPress={() => setBusca('')}
+                      accessibilityLabel="Limpar busca"
+                      hitSlop={8}
+                    >
+                      <X size={16} color={theme.textMuted} strokeWidth={2.2} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
+
               {carregando ? (
                 <View style={styles.centerBox}>
                   <ActivityIndicator color={theme.error} size="large" />
@@ -156,13 +289,20 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
                     Nenhum militar reprovado encontrado.
                   </Text>
                 </View>
+              ) : filtrada.length === 0 ? (
+                <View style={styles.centerBox}>
+                  <Text style={[ts.body, { color: theme.textSecondary, textAlign: 'center' }]}>
+                    Nenhum militar encontrado para essa busca.
+                  </Text>
+                </View>
               ) : (
                 <ScrollView
                   style={styles.list}
                   contentContainerStyle={styles.listContent}
                   showsVerticalScrollIndicator
+                  keyboardShouldPersistTaps="handled"
                 >
-                  {lista.map((item, index) => (
+                  {filtrada.map((item, index) => (
                     <View
                       key={item.id}
                       style={[
@@ -198,6 +338,26 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
                               : ''}
                           </Text>
                         </View>
+                        <TouchableOpacity
+                          onPress={() => pedirExclusao(item)}
+                          disabled={excluindo}
+                          accessibilityLabel={`Excluir resultado de reprovado de ${item.nome}`}
+                          style={[
+                            styles.deleteBtn,
+                            {
+                              borderColor: theme.isDark
+                                ? 'rgba(248, 113, 113, 0.45)'
+                                : 'rgba(252, 165, 165, 0.95)',
+                              backgroundColor: theme.isDark
+                                ? 'rgba(127, 29, 29, 0.35)'
+                                : 'rgba(254, 226, 226, 1)',
+                              opacity: excluindo ? 0.55 : 1,
+                            },
+                          ]}
+                          hitSlop={8}
+                        >
+                          <Trash2 size={16} color={theme.error} strokeWidth={2.3} />
+                        </TouchableOpacity>
                       </View>
                       <View style={styles.chips}>
                         {item.modalidades.map((m) => (
@@ -269,6 +429,19 @@ export function ReprovadosInicioModal({ visible, onClose }: Props) {
         </View>
       </AppModal>
 
+      <ConfirmacaoExcluirResultadoModal
+        visible={confirmarExclusao != null}
+        nome={confirmarExclusao?.item.nome ?? ''}
+        nip={confirmarExclusao?.item.nip ?? ''}
+        modalidade={modalidadeConfirmacao}
+        rotuloProva={rotuloProvaConfirmacao}
+        loading={excluindo}
+        onClose={() => {
+          if (!excluindo) setConfirmarExclusao(null);
+        }}
+        onConfirm={() => void executarExclusao()}
+      />
+
       <SalvarPdfFeedbackModal
         visible={feedback != null}
         tipo={feedback?.tipo ?? 'ok'}
@@ -289,8 +462,8 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    maxWidth: 560,
-    maxHeight: '92%',
+    maxWidth: 1120,
+    maxHeight: '96%',
     borderRadius: PREMIUM.radiusLg + 4,
     borderWidth: 1,
     overflow: 'hidden',
@@ -352,12 +525,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.16)',
   },
   body: {
-    minHeight: 180,
-    maxHeight: Platform.OS === 'web' ? 420 : 360,
+    minHeight: 360,
+    maxHeight: Platform.OS === 'web' ? 840 : 720,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
+  buscaWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    paddingHorizontal: 12,
+    height: 44,
+    marginBottom: 12,
+  },
+  buscaInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
   },
   centerBox: {
     flex: 1,
-    minHeight: 180,
+    minHeight: 280,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -366,7 +556,7 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   listContent: {
-    padding: 14,
+    paddingBottom: 14,
     gap: 10,
   },
   item: {
@@ -385,6 +575,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
     marginTop: 2,
+  },
+  deleteBtn: {
+    width: PREMIUM.minTouch,
+    height: PREMIUM.minTouch,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chips: {
     flexDirection: 'row',

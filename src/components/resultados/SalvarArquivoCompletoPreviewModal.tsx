@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,13 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Download, FileText, History } from 'lucide-react-native';
+import { Download, FileText, History, Search, X } from 'lucide-react-native';
 import { ModernModal } from '../sismav/ModernModal';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import type { ResultadosTafPdfBloco } from '../../utils/resultadosTafPdfPorAplicador';
 import type { ResultadoTafLinha } from '../../utils/resultadoTafCadastro';
@@ -20,6 +22,7 @@ import {
   valoresCorridaCaminhadaParaPdf,
 } from '../../utils/corridaCaminhadaExcludente';
 import { HistoricoResultadosSubstituidosModal } from './HistoricoResultadosSubstituidosModal';
+import { nipDigitos } from '../../utils/nipFormat';
 
 type Props = {
   visible: boolean;
@@ -94,6 +97,16 @@ function PreviewRow({
   );
 }
 
+function linhaCombinaBusca(linha: ResultadoTafLinha, q: string, qDigits: string): boolean {
+  if (!q) return true;
+  const nome = (linha.nome || '').toLowerCase();
+  const posto = (linha.postoGrad || '').toLowerCase();
+  const nip = nipDigitos(linha.nip);
+  if (nome.includes(q) || posto.includes(q)) return true;
+  if (qDigits && nip.includes(qDigits)) return true;
+  return false;
+}
+
 export function SalvarArquivoCompletoPreviewModal({
   visible,
   onClose,
@@ -103,7 +116,9 @@ export function SalvarArquivoCompletoPreviewModal({
   onConfirmarSalvar,
 }: Props) {
   const { theme } = useTheme();
+  const ui = useMemo(() => getUiColors(theme), [theme]);
   const ts = theme.textStyles;
+  const [busca, setBusca] = useState('');
   const [historicoAberto, setHistoricoAberto] = useState(false);
   const [focoHistorico, setFocoHistorico] = useState<{
     nip?: string;
@@ -111,10 +126,31 @@ export function SalvarArquivoCompletoPreviewModal({
     nome?: string;
   } | null>(null);
 
+  useEffect(() => {
+    if (!visible) setBusca('');
+  }, [visible]);
+
   const todasLinhas = useMemo(() => blocos.flatMap((b) => b.linhas), [blocos]);
   const { mostrarCorrida, mostrarCaminhada } = useMemo(
     () => colunasDistanciaPdfVisiveis(todasLinhas),
     [todasLinhas],
+  );
+
+  const blocosFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const qDigits = nipDigitos(busca);
+    if (!q) return blocos;
+    return blocos
+      .map((bloco) => ({
+        ...bloco,
+        linhas: bloco.linhas.filter((linha) => linhaCombinaBusca(linha, q, qDigits)),
+      }))
+      .filter((bloco) => bloco.linhas.length > 0);
+  }, [blocos, busca]);
+
+  const totalFiltrado = useMemo(
+    () => blocosFiltrados.reduce((acc, b) => acc + b.linhas.length, 0),
+    [blocosFiltrados],
   );
 
   const abrirHistoricoGeral = useCallback(() => {
@@ -196,17 +232,60 @@ export function SalvarArquivoCompletoPreviewModal({
           que foram substituídos.
         </Text>
 
+        {blocos.length > 0 ? (
+          <View
+            style={[
+              styles.buscaWrap,
+              { backgroundColor: theme.cardBg, borderColor: ui.inputBorder },
+            ]}
+          >
+            <Search size={16} color={theme.textMuted} strokeWidth={2.2} />
+            <TextInput
+              value={busca}
+              onChangeText={setBusca}
+              placeholder="Pesquisar por nome ou NIP"
+              placeholderTextColor={theme.textMuted}
+              style={[styles.buscaInput, { color: ui.text }]}
+              accessibilityLabel="Pesquisar militar por nome ou NIP"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {busca.trim() ? (
+              <TouchableOpacity
+                onPress={() => setBusca('')}
+                accessibilityLabel="Limpar pesquisa"
+                hitSlop={8}
+              >
+                <X size={16} color={theme.textMuted} strokeWidth={2.2} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+
+        {busca.trim() && blocos.length > 0 ? (
+          <Text style={[ts.caption, { color: theme.textMuted, marginBottom: 10 }]}>
+            {totalFiltrado > 0
+              ? `${totalFiltrado} militar${totalFiltrado !== 1 ? 'es' : ''} encontrado${totalFiltrado !== 1 ? 's' : ''}`
+              : 'Nenhum militar encontrado para essa pesquisa.'}
+          </Text>
+        ) : null}
+
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator
+          keyboardShouldPersistTaps="handled"
         >
           {blocos.length === 0 ? (
             <Text style={[ts.body, { color: theme.textSecondary, textAlign: 'center' }]}>
               Não há resultados para exportar.
             </Text>
+          ) : blocosFiltrados.length === 0 ? (
+            <Text style={[ts.body, { color: theme.textSecondary, textAlign: 'center' }]}>
+              Nenhum militar encontrado para essa pesquisa.
+            </Text>
           ) : (
-            blocos.map((bloco, bi) => (
+            blocosFiltrados.map((bloco, bi) => (
               <View key={`${bloco.rotuloAplicador}-${bi}`} style={styles.bloco}>
                 <View
                   style={[
@@ -250,6 +329,21 @@ export function SalvarArquivoCompletoPreviewModal({
 }
 
 const styles = StyleSheet.create({
+  buscaWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: PREMIUM.radiusMd,
+    paddingHorizontal: 12,
+    height: 44,
+    marginBottom: 10,
+  },
+  buscaInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+  },
   scroll: { flexGrow: 0, maxHeight: Platform.OS === 'web' ? 560 : 480 },
   scrollContent: { paddingBottom: 8, gap: 14 },
   bloco: { gap: 8 },

@@ -7,7 +7,10 @@ import {
   type SessaoAplicacaoTaf,
   type TipoProvaAplicada,
 } from '../services/resultadosAplicadosIndexedDb';
-import { getSessaoSortTime } from '../services/offline/recordTimestamps';
+import {
+  getRecordUpdatedAt,
+  parseDataAplicacaoBr,
+} from '../services/offline/recordTimestamps';
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { formatTempoColunaResultado } from './formatTempoColunaResultado';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
@@ -21,7 +24,7 @@ import {
 import type { RubricasPorNip } from './rubricasDasSessoes';
 import { excluirResultadoSubstituido, listarResultadosSubstituidos } from '../services/resultadosSubstituidosStorage';
 
-/** Resultado anterior (mesma prova, mesmo NIP) — exibido como histórico na prévia. */
+/** Resultado anterior (mesma prova, mesmo militar) — exibido como histórico na prévia. */
 export type HistoricoProvaPreviewItem = {
   id: string;
   sessaoId: string;
@@ -59,15 +62,61 @@ function notaFromResultado(r: ResultadoCorridaItem): string {
   return t || '—';
 }
 
-function chaveNipProva(nipKey: string, tipo: TipoProvaAplicada): string {
-  // nipKey já vem normalizado (dígitos ou fallback nome:…).
-  return `${nipKey}|${tipo}`;
+function normalizeNome(nome: string): string {
+  try {
+    return nome
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .trim()
+      .toLowerCase();
+  } catch {
+    return nome.trim().toLowerCase();
+  }
+}
+
+/**
+ * Identidade estável do militar para agrupar a mesma pessoa entre sessões
+ * (cadastro > NIP > nome), evitando duplicar “atual” quando NIP/nome variam.
+ */
+function identidadeParticipante(
+  r: ResultadoCorridaItem,
+  cadastros: CadastroItemPersist[],
+): {
+  key: string;
+  nip: string;
+  nome: string;
+  postoGrad?: string;
+  cadastroId?: string;
+} {
+  const busca = buscarCadastroPorNomeOuNip(
+    cadastros,
+    (r.nip || '').trim() || (r.nome || '').trim(),
+  );
+  const cadastro = busca.kind === 'found' ? busca.cadastro : undefined;
+  const nip = (r.nip || cadastro?.nip || '').trim();
+  const nome = (r.nome || cadastro?.nome || '').trim();
+  const nipKey = nipDigitos(nip);
+  const key = cadastro?.id
+    ? `id:${cadastro.id}`
+    : nipKey
+      ? `nip:${nipKey}`
+      : nome
+        ? `nome:${normalizeNome(nome)}`
+        : '';
+  return {
+    key,
+    nip: nip || '—',
+    nome: nome || '—',
+    postoGrad: cadastro ? postoGradFromCadastro(cadastro) : undefined,
+    cadastroId: cadastro?.id,
+  };
 }
 
 type Ocorrencia = {
   sessaoId: string;
+  resultadoIndex: number;
   tipoProva: TipoProvaAplicada;
-  nipKey: string;
+  participanteKey: string;
   nip: string;
   nome: string;
   postoGrad?: string;
@@ -76,9 +125,18 @@ type Ocorrencia = {
   tempo: string;
   nota: string;
   situacao: string;
-  sortTime: number;
-  resultado: ResultadoCorridaItem;
+  /** updatedAt/criadoEm da sessão. */
+  recordTime: number;
+  /** Timestamp da data de aplicação (DD/MM/AAAA). */
+  dataTime: number;
 };
+
+function compararOcorrenciaRecente(a: Ocorrencia, b: Ocorrencia): number {
+  // Mais recente por data de aplicação; desempate por updatedAt/criadoEm e id da sessão.
+  if (a.dataTime !== b.dataTime) return b.dataTime - a.dataTime;
+  if (a.recordTime !== b.recordTime) return b.recordTime - a.recordTime;
+  return b.sessaoId.localeCompare(a.sessaoId);
+}
 
 function coletarOcorrencias(
   sessoes: SessaoAplicacaoTaf[],
@@ -87,37 +145,43 @@ function coletarOcorrencias(
   const out: Ocorrencia[] = [];
   for (const sessao of sessoes) {
     const tipo = sessao.tipoProva;
-    const sortTime = getSessaoSortTime(sessao);
-    for (const r of sessao.resultados) {
-      const nipKey = nipDigitos(r.nip);
-      if (!nipKey && !(r.nome || '').trim()) continue;
-      const busca = buscarCadastroPorNomeOuNip(
-        cadastros,
-        (r.nip || '').trim() || (r.nome || '').trim(),
-      );
-      const cadastro = busca.kind === 'found' ? busca.cadastro : undefined;
+    const recordTime = getRecordUpdatedAt(sessao);
+    const dataTime = parseDataAplicacaoBr(sessao.dataAplicacao);
+    for (let i = 0; i < sessao.resultados.length; i++) {
+      const r = sessao.resultados[i]!;
+      const ident = identidadeParticipante(r, cadastros);
+      if (!ident.key) continue;
       out.push({
         sessaoId: sessao.id,
+        resultadoIndex: i,
         tipoProva: tipo,
-        nipKey: nipKey || `nome:${(r.nome || '').trim().toLowerCase()}`,
-        nip: (r.nip || cadastro?.nip || '').trim() || '—',
-        nome: (r.nome || cadastro?.nome || '').trim() || '—',
-        postoGrad: cadastro ? postoGradFromCadastro(cadastro) : undefined,
-        cadastroId: cadastro?.id,
+        participanteKey: ident.key,
+        nip: ident.nip,
+        nome: ident.nome,
+        postoGrad: ident.postoGrad,
+        cadastroId: ident.cadastroId,
         dataAplicacao: sessao.dataAplicacao,
         tempo: tempoFromResultado(tipo, r),
         nota: notaFromResultado(r),
         situacao: situacaoFromResultado(r),
-        sortTime,
-        resultado: r,
+        recordTime,
+        dataTime,
       });
     }
   }
   return out;
 }
 
+/** Une chaves alternativas do mesmo militar (ex.: id:… e nip:… / nome:…). */
+function chaveGrupoCanonico(o: Ocorrencia): string {
+  if (o.cadastroId) return `id:${o.cadastroId}|${o.tipoProva}`;
+  const nip = nipDigitos(o.nip);
+  if (nip) return `nip:${nip}|${o.tipoProva}`;
+  return `${o.participanteKey}|${o.tipoProva}`;
+}
+
 /**
- * Por NIP + prova: mantém só o resultado mais recente nas sessões;
+ * Por militar + prova: mantém só o resultado mais recente nas sessões;
  * os anteriores viram histórico da prévia.
  */
 export function classificarSessoesAtuaisEHistoricos(
@@ -130,23 +194,62 @@ export function classificarSessoesAtuaisEHistoricos(
   const ocorrencias = coletarOcorrencias(sessoes, cadastros);
   const porChave = new Map<string, Ocorrencia[]>();
   for (const o of ocorrencias) {
-    const key = chaveNipProva(o.nipKey, o.tipoProva);
+    const key = chaveGrupoCanonico(o);
     const list = porChave.get(key) ?? [];
     list.push(o);
     porChave.set(key, list);
   }
 
-  const atuaisKeys = new Set<string>();
+  // Une aliases do mesmo militar+prova (id vs nip vs nome sem cadastro).
+  const grupos = Array.from(porChave.entries());
+  const consumido = new Set<string>();
+  const gruposFinais: Ocorrencia[][] = [];
+
+  for (let i = 0; i < grupos.length; i++) {
+    const [keyA, listA] = grupos[i]!;
+    if (consumido.has(keyA)) continue;
+    let merged = [...listA];
+    const amostra = listA[0]!;
+    const nipA = nipDigitos(amostra.nip);
+    const nomeA = normalizeNome(amostra.nome);
+
+    for (let j = i + 1; j < grupos.length; j++) {
+      const [keyB, listB] = grupos[j]!;
+      if (consumido.has(keyB)) continue;
+      const b = listB[0]!;
+      if (amostra.tipoProva !== b.tipoProva) continue;
+
+      const nipB = nipDigitos(b.nip);
+      const nomeB = normalizeNome(b.nome);
+      const mesmoCadastro =
+        !!amostra.cadastroId && !!b.cadastroId && amostra.cadastroId === b.cadastroId;
+      const mesmoNip = nipA.length >= 8 && nipA === nipB;
+      const mesmoNomeSemCadastro =
+        nomeA.length >= 5 &&
+        nomeA === nomeB &&
+        (!amostra.cadastroId || !b.cadastroId);
+
+      if (mesmoCadastro || mesmoNip || mesmoNomeSemCadastro) {
+        merged = merged.concat(listB);
+        consumido.add(keyB);
+      }
+    }
+    consumido.add(keyA);
+    gruposFinais.push(merged);
+  }
+
+  /** Chave estável da ocorrência atual: sessão + índice do resultado. */
+  const atuaisOccKeys = new Set<string>();
   const historicos: HistoricoProvaPreviewItem[] = [];
 
-  for (const [, list] of porChave) {
-    list.sort((a, b) => b.sortTime - a.sortTime || b.sessaoId.localeCompare(a.sessaoId));
+  for (const list of gruposFinais) {
+    list.sort(compararOcorrenciaRecente);
     const [atual, ...anteriores] = list;
     if (!atual) continue;
-    atuaisKeys.add(`${atual.sessaoId}|${atual.nipKey}|${atual.tipoProva}`);
+    atuaisOccKeys.add(`${atual.sessaoId}#${atual.resultadoIndex}`);
     for (const ant of anteriores) {
       historicos.push({
-        id: `sess:${ant.sessaoId}:${ant.nipKey}:${ant.tipoProva}:${ant.sortTime}`,
+        id: `sess:${ant.sessaoId}:${ant.resultadoIndex}:${ant.tipoProva}:${ant.dataTime || ant.recordTime}`,
         sessaoId: ant.sessaoId,
         nip: ant.nip,
         nome: ant.nome,
@@ -158,7 +261,7 @@ export function classificarSessoesAtuaisEHistoricos(
         tempo: ant.tempo,
         nota: ant.nota,
         situacao: ant.situacao,
-        sortTime: ant.sortTime,
+        sortTime: ant.dataTime || ant.recordTime,
         origem: 'sessao',
       });
     }
@@ -173,10 +276,9 @@ export function classificarSessoesAtuaisEHistoricos(
 
   const sessoesAtuais: SessaoAplicacaoTaf[] = [];
   for (const sessao of sessoes) {
-    const filtrados = sessao.resultados.filter((r) => {
-      const nipKey = nipDigitos(r.nip) || `nome:${(r.nome || '').trim().toLowerCase()}`;
-      return atuaisKeys.has(`${sessao.id}|${nipKey}|${sessao.tipoProva}`);
-    });
+    const filtrados = sessao.resultados.filter((_, i) =>
+      atuaisOccKeys.has(`${sessao.id}#${i}`),
+    );
     if (filtrados.length === 0) continue;
     if (filtrados.length === sessao.resultados.length) {
       sessoesAtuais.push(sessao);
@@ -262,16 +364,21 @@ export async function excluirHistoricoProvaPreview(
   const sessoes = await getAllSessoesAplicacao({ includeDemo: true });
   const sessao = sessoes.find((s) => s.id === item.sessaoId);
   if (!sessao) {
-    // Sessão já sumiu — tenta limpar arquivo espelho se houver.
     return;
   }
 
   const nipKey = nipDigitos(item.nip);
+  const nomeKey = normalizeNome(item.nome);
   const filtrados = sessao.resultados.filter((r) => {
-    const rKey = nipDigitos(r.nip);
-    if (nipKey && rKey) return rKey !== nipKey;
+    const rNip = nipDigitos(r.nip);
+    if (nipKey && rNip) return rNip !== nipKey;
+    if (item.cadastroId) {
+      // Sem NIP no resultado: remove por nome quando bate com o item.
+      if (nomeKey && normalizeNome(r.nome || '') === nomeKey) return false;
+      return true;
+    }
     if (nipKey) return true;
-    return (r.nome || '').trim().toLowerCase() !== (item.nome || '').trim().toLowerCase();
+    return normalizeNome(r.nome || '') !== nomeKey;
   });
 
   if (filtrados.length === sessao.resultados.length) return;

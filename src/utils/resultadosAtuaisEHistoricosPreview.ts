@@ -14,7 +14,7 @@ import {
 import { buscarCadastroPorNomeOuNip } from './buscarCadastroPorNomeOuNip';
 import { formatTempoColunaResultado } from './formatTempoColunaResultado';
 import { isNotaReprovacaoTexto } from './notaReprovacaoTexto';
-import { nipDigitos } from './nipFormat';
+import { nipChaveCadastro, nipDigitos } from './nipFormat';
 import { PERMANENCIA_TEMPO_PDF_PADRAO } from './exportResultadosTafPdf';
 import { postoGradFromCadastro } from './resultadoTafCadastro';
 import {
@@ -172,11 +172,12 @@ function coletarOcorrencias(
   return out;
 }
 
-/** Une chaves alternativas do mesmo militar (ex.: id:… e nip:… / nome:…). */
+/** Une chaves do mesmo militar+prova — NIP primeiro (evita split por cadastro duplicado). */
 function chaveGrupoCanonico(o: Ocorrencia): string {
+  const nip = nipChaveCadastro(o.nip) || nipDigitos(o.nip);
+  if (nip.length >= 8) return `nip:${nip.slice(0, 8)}|${o.tipoProva}`;
+  if (nip.length > 0) return `nip:${nip}|${o.tipoProva}`;
   if (o.cadastroId) return `id:${o.cadastroId}|${o.tipoProva}`;
-  const nip = nipDigitos(o.nip);
-  if (nip) return `nip:${nip}|${o.tipoProva}`;
   return `${o.participanteKey}|${o.tipoProva}`;
 }
 
@@ -223,13 +224,17 @@ export function classificarSessoesAtuaisEHistoricos(
       const nomeB = normalizeNome(b.nome);
       const mesmoCadastro =
         !!amostra.cadastroId && !!b.cadastroId && amostra.cadastroId === b.cadastroId;
-      const mesmoNip = nipA.length >= 8 && nipA === nipB;
-      const mesmoNomeSemCadastro =
+      const mesmoNip =
+        nipA.length > 0 &&
+        nipB.length > 0 &&
+        (nipA === nipB ||
+          (nipA.length >= 8 && nipB.length >= 8 && nipA.slice(0, 8) === nipB.slice(0, 8)));
+      const mesmoNome =
         nomeA.length >= 5 &&
         nomeA === nomeB &&
-        (!amostra.cadastroId || !b.cadastroId);
+        (!nipA || !nipB || mesmoNip || !amostra.cadastroId || !b.cadastroId);
 
-      if (mesmoCadastro || mesmoNip || mesmoNomeSemCadastro) {
+      if (mesmoCadastro || mesmoNip || mesmoNome) {
         merged = merged.concat(listB);
         consumido.add(keyB);
       }

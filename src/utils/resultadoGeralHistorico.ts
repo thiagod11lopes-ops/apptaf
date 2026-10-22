@@ -269,6 +269,7 @@ function mergeKeyForParticipante(
 export function agregarHistoricoPorParticipante(
   sessoes: SessaoAplicacaoTaf[],
   cadastros: CadastroItemPersist[] = [],
+  opts?: { somenteSessoesInformadas?: boolean },
 ): AggRow[] {
   const index = buildCadastroLookupIndex(cadastros);
   const map = new Map<string, AggRow>();
@@ -328,9 +329,13 @@ export function agregarHistoricoPorParticipante(
     }
   }
 
-  enriquecerCorridaCaminhadaFromCadastros(map, cadastros, index);
-  enriquecerPermanenciaFromCadastros(map, cadastros, index);
-  enriquecerCfnFromCadastros(map, cadastros, index);
+  // Prévia/PDF por aplicador: não completar com o cadastro — senão a prova de um
+  // aplicador aparece no bloco de outro (mesmo NIP).
+  if (!opts?.somenteSessoesInformadas) {
+    enriquecerCorridaCaminhadaFromCadastros(map, cadastros, index);
+    enriquecerPermanenciaFromCadastros(map, cadastros, index);
+    enriquecerCfnFromCadastros(map, cadastros, index);
+  }
 
   return [...map.values()].filter(
     (agg) =>
@@ -541,7 +546,9 @@ export function listarResultadosGeralFromHistorico(
     opts?.somenteSessoesInformadas || opts?.jaUnificadas
       ? sessoesReais
       : unificarSessoesComCadastroRegistrador(sessoesReais, cadastrosReais);
-  return agregarHistoricoPorParticipante(base, cadastrosReais)
+  return agregarHistoricoPorParticipante(base, cadastrosReais, {
+    somenteSessoesInformadas: opts?.somenteSessoesInformadas === true,
+  })
     .map((agg) => ({
       ...aggParaLinha(agg),
       ...metaCorridaCaminhadaFromCadastro(agg, cadastrosReais, index),

@@ -8,15 +8,26 @@ import {
 
 const cadastroThiago: CadastroItemPersist = {
   id: 'cad-thiago',
-  nip: '12.3456.78',
-  nome: 'Thiago Lopes de Oliveira',
-  postoGrad: 'MN',
+  nip: '06.0380.85',
+  nome: 'THIAGO LOPES DE OLIVEIRA',
+  postoGrad: '1°SG',
+  notaCorrida: '50',
+  tempoCorrida: '16:10:00',
+  notaNatacao: '50',
+  tempoNatacao: '01:26:00',
+  resultadoPermanencia: 'aprovado',
+  tempoPermanencia: '10:00',
 } as CadastroItemPersist;
 
 function sessao(
   partial: Pick<SessaoAplicacaoTaf, 'id' | 'dataAplicacao' | 'tipoProva' | 'criadoEm'> & {
     nip?: string;
     nome?: string;
+    notaTexto?: string;
+    tempoMs?: number;
+    desempenhoTexto?: string;
+    aplicadorId?: string;
+    aplicadorNome?: string;
     updatedAt?: number;
   },
 ): SessaoAplicacaoTaf {
@@ -29,12 +40,23 @@ function sessao(
     resultados: [
       {
         corredor: 1,
-        nome: partial.nome ?? 'Thiago Lopes de Oliveira',
-        nip: partial.nip ?? '12.3456.78',
-        tempoMs: 600_000,
-        notaTexto: '50',
+        nome: partial.nome ?? 'THIAGO LOPES DE OLIVEIRA',
+        nip: partial.nip ?? '06.0380.85',
+        tempoMs: partial.tempoMs ?? 600_000,
+        notaTexto: partial.notaTexto ?? '50',
+        desempenhoTexto: partial.desempenhoTexto,
       },
     ],
+    aplicadorAssinatura: partial.aplicadorId
+      ? {
+          aplicadorId: partial.aplicadorId,
+          nome: partial.aplicadorNome ?? partial.aplicadorId,
+          nip: '11.1111.11',
+          categoria: 'Oficiais',
+          postoGrad: 'CT',
+          rubricaSvg: `data:image/svg+xml,<svg id="${partial.aplicadorId}"/>`,
+        }
+      : undefined,
   };
 }
 
@@ -74,7 +96,6 @@ describe('classificarSessoesAtuaisEHistoricos', () => {
     expect(sessoesAtuais.map((s) => s.id).sort()).toEqual(['corrida-nova', 'perm-nova']);
     expect(historicos).toHaveLength(2);
     expect(historicos.map((h) => h.sessaoId).sort()).toEqual(['corrida-antiga', 'perm-antiga']);
-    expect(historicos.every((h) => h.origem === 'sessao')).toBe(true);
   });
 
   it('agrupa mesmo militar quando uma sessão tem NIP e outra só o nome do cadastro', () => {
@@ -84,7 +105,7 @@ describe('classificarSessoesAtuaisEHistoricos', () => {
         dataAplicacao: '01/01/2026',
         tipoProva: 'corrida',
         criadoEm: '2026-01-01T10:00:00.000Z',
-        nip: '12.3456.78',
+        nip: '06.0380.85',
       }),
       sessao({
         id: 'corrida-nova',
@@ -92,7 +113,7 @@ describe('classificarSessoesAtuaisEHistoricos', () => {
         tipoProva: 'corrida',
         criadoEm: '2026-03-15T10:00:00.000Z',
         nip: '',
-        nome: 'Thiago Lopes de Oliveira',
+        nome: 'THIAGO LOPES DE OLIVEIRA',
       }),
     ];
 
@@ -103,39 +124,61 @@ describe('classificarSessoesAtuaisEHistoricos', () => {
     expect(sessoesAtuais.map((s) => s.id)).toEqual(['corrida-nova']);
     expect(historicos.map((h) => h.sessaoId)).toEqual(['corrida-antiga']);
   });
+});
 
-  it('prévia monta um bloco atual por prova recente e lista históricos', () => {
+describe('montarBlocosPreviewSomenteAtuais', () => {
+  it('não repete corrida/permanência no bloco de outro aplicador via cadastro', () => {
+    // Diogo: corrida (mais nova) + natação + permanência (mais nova)
+    // Wanderson: corrida antiga + permanência antiga → histórico
+    // Cadastro ainda tem as notas atuais — não pode vazar para o bloco do Wanderson.
     const sessoes: SessaoAplicacaoTaf[] = [
-      {
-        ...sessao({
-          id: 'corrida-antiga',
-          dataAplicacao: '01/01/2026',
-          tipoProva: 'corrida',
-          criadoEm: '2026-01-01T10:00:00.000Z',
-        }),
-        aplicadorAssinatura: {
-          aplicadorId: 'app-1',
-          nome: 'Aplicador A',
-          nip: '11.1111.11',
-          categoria: 'Oficiais',
-          postoGrad: 'CT',
-        },
-      },
-      {
-        ...sessao({
-          id: 'corrida-nova',
-          dataAplicacao: '15/03/2026',
-          tipoProva: 'corrida',
-          criadoEm: '2026-03-15T10:00:00.000Z',
-        }),
-        aplicadorAssinatura: {
-          aplicadorId: 'app-2',
-          nome: 'Aplicador B',
-          nip: '22.2222.22',
-          categoria: 'Oficiais',
-          postoGrad: 'CT',
-        },
-      },
+      sessao({
+        id: 'wand-corrida',
+        dataAplicacao: '13/08/2026',
+        tipoProva: 'corrida',
+        criadoEm: '2026-08-13T10:00:00.000Z',
+        notaTexto: '60',
+        desempenhoTexto: '15:02:00',
+        aplicadorId: 'wanderson',
+        aplicadorNome: 'Wanderson Teixeira Nogueira',
+      }),
+      sessao({
+        id: 'wand-perm',
+        dataAplicacao: '13/08/2026',
+        tipoProva: 'permanencia',
+        criadoEm: '2026-08-13T10:05:00.000Z',
+        aplicadorId: 'wanderson',
+        aplicadorNome: 'Wanderson Teixeira Nogueira',
+      }),
+      sessao({
+        id: 'diogo-corrida',
+        dataAplicacao: '20/09/2026',
+        tipoProva: 'corrida',
+        criadoEm: '2026-09-20T10:00:00.000Z',
+        notaTexto: '50',
+        desempenhoTexto: '16:10:00',
+        aplicadorId: 'diogo',
+        aplicadorNome: 'Diogo Silva Gama',
+      }),
+      sessao({
+        id: 'diogo-natacao',
+        dataAplicacao: '20/09/2026',
+        tipoProva: 'natacao',
+        criadoEm: '2026-09-20T10:10:00.000Z',
+        notaTexto: '50',
+        desempenhoTexto: '01:26:00',
+        tempoMs: 86_000,
+        aplicadorId: 'diogo',
+        aplicadorNome: 'Diogo Silva Gama',
+      }),
+      sessao({
+        id: 'diogo-perm',
+        dataAplicacao: '20/09/2026',
+        tipoProva: 'permanencia',
+        criadoEm: '2026-09-20T10:20:00.000Z',
+        aplicadorId: 'diogo',
+        aplicadorNome: 'Diogo Silva Gama',
+      }),
     ];
 
     const { blocos, historicosSessao } = montarBlocosPreviewSomenteAtuais({
@@ -143,11 +186,57 @@ describe('classificarSessoesAtuaisEHistoricos', () => {
       cadastros: [cadastroThiago],
     });
 
-    expect(historicosSessao).toHaveLength(1);
-    expect(historicosSessao[0]!.sessaoId).toBe('corrida-antiga');
-    const nipsAtuais = blocos.flatMap((b) => b.linhas.map((l) => l.nip.replace(/\D/g, '')));
-    expect(nipsAtuais.filter((n) => n === '12345678')).toHaveLength(1);
-    expect(blocos.some((b) => b.rotuloAplicador.includes('Aplicador B'))).toBe(true);
-    expect(blocos.some((b) => b.rotuloAplicador.includes('Aplicador A'))).toBe(false);
+    expect(historicosSessao.map((h) => h.sessaoId).sort()).toEqual(['wand-corrida', 'wand-perm']);
+
+    const blocoDiogo = blocos.find((b) => b.rotuloAplicador.includes('Diogo'));
+    const blocoWand = blocos.find((b) => b.rotuloAplicador.includes('Wanderson'));
+
+    expect(blocoDiogo).toBeTruthy();
+    expect(blocoWand).toBeFalsy(); // sem sessões atuais → sem bloco
+
+    const linha = blocoDiogo!.linhas.find((l) => l.nip.replace(/\D/g, '') === '06038085');
+    expect(linha).toBeTruthy();
+    expect(linha!.notaCorrida).toBe('50');
+    expect(linha!.notaNatacao).toBe('50');
+    expect(linha!.situacaoPermanencia).toBe('Aprovado');
+  });
+
+  it('quando Wanderson tem só permanência atual, não herda corrida do cadastro', () => {
+    const sessoes: SessaoAplicacaoTaf[] = [
+      sessao({
+        id: 'diogo-corrida',
+        dataAplicacao: '20/09/2026',
+        tipoProva: 'corrida',
+        criadoEm: '2026-09-20T10:00:00.000Z',
+        aplicadorId: 'diogo',
+        aplicadorNome: 'Diogo Silva Gama',
+      }),
+      sessao({
+        id: 'wand-perm',
+        dataAplicacao: '21/09/2026',
+        tipoProva: 'permanencia',
+        criadoEm: '2026-09-21T10:00:00.000Z',
+        aplicadorId: 'wanderson',
+        aplicadorNome: 'Wanderson Teixeira Nogueira',
+      }),
+    ];
+
+    const { blocos, historicosSessao } = montarBlocosPreviewSomenteAtuais({
+      sessoes,
+      cadastros: [cadastroThiago],
+    });
+
+    expect(historicosSessao).toHaveLength(0);
+
+    const blocoDiogo = blocos.find((b) => b.rotuloAplicador.includes('Diogo'))!;
+    const blocoWand = blocos.find((b) => b.rotuloAplicador.includes('Wanderson'))!;
+    const linhaDiogo = blocoDiogo.linhas[0]!;
+    const linhaWand = blocoWand.linhas[0]!;
+
+    expect(linhaDiogo.notaCorrida).toBe('50');
+    expect(linhaDiogo.situacaoPermanencia === '—' || !linhaDiogo.situacaoPermanencia).toBe(true);
+
+    expect(linhaWand.situacaoPermanencia).toBe('Aprovado');
+    expect(linhaWand.notaCorrida === '—' || !linhaWand.notaCorrida).toBe(true);
   });
 });

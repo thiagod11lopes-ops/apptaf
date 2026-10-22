@@ -17,10 +17,7 @@ import { getUiColors } from '../../theme/uiColors';
 import { PREMIUM } from '../../theme/premium';
 import type { ResultadosTafPdfBloco } from '../../utils/resultadosTafPdfPorAplicador';
 import type { ResultadoTafLinha } from '../../utils/resultadoTafCadastro';
-import {
-  colunasDistanciaPdfVisiveis,
-  valoresCorridaCaminhadaParaPdf,
-} from '../../utils/corridaCaminhadaExcludente';
+import { valoresCorridaCaminhadaParaPdf } from '../../utils/corridaCaminhadaExcludente';
 import { HistoricoResultadosSubstituidosModal } from './HistoricoResultadosSubstituidosModal';
 import { HistoricoSubstituidoStripe } from './HistoricoSubstituidoStripe';
 import { ConfirmacaoExcluirHistoricoSubstituidoModal } from './ConfirmacaoExcluirHistoricoSubstituidoModal';
@@ -55,18 +52,34 @@ function celula(v: string | undefined): string {
 
 function PreviewRow({
   linha,
-  mostrarCorrida,
-  mostrarCaminhada,
   theme,
   onHistorico,
 }: {
   linha: ResultadoTafLinha;
-  mostrarCorrida: boolean;
-  mostrarCaminhada: boolean;
   theme: ReturnType<typeof useTheme>['theme'];
   onHistorico: (linha: ResultadoTafLinha) => void;
 }) {
   const dist = valoresCorridaCaminhadaParaPdf(linha);
+  const temCorrida =
+    temValorResultado(dist.notaCorrida) || temValorResultado(dist.situacaoCorrida);
+  const temCaminhada =
+    temValorResultado(dist.notaCaminhada) || temValorResultado(dist.situacaoCaminhada);
+  const temNatacao =
+    temValorResultado(linha.notaNatacao) || temValorResultado(linha.situacaoNatacao);
+  const temPermanencia =
+    temValorResultado(linha.situacaoPermanencia) ||
+    temValorResultado(linha.permanenciaTempo);
+  const temFlexaoBarra =
+    temValorResultado(linha.notaFlexaoBarra) || temValorResultado(linha.situacaoFlexaoBarra);
+  const temFlexaoSolo =
+    temValorResultado(linha.notaFlexaoSolo) || temValorResultado(linha.situacaoFlexaoSolo);
+  const temAbdRemador =
+    temValorResultado(linha.notaAbdominalRemador) ||
+    temValorResultado(linha.situacaoAbdominalRemador);
+  const temAbdPrancha =
+    temValorResultado(linha.notaAbdominalPrancha) ||
+    temValorResultado(linha.situacaoAbdominalPrancha);
+
   return (
     <View style={[styles.row, { borderColor: theme.border, backgroundColor: theme.cardBg }]}>
       <View style={styles.rowTop}>
@@ -87,26 +100,54 @@ function PreviewRow({
         </TouchableOpacity>
       </View>
       <View style={styles.grid}>
-        {mostrarCorrida ? (
+        {temCorrida ? (
           <Text style={[styles.cell, { color: theme.text }]}>
             Corrida: {celula(dist.notaCorrida)} · {celula(dist.situacaoCorrida)}
             {dist.tempoCorrida ? ` · ${dist.tempoCorrida}` : ''}
           </Text>
         ) : null}
-        {mostrarCaminhada ? (
+        {temCaminhada ? (
           <Text style={[styles.cell, { color: theme.text }]}>
             Caminhada: {celula(dist.notaCaminhada)} · {celula(dist.situacaoCaminhada)}
             {dist.tempoCaminhada ? ` · ${dist.tempoCaminhada}` : ''}
           </Text>
         ) : null}
-        <Text style={[styles.cell, { color: theme.text }]}>
-          Natação: {celula(linha.notaNatacao)} · {celula(linha.situacaoNatacao)}
-          {linha.tempoNatacao ? ` · ${linha.tempoNatacao}` : ''}
-        </Text>
-        <Text style={[styles.cell, { color: theme.text }]}>
-          Permanência: {celula(linha.situacaoPermanencia)}
-          {linha.permanenciaTempo ? ` · ${linha.permanenciaTempo}` : ''}
-        </Text>
+        {temNatacao ? (
+          <Text style={[styles.cell, { color: theme.text }]}>
+            Natação: {celula(linha.notaNatacao)} · {celula(linha.situacaoNatacao)}
+            {linha.tempoNatacao ? ` · ${linha.tempoNatacao}` : ''}
+          </Text>
+        ) : null}
+        {temPermanencia ? (
+          <Text style={[styles.cell, { color: theme.text }]}>
+            Permanência: {celula(linha.situacaoPermanencia)}
+            {linha.permanenciaTempo && linha.permanenciaTempo !== '—'
+              ? ` · ${linha.permanenciaTempo}`
+              : ''}
+          </Text>
+        ) : null}
+        {temFlexaoBarra ? (
+          <Text style={[styles.cell, { color: theme.text }]}>
+            Flexão barra: {celula(linha.notaFlexaoBarra)} · {celula(linha.situacaoFlexaoBarra)}
+          </Text>
+        ) : null}
+        {temFlexaoSolo ? (
+          <Text style={[styles.cell, { color: theme.text }]}>
+            Flexão solo: {celula(linha.notaFlexaoSolo)} · {celula(linha.situacaoFlexaoSolo)}
+          </Text>
+        ) : null}
+        {temAbdRemador ? (
+          <Text style={[styles.cell, { color: theme.text }]}>
+            Abdominal remador: {celula(linha.notaAbdominalRemador)} ·{' '}
+            {celula(linha.situacaoAbdominalRemador)}
+          </Text>
+        ) : null}
+        {temAbdPrancha ? (
+          <Text style={[styles.cell, { color: theme.text }]}>
+            Abdominal prancha: {celula(linha.notaAbdominalPrancha)} ·{' '}
+            {celula(linha.situacaoAbdominalPrancha)}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -270,12 +311,6 @@ export function SalvarArquivoCompletoPreviewModal({
   buscaRef.current = busca;
   blocosRef.current = blocos;
   subtituloRef.current = subtitulo;
-
-  const todasLinhas = useMemo(() => blocos.flatMap((b) => b.linhas), [blocos]);
-  const { mostrarCorrida, mostrarCaminhada } = useMemo(
-    () => colunasDistanciaPdfVisiveis(todasLinhas),
-    [todasLinhas],
-  );
 
   const buscaPorNip = useMemo(() => isBuscaPorNip(busca), [busca]);
   const temPesquisa = busca.trim().length > 0;
@@ -557,8 +592,6 @@ export function SalvarArquivoCompletoPreviewModal({
                 <PreviewRow
                   key={`${bloco.rotuloAplicador}-${linha.id}-${linha.nip}`}
                   linha={linha}
-                  mostrarCorrida={mostrarCorrida}
-                  mostrarCaminhada={mostrarCaminhada}
                   theme={theme}
                   onHistorico={abrirHistoricoMilitar}
                 />

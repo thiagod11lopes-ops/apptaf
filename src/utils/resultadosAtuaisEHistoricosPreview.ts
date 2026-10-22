@@ -233,12 +233,14 @@ export function montarBlocosPreviewSomenteAtuais(opts: {
     opts.sessoes,
     opts.cadastros,
   );
+  // Só as sessões de cada aplicador — não unifica com o cadastro/registrador,
+  // senão todas as provas do militar aparecem no bloco de quem aplicou só uma.
   const blocos = montarBlocosResultadosTafPorAplicador({
     sessoes: sessoesAtuais,
     cadastros: opts.cadastros,
     rubricasSessoes: opts.rubricasSessoes,
     rubricasCadastros: opts.rubricasCadastros,
-    somenteSessoesInformadas: false,
+    somenteSessoesInformadas: true,
   });
   return { blocos, historicosSessao: historicos };
 }

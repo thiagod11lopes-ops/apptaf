@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CadastroItemPersist } from '../../src/services/cadastrosIndexedDb';
 import type { SessaoAplicacaoTaf } from '../../src/services/resultadosAplicadosIndexedDb';
+import { buildResultadosTafHtml } from '../../src/utils/exportResultadosTafPdf';
 import {
   classificarSessoesAtuaisEHistoricos,
   montarBlocosPreviewSomenteAtuais,
@@ -199,6 +200,54 @@ describe('montarBlocosPreviewSomenteAtuais', () => {
     expect(linha!.notaCorrida).toBe('50');
     expect(linha!.notaNatacao).toBe('50');
     expect(linha!.situacaoPermanencia).toBe('Aprovado');
+  });
+
+  it('PDF inclui a corrida atual do Wanderson (não só natação/permanência do Diogo)', () => {
+    const sessoes: SessaoAplicacaoTaf[] = [
+      sessao({
+        id: 'diogo-natacao',
+        dataAplicacao: '20/09/2026',
+        tipoProva: 'natacao',
+        criadoEm: '2026-09-20T10:10:00.000Z',
+        notaTexto: '50',
+        desempenhoTexto: '01:26:00',
+        tempoMs: 86_000,
+        aplicadorId: 'diogo',
+        aplicadorNome: 'Diogo Silva Gama',
+      }),
+      sessao({
+        id: 'diogo-perm',
+        dataAplicacao: '20/09/2026',
+        tipoProva: 'permanencia',
+        criadoEm: '2026-09-20T10:20:00.000Z',
+        aplicadorId: 'diogo',
+        aplicadorNome: 'Diogo Silva Gama',
+      }),
+      sessao({
+        id: 'wand-corrida',
+        dataAplicacao: '20/09/2026',
+        tipoProva: 'corrida',
+        criadoEm: '2026-09-20T09:00:00.000Z',
+        notaTexto: '50',
+        desempenhoTexto: '16:10:00',
+        aplicadorId: 'wanderson',
+        aplicadorNome: 'Wanderson Teixeira Nogueira',
+      }),
+    ];
+
+    const { blocos, historicosSessao } = montarBlocosPreviewSomenteAtuais({
+      sessoes,
+      cadastros: [cadastroThiago],
+    });
+    expect(historicosSessao).toHaveLength(0);
+    expect(blocos).toHaveLength(2);
+
+    const html = buildResultadosTafHtml(blocos, 'teste NIP 06038085');
+    expect(html).toContain('Wanderson');
+    expect(html).toContain('Diogo');
+    expect(html).toContain('Nota corrida');
+    expect(html).toMatch(/>50</);
+    expect(html).toContain('16:10:00');
   });
 
   it('quando Wanderson tem só permanência atual, não herda corrida do cadastro', () => {

@@ -119,10 +119,12 @@ function sliceFromResultado(
     };
   }
   const modality = tipo === 'natacao' ? 'natacao' : 'corrida';
+  const tempoTxt = (r.desempenhoTexto ?? '').trim();
   const tempoFmt =
-    typeof r.tempoMs === 'number' && r.tempoMs > 0
+    tempoTxt ||
+    (typeof r.tempoMs === 'number' && r.tempoMs > 0
       ? formatMsByModality(modality, r.tempoMs).trim() || undefined
-      : undefined;
+      : undefined);
   return {
     nota: notaFromResultado(r),
     situacao: situacaoFromResultado(r),
@@ -546,12 +548,20 @@ export function listarResultadosGeralFromHistorico(
     opts?.somenteSessoesInformadas || opts?.jaUnificadas
       ? sessoesReais
       : unificarSessoesComCadastroRegistrador(sessoesReais, cadastrosReais);
+  const soSessoes = opts?.somenteSessoesInformadas === true;
   return agregarHistoricoPorParticipante(base, cadastrosReais, {
-    somenteSessoesInformadas: opts?.somenteSessoesInformadas === true,
+    somenteSessoesInformadas: soSessoes,
   })
     .map((agg) => ({
       ...aggParaLinha(agg),
-      ...metaCorridaCaminhadaFromCadastro(agg, cadastrosReais, index),
+      // Por aplicador: não importa modalidadeDistanciaAtiva/datas do cadastro —
+      // isso pode esconder a corrida atual no PDF daquele bloco.
+      ...(soSessoes
+        ? {
+            corridaRegistradaEm: agg.corridaSessaoEm,
+            caminhadaRegistradaEm: agg.caminhadaSessaoEm,
+          }
+        : metaCorridaCaminhadaFromCadastro(agg, cadastrosReais, index)),
       postoGrad: postoGradFromLinhaId(agg.id, agg.nip, cadastrosReais),
     }))
     .sort(compareByNomePtBr);

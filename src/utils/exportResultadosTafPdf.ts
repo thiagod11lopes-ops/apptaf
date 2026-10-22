@@ -139,13 +139,15 @@ export function buildResultadosTafHtml(
 ): string {
   const dataStr = new Date().toLocaleString('pt-BR');
   const todasLinhas = blocos.flatMap((b) => b.linhas);
-  const { mostrarCorrida, mostrarCaminhada } = colunasDistanciaPdfVisiveis(todasLinhas);
-  const titulo = tituloResultadosTafPdf(mostrarCorrida, mostrarCaminhada);
-  const theadHtml = buildResultadosTafTheadHtml(mostrarCorrida, mostrarCaminhada);
-  const colspan = contarColunasResultadosTaf(mostrarCorrida, mostrarCaminhada);
+  const globais = colunasDistanciaPdfVisiveis(todasLinhas);
+  const titulo = tituloResultadosTafPdf(globais.mostrarCorrida, globais.mostrarCaminhada);
   const totalRegistros = todasLinhas.length;
 
   const secoes = blocos.map((bloco, index) => {
+    // Colunas por bloco: aplicador só com corrida não perde a coluna no PDF.
+    const { mostrarCorrida, mostrarCaminhada } = colunasDistanciaPdfVisiveis(bloco.linhas);
+    const theadHtml = buildResultadosTafTheadHtml(mostrarCorrida, mostrarCaminhada);
+    const colspan = contarColunasResultadosTaf(mostrarCorrida, mostrarCaminhada);
     const rows = buildLinhasTabelaHtml(bloco.linhas, mostrarCorrida, mostrarCaminhada);
     const tabelaHtml = buildPdfTableHtml({
       tableClass: 'resultados-taf',

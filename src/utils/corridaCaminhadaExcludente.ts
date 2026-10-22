@@ -150,8 +150,20 @@ export function colunasDistanciaPdfVisiveis(linhas: LinhaCorridaCaminhada[]): {
   let mostrarCaminhada = false;
   for (const item of linhas) {
     const vigente = modalidadeCorridaCaminhadaVigente(item);
-    if (vigente === 'corrida') mostrarCorrida = true;
-    if (vigente === 'caminhada') mostrarCaminhada = true;
+    // Inclui coluna se a modalidade é a vigente OU se a linha tem resultado preenchido
+    // (prévia por aplicador: um bloco só com corrida não pode perder a coluna no PDF).
+    if (
+      vigente === 'corrida' ||
+      modalidadeConcluida(item.notaCorrida, item.situacaoCorrida)
+    ) {
+      mostrarCorrida = true;
+    }
+    if (
+      vigente === 'caminhada' ||
+      modalidadeConcluida(item.notaCaminhada, item.situacaoCaminhada)
+    ) {
+      mostrarCaminhada = true;
+    }
     if (mostrarCorrida && mostrarCaminhada) break;
   }
   return { mostrarCorrida, mostrarCaminhada };

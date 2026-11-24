@@ -25,18 +25,19 @@ export function IdMilitarBadge({
   const t = (value || '').trim();
   if (!t) return null;
   const size = Math.max(9, fontSize);
+  const textStyle = [
+    styles.badgeText,
+    {
+      fontSize: size,
+      lineHeight: Math.round(size * 1.2),
+    },
+  ];
   return (
     <View style={styles.badge} accessibilityLabel={`ID ${t}`}>
-      <Text
-        style={[
-          styles.badgeText,
-          {
-            fontSize: size,
-            lineHeight: Math.round(size * 1.2),
-          },
-        ]}
-        numberOfLines={1}
-      >
+      <Text style={textStyle} numberOfLines={1}>
+        ID
+      </Text>
+      <Text style={[textStyle, styles.badgeNumber]} numberOfLines={1}>
         {t}
       </Text>
     </View>
@@ -62,30 +63,39 @@ export function IdMilitarInput({
 }: InputProps) {
   return (
     <View style={wide ? styles.inputWrapWide : styles.inputWrap}>
-      <Text style={styles.inputLabel}>{wide ? 'ID do militar' : 'ID'}</Text>
-      <TextInput
-        value={value}
-        onChangeText={(t) => onChangeText(t.replace(/[^\dA-Za-z\-_.]/g, '').slice(0, 12))}
-        placeholder={wide ? 'id opcional' : 'ID'}
-        placeholderTextColor="#6ee7b7"
-        editable={editable}
-        keyboardType="default"
-        autoCorrect={false}
-        spellCheck={false}
+      <View
         style={[
-          styles.input,
-          wide ? styles.inputWide : null,
+          styles.inputRow,
+          wide ? styles.inputRowWide : null,
           !editable ? { opacity: 0.75 } : null,
         ]}
-        accessibilityLabel={accessibilityLabel}
-        accessibilityState={{ disabled: !editable }}
-      />
+      >
+        <Text style={styles.inputPrefix} accessibilityElementsHidden>
+          ID
+        </Text>
+        <TextInput
+          value={value}
+          onChangeText={(t) => onChangeText(t.replace(/[^\dA-Za-z\-_.]/g, '').slice(0, 12))}
+          placeholder="opcional"
+          placeholderTextColor="#6ee7b7"
+          editable={editable}
+          keyboardType="default"
+          autoCorrect={false}
+          spellCheck={false}
+          style={[styles.input, wide ? styles.inputWide : null]}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityState={{ disabled: !editable }}
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: GREEN_BG,
     borderWidth: 1.5,
     borderColor: GREEN_BORDER,
@@ -93,42 +103,59 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     flexShrink: 0,
-    maxWidth: 120,
+    maxWidth: 140,
   },
   badgeText: {
     color: GREEN_TEXT,
-    fontWeight: '600',
+    fontWeight: '800',
     letterSpacing: 0.2,
+    flexShrink: 0,
     ...(Platform.OS === 'web' ? ({ fontVariant: ['tabular-nums'] } as object) : null),
   },
+  badgeNumber: {
+    fontWeight: '600',
+    flexShrink: 1,
+    minWidth: 0,
+  },
   inputWrap: {
-    width: 96,
+    width: 120,
     flexShrink: 0,
-    gap: 2,
   },
   inputWrapWide: {
     width: '100%',
-    gap: 4,
     marginBottom: 4,
   },
-  inputLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: GREEN_TEXT,
-    letterSpacing: 0.4,
-  },
-  input: {
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     borderWidth: 1.5,
     borderColor: GREEN_BORDER,
     borderRadius: 14,
     backgroundColor: GREEN_BG,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  inputRowWide: {
+    paddingHorizontal: 16,
+  },
+  inputPrefix: {
+    color: GREEN_TEXT,
+    fontSize: ID_MILITAR_FONT_SIZE_NIP_INPUT,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    flexShrink: 0,
+  },
+  input: {
+    flex: 1,
+    minWidth: 0,
+    padding: 0,
+    margin: 0,
     color: GREEN_TEXT,
     fontSize: ID_MILITAR_FONT_SIZE_NIP_INPUT,
     fontWeight: '600',
     letterSpacing: 0.2,
-    textAlign: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    textAlign: 'left',
     ...(Platform.OS === 'web'
       ? ({ outlineStyle: 'none', fontVariant: ['tabular-nums'] } as object)
       : null),

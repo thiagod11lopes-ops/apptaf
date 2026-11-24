@@ -6,6 +6,8 @@ export type ResultadoCorridaItem = {
   nome: string;
   tempoMs: number;
   nip: string;
+  /** ID do militar no pré-cadastro (acompanha o resultado e o PDF). */
+  idMilitar?: string;
   prova?:
     | 'corrida'
     | 'natacao'

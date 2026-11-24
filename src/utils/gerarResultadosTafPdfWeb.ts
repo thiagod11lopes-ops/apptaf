@@ -40,8 +40,9 @@ function montarColunasResultadosTaf(
 ): Coluna[] {
   const colunas: Coluna[] = [
     { key: 'pg', label: 'P/G', width: 36, get: (r) => r.postoGrad },
+    { key: 'id', label: 'ID', width: 36, get: (r) => (r.idMilitar || '').trim() || '—' },
     { key: 'nip', label: 'NIP', width: 52, get: (r) => r.nip },
-    { key: 'nome', label: 'Nome', width: 90, get: (r) => r.nome },
+    { key: 'nome', label: 'Nome', width: 84, get: (r) => r.nome },
   ];
   if (mostrarCorrida) {
     colunas.push(

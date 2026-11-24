@@ -11,6 +11,8 @@ export type ResultadoTafLinha = {
   id: string;
   postoGrad: string;
   nip: string;
+  /** ID do militar (pré-cadastro), quando informado. */
+  idMilitar?: string;
   nome: string;
   notaCorrida: string;
   situacaoCorrida: string;

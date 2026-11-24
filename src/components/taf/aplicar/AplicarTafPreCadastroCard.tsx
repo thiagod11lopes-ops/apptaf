@@ -8,6 +8,12 @@ import { PREMIUM } from '../../../theme/premium';
 import { AplicarTafPrimaryButton } from './AplicarTafUi';
 import { getAplicarTafGlass } from './aplicarTafTheme';
 import { useAplicarTafLayout } from './useAplicarTafLayout';
+import { IdMilitarBadge } from './IdMilitarBadge';
+
+export type PreCadastroParticipantePreview = {
+  nome: string;
+  idMilitar?: string;
+};
 
 type Props = {
   /** Número de ordem do card (1-based), exibido no topo à direita. */
@@ -17,7 +23,7 @@ type Props = {
   /** Nome da modalidade (Natação, Corrida…), colorido. */
   modalidadeLabel: string;
   meta: string;
-  nomesPreview: string;
+  participantesPreview: PreCadastroParticipantePreview[];
   onIniciar: () => void;
   onExcluir: () => void;
   onEditar: () => void;
@@ -29,7 +35,7 @@ export function AplicarTafPreCadastroCard({
   titulo,
   modalidadeLabel,
   meta,
-  nomesPreview,
+  participantesPreview,
   onIniciar,
   onExcluir,
   onEditar,
@@ -127,9 +133,25 @@ export function AplicarTafPreCadastroCard({
             </View>
           </View>
         </View>
-        <Text style={[styles.nomes, { color: theme.textMuted }]} numberOfLines={2}>
-          {nomesPreview}
-        </Text>
+        <View style={styles.participantesList}>
+          {participantesPreview.slice(0, 6).map((p, i) => {
+            const nome = (p.nome || '').trim() || `Participante ${i + 1}`;
+            const id = (p.idMilitar || '').trim();
+            return (
+              <View key={`${nome}-${id}-${i}`} style={styles.participanteRow}>
+                {id ? <IdMilitarBadge value={id} compact /> : null}
+                <Text style={[styles.nomes, { color: theme.textMuted }]} numberOfLines={1}>
+                  {nome}
+                </Text>
+              </View>
+            );
+          })}
+          {participantesPreview.length > 6 ? (
+            <Text style={[styles.nomes, { color: theme.textMuted }]}>
+              +{participantesPreview.length - 6} outro(s)
+            </Text>
+          ) : null}
+        </View>
         <View style={[styles.actions, stackActions ? styles.actionsStacked : null]}>
           <View style={styles.btnIniciarWrap}>
             <AplicarTafPrimaryButton label="Iniciar Prova" onPress={onIniciar} />
@@ -233,12 +255,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  participantesList: {
+    gap: 4,
+    marginBottom: 6,
+    marginTop: 2,
+  },
+  participanteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
   nomes: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 17,
-    marginBottom: 6,
-    marginTop: 2,
+    minWidth: 0,
   },
   actions: {
     flexDirection: 'row',

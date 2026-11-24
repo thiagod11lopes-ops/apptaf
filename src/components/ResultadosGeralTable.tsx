@@ -209,6 +209,17 @@ const ResultadoGeralRow = memo(function ResultadoGeralRow({
         <View style={[styles.modernDivider, { backgroundColor: glassBorder }]} />
 
         <View style={styles.modernMetaGrid}>
+          {(item.idMilitar || '').trim() ? (
+            <View style={styles.modernMetaItem}>
+              <Text style={[styles.modernMetaLabel, { color: textMuted }]}>ID</Text>
+              <SearchHighlightText
+                text={(item.idMilitar || '').trim()}
+                queryLower={buscaLower}
+                style={[styles.modernMetaValue, { color: '#047857' }]}
+                numberOfLines={1}
+              />
+            </View>
+          ) : null}
           <View style={styles.modernMetaItem}>
             <LabelNip color={textMuted} fontSize={9} fontWeight="800" />
             <SearchHighlightText

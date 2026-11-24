@@ -88,7 +88,9 @@ function PreviewRow({
             {celula(linha.nome)}
           </Text>
           <Text style={[styles.meta, { color: theme.textMuted }]}>
-            {celula(linha.postoGrad)} · NIP {celula(linha.nip)}
+            {celula(linha.postoGrad)}
+            {(linha.idMilitar || '').trim() ? ` · ID ${celula((linha.idMilitar || '').trim())}` : ''}
+            {' · '}NIP {celula(linha.nip)}
           </Text>
         </View>
         <TouchableOpacity

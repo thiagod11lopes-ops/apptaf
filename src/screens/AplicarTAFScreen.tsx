@@ -269,6 +269,8 @@ export default function AplicarTAFScreen() {
   const [erroParticipantes, setErroParticipantes] = useState('');
   const [nipsParticipantes, setNipsParticipantes] = useState<string[]>([]);
   const nParticipantesConfirmado = nipsParticipantes.length;
+  /** IDs dos militares (pré-cadastro), alinhados a `nipsParticipantes`. */
+  const [idsMilitarParticipantes, setIdsMilitarParticipantes] = useState<string[]>([]);
   const [nipFeedbackLinhas, setNipFeedbackLinhas] = useState<NipFeedbackLinha[]>([]);
   const [demoAtivo, setDemoAtivo] = useState(isModoDemonstracaoAtivo);
   const [preenchendoNipsDemo, setPreenchendoNipsDemo] = useState(false);
@@ -749,6 +751,7 @@ export default function AplicarTAFScreen() {
       modoTafNaval,
       corridaEtapa: etapaSalva,
       nipsParticipantes: [...nipsParticipantes],
+      idsMilitarParticipantes: [...idsMilitarParticipantes],
       nipFeedbackLinhas: nipFeedbackLinhas.map((fb) =>
         fb == null ? null : ({ ...fb } as ProvaAtivaSessionV1['nipFeedbackLinhas'][number]),
       ),
@@ -782,6 +785,7 @@ export default function AplicarTAFScreen() {
     fluxoAplicadorVisible,
     modalTempoRegistradoVisible,
     nipsParticipantes,
+    idsMilitarParticipantes,
     nipFeedbackLinhas,
     trialTable,
     numeroVoltas,
@@ -819,6 +823,11 @@ export default function AplicarTAFScreen() {
       setMostrarRestritos(false);
       setMostrarProvas(true);
       setNipsParticipantes(session.nipsParticipantes);
+      setIdsMilitarParticipantes(
+        session.idsMilitarParticipantes?.length === session.nipsParticipantes.length
+          ? [...session.idsMilitarParticipantes]
+          : session.nipsParticipantes.map(() => ''),
+      );
       setNipFeedbackLinhas(session.nipFeedbackLinhas as NipFeedbackLinha[]);
       nipsRepeticaoAutorizadaRef.current = new Set(session.nipsRepeticaoAutorizada ?? []);
       preCadastroOrigemIdRef.current = session.preCadastroOrigemId?.trim() || null;
@@ -924,6 +933,7 @@ export default function AplicarTAFScreen() {
     setNumeroVoltas(NUMERO_VOLTAS_PADRAO);
     setVoltasConfirmadasProva(false);
     setNipsParticipantes([]);
+    setIdsMilitarParticipantes([]);
     setNipFeedbackLinhas([]);
     setTipoProva(null);
     tipoProvaRef.current = null;
@@ -1276,11 +1286,13 @@ export default function AplicarTAFScreen() {
           prova === 'corrida'
             ? formatNotaDesistenciaCorrida(desistenciaVoltasParticipantes[i] ?? 0)
             : 'REPROVADO';
+        const idMilitarDesist = (idsMilitarParticipantes[i] || '').trim();
         resultados.push({
           corredor: i + 1,
           nome: nomeBase,
           tempoMs: tempoDesistenciaMs ?? 0,
           nip,
+          ...(idMilitarDesist ? { idMilitar: idMilitarDesist } : {}),
           prova,
           desempenhoTexto: desempenhoDesistencia,
           notaTexto: notaDesistencia,
@@ -1303,11 +1315,13 @@ export default function AplicarTAFScreen() {
       const desempenhoTexto =
         temposMilitaresMs[i] != null ? formatMsByModality(tempoMod, temposMilitaresMs[i]!) : undefined;
 
+      const idMilitar = (idsMilitarParticipantes[i] || '').trim();
       resultados.push({
         corredor: i + 1,
         nome: nomeBase,
         tempoMs,
         nip,
+        ...(idMilitar ? { idMilitar } : {}),
         prova,
         desempenhoTexto,
         notaTexto,
@@ -1412,6 +1426,7 @@ export default function AplicarTAFScreen() {
     nParticipantesConfirmado,
     nipFeedbackLinhas,
     nipsParticipantes,
+    idsMilitarParticipantes,
     salvandoResultadosCorrida,
     temposMilitaresMs,
     desistenciaParticipantes,
@@ -1457,11 +1472,13 @@ export default function AplicarTAFScreen() {
         );
         if (notaTexto === '—') notaTexto = undefined;
       }
+      const idMilitar = (idsMilitarParticipantes[i] || '').trim();
       resultados.push({
         corredor: i + 1,
         nome: nomeBase,
         tempoMs: Number.isFinite(reps) ? reps : 0,
         nip: nipsParticipantes[i] ?? '',
+        ...(idMilitar ? { idMilitar } : {}),
         prova,
         desempenhoTexto: Number.isFinite(reps) ? `${reps} rep.` : undefined,
         notaTexto,
@@ -1536,6 +1553,7 @@ export default function AplicarTAFScreen() {
     nParticipantesConfirmado,
     nipFeedbackLinhas,
     nipsParticipantes,
+    idsMilitarParticipantes,
     repeticoesParticipantes,
     salvandoResultadosCorrida,
     tipoProva,
@@ -1799,6 +1817,7 @@ export default function AplicarTAFScreen() {
       setTipoProva(tipo);
       setErroParticipantes('');
       setNipsParticipantes(['']);
+      setIdsMilitarParticipantes(['']);
       setNipFeedbackLinhas([null]);
       nipsRepeticaoAutorizadaRef.current = new Set();
       setModalEditarIdadeGeneroIndex(null);
@@ -1845,6 +1864,7 @@ export default function AplicarTAFScreen() {
     setTipoProva(null);
     setErroParticipantes('');
     setNipsParticipantes([]);
+    setIdsMilitarParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalEditarIdadeGeneroIndex(null);
@@ -1866,6 +1886,7 @@ export default function AplicarTAFScreen() {
     setErroParticipantes('');
     scrollNipsAposAddRef.current = true;
     setNipsParticipantes((prev) => [...prev, '']);
+    setIdsMilitarParticipantes((prev) => [...prev, '']);
     setNipFeedbackLinhas((prev) => [...prev, null]);
   }, [tipoProva, nipsParticipantes.length]);
 
@@ -1919,6 +1940,10 @@ export default function AplicarTAFScreen() {
       return cur;
     });
     setNipsParticipantes((prev) => {
+      if (prev.length <= 1) return [''];
+      return prev.filter((_, i) => i !== index);
+    });
+    setIdsMilitarParticipantes((prev) => {
       if (prev.length <= 1) return [''];
       return prev.filter((_, i) => i !== index);
     });
@@ -2344,6 +2369,7 @@ export default function AplicarTAFScreen() {
         const selecionados = pool.slice(0, n);
         setErroParticipantes('');
         setNipsParticipantes(selecionados.map((c) => c.nip));
+        setIdsMilitarParticipantes(Array.from({ length: n }, () => ''));
         setNipFeedbackLinhas(selecionados.map((c) => nipFeedbackOkFromCadastro(c)));
         nipsRepeticaoAutorizadaRef.current = new Set(Array.from({ length: n }, (_, i) => i));
         setModalTesteExistente(null);
@@ -2360,11 +2386,21 @@ export default function AplicarTAFScreen() {
     const n = nParticipantesConfirmado;
     if (n < 1) return;
     setNipsParticipantes(Array.from({ length: n }, () => ''));
+    setIdsMilitarParticipantes(Array.from({ length: n }, () => ''));
     setNipFeedbackLinhas(Array.from({ length: n }, () => null));
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalTesteExistente(null);
     setModalModalidadeExcludente(null);
   }, [nParticipantesConfirmado]);
+
+  const atualizarIdMilitarParticipante = useCallback((index: number, texto: string) => {
+    setIdsMilitarParticipantes((prev) => {
+      const next = [...prev];
+      while (next.length <= index) next.push('');
+      next[index] = texto.trim();
+      return next;
+    });
+  }, []);
 
   const fecharModalTesteExistente = useCallback(() => {
     setModalTesteExistente(null);
@@ -2551,6 +2587,7 @@ export default function AplicarTAFScreen() {
         const nip = nipsParticipantes[i] ?? '';
         const resultado = resultadoPermanenciaLinhas[i]!;
         const tempoMs = tempoMsLinha(i, resultado);
+        const idMilitar = (idsMilitarParticipantes[i] || '').trim();
         resultadosPerm.push({
           corredor: i + 1,
           nome:
@@ -2558,6 +2595,7 @@ export default function AplicarTAFScreen() {
               ? (fb.nomeMilitar || '').trim() || `Militar ${i + 1}`
               : `Militar ${i + 1}`,
           nip,
+          ...(idMilitar ? { idMilitar } : {}),
           tempoMs,
           prova: 'permanencia',
           notaTexto: resultado === 'aprovado' ? 'Aprovado' : 'REPROVADO',
@@ -2633,6 +2671,7 @@ export default function AplicarTAFScreen() {
     temposMilitaresMs,
     nParticipantesConfirmado,
     nipsParticipantes,
+    idsMilitarParticipantes,
     nipFeedbackLinhas,
     salvandoResultadosCorrida,
     abrirFluxoRubricaCandidatos,
@@ -2867,6 +2906,7 @@ export default function AplicarTAFScreen() {
     setErroParticipantes('');
     setNomeCodigoPreCadastro(null);
     setNipsParticipantes([]);
+    setIdsMilitarParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalTesteExistente(null);
@@ -2893,6 +2933,7 @@ export default function AplicarTAFScreen() {
     setErroParticipantes('');
     setNomeCodigoPreCadastro(null);
     setNipsParticipantes([]);
+    setIdsMilitarParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalTesteExistente(null);
@@ -2955,11 +2996,13 @@ export default function AplicarTAFScreen() {
     }
     const participantes = nipFeedbackLinhas.map((fb, index) => {
       const ok = fb as Extract<NipFeedbackLinha, { tipo: 'ok' }>;
+      const idMilitar = (idsMilitarParticipantes[index] || '').trim();
       return {
         nip: nipsParticipantes[index] || '',
         nomeMilitar: ok.nomeMilitar,
         dataNascimento: ok.dataNascimento,
         sexo: ok.sexo,
+        ...(idMilitar ? { idMilitar } : {}),
       };
     });
     const editando = preCadastroEditando;
@@ -3011,6 +3054,7 @@ export default function AplicarTAFScreen() {
     nomeCodigoPreCadastro,
     listaPreCadastros,
     preCadastroEditando,
+    idsMilitarParticipantes,
   ]);
 
   const iniciarProvaFromPreCadastro = useCallback(
@@ -3046,6 +3090,7 @@ export default function AplicarTAFScreen() {
         setMostrarProvas(true);
         preCadastroOrigemIdRef.current = pre.id;
         setNipsParticipantes(participantes.map((p) => p.nip));
+        setIdsMilitarParticipantes(participantes.map((p) => (p.idMilitar || '').trim()));
         setNipFeedbackLinhas(
           participantes.map((p) => {
             const busca = buscarCadastroPorNomeOuNip(lista, p.nip);
@@ -3135,6 +3180,7 @@ export default function AplicarTAFScreen() {
             : 'Nenhum',
         );
         setNipsParticipantes(pre.participantes.map((p) => p.nip));
+        setIdsMilitarParticipantes(pre.participantes.map((p) => (p.idMilitar || '').trim()));
         setNipFeedbackLinhas(
           pre.participantes.map((p) => {
             const busca = buscarCadastroPorNomeOuNip(lista, p.nip);
@@ -3198,6 +3244,7 @@ export default function AplicarTAFScreen() {
     setCorridaEtapa('menu');
     setErroParticipantes('');
     setNipsParticipantes([]);
+    setIdsMilitarParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalTesteExistente(null);
@@ -3223,6 +3270,7 @@ export default function AplicarTAFScreen() {
     setCorridaEtapa('menu');
     setErroParticipantes('');
     setNipsParticipantes([]);
+    setIdsMilitarParticipantes([]);
     setNipFeedbackLinhas([]);
     nipsRepeticaoAutorizadaRef.current = new Set();
     setModalTesteExistente(null);
@@ -3666,7 +3714,10 @@ export default function AplicarTAFScreen() {
                     titulo={(pre.nomeCodigo || '').trim() || null}
                     modalidadeLabel={labelTipoProvaPreCadastro(pre)}
                     meta={metaPreCadastro(pre)}
-                    nomesPreview={pre.participantes.map((p) => p.nomeMilitar).join(', ')}
+                    participantesPreview={pre.participantes.map((p) => ({
+                      nome: p.nomeMilitar,
+                      idMilitar: p.idMilitar,
+                    }))}
                     accentColors={PRE_CADASTRO_ACCENTS[pre.tipoProva] ?? PRE_CADASTRO_ACCENTS.corrida}
                     onIniciar={() => iniciarProvaFromPreCadastro(pre)}
                     onExcluir={() => excluirPreCadastro(pre)}
@@ -3857,6 +3908,9 @@ export default function AplicarTAFScreen() {
               feedbackLinhas={nipFeedbackLinhas}
               demoAtivo={demoAtivo}
               labelAtleta={labelAtleta}
+              idsMilitar={idsMilitarParticipantes}
+              mostrarCampoId={modoPreCadastro}
+              onAtualizarIdMilitar={atualizarIdMilitarParticipante}
               onAtualizarNip={atualizarNip}
               onVerificarNip={(index) => void verificarNipNoCadastro(index)}
               onRemoverPress={solicitarExclusaoParticipanteNip}
@@ -4006,6 +4060,7 @@ export default function AplicarTAFScreen() {
         onConfirmDesistencia={confirmarDesistenciaParticipante}
         onClearDesistencia={limparDesistenciaParticipante}
         nipsParticipantes={nipsParticipantes}
+        idsMilitarParticipantes={idsMilitarParticipantes}
         temposMilitaresMs={temposMilitaresMs}
         formatMs={formatMs}
         mostrarTempo={mostrarColunaTempo}
@@ -4035,6 +4090,7 @@ export default function AplicarTAFScreen() {
         nParticipantes={nParticipantesConfirmado}
         nomesParticipantes={nomesParticipantesModal}
         nipsParticipantes={nipsParticipantes}
+        idsMilitarParticipantes={idsMilitarParticipantes}
         participantesComFatorRisco={participantesComFatorRiscoModal}
         onPressNomeParticipante={abrirModalFatoresRiscoParticipante}
         onDoublePressNomeParticipante={solicitarExclusaoParticipanteProva}

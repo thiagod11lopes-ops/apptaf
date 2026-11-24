@@ -50,6 +50,8 @@ export type ProvaAtivaSessionV1 = {
   modoTafNaval: boolean;
   corridaEtapa: 'tabela_corrida' | 'tabela_permanencia' | 'tabela_repeticoes' | 'nips';
   nipsParticipantes: string[];
+  /** IDs dos militares (pré-cadastro), alinhados a `nipsParticipantes`. */
+  idsMilitarParticipantes?: string[];
   nipFeedbackLinhas: ProvaAtivaNipFeedback[];
   trialTable: TrialTableState;
   numeroVoltas: string;

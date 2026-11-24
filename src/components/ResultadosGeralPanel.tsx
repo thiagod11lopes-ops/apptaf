@@ -91,6 +91,7 @@ function temModalidadeItem(item: ResultadoGeralItem, filtro: FiltroModalidade): 
 function linhaCombinaBusca(item: ResultadoGeralItem, q: string, qDigits: string): boolean {
   const haystack = [
     item.postoGrad,
+    item.idMilitar,
     item.nip,
     item.nome,
     item.statusTaf,

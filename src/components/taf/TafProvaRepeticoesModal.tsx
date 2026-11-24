@@ -22,6 +22,7 @@ import { useAplicarTafLayout } from './aplicar/useAplicarTafLayout';
 import { LogombWatermark } from '../mobile/LogombWatermark';
 import { formatNipInput } from '../../utils/nipFormat';
 import { ConfirmacaoVoltarIdentificacaoModal } from './aplicar/ConfirmacaoVoltarIdentificacaoModal';
+import { IdMilitarBadge } from './aplicar/IdMilitarBadge';
 
 export type TafProvaRepeticoesModalProps = {
   visible: boolean;
@@ -30,6 +31,7 @@ export type TafProvaRepeticoesModalProps = {
   nParticipantes: number;
   nomesParticipantes: string[];
   nipsParticipantes?: string[];
+  idsMilitarParticipantes?: string[];
   participantesComFatorRisco?: boolean[];
   onPressNomeParticipante?: (index: number) => void;
   onDoublePressNomeParticipante?: (index: number) => void;
@@ -50,6 +52,7 @@ export function TafProvaRepeticoesModal({
   nParticipantes,
   nomesParticipantes,
   nipsParticipantes = [],
+  idsMilitarParticipantes = [],
   participantesComFatorRisco = [],
   onPressNomeParticipante,
   onDoublePressNomeParticipante,
@@ -135,6 +138,7 @@ export function TafProvaRepeticoesModal({
               {rows.map((index) => {
                 const nome = nomesParticipantes[index] ?? `Militar ${index + 1}`;
                 const nipExibicao = formatNipInput(nipsParticipantes[index] ?? '') || '—';
+                const idMilitar = (idsMilitarParticipantes[index] ?? '').trim();
                 const temFatorRisco = participantesComFatorRisco[index] === true;
                 const nota = getNota(index);
                 const reprov = isNotaReprovado(index);
@@ -178,13 +182,16 @@ export function TafProvaRepeticoesModal({
                         >
                           {nome}
                         </Text>
-                        <Text
-                          style={[styles.rowNip, { color: theme.textMuted }]}
-                          numberOfLines={1}
-                          accessibilityLabel={`NIP ${nipExibicao}`}
-                        >
-                          {nipExibicao}
-                        </Text>
+                        <View style={styles.rowNipRow}>
+                          {idMilitar ? <IdMilitarBadge value={idMilitar} compact /> : null}
+                          <Text
+                            style={[styles.rowNip, { color: theme.textMuted, flexShrink: 1 }]}
+                            numberOfLines={1}
+                            accessibilityLabel={`NIP ${nipExibicao}`}
+                          >
+                            {nipExibicao}
+                          </Text>
+                        </View>
                       </View>
                       <View style={styles.rowFields}>
                         <View style={styles.inputWrap}>
@@ -379,6 +386,12 @@ const styles = StyleSheet.create({
   },
   rowNumSideText: { fontSize: 16, fontWeight: '900', fontVariant: ['tabular-nums'] },
   rowNome: { fontSize: 15, fontWeight: '800', lineHeight: 18, minWidth: 0 },
+  rowNipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
   rowNip: {
     fontSize: 11,
     fontWeight: '600',

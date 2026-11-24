@@ -43,6 +43,8 @@ type AggRow = {
   id: string;
   nip: string;
   nome: string;
+  /** ID do militar no pré-cadastro (quando informado na prova). */
+  idMilitar?: string;
   corrida?: ModalidadeHistorico;
   caminhada?: ModalidadeHistorico;
   natacao?: ModalidadeHistorico;
@@ -147,12 +149,14 @@ function atualizarIdentidade(
   if (busca.kind === 'found') {
     agg.nip = formatNipInput(busca.cadastro.nip ?? '') || agg.nip;
     agg.nome = (busca.cadastro.nome ?? '').trim() || agg.nome;
-    return;
+  } else {
+    const nipFmt = formatNipInput(r.nip ?? '');
+    if (nipFmt.trim()) agg.nip = nipFmt;
+    const nome = (r.nome ?? '').trim();
+    if (nome) agg.nome = nome;
   }
-  const nipFmt = formatNipInput(r.nip ?? '');
-  if (nipFmt.trim()) agg.nip = nipFmt;
-  const nome = (r.nome ?? '').trim();
-  if (nome) agg.nome = nome;
+  const idMilitar = (r.idMilitar ?? '').trim();
+  if (idMilitar) agg.idMilitar = idMilitar;
 }
 
 function metaCorridaCaminhadaFromCadastro(
@@ -205,6 +209,7 @@ function aggParaLinha(agg: AggRow): ResultadoGeralItem {
     id: agg.id,
     postoGrad: '—',
     nip: agg.nip || '—',
+    ...(agg.idMilitar ? { idMilitar: agg.idMilitar } : {}),
     nome: agg.nome || '—',
     notaCorrida: temCorrida ? agg.corrida!.nota : '—',
     situacaoCorrida: temCorrida ? agg.corrida!.situacao : '—',

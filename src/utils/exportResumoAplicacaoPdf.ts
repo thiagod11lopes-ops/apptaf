@@ -213,10 +213,13 @@ export function buildResumoAplicacaoHtml(
   const colProva = escapeHtmlPdf(cabecalhoColunaProvaResultados(resultados));
   const tituloProva = escapeHtmlPdf(tituloProvaResumoPdf(resultados));
 
-  const theadPdf = `<tr><th>${colProva}</th><th class="col-nome">Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>SituaÃ§Ã£o</th><th class="col-rubrica">RÃºbrica</th></tr>`;
+  const theadPdf = `<tr><th>${colProva}</th><th class="col-nome">Nome</th><th>ID</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>SituaÃ§Ã£o</th><th class="col-rubrica">RÃºbrica</th></tr>`;
 
   const rows = resultados.map((r) => {
       const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
+      const idMilitar = (r.idMilitar || '').trim()
+        ? escapeHtmlPdf((r.idMilitar || '').trim())
+        : 'â€”';
       const nip = r.nip ? escapeHtmlPdf(r.nip) : 'â€”';
       const nota = escapeHtmlPdf(r.notaTexto ?? 'â€”');
       const situacao = escapeHtmlPdf(
@@ -227,6 +230,7 @@ export function buildResumoAplicacaoHtml(
       return `<tr>
         <td>${papel} ${r.corredor}</td>
         <td class="col-nome">${escapeHtmlPdf(r.nome)}</td>
+        <td>${idMilitar}</td>
         <td>${nip}</td>
         <td class="tempo">${escapeHtmlPdf(formatTempoColunaResultado(r))}</td>
         <td class="nota">${nota}</td>
@@ -245,7 +249,7 @@ export function buildResumoAplicacaoHtml(
           tableClass: 'resultados-taf',
           theadHtml: theadPdf,
           rowHtml: rows,
-          emptyColspan: 7,
+          emptyColspan: 8,
           rowsPerPage: comAssinatura ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA : undefined,
         });
 
@@ -387,9 +391,12 @@ export function buildResumosAplicacaoDiaHtml(
     const resultados = bloco.resultados;
     const colProva = escapeHtmlPdf(cabecalhoColunaProvaResultados(resultados));
     const tituloProva = escapeHtmlPdf(tituloProvaResumoPdf(resultados));
-    const theadPdf = `<tr><th>${colProva}</th><th class="col-nome">Nome</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>SituaÃ§Ã£o</th><th class="col-rubrica">RÃºbrica</th></tr>`;
+    const theadPdf = `<tr><th>${colProva}</th><th class="col-nome">Nome</th><th>ID</th><th>NIP</th><th>Tempo</th><th>Nota</th><th>SituaÃ§Ã£o</th><th class="col-rubrica">RÃºbrica</th></tr>`;
     const rows = resultados.map((r) => {
       const papel = r.prova === 'natacao' ? 'Nadador' : 'Corredor';
+      const idMilitar = (r.idMilitar || '').trim()
+        ? escapeHtmlPdf((r.idMilitar || '').trim())
+        : 'â€”';
       const nip = r.nip ? escapeHtmlPdf(r.nip) : 'â€”';
       const nota = escapeHtmlPdf(r.notaTexto ?? 'â€”');
       const situacao = escapeHtmlPdf(
@@ -400,6 +407,7 @@ export function buildResumosAplicacaoDiaHtml(
       return `<tr>
         <td>${papel} ${r.corredor}</td>
         <td class="col-nome">${escapeHtmlPdf(r.nome)}</td>
+        <td>${idMilitar}</td>
         <td>${nip}</td>
         <td class="tempo">${escapeHtmlPdf(formatTempoColunaResultado(r))}</td>
         <td class="nota">${nota}</td>
@@ -411,7 +419,7 @@ export function buildResumosAplicacaoDiaHtml(
       tableClass: 'resultados-taf',
       theadHtml: theadPdf,
       rowHtml: rows,
-      emptyColspan: 7,
+      emptyColspan: 8,
       rowsPerPage: bloco.aplicadorAssinatura
         ? PDF_MAX_ROWS_PER_PAGE_COM_ASSINATURA
         : undefined,

@@ -66,6 +66,7 @@ function tituloResultadosTafPdf(mostrarCorrida: boolean, mostrarCaminhada: boole
 function buildResultadosTafTheadHtml(mostrarCorrida: boolean, mostrarCaminhada: boolean): string {
   const partes = [
     '<th>P/G</th>',
+    '<th>ID</th>',
     '<th>NIP</th>',
     '<th class="col-nome">Nome</th>',
   ];
@@ -90,7 +91,7 @@ function buildResultadosTafTheadHtml(mostrarCorrida: boolean, mostrarCaminhada: 
 }
 
 function contarColunasResultadosTaf(mostrarCorrida: boolean, mostrarCaminhada: boolean): number {
-  let n = 3 + 3 + 2; // P/G NIP Nome + natação (3) + permanência (2)
+  let n = 4 + 3 + 2; // P/G ID NIP Nome + natação (3) + permanência (2)
   if (mostrarCorrida) n += 3;
   if (mostrarCaminhada) n += 3;
   return n;
@@ -105,6 +106,7 @@ function buildLinhasTabelaHtml(
     const dist = valoresCorridaCaminhadaParaPdf(r);
     const celulas = [
       `<td>${escapeHtmlPdf(r.postoGrad)}</td>`,
+      `<td>${escapeHtmlPdf((r.idMilitar || '').trim() || '—')}</td>`,
       `<td>${escapeHtmlPdf(r.nip)}</td>`,
       `<td class="col-nome">${escapeHtmlPdf(r.nome)}</td>`,
     ];

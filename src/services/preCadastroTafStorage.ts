@@ -21,6 +21,8 @@ export type PreCadastroParticipante = {
   nomeMilitar: string;
   dataNascimento: string;
   sexo?: 'M' | 'F';
+  /** ID livre do militar no pré-cadastro (exibido à esquerda do NIP). */
+  idMilitar?: string;
 };
 
 export type PreCadastroTaf = {

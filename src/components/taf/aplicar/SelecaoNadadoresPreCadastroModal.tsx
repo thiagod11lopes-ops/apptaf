@@ -6,6 +6,7 @@ import { ModernModal } from '../../sismav/ModernModal';
 import { PressableScale } from '../../premium/PressableScale';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { formatNipInput, nipDigitos } from '../../../utils/nipFormat';
+import { IdMilitarBadge } from './IdMilitarBadge';
 import type { PreCadastroParticipante, PreCadastroTaf } from '../../../services/preCadastroTafStorage';
 
 type Props = {
@@ -165,9 +166,14 @@ export function SelecaoNadadoresPreCadastroModal({
                     <Text style={[styles.nome, { color: theme.text }]} numberOfLines={2}>
                       {nome}
                     </Text>
-                    {nipFmt ? (
-                      <Text style={[styles.nip, { color: theme.textMuted }]}>NIP {nipFmt}</Text>
-                    ) : null}
+                    <View style={styles.nipRow}>
+                      {(p.idMilitar || '').trim() ? (
+                        <IdMilitarBadge value={(p.idMilitar || '').trim()} compact />
+                      ) : null}
+                      {nipFmt ? (
+                        <Text style={[styles.nip, { color: theme.textMuted }]}>NIP {nipFmt}</Text>
+                      ) : null}
+                    </View>
                   </View>
                 </PressableScale>
               );
@@ -224,6 +230,12 @@ const styles = StyleSheet.create({
   nome: {
     fontSize: 15,
     fontWeight: '700',
+  },
+  nipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
   },
   nip: {
     fontSize: 12,

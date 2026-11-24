@@ -25,6 +25,7 @@ import {
   VinculoCarreiraRm2Checks,
   type VinculoMilitar,
 } from './VinculoCarreiraRm2Checks';
+import { IdMilitarBadge, IdMilitarInput } from './IdMilitarBadge';
 
 export type NipFeedbackLinha =
   | {
@@ -62,6 +63,11 @@ export type AplicarTafNipsListProps = {
   feedbackLinhas: NipFeedbackLinha[];
   demoAtivo: boolean;
   labelAtleta: string;
+  /** IDs dos militares (pré-cadastro), alinhados a `nips`. */
+  idsMilitar?: string[];
+  /** Exibe campo ID à esquerda do NIP (pré-cadastro). */
+  mostrarCampoId?: boolean;
+  onAtualizarIdMilitar?: (index: number, texto: string) => void;
   onAtualizarNip: (index: number, texto: string) => void;
   onVerificarNip: (index: number) => void;
   onRemoverPress: (index: number) => void;
@@ -104,6 +110,8 @@ const NipRowSeparator = () => <View style={styles.separator} />;
 type NipParticipanteRowProps = {
   index: number;
   nip: string;
+  idMilitar: string;
+  mostrarCampoId: boolean;
   fb: NipFeedbackLinha;
   demoAtivo: boolean;
   labelAtleta: string;
@@ -114,6 +122,7 @@ type NipParticipanteRowProps = {
   inputBorder: string;
   selectedBgColor: string;
   selectedTextColor: string;
+  onAtualizarIdMilitar?: (index: number, texto: string) => void;
   onAtualizarNip: (index: number, texto: string) => void;
   onVerificarNip: (index: number) => void;
   onRemoverPress: (index: number) => void;
@@ -132,6 +141,8 @@ type NipParticipanteRowProps = {
 const NipParticipanteRow = memo(function NipParticipanteRow({
   index,
   nip,
+  idMilitar,
+  mostrarCampoId,
   fb,
   demoAtivo,
   labelAtleta,
@@ -142,6 +153,7 @@ const NipParticipanteRow = memo(function NipParticipanteRow({
   inputBorder,
   selectedBgColor,
   selectedTextColor,
+  onAtualizarIdMilitar,
   onAtualizarNip,
   onVerificarNip,
   onRemoverPress,
@@ -180,6 +192,16 @@ const NipParticipanteRow = memo(function NipParticipanteRow({
           </TouchableOpacity>
         </View>
         <View style={rowStyles.nipInputRow}>
+          {mostrarCampoId ? (
+            <IdMilitarInput
+              value={idMilitar}
+              onChangeText={(t) => onAtualizarIdMilitar?.(index, t)}
+              editable={!demoAtivo}
+              accessibilityLabel={`ID do participante ${index + 1}`}
+            />
+          ) : (
+            <IdMilitarBadge value={idMilitar} />
+          )}
           <AplicarTafInput
             value={nip}
             onChangeText={(t) => onAtualizarNip(index, t)}
@@ -272,6 +294,11 @@ const NipParticipanteRow = memo(function NipParticipanteRow({
               <Text style={[rowStyles.militarRoleLabel, { color: theme.textSecondary }]}>
                 {labelAtleta}
               </Text>
+              {idMilitar.trim() ? (
+                <View style={{ marginBottom: 2 }}>
+                  <IdMilitarBadge value={idMilitar} />
+                </View>
+              ) : null}
               <Text
                 accessibilityRole={!demoAtivo ? 'button' : undefined}
                 accessibilityLabel="Editar dados do militar"
@@ -522,6 +549,9 @@ export function AplicarTafNipsList({
   feedbackLinhas,
   demoAtivo,
   labelAtleta,
+  idsMilitar = [],
+  mostrarCampoId = false,
+  onAtualizarIdMilitar,
   onAtualizarNip,
   onVerificarNip,
   onRemoverPress,
@@ -542,8 +572,8 @@ export function AplicarTafNipsList({
   const inputBorder = ui.inputBorder;
 
   const extraData = useMemo(
-    () => ({ feedbackLinhas, demoAtivo }),
-    [feedbackLinhas, demoAtivo],
+    () => ({ feedbackLinhas, demoAtivo, idsMilitar, mostrarCampoId }),
+    [feedbackLinhas, demoAtivo, idsMilitar, mostrarCampoId],
   );
 
   const renderItem = useCallback(
@@ -551,6 +581,8 @@ export function AplicarTafNipsList({
       <NipParticipanteRow
         index={index}
         nip={nip}
+        idMilitar={idsMilitar[index] ?? ''}
+        mostrarCampoId={mostrarCampoId}
         fb={feedbackLinhas[index] ?? null}
         demoAtivo={demoAtivo}
         labelAtleta={labelAtleta}
@@ -561,6 +593,7 @@ export function AplicarTafNipsList({
         inputBorder={inputBorder}
         selectedBgColor={selectedBgColor}
         selectedTextColor={selectedTextColor}
+        onAtualizarIdMilitar={onAtualizarIdMilitar}
         onAtualizarNip={onAtualizarNip}
         onVerificarNip={onVerificarNip}
         onRemoverPress={onRemoverPress}
@@ -575,6 +608,9 @@ export function AplicarTafNipsList({
     ),
     [
       feedbackLinhas,
+      idsMilitar,
+      mostrarCampoId,
+      onAtualizarIdMilitar,
       demoAtivo,
       labelAtleta,
       theme,

@@ -239,20 +239,26 @@ export async function gerarResumosAplicacaoPdfBlobWeb(
     const rowH = temAlgumaRubrica ? Math.max(36, imgH + 14) : 18;
 
     const cols: Col[] = [
-      { title: colProva, w: usableW * 0.11, kind: 'text', get: (r) => papelLinha(r) },
-      { title: 'Nome', w: usableW * 0.26, kind: 'text', get: (r) => r.nome || '—' },
+      { title: colProva, w: usableW * 0.1, kind: 'text', get: (r) => papelLinha(r) },
+      { title: 'Nome', w: usableW * 0.22, kind: 'text', get: (r) => r.nome || '—' },
+      {
+        title: 'ID',
+        w: usableW * 0.08,
+        kind: 'text',
+        get: (r) => (r.idMilitar || '').trim() || '—',
+      },
       { title: 'NIP', w: usableW * 0.12, kind: 'text', get: (r) => r.nip || '—' },
       { title: 'Tempo', w: usableW * 0.1, kind: 'text', get: (r) => formatarTempo(r) },
       { title: 'Nota', w: usableW * 0.09, kind: 'text', get: (r) => r.notaTexto || '—' },
       {
         title: 'Situacao',
-        w: usableW * 0.12,
+        w: usableW * 0.11,
         kind: 'text',
         get: (r) =>
           r.reprovacaoTexto ||
           (r.desistencia || isNotaReprovacaoTexto(r.notaTexto) ? 'Reprovado' : 'Aprovado'),
       },
-      { title: 'Rubrica', w: usableW * 0.2, kind: 'rubrica' },
+      { title: 'Rubrica', w: usableW * 0.18, kind: 'rubrica' },
     ];
 
     const sumW = cols.reduce((a, c) => a + c.w, 0);

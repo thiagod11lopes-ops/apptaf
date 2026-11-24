@@ -48,6 +48,7 @@ import { TafVoltasPromptOverlay } from './TafVoltasPromptOverlay';
 import { LogombWatermark } from '../mobile/LogombWatermark';
 import type { ResultadoPermanenciaOpcao } from '../PermanenciaTafPanel';
 import { formatNipInput } from '../../utils/nipFormat';
+import { IdMilitarBadge } from './aplicar/IdMilitarBadge';
 import { TAF_PROVA_ATIVA_CAPTURE_ATTR } from '../../utils/capturarPrintPagina';
 
 export type TafProvaTempoModalProva = 'corrida' | 'caminhada' | 'natacao' | 'permanencia';
@@ -131,6 +132,8 @@ export type TafProvaTempoModalProps = {
   onConfirmDesistencia?: (participante: number) => void;
   onClearDesistencia?: (participante: number) => void;
   nipsParticipantes?: string[];
+  /** IDs dos militares (pré-cadastro), alinhados a `nipsParticipantes`. */
+  idsMilitarParticipantes?: string[];
   temposMilitaresMs?: (number | null)[];
   formatMs: (ms: number) => string;
   mostrarTempo: boolean;
@@ -441,6 +444,7 @@ export function TafProvaTempoModal({
   onConfirmDesistencia,
   onClearDesistencia,
   nipsParticipantes = [],
+  idsMilitarParticipantes = [],
   temposMilitaresMs = [],
   formatMs,
   mostrarTempo,
@@ -588,22 +592,28 @@ export function TafProvaTempoModal({
     const gapIcon = permiteDesistencia ? 8 : 0;
     const padDireita = 6;
     let maxTexto = estimarLarguraNomePx('—', fontSize);
+    let maxIdExtra = 0;
     for (let i = 0; i < nParticipantes; i += 1) {
       const nipFmt = formatNipInput(nipsParticipantes[i] ?? '') || '—';
+      const idTxt = (idsMilitarParticipantes[i] ?? '').trim();
+      if (idTxt) {
+        maxIdExtra = Math.max(maxIdExtra, estimarLarguraNomePx(idTxt, nipFontSize) + 18);
+      }
       maxTexto = Math.max(
         maxTexto,
         estimarLarguraNomePx(nomesParticipantes[i] ?? '—', fontSize),
         estimarLarguraNomePx(nipFmt, nipFontSize),
       );
     }
-    const natural = iconW + gapIcon + maxTexto + padDireita;
+    const natural = iconW + gapIcon + maxTexto + maxIdExtra + padDireita;
     const minW = iconW + gapIcon + 40;
-    const maxW = isNativeMobile ? 150 : 220;
+    const maxW = isNativeMobile ? 168 : 248;
     return Math.min(maxW, Math.max(minW, natural));
   }, [
     nParticipantes,
     nomesParticipantes,
     nipsParticipantes,
+    idsMilitarParticipantes,
     permiteDesistencia,
     isNativeMobile,
   ]);
@@ -626,6 +636,7 @@ export function TafProvaTempoModal({
       {Array.from({ length: nParticipantes }, (_, index) => {
         const nome = nomesParticipantes[index] ?? '—';
         const nipExibicao = formatNipInput(nipsParticipantes[index] ?? '') || '—';
+        const idMilitar = (idsMilitarParticipantes[index] ?? '').trim();
         const temFatorRisco = participantesComFatorRisco[index] === true;
         const desistiu = permiteDesistencia && (desistenciaParticipantes[index] ?? false);
         const tempoMs = temposMilitaresMs[index];
@@ -757,17 +768,20 @@ export function TafProvaTempoModal({
                     >
                       {nome}
                     </Text>
-                    <Text
-                      style={[
-                        styles.participantNip,
-                        isNativeMobile ? styles.participantNipCompact : null,
-                        { color: desistiu ? theme.loss : theme.textMuted },
-                      ]}
-                      numberOfLines={1}
-                      accessibilityLabel={`NIP ${nipExibicao}`}
-                    >
-                      {nipExibicao}
-                    </Text>
+                    <View style={styles.participantNipRow}>
+                      {idMilitar ? <IdMilitarBadge value={idMilitar} compact /> : null}
+                      <Text
+                        style={[
+                          styles.participantNip,
+                          isNativeMobile ? styles.participantNipCompact : null,
+                          { color: desistiu ? theme.loss : theme.textMuted, flexShrink: 1 },
+                        ]}
+                        numberOfLines={1}
+                        accessibilityLabel={`NIP ${nipExibicao}`}
+                      >
+                        {nipExibicao}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
@@ -1199,6 +1213,12 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexBasis: 'auto',
     lineHeight: 13,
+    minWidth: 0,
+  },
+  participantNipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     minWidth: 0,
   },
   participantNip: {

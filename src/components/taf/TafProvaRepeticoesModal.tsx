@@ -183,7 +183,7 @@ export function TafProvaRepeticoesModal({
                           {nome}
                         </Text>
                         <View style={styles.rowNipRow}>
-                          {idMilitar ? <IdMilitarBadge value={idMilitar} compact /> : null}
+                          {idMilitar ? <IdMilitarBadge value={idMilitar} fontSize={11} /> : null}
                           <Text
                             style={[styles.rowNip, { color: theme.textMuted, flexShrink: 1 }]}
                             numberOfLines={1}

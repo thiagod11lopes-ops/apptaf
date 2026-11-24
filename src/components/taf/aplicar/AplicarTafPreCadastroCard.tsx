@@ -139,7 +139,7 @@ export function AplicarTafPreCadastroCard({
             const id = (p.idMilitar || '').trim();
             return (
               <View key={`${nome}-${id}-${i}`} style={styles.participanteRow}>
-                {id ? <IdMilitarBadge value={id} compact /> : null}
+                {id ? <IdMilitarBadge value={id} fontSize={12} /> : null}
                 <Text style={[styles.nomes, { color: theme.textMuted }]} numberOfLines={1}>
                   {nome}
                 </Text>

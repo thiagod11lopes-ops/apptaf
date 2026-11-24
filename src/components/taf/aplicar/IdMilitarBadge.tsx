@@ -5,22 +5,38 @@ const GREEN_BG = '#ecfdf5';
 const GREEN_BORDER = '#10b981';
 const GREEN_TEXT = '#047857';
 
+/** Mesmo tamanho tipográfico do input de NIP (`AplicarTafInput`). */
+export const ID_MILITAR_FONT_SIZE_NIP_INPUT = 17;
+
 type BadgeProps = {
   value: string;
-  /** Só exibe se houver valor. */
-  compact?: boolean;
+  /**
+   * Fonte do texto — deve ser a mesma do NIP ao lado.
+   * Padrão: tamanho do input de NIP na lista.
+   */
+  fontSize?: number;
 };
 
 /** Chip verde do ID ao lado do NIP (prova / cards). */
-export function IdMilitarBadge({ value, compact }: BadgeProps) {
+export function IdMilitarBadge({
+  value,
+  fontSize = ID_MILITAR_FONT_SIZE_NIP_INPUT,
+}: BadgeProps) {
   const t = (value || '').trim();
   if (!t) return null;
+  const size = Math.max(9, fontSize);
   return (
-    <View
-      style={[styles.badge, compact ? styles.badgeCompact : null]}
-      accessibilityLabel={`ID ${t}`}
-    >
-      <Text style={[styles.badgeText, compact ? styles.badgeTextCompact : null]} numberOfLines={1}>
+    <View style={styles.badge} accessibilityLabel={`ID ${t}`}>
+      <Text
+        style={[
+          styles.badgeText,
+          {
+            fontSize: size,
+            lineHeight: Math.round(size * 1.2),
+          },
+        ]}
+        numberOfLines={1}
+      >
         {t}
       </Text>
     </View>
@@ -36,7 +52,7 @@ type InputProps = {
   wide?: boolean;
 };
 
-/** Campo de cadastro do ID (pré-cadastro). */
+/** Campo de cadastro do ID (pré-cadastro) — mesma tipografia/altura do NIP. */
 export function IdMilitarInput({
   value,
   onChangeText,
@@ -76,26 +92,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    maxWidth: 72,
     flexShrink: 0,
-  },
-  badgeCompact: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    maxWidth: 56,
+    maxWidth: 120,
   },
   badgeText: {
     color: GREEN_TEXT,
-    fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '600',
     letterSpacing: 0.2,
     ...(Platform.OS === 'web' ? ({ fontVariant: ['tabular-nums'] } as object) : null),
   },
-  badgeTextCompact: {
-    fontSize: 13,
-  },
   inputWrap: {
-    width: 64,
+    width: 96,
     flexShrink: 0,
     gap: 2,
   },
@@ -105,29 +112,28 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   inputLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     color: GREEN_TEXT,
     letterSpacing: 0.4,
   },
   input: {
-    height: 48,
     borderWidth: 1.5,
     borderColor: GREEN_BORDER,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: GREEN_BG,
     color: GREEN_TEXT,
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: ID_MILITAR_FONT_SIZE_NIP_INPUT,
+    fontWeight: '600',
+    letterSpacing: 0.2,
     textAlign: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     ...(Platform.OS === 'web'
       ? ({ outlineStyle: 'none', fontVariant: ['tabular-nums'] } as object)
       : null),
   },
   inputWide: {
     textAlign: 'left',
-    paddingHorizontal: 14,
-    letterSpacing: 0.3,
   },
 });

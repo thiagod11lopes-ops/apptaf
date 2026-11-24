@@ -769,7 +769,12 @@ export function TafProvaTempoModal({
                       {nome}
                     </Text>
                     <View style={styles.participantNipRow}>
-                      {idMilitar ? <IdMilitarBadge value={idMilitar} compact /> : null}
+                      {idMilitar ? (
+                        <IdMilitarBadge
+                          value={idMilitar}
+                          fontSize={isNativeMobile ? 9 : 10}
+                        />
+                      ) : null}
                       <Text
                         style={[
                           styles.participantNip,

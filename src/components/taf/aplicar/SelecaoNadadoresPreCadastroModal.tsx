@@ -168,7 +168,7 @@ export function SelecaoNadadoresPreCadastroModal({
                     </Text>
                     <View style={styles.nipRow}>
                       {(p.idMilitar || '').trim() ? (
-                        <IdMilitarBadge value={(p.idMilitar || '').trim()} compact />
+                        <IdMilitarBadge value={(p.idMilitar || '').trim()} fontSize={12} />
                       ) : null}
                       {nipFmt ? (
                         <Text style={[styles.nip, { color: theme.textMuted }]}>NIP {nipFmt}</Text>

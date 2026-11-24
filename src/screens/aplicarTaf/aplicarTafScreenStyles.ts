@@ -44,6 +44,24 @@ export function createAplicarTafStyles(theme: AppTheme, ui: UiColors) {
     textTransform: 'uppercase',
     marginBottom: 4,
   },
+  idMilitarPreCadastroBox: {
+    borderWidth: 1.5,
+    borderRadius: PREMIUM.radiusMd,
+    padding: 12,
+    marginBottom: 12,
+    gap: 4,
+  },
+  idMilitarPreCadastroLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+    color: '#047857',
+    marginBottom: 2,
+  },
+  idMilitarPreCadastroItem: {
+    marginTop: 6,
+  },
   nomeCodigoSelectList: {
     borderWidth: 1,
     borderRadius: 12,

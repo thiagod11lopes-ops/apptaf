@@ -49,6 +49,7 @@ import {
   AplicarTafNipsList,
   type NipFeedbackLinha,
 } from '../components/taf/aplicar/AplicarTafNipsList';
+import { IdMilitarInput } from '../components/taf/aplicar/IdMilitarBadge';
 import {
   AplicarTafPreCadastroCard,
   PRE_CADASTRO_ACCENTS,
@@ -3811,7 +3812,7 @@ export default function AplicarTAFScreen() {
                   demoAtivo
                     ? `NIPs, idade e gênero dos ${nParticipantesConfirmado} participantes ficam bloqueados no Modo Teste. Use o botão acima para preencher.`
                     : modoPreCadastro
-                      ? 'Opcional: escolha Alfa…Zulu ou Nenhum. Depois informe o NIP de cada participante.'
+                      ? 'Opcional: escolha Alfa…Zulu ou Nenhum. Abaixo, informe o ID (campo verde) e o NIP de cada participante.'
                       : 'Informe o NIP de cada participante. Use Adicionar Participante para incluir mais.'
                 }
               />
@@ -3828,7 +3829,7 @@ export default function AplicarTAFScreen() {
                 </Text>
                 <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 8 }]}>
                   Escolha um nome (único) ou Nenhum para usar só a numeração. Nomes já em uso não
-                  aparecem.
+                  aparecem. Em seguida, preencha o ID e o NIP de cada militar nos campos abaixo.
                 </Text>
                 {Platform.OS === 'web' ? (
                   <select
@@ -3903,13 +3904,49 @@ export default function AplicarTAFScreen() {
               </View>
             ) : null}
 
+            {modoPreCadastro ? (
+              <View
+                style={[
+                  styles.idMilitarPreCadastroBox,
+                  { backgroundColor: inputBg, borderColor: '#10b981' },
+                ]}
+              >
+                <Text style={[ts.label, styles.idMilitarPreCadastroLabel]}>ID do militar</Text>
+                <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 8 }]}>
+                  Informe o ID de cada participante (opcional). O número acompanha o militar na
+                  prova, no resultado geral e nos PDFs.
+                </Text>
+                {nipsParticipantes.map((_, index) => (
+                  <View
+                    key={`id-militar-pre-${index}`}
+                    style={nipsParticipantes.length > 1 ? styles.idMilitarPreCadastroItem : null}
+                  >
+                    {nipsParticipantes.length > 1 ? (
+                      <Text
+                        style={[ts.caption, { color: theme.textMuted, marginBottom: 4, fontWeight: '700' }]}
+                      >
+                        Participante {index + 1}
+                      </Text>
+                    ) : null}
+                    <IdMilitarInput
+                      wide
+                      value={idsMilitarParticipantes[index] ?? ''}
+                      onChangeText={(t) => atualizarIdMilitarParticipante(index, t)}
+                      editable={!demoAtivo}
+                      accessibilityLabel={`ID do participante ${index + 1}`}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             <AplicarTafNipsList
               nips={nipsParticipantes}
               feedbackLinhas={nipFeedbackLinhas}
               demoAtivo={demoAtivo}
               labelAtleta={labelAtleta}
               idsMilitar={idsMilitarParticipantes}
-              mostrarCampoId={modoPreCadastro}
+              mostrarCampoId={false}
               onAtualizarIdMilitar={atualizarIdMilitarParticipante}
               onAtualizarNip={atualizarNip}
               onVerificarNip={(index) => void verificarNipNoCadastro(index)}

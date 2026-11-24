@@ -179,6 +179,15 @@ const NipParticipanteRow = memo(function NipParticipanteRow({
       ]}
     >
       <View style={rowStyles.nipFieldBlock}>
+        {mostrarCampoId ? (
+          <IdMilitarInput
+            value={idMilitar}
+            onChangeText={(t) => onAtualizarIdMilitar?.(index, t)}
+            editable={!demoAtivo}
+            wide
+            accessibilityLabel={`ID do participante ${index + 1}`}
+          />
+        ) : null}
         <View style={rowStyles.nipLabelRow}>
           <LabelNip color={ui.label} fontSize={11} fontWeight="800" />
           <TouchableOpacity
@@ -192,16 +201,7 @@ const NipParticipanteRow = memo(function NipParticipanteRow({
           </TouchableOpacity>
         </View>
         <View style={rowStyles.nipInputRow}>
-          {mostrarCampoId ? (
-            <IdMilitarInput
-              value={idMilitar}
-              onChangeText={(t) => onAtualizarIdMilitar?.(index, t)}
-              editable={!demoAtivo}
-              accessibilityLabel={`ID do participante ${index + 1}`}
-            />
-          ) : (
-            <IdMilitarBadge value={idMilitar} />
-          )}
+          {!mostrarCampoId ? <IdMilitarBadge value={idMilitar} /> : null}
           <AplicarTafInput
             value={nip}
             onChangeText={(t) => onAtualizarNip(index, t)}

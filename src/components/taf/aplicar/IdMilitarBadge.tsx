@@ -32,28 +32,35 @@ type InputProps = {
   onChangeText: (text: string) => void;
   editable?: boolean;
   accessibilityLabel?: string;
+  /** Campo em linha própria (pré-cadastro) — mais largo e visível. */
+  wide?: boolean;
 };
 
-/** Campo de cadastro do ID (pré-cadastro), à esquerda do NIP. */
+/** Campo de cadastro do ID (pré-cadastro). */
 export function IdMilitarInput({
   value,
   onChangeText,
   editable = true,
   accessibilityLabel = 'ID do militar',
+  wide = false,
 }: InputProps) {
   return (
-    <View style={styles.inputWrap}>
-      <Text style={styles.inputLabel}>ID</Text>
+    <View style={wide ? styles.inputWrapWide : styles.inputWrap}>
+      <Text style={styles.inputLabel}>{wide ? 'ID do militar' : 'ID'}</Text>
       <TextInput
         value={value}
         onChangeText={(t) => onChangeText(t.replace(/[^\dA-Za-z\-_.]/g, '').slice(0, 12))}
-        placeholder="ID"
+        placeholder={wide ? 'Informe o ID' : 'ID'}
         placeholderTextColor="#6ee7b7"
         editable={editable}
         keyboardType="default"
         autoCorrect={false}
         spellCheck={false}
-        style={[styles.input, !editable ? { opacity: 0.75 } : null]}
+        style={[
+          styles.input,
+          wide ? styles.inputWide : null,
+          !editable ? { opacity: 0.75 } : null,
+        ]}
         accessibilityLabel={accessibilityLabel}
         accessibilityState={{ disabled: !editable }}
       />
@@ -92,6 +99,11 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     gap: 2,
   },
+  inputWrapWide: {
+    width: '100%',
+    gap: 4,
+    marginBottom: 4,
+  },
   inputLabel: {
     fontSize: 10,
     fontWeight: '800',
@@ -112,5 +124,10 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web'
       ? ({ outlineStyle: 'none', fontVariant: ['tabular-nums'] } as object)
       : null),
+  },
+  inputWide: {
+    textAlign: 'left',
+    paddingHorizontal: 14,
+    letterSpacing: 0.3,
   },
 });

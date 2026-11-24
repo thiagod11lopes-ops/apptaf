@@ -3827,10 +3827,6 @@ export default function AplicarTAFScreen() {
                 <Text style={[ts.label, styles.nomeCodigoLabel, { color: theme.textMuted }]}>
                   Nome do pré-cadastro
                 </Text>
-                <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 8 }]}>
-                  Escolha um nome (único) ou Nenhum para usar só a numeração. Nomes já em uso não
-                  aparecem. Em seguida, preencha o ID e o NIP de cada militar nos campos abaixo.
-                </Text>
                 {Platform.OS === 'web' ? (
                   <select
                     value={nomeCodigoPreCadastro ?? ''}
@@ -3912,10 +3908,6 @@ export default function AplicarTAFScreen() {
                 ]}
               >
                 <Text style={[ts.label, styles.idMilitarPreCadastroLabel]}>ID do militar</Text>
-                <Text style={[ts.caption, { color: theme.textSecondary, marginBottom: 8 }]}>
-                  Informe o ID de cada participante (opcional). O número acompanha o militar na
-                  prova, no resultado geral e nos PDFs.
-                </Text>
                 {nipsParticipantes.map((_, index) => (
                   <View
                     key={`id-militar-pre-${index}`}

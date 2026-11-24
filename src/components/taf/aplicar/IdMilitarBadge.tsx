@@ -50,7 +50,7 @@ export function IdMilitarInput({
       <TextInput
         value={value}
         onChangeText={(t) => onChangeText(t.replace(/[^\dA-Za-z\-_.]/g, '').slice(0, 12))}
-        placeholder={wide ? 'Informe o ID' : 'ID'}
+        placeholder={wide ? 'id opcional' : 'ID'}
         placeholderTextColor="#6ee7b7"
         editable={editable}
         keyboardType="default"

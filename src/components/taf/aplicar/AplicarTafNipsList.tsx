@@ -201,7 +201,6 @@ const NipParticipanteRow = memo(function NipParticipanteRow({
           </TouchableOpacity>
         </View>
         <View style={rowStyles.nipInputRow}>
-          {!mostrarCampoId ? <IdMilitarBadge value={idMilitar} /> : null}
           <AplicarTafInput
             value={nip}
             onChangeText={(t) => onAtualizarNip(index, t)}
